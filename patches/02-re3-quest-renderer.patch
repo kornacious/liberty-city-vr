@@ -1,0 +1,3713 @@
+From 27010af9fb58de5a116592cdf20d34c513361f88 Mon Sep 17 00:00:00 2001
+From: Liberty City VR Developer <dev@libertyvr.quest>
+Date: Fri, 16 Oct 2026 23:09:40 +0300
+Subject: [PATCH 2/4] re3 quest renderer and RW pipeline subsystem
+
+---
+ src/control/CarCtrl.h         |   4 +
+ src/core/Streaming.cpp        |  20 +-
+ src/extras/custompipes.cpp    |  13 +
+ src/extras/debugmenu.cpp      |  10 +-
+ src/objects/ParticleObject.h  |  12 +
+ src/renderer/Antennas.cpp     |   7 +-
+ src/renderer/Clouds.cpp       | 278 +++++++++++-
+ src/renderer/Coronas.cpp      |  72 +++
+ src/renderer/Draw.cpp         |  14 +
+ src/renderer/Fluff.cpp        |   9 +-
+ src/renderer/Font.cpp         |   2 +
+ src/renderer/Glass.cpp        |  28 +-
+ src/renderer/Hud.cpp          | 814 ++++++++++++++++++++++++++--------
+ src/renderer/Hud.h            |   3 +
+ src/renderer/Lines.cpp        |  13 +-
+ src/renderer/MBlur.cpp        |   7 +-
+ src/renderer/Particle.cpp     |  21 +
+ src/renderer/Particle.h       |   2 +
+ src/renderer/PlayerSkin.cpp   |   3 +-
+ src/renderer/RenderBuffer.cpp |   8 +-
+ src/renderer/Renderer.cpp     | 381 ++++++++++++++--
+ src/renderer/Renderer.h       |  46 +-
+ src/renderer/Rubbish.cpp      |   8 +-
+ src/renderer/Shadows.cpp      |  38 +-
+ src/renderer/Shadows.h        |   6 +
+ src/renderer/Skidmarks.cpp    |   8 +-
+ src/renderer/SpecialFX.cpp    |  92 +++-
+ src/renderer/SpecialFX.h      |  12 +
+ src/renderer/Sprite.cpp       |   9 +-
+ src/renderer/Sprite2d.cpp     |  23 +-
+ src/renderer/Sprite2d.h       |   7 +-
+ src/renderer/WaterCannon.cpp  |   8 +-
+ src/renderer/WaterLevel.cpp   |  42 +-
+ src/renderer/Weather.cpp      |  31 +-
+ src/rw/RwHelper.h             |   5 +-
+ src/rw/TexRead.cpp            |  46 +-
+ src/rw/TxdStore.cpp           |  34 +-
+ src/rw/TxdStore.h             |   5 +-
+ src/rw/VisibilityPlugins.cpp  |  75 +++-
+ src/rw/VisibilityPlugins.h    |   3 +
+ 40 files changed, 1863 insertions(+), 356 deletions(-)
+
+diff --git a/src/control/CarCtrl.h b/src/control/CarCtrl.h
+index 40be8d79..28daa262 100644
+--- a/src/control/CarCtrl.h
++++ b/src/control/CarCtrl.h
+@@ -122,6 +122,10 @@ public:
+ 		return angle;
+ 	}
+ 
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	static void MarkVrVehicleRendered(CVehicle *vehicle) {}
++#endif
++
+ 	static int32 NumLawEnforcerCars;
+ 	static int32 NumAmbulancesOnDuty;
+ 	static int32 NumFiretrucksOnDuty;
+diff --git a/src/core/Streaming.cpp b/src/core/Streaming.cpp
+index fc7998ab..972815b2 100644
+--- a/src/core/Streaming.cpp
++++ b/src/core/Streaming.cpp
+@@ -581,12 +581,11 @@ CStreaming::ConvertBufferToObject(int8 *buf, int32 streamId)
+ 		}
+ 
+ 		PUSH_MEMID(MEMID_STREAM_TEXUTRES);
+-		if(ms_bLoadingBigModel || cdsize > 200){
+-			success = CTxdStore::StartLoadTxd(streamId - STREAM_OFFSET_TXD, stream);
+-			if(success)
+-				ms_aInfoForModel[streamId].m_loadState = STREAMSTATE_STARTED;
+-		}else
+-		        success = CTxdStore::LoadTxd(streamId - STREAM_OFFSET_TXD, stream);
++		// Decode streamed TXDs incrementally.  Creating and uploading a whole
++		// dictionary in one frame is the dominant source of VR frame-time spikes.
++		success = CTxdStore::StartLoadTxd(streamId - STREAM_OFFSET_TXD, stream);
++		if(success)
++			ms_aInfoForModel[streamId].m_loadState = STREAMSTATE_STARTED;
+ 		POP_MEMID();
+ 		UpdateMemoryUsed();
+ 
+@@ -676,6 +675,7 @@ CStreaming::FinishLoadingLargeFile(int8 *buf, int32 streamId)
+ 	mem.length = ms_aInfoForModel[streamId].GetCdSize() * CDSTREAM_SECTOR_SIZE;
+ 	stream = RwStreamOpen(rwSTREAMMEMORY, rwSTREAMREAD, &mem);
+ 
++	bool pending = false;
+ 	if(streamId < STREAM_OFFSET_TXD){
+ 		// Model
+ 		mi = CModelInfo::GetModelInfo(streamId);
+@@ -695,12 +695,18 @@ CStreaming::FinishLoadingLargeFile(int8 *buf, int32 streamId)
+ 		// Txd
+ 		CTxdStore::AddRef(streamId - STREAM_OFFSET_TXD);
+ 		PUSH_MEMID(MEMID_STREAM_TEXUTRES);
+-		success = CTxdStore::FinishLoadTxd(streamId - STREAM_OFFSET_TXD, stream);
++		const int32 result = CTxdStore::FinishLoadTxd(streamId - STREAM_OFFSET_TXD, stream);
++		success = result >= 0;
++		pending = result == 0;
+ 		POP_MEMID();
+ 		CTxdStore::RemoveRefWithoutDelete(streamId - STREAM_OFFSET_TXD);
+ 	}
+ 
+ 	RwStreamClose(stream, &mem);
++	if(pending){
++		UpdateMemoryUsed();
++		return true;
++	}
+ 
+ 	ms_aInfoForModel[streamId].m_loadState = STREAMSTATE_LOADED;	// only done if success on PS2
+ #ifndef USE_CUSTOM_ALLOCATOR
+diff --git a/src/extras/custompipes.cpp b/src/extras/custompipes.cpp
+index 092b3e23..acb8f8d5 100644
+--- a/src/extras/custompipes.cpp
++++ b/src/extras/custompipes.cpp
+@@ -126,6 +126,19 @@ EnvMapRender(void)
+ 	if(VehiclePipeSwitch != VEHICLEPIPE_NEO)
+ 		return;
+ 
++	// Save loading tears the old world down before GenericLoad creates the new
++	// player ped.  Keep the main camera update active and skip this optional
++	// reflection refresh during that valid transition frame; FindPlayerCoors
++	// assumes a live player and would otherwise dereference a null ped here.
++	if(FindPlayerPed() == nil)
++		return;
++
++	// Refreshing the low-frequency vehicle reflection by rendering the complete
++	// world every frame is disproportionately expensive on the mobile tiler.
++	static uint32 envMapFrameCounter;
++	if(++envMapFrameCounter % 9 != 1)
++		return;
++
+ 	RwCameraEndUpdate(Scene.camera);
+ 
+ 	// Neo does this differently, but i'm not quite convinced it's much better
+diff --git a/src/extras/debugmenu.cpp b/src/extras/debugmenu.cpp
+index da0dbb81..89bbd870 100644
+--- a/src/extras/debugmenu.cpp
++++ b/src/extras/debugmenu.cpp
+@@ -7,6 +7,7 @@
+ #include "rtcharse.h"
+ #include "re3_inttypes.h"
+ #include "debugmenu.h"
++#include "GameRenderCommand.h"
+ #include <new>
+ 
+ #ifdef _WIN32
+@@ -1125,7 +1126,8 @@ drawArrow(RwRect r, int direction, int style)
+ 
+ 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
+ 		RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, arrowVerts, 4, indices, 6);
++		GameRender::SubmitImmediate2DIndexed(rwPRIMTYPETRILIST, arrowVerts, 4, indices, 6,
++			GameRender::IMMEDIATE2D_DRAW_DEBUG);
+ 	}
+ 
+ 
+@@ -1167,7 +1169,8 @@ drawArrow(RwRect r, int direction, int style)
+ 
+ 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, arrow);
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, arrowVerts, 4, indices, 6);
++	GameRender::SubmitImmediate2DIndexed(rwPRIMTYPETRILIST, arrowVerts, 4, indices, 6,
++		GameRender::IMMEDIATE2D_DRAW_DEBUG);
+ }
+ 
+ void
+@@ -1232,7 +1235,8 @@ drawMouse(void)
+ 
+ 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, cursor);
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, vertices, 4, indices, 6);
++	GameRender::SubmitImmediate2DIndexed(rwPRIMTYPETRILIST, vertices, 4, indices, 6,
++		GameRender::IMMEDIATE2D_DRAW_DEBUG);
+ }
+ 
+ 
+diff --git a/src/objects/ParticleObject.h b/src/objects/ParticleObject.h
+index 34c1fa64..3dc4bcfc 100644
+--- a/src/objects/ParticleObject.h
++++ b/src/objects/ParticleObject.h
+@@ -40,6 +40,15 @@ enum eParticleObjectState
+ 	POBJECTSTATE_FREE,
+ };
+ 
++enum eVrFountainQuality
++{
++	VR_FOUNTAIN_OFF = 0,
++	VR_FOUNTAIN_LOW,
++	VR_FOUNTAIN_OPTIMIZED,
++	VR_FOUNTAIN_ORIGINAL,
++	VR_FOUNTAIN_QUALITY_COUNT
++};
++
+ class CParticle;
+ 
+ class CParticleObject : public CPlaceable
+@@ -70,6 +79,9 @@ public:
+ 	~CParticleObject();
+ 	
+ 	static void Initialise(void);
++	static void SetVrFountainQuality(int32 quality) {}
++	static int32 GetVrFountainQuality(void) { return VR_FOUNTAIN_OFF; }
++	static const char *GetVrFountainQualityName(void) { return "N/A"; }
+ 	
+ 	static CParticleObject *AddObject(uint16 type, CVector const &pos,                                                                          uint8 remove);
+ 	static CParticleObject *AddObject(uint16 type, CVector const &pos,                        float size,                                       uint8 remove);
+diff --git a/src/renderer/Antennas.cpp b/src/renderer/Antennas.cpp
+index 5e30aca2..a9b25d2f 100644
+--- a/src/renderer/Antennas.cpp
++++ b/src/renderer/Antennas.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include "main.h"
+ #include "Antennas.h"
++#include "GameRenderCommand.h"
+ 
+ CAntenna CAntennas::aAntennas[NUMANTENNAS];
+ 
+@@ -95,9 +96,9 @@ CAntennas::Render(void)
+ 				aAntennas[i].pos[j+1].z);
+ 
+ 			// LittleTest();
+-			if(RwIm3DTransform(vertexbufferA, 2, nil, 0)){
+-				RwIm3DRenderLine(0, 1);
+-				RwIm3DEnd();
++			if(GameRender::BeginImmediate3D(vertexbufferA, 2, nil, 0, GameRender::IMMEDIATE3D_DRAW_LINES)){
++				GameRender::SubmitImmediate3DLine(0, 1);
++				GameRender::EndImmediate3D();
+ 			}
+ 		}
+ 	}
+diff --git a/src/renderer/Clouds.cpp b/src/renderer/Clouds.cpp
+index 957844a5..53d79b23 100644
+--- a/src/renderer/Clouds.cpp
++++ b/src/renderer/Clouds.cpp
+@@ -14,6 +14,148 @@
+ #include "Renderer.h"
+ #include "Clouds.h"
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++#include "GameRenderCommand.h"
++
++extern bool gVrFirstPersonActive;
++
++namespace
++{
++const int32 WORLD_CLOUD_QUAD_CAPACITY = 37;
++
++struct WorldCloudBatch
++{
++	RwIm3DVertex vertices[WORLD_CLOUD_QUAD_CAPACITY * 4];
++	RwImVertexIndex indices[WORLD_CLOUD_QUAD_CAPACITY * 6];
++	int32 vertexCount;
++	int32 indexCount;
++
++	WorldCloudBatch(void) : vertexCount(0), indexCount(0) {}
++
++	void Reset(void)
++	{
++		vertexCount = 0;
++		indexCount = 0;
++	}
++};
++
++static uint8
++CloudColourLerp(uint8 bottom, uint8 top, float topFactor)
++{
++	topFactor = Clamp(topFactor, 0.0f, 1.0f);
++	return (uint8)(bottom + (top - bottom)*topFactor);
++}
++
++static void
++AddWorldCloudQuad(WorldCloudBatch &batch, const CVector &originalCenter,
++	const CVector &cameraPosition, float halfWidth, float halfHeight,
++	float rotation, const CRGBA &top, const CRGBA &bottom)
++{
++	if(batch.vertexCount + 4 > (int32)ARRAY_SIZE(batch.vertices))
++		return;
++
++	// The original clouds are screen sprites and therefore ignore the world
++	// far plane.  Preserve their apparent angular size while bringing only the
++	// presentation geometry inside the real 3D frustum.
++	CVector delta = originalCenter - cameraPosition;
++	float distance = delta.Magnitude();
++	if(distance <= 0.001f)
++		return;
++
++	float scale = 1.0f;
++	// Native XR uses a 1000-unit far plane.  The 800-unit low-cloud ring
++	// normally fits as-is; retain a little safety margin for high vehicles.
++	const float presentationLimit = 900.0f;
++	if(distance > presentationLimit)
++		scale = presentationLimit/distance;
++
++	const CVector center = cameraPosition + delta*scale;
++	halfWidth *= scale;
++	halfHeight *= scale;
++
++	CVector toCamera = cameraPosition - center;
++	toCamera.Normalise();
++
++	// This basis depends only on the cloud's world direction and global up,
++	// never on the current HMD orientation.  Turning the head can therefore
++	// reveal a different part of the quad without rotating the quad itself.
++	const CVector worldUp(0.0f, 0.0f, 1.0f);
++	CVector stableRight = CrossProduct(worldUp, toCamera);
++	if(stableRight.MagnitudeSqr() <= 0.000001f)
++		stableRight = CVector(1.0f, 0.0f, 0.0f);
++	else
++		stableRight.Normalise();
++	CVector stableUp = CrossProduct(toCamera, stableRight);
++	stableUp.Normalise();
++
++	const float c = Cos(rotation);
++	const float s = Sin(rotation);
++	const CVector right = stableRight*c + stableUp*s;
++	const CVector up = stableUp*c - stableRight*s;
++
++	const CVector offsets[4] = {
++		-right*halfWidth + up*halfHeight,
++		-right*halfWidth - up*halfHeight,
++		 right*halfWidth - up*halfHeight,
++		 right*halfWidth + up*halfHeight
++	};
++	const float u[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
++	const float v[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
++	const int32 firstVertex = batch.vertexCount;
++
++	for(int32 i = 0; i < 4; i++){
++		const CVector position = center + offsets[i];
++		RwIm3DVertex &vertex = batch.vertices[batch.vertexCount++];
++		RwIm3DVertexSetPos(&vertex, position.x, position.y, position.z);
++		RwIm3DVertexSetU(&vertex, u[i]);
++		RwIm3DVertexSetV(&vertex, v[i]);
++
++		// Keep the original two-colour gradient vertical in the world even
++		// while the cloud texture has its own slow rotation.
++		const float vertical = halfHeight > 0.0001f ?
++			DotProduct(offsets[i], stableUp)/halfHeight : 0.0f;
++		const float topFactor = Clamp(vertical*0.5f + 0.5f, 0.0f, 1.0f);
++		RwIm3DVertexSetRGBA(&vertex,
++			CloudColourLerp(bottom.r, top.r, topFactor),
++			CloudColourLerp(bottom.g, top.g, topFactor),
++			CloudColourLerp(bottom.b, top.b, topFactor),
++			CloudColourLerp(bottom.a, top.a, topFactor));
++	}
++
++	batch.indices[batch.indexCount++] = firstVertex + 0;
++	batch.indices[batch.indexCount++] = firstVertex + 1;
++	batch.indices[batch.indexCount++] = firstVertex + 2;
++	batch.indices[batch.indexCount++] = firstVertex + 0;
++	batch.indices[batch.indexCount++] = firstVertex + 2;
++	batch.indices[batch.indexCount++] = firstVertex + 3;
++}
++
++static void
++RenderWorldCloudBatch(WorldCloudBatch &batch)
++{
++	if(batch.vertexCount == 0)
++		return;
++
++	RwUInt32 oldCullMode = rwCULLMODECULLNONE;
++	RwUInt32 oldFogEnable = FALSE;
++	RwRenderStateGet(rwRENDERSTATECULLMODE, &oldCullMode);
++	RwRenderStateGet(rwRENDERSTATEFOGENABLE, &oldFogEnable);
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
++	if(GameRender::BeginImmediate3D(batch.vertices, batch.vertexCount, nil,
++	   rwIM3D_VERTEXXYZ|rwIM3D_VERTEXRGBA|rwIM3D_VERTEXUV,
++	   GameRender::IMMEDIATE3D_DRAW_WEATHER)){
++		GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST,
++			batch.indices, batch.indexCount);
++		GameRender::EndImmediate3D();
++	}
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)(uintptr)oldCullMode);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)(uintptr)oldFogEnable);
++	batch.Reset();
++}
++}
++#endif
++
+ #define SMALLSTRIPHEIGHT 4.0f
+ #define HORIZSTRIPHEIGHT 48.0f
+ 
+@@ -27,6 +169,22 @@ float CClouds::ms_horizonZ;
+ CRGBA CClouds::ms_colourTop;
+ CRGBA CClouds::ms_colourBottom;
+ 
++static void
++UpdateCloudCameraRoll(const CVector &up, const CVector &forward)
++{
++	CVector right = CrossProduct(up, forward);
++	if(right.MagnitudeSqr() <= 0.000001f)
++		return;
++
++	right.Normalise();
++	float c = right.Magnitude2D();
++	if(c > 1.0f)
++		c = 1.0f;
++	CClouds::ms_cameraRoll = Acos(c);
++	if(right.z < 0.0f)
++		CClouds::ms_cameraRoll = -CClouds::ms_cameraRoll;
++}
++
+ void
+ CClouds::Init(void)
+ {
+@@ -137,6 +295,33 @@ CClouds::Render(void)
+ 
+ 	int minute = CClock::GetHours()*60 + CClock::GetMinutes();
+ 	RwV3d campos = TheCamera.GetPosition();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// The desktop VR renderer temporarily puts its eye camera in TheCamera
++	// before drawing sky sprites. Native Quest keeps the simulation camera in
++	// TheCamera and writes the post-physics first-person view into Scene.camera
++	// instead. Using the former as the origin made the moon and star field
++	// inherit the removed chase-camera gait/bob while their projection used
++	// the VR view matrix. Use the actual rendered camera origin for the same
++	// camera-relative construction as desktop.
++	if(gVrFirstPersonActive && Scene.camera != nil){
++		RwFrame *frame = RwCameraGetFrame(Scene.camera);
++		if(frame != nil){
++			RwMatrix *camera = RwFrameGetLTM(frame);
++			campos = *RwMatrixGetPos(camera);
++
++			// RenderBackground normally refreshes this value from TheCamera.
++			// Quest deliberately skips that flat full-screen sky pass, while
++			// the actual HMD orientation lives in Scene.camera. Without the
++			// matching roll compensation the screen-facing cloud sprites turn
++			// with the player's head instead of remaining fixed in the world.
++			RwV3d *cameraUp = RwMatrixGetUp(camera);
++			RwV3d *cameraForward = RwMatrixGetAt(camera);
++			UpdateCloudCameraRoll(
++				CVector(cameraUp->x, cameraUp->y, cameraUp->z),
++				CVector(cameraForward->x, cameraForward->y, cameraForward->z));
++		}
++	}
++#endif
+ 
+ 	// Moon
+ 	int moonfadeout = Abs(minute - 180);	// fully visible at 3AM
+@@ -206,6 +391,10 @@ CClouds::Render(void)
+ 	int r = CTimeCycle::GetLowCloudsRed() * lowcloudintensity;
+ 	int g = CTimeCycle::GetLowCloudsGreen() * lowcloudintensity;
+ 	int b = CTimeCycle::GetLowCloudsBlue() * lowcloudintensity;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const bool renderWorldClouds = gVrFirstPersonActive;
++	WorldCloudBatch worldCloudBatch;
++#endif
+ 	for(int cloudtype = 0; cloudtype < 3; cloudtype++){
+ 		for(i = cloudtype; i < 12; i += 3){
+ 			RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gpCloudTex[cloudtype]));
+@@ -213,10 +402,25 @@ CClouds::Render(void)
+ 			worldpos.x = campos.x + pos.x;
+ 			worldpos.y = campos.y + pos.y;
+ 			worldpos.z = 40.0f + pos.z;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(renderWorldClouds){
++				// The legacy CPU projection follows the body camera, not an HMD
++				// head turn.  Submit the tiny sky ring in full and let the XR GPU
++				// frustum choose what each eye can see.
++				const CRGBA colour((uint8)r, (uint8)g, (uint8)b, 255);
++				AddWorldCloudQuad(worldCloudBatch, CVector(worldpos), CVector(campos),
++					320.0f, 40.0f, 0.0f, colour, colour);
++			}else
++#endif
+ 			if(CSprite::CalcScreenCoors(worldpos, &screenpos, &szx, &szy, false))
+ 				CSprite::RenderBufferedOneXLUSprite_Rotate_Dimension(screenpos.x, screenpos.y, screenpos.z,
+ 					szx*320.0f, szy*40.0f, r, g, b, 255, 1.0f/screenpos.z, ms_cameraRoll, 255);
+ 		}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if(renderWorldClouds)
++			RenderWorldCloudBatch(worldCloudBatch);
++		else
++#endif
+ 		CSprite::FlushSpriteBuffer();
+ 	}
+ 
+@@ -227,6 +431,11 @@ CClouds::Render(void)
+ 	if(fluffyalpha != 0){
+ 		static bool bCloudOnScreen[37];
+ 		float hilight;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		CVector fluffyWorldPosition[37];
++		float fluffyHilight[37];
++		bool fluffyHighlightVisible[37];
++#endif
+ 
+ 		RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+@@ -237,6 +446,43 @@ CClouds::Render(void)
+ 			worldpos.y = pos.x*rot_sin - pos.y*rot_cos + campos.y;
+ 			worldpos.z = pos.z;
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(renderWorldClouds){
++				int tr = CTimeCycle::GetFluffyCloudsTopRed();
++				int tg = CTimeCycle::GetFluffyCloudsTopGreen();
++				int tb = CTimeCycle::GetFluffyCloudsTopBlue();
++				int br = CTimeCycle::GetFluffyCloudsBottomRed();
++				int bg = CTimeCycle::GetFluffyCloudsBottomGreen();
++				int bb = CTimeCycle::GetFluffyCloudsBottomBlue();
++
++				CVector cloudDirection = CVector(worldpos) - CVector(campos);
++				cloudDirection.Normalise();
++				const float sunAlignment = DotProduct(cloudDirection,
++					CTimeCycle::GetSunDirection());
++				hilight = (1.0f - Max(CWeather::Foggyness, CWeather::CloudCoverage)) *
++					Clamp((sunAlignment - 0.5f)*2.0f, 0.0f, 1.0f);
++				tr = tr*(1.0f-hilight) + 255*hilight;
++				tg = tg*(1.0f-hilight) + 190*hilight;
++				tb = tb*(1.0f-hilight) + 190*hilight;
++				br = br*(1.0f-hilight) + 255*hilight;
++				bg = bg*(1.0f-hilight) + 190*hilight;
++				bb = bb*(1.0f-hilight) + 190*hilight;
++				if(sunAlignment > 0.98f)
++					CCoronas::SunBlockedByClouds = true;
++
++				fluffyWorldPosition[i] = CVector(worldpos);
++				fluffyHilight[i] = hilight;
++				fluffyHighlightVisible[i] = sunAlignment > 0.85f;
++				const CRGBA topColour((uint8)tr, (uint8)tg, (uint8)tb, (uint8)fluffyalpha);
++				const CRGBA bottomColour((uint8)br, (uint8)bg, (uint8)bb, (uint8)fluffyalpha);
++				AddWorldCloudQuad(worldCloudBatch, CVector(worldpos), CVector(campos),
++					55.0f, 55.0f,
++					(uint16)IndividualRotation/65336.0f * 6.28f,
++					topColour, bottomColour);
++				bCloudOnScreen[i] = true;
++				continue;
++			}
++#endif
+ 			if(CSprite::CalcScreenCoors(worldpos, &screenpos, &szx, &szy, false)){
+ 				float sundist = Sqrt(sq(screenpos.x-CCoronas::SunScreenX) + sq(screenpos.y-CCoronas::SunScreenY));
+ 				int tr = CTimeCycle::GetFluffyCloudsTopRed();
+@@ -267,6 +513,11 @@ CClouds::Render(void)
+ 			}else
+ 				bCloudOnScreen[i] = false;
+ 		}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if(renderWorldClouds)
++			RenderWorldCloudBatch(worldCloudBatch);
++		else
++#endif
+ 		CSprite::FlushSpriteBuffer();
+ 
+ 		// Highlights
+@@ -275,6 +526,20 @@ CClouds::Render(void)
+ 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gpCloudTex[3]));
+ 
+ 		for(i = 0; i < 37; i++){
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(renderWorldClouds){
++				if(bCloudOnScreen[i] && fluffyHighlightVisible[i]){
++					const uint8 red = (uint8)(200.0f*fluffyHilight[i]);
++					const CRGBA colour(red, 0, 0, 255);
++					const CVector &sunDirection = CTimeCycle::GetSunDirection();
++					const float rotation = 1.7f -
++						CGeneral::GetATanOfXY(sunDirection.x, sunDirection.y);
++					AddWorldCloudQuad(worldCloudBatch, fluffyWorldPosition[i], CVector(campos),
++						30.0f, 30.0f, rotation, colour, colour);
++				}
++				continue;
++			}
++#endif
+ 			RwV3d pos = { 2.0f*CoorsOffsetX[i], 2.0f*CoorsOffsetY[i], 40.0f*CoorsOffsetZ[i] + 40.0f };
+ 			worldpos.x = pos.x*rot_cos + pos.y*rot_sin + campos.x;
+ 			worldpos.y = pos.x*rot_sin - pos.y*rot_cos + campos.y;
+@@ -289,6 +554,11 @@ CClouds::Render(void)
+ 				}
+ 			}
+ 		}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if(renderWorldClouds)
++			RenderWorldCloudBatch(worldCloudBatch);
++		else
++#endif
+ 		CSprite::FlushSpriteBuffer();
+ 	}
+ 
+@@ -329,13 +599,7 @@ CClouds::RenderBackground(int16 topred, int16 topgreen, int16 topblue,
+ {
+ 	PUSH_RENDERGROUP("CClouds::RenderBackground");
+ 
+-	CVector left = TheCamera.GetRight();
+-	float c = left.Magnitude2D();
+-	if(c > 1.0f)
+-		c = 1.0f;
+-	ms_cameraRoll = Acos(c);
+-	if(left.z < 0.0f)
+-		ms_cameraRoll = -ms_cameraRoll;
++	UpdateCloudCameraRoll(TheCamera.GetUp(), TheCamera.GetForward());
+ 
+ 	if(UseDarkBackground()){
+ 		ms_colourTop.r = 50;
+diff --git a/src/renderer/Coronas.cpp b/src/renderer/Coronas.cpp
+index e9f9e662..80cf2284 100644
+--- a/src/renderer/Coronas.cpp
++++ b/src/renderer/Coronas.cpp
+@@ -16,6 +16,47 @@
+ #include "Shadows.h"
+ #include "Clock.h"
+ #include "Bridge.h"
++#include "GameRenderCommand.h"
++
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++namespace androidgame {
++bool VrShouldUseTheaterMode(void);
++}
++
++// Native cutscenes are rendered through a conventional mono 16:9 camera and
++// then submitted on the theater quad.  The RenderWare camera raster is still
++// the Quest's portrait per-eye image, however, so CalcScreenCoors uses that
++// portrait view window.  World geometry consequently follows the 16:9 theater
++// projection while Im2D coronas (most visibly moving vehicle headlights)
++// follow the narrower portrait projection and appear detached from the model.
++//
++// Remap only theater-mode world sprites from the active RenderWare projection
++// to the projection used by makeTheaterMatrices in android_main.cpp.  Immersive
++// gameplay keeps the regular per-eye path unchanged.
++static void
++RemapCoronaToQuestTheater(RwV3d *screen, float *width, float *height)
++{
++	if(!androidgame::VrShouldUseTheaterMode())
++		return;
++
++	const RwV2d *viewWindow = RwCameraGetViewWindow(Scene.camera);
++	if(viewWindow == nil || viewWindow->x <= 0.01f ||
++	   viewWindow->y <= 0.01f)
++		return;
++
++	const float theaterViewY = Tan(DEGTORAD(60.0f * 0.5f));
++	const float theaterViewX = theaterViewY * (16.0f / 9.0f);
++	const float scaleX = viewWindow->x / theaterViewX;
++	const float scaleY = viewWindow->y / theaterViewY;
++	const float centerX = SCREEN_WIDTH * 0.5f;
++	const float centerY = SCREEN_HEIGHT * 0.5f;
++
++	screen->x = centerX + (screen->x - centerX) * scaleX;
++	screen->y = centerY + (screen->y - centerY) * scaleY;
++	*width *= scaleX;
++	*height *= scaleY;
++}
++#endif
+ 
+ struct FlareDef
+ {
+@@ -200,6 +241,16 @@ CCoronas::RegisterCorona(uint32 id, uint8 red, uint8 green, uint8 blue, uint8 al
+ 		const CVector &coors, float size, float drawDist, uint8 type,
+ 		int8 flareType, uint8 reflection, uint8 LOScheck, uint8 drawStreak, float someAngle)
+ {
++#ifdef RW_VULKAN
++	// Both legacy vehicle-light textures are deliberately stretched into a
++	// thin horizontal streak.  In stereo that billboard reads as a white
++	// filament coming out of the lamp and its wide quad can remain visible
++	// around occluder edges.  Keep the same world position, colour, range,
++	// reflection and depth-tested LOS policy, but use the compact corona on
++	// Vulkan.  The actual headlight beam/bright-light geometry is unaffected.
++	if(type == TYPE_HEADLIGHT || type == TYPE_STREAK)
++		type = TYPE_NORMAL;
++#endif
+ 	RegisterCorona(id, red, green, blue, alpha, coors, size, drawDist,
+ 		gpCoronaTexture[type], flareType, reflection, LOScheck, drawStreak, someAngle);
+ }
+@@ -266,6 +317,9 @@ CCoronas::Render(void)
+ 			aCoronas[i].offScreen = true;
+ 			aCoronas[i].sightClear = false;
+ 		}else{
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			RemapCoronaToQuestTheater(&spriteCoors, &spritew, &spriteh);
++#endif
+ 			aCoronas[i].offScreen = false;
+ 
+ 			if(spriteCoors.x < 0.0f || spriteCoors.y < 0.0f ||
+@@ -386,6 +440,12 @@ CCoronas::Render(void)
+ 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
+ 
+ 	// streaks
++#ifndef RW_VULKAN
++	// These are historical screen-space trails, not world geometry. In
++	// multiview they have no common stereo depth and are intentionally drawn
++	// with depth testing disabled, which turns moving headlights into thin
++	// white filaments visible through every wall. The actual headlight corona
++	// and its world-space bright-light geometry remain enabled.
+ 	for(i = 0; i < NUMCORONAS; i++){
+ 		if(aCoronas[i].id == 0 || !aCoronas[i].drawStreak)
+ 			continue;
+@@ -416,6 +476,7 @@ CCoronas::Render(void)
+ 			RwIm2DRenderLine(vertexbufferX, 2, 0, 1);
+ 		}
+ 	}
++#endif
+ 
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+@@ -483,6 +544,17 @@ CCoronas::RenderReflections(void)
+ 						float distanceFade = spriteCoors.z < fadeDistance ? 1.0f : 1.0f - (spriteCoors.z - fadeDistance)/fadeDistance;
+ 						distanceFade = Clamp(distanceFade, 0.0f, 1.0f);
+ 						float recipz = 1.0f/RwCameraGetNearClipPlane(Scene.camera);
++#ifdef RW_VULKAN
++						// The legacy renderer only needed the mirrored screen
++						// position, so it put every reflection at near-clip
++						// depth. The multiview Im2D shader reconstructs stereo
++						// depth from this value; near-clip therefore makes the
++						// light float in front of the road. The reflection is
++						// already projected from the virtual source mirrored
++						// below the road, so use that source's real camera
++						// depth and recover the correct stereo convergence.
++						recipz = 1.0f/spriteCoors.z;
++#endif
+ 						float heightFade = (20.0f - aCoronas[i].heightAboveRoad)/20.0f;
+ 						int intensity = distanceFade*heightFade * 230.0 * CWeather::WetRoads;
+ 
+diff --git a/src/renderer/Draw.cpp b/src/renderer/Draw.cpp
+index 846b3fd0..df142490 100644
+--- a/src/renderer/Draw.cpp
++++ b/src/renderer/Draw.cpp
+@@ -5,6 +5,13 @@
+ #include "Camera.h"
+ #include "CutsceneMgr.h"
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++namespace androidgame {
++bool VrShouldUseTheaterMode(void);
++float VrTheaterAspectRatio(void);
++}
++#endif
++
+ #ifdef ASPECT_RATIO_SCALE
+ float CDraw::ms_fAspectRatio = DEFAULT_ASPECT_RATIO;
+ float CDraw::ms_fScaledFOV = 45.0f;
+@@ -33,6 +40,13 @@ bool CDraw::ms_bFixSprites = true;
+ float
+ CDraw::FindAspectRatio(void)
+ {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// Theater mode shows the frame on a quad of a fixed shape. AR_AUTO would
++	// report the eye buffer's own ratio, which is nearly square, and the
++	// interface would be laid out for one shape and displayed on another.
++	if(androidgame::VrShouldUseTheaterMode())
++		return androidgame::VrTheaterAspectRatio();
++#endif
+ #ifndef ASPECT_RATIO_SCALE
+ 	if(FrontEndMenuManager.m_PrefsUseWideScreen)	
+ 		return 16.0f/9.0f;
+diff --git a/src/renderer/Fluff.cpp b/src/renderer/Fluff.cpp
+index c4cfe7f7..ce4bd96a 100644
+--- a/src/renderer/Fluff.cpp
++++ b/src/renderer/Fluff.cpp
+@@ -13,6 +13,7 @@
+ #include "Stats.h"
+ #include "maths.h"
+ #include "Frontend.h"
++#include "GameRenderCommand.h"
+ 
+ uint8 ScrollCharSet[59][5] = {
+ 	{ 0x00, 0x00, 0x00, 0x00, 0x00 }, // ' '
+@@ -772,11 +773,11 @@ void CTowerClock::Render()
+ 		LittleTest();
+ 
+ 		// Draw lines
+-		if (RwIm3DTransform(TempV, 4, nil, 0))
++		if (GameRender::BeginImmediate3D(TempV, 4, nil, 0, GameRender::IMMEDIATE3D_DRAW_LINES))
+ 		{
+-			RwIm3DRenderLine(0, 1);
+-			RwIm3DRenderLine(2, 3);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DLine(0, 1);
++			GameRender::SubmitImmediate3DLine(2, 3);
++			GameRender::EndImmediate3D();
+ 		}
+ 	}
+ }
+diff --git a/src/renderer/Font.cpp b/src/renderer/Font.cpp
+index 9ebc16ec..f8cfbbc4 100644
+--- a/src/renderer/Font.cpp
++++ b/src/renderer/Font.cpp
+@@ -1444,6 +1444,8 @@ CFont::ParseToken(wchar *s, wchar*)
+ void
+ CFont::DrawFonts(void)
+ {
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+ 	CSprite2d::DrawBank(Details.bank);
+ 	CSprite2d::DrawBank(Details.bank+1);
+ 	CSprite2d::DrawBank(Details.bank+2);
+diff --git a/src/renderer/Glass.cpp b/src/renderer/Glass.cpp
+index cc45648c..a96b8c19 100644
+--- a/src/renderer/Glass.cpp
++++ b/src/renderer/Glass.cpp
+@@ -14,6 +14,7 @@
+ #include "ModelIndices.h"
+ #include "main.h"
+ #include "soundlist.h"
++#include "GameRenderCommand.h"
+ 
+ 
+ uint32 CGlass::NumGlassEntities;
+@@ -551,10 +552,11 @@ CGlass::RenderHiLightPolys(void)
+ 
+ 		LittleTest();
+ 
+-		if ( RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStoredHiLight, nil, rwIM3D_VERTEXUV) )
++		if (GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStoredHiLight, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_GLASS))
+ 		{
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStoredHiLight);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStoredHiLight);
++			GameRender::EndImmediate3D();
+ 		}
+ 
+ 		TempBufferVerticesStoredHiLight = TEMPBUFFERVERTHILIGHTOFFSET;
+@@ -573,10 +575,14 @@ CGlass::RenderShatteredPolys(void)
+ 
+ 		LittleTest();
+ 
+-		if ( RwIm3DTransform(&TempBufferRenderVertices[TEMPBUFFERVERTSHATTEREDOFFSET], TempBufferVerticesStoredShattered - TEMPBUFFERVERTSHATTEREDOFFSET, nil, rwIM3D_VERTEXUV) )
++		if (GameRender::BeginImmediate3D(&TempBufferRenderVertices[TEMPBUFFERVERTSHATTEREDOFFSET],
++			TempBufferVerticesStoredShattered - TEMPBUFFERVERTSHATTEREDOFFSET, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_GLASS))
+ 		{
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, &TempBufferRenderIndexList[TEMPBUFFERINDEXSHATTEREDOFFSET], TempBufferIndicesStoredShattered - TEMPBUFFERINDEXSHATTEREDOFFSET);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST,
++				&TempBufferRenderIndexList[TEMPBUFFERINDEXSHATTEREDOFFSET],
++				TempBufferIndicesStoredShattered - TEMPBUFFERINDEXSHATTEREDOFFSET);
++			GameRender::EndImmediate3D();
+ 		}
+ 
+ 		TempBufferIndicesStoredShattered  = TEMPBUFFERINDEXSHATTEREDOFFSET;
+@@ -595,10 +601,14 @@ CGlass::RenderReflectionPolys(void)
+ 
+ 		LittleTest();
+ 
+-		if ( RwIm3DTransform(&TempBufferRenderVertices[TEMPBUFFERVERTREFLECTIONOFFSET], TempBufferVerticesStoredReflection - TEMPBUFFERVERTREFLECTIONOFFSET, nil, rwIM3D_VERTEXUV) )
++		if (GameRender::BeginImmediate3D(&TempBufferRenderVertices[TEMPBUFFERVERTREFLECTIONOFFSET],
++			TempBufferVerticesStoredReflection - TEMPBUFFERVERTREFLECTIONOFFSET, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_GLASS))
+ 		{
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, &TempBufferRenderIndexList[TEMPBUFFERINDEXREFLECTIONOFFSET], TempBufferIndicesStoredReflection - TEMPBUFFERINDEXREFLECTIONOFFSET);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST,
++				&TempBufferRenderIndexList[TEMPBUFFERINDEXREFLECTIONOFFSET],
++				TempBufferIndicesStoredReflection - TEMPBUFFERINDEXREFLECTIONOFFSET);
++			GameRender::EndImmediate3D();
+ 		}
+ 
+ 		TempBufferIndicesStoredReflection  = TEMPBUFFERINDEXREFLECTIONOFFSET;
+diff --git a/src/renderer/Hud.cpp b/src/renderer/Hud.cpp
+index 3446f620..242b3923 100644
+--- a/src/renderer/Hud.cpp
++++ b/src/renderer/Hud.cpp
+@@ -20,6 +20,45 @@
+ #include "TxdStore.h"
+ #include "User.h"
+ #include "World.h"
++#include "GameRenderCommand.h"
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++#include "OculusVR.h"
++#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++namespace androidgame {
++bool VrGameplayHudEnabled(void);
++bool VrShouldUseTheaterMode(void);
++bool VrWristPanelEnabled(int panel);
++bool VrWristPanelsInVehicle(void);
++bool VrHudWeaponPanelEnabled(void);
++bool VrHudClockEnabled(void);
++void VrWristAmmoColour(unsigned char *red, unsigned char *green,
++                       unsigned char *blue);
++int VrWristPanelHand(int panel);
++float VrWristPanelOpacity(int panel);
++void *BeginVrWristPanel(int panel, float centreX, float centreY, float width,
++	float height, int hand = -1);
++void EndVrWristPanel(void);
++}
++// Panel indices, mirroring librw's WRIST_PANEL_* without pulling the
++// backend header into the HUD.
++enum {
++	VR_WRIST_PANEL_MAP = 0,
++	VR_WRIST_PANEL_STATUS = 1,
++	VR_WRIST_PANEL_CLOCK = 2,
++	VR_WRIST_PANEL_AMMO = 3
++};
++// The clock panel has no screen rect to inherit, so it gets one of its own:
++// a small strip just big enough for HH:MM at the interface font size.
++enum {
++	VR_WRIST_CLOCK_WIDTH = 120,
++	VR_WRIST_CLOCK_HEIGHT = 40,
++	VR_WRIST_CLOCK_MARGIN = 4,
++	VR_WRIST_AMMO_WIDTH = 120,
++	VR_WRIST_AMMO_HEIGHT = 40,
++	VR_WRIST_AMMO_MARGIN = 4
++};
++#endif
+ 
+ #ifdef PS2_HUD
+ #define MONEY_X 100.0f
+@@ -321,6 +360,466 @@ void CHud::SetVehicleName(wchar *name)
+ 	m_pVehicleName = name;
+ }
+ 
++RwTexture *
++CHud::GetWeaponIconTexture(int32 weaponType)
++{
++	if(weaponType >= 0 && weaponType < 13)
++		return Sprites[weaponType].m_pTexture;
++	return nil;
++}
++
++// The map, its disc and the blips, in screen coordinates. Kept apart from
++// CHud::Draw because the wrist minimap runs exactly this code into a texture
++// of its own, before the frame's render pass opens.
++static void
++DrawRadarContents(void)
++{
++	CRadar::DrawMap();
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	CRect rect(0.0f, 0.0f, SCREEN_SCALE_X(RADAR_WIDTH), SCREEN_SCALE_Y(RADAR_HEIGHT));
++	rect.Translate(SCREEN_SCALE_X_FIX(RADAR_LEFT), SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
++
++#ifdef PS2_HUD
++	#ifdef FIX_BUGS
++	rect.Grow(SCREEN_SCALE_X(2.0f), SCREEN_SCALE_X(4.0f), SCREEN_SCALE_Y(2.0f), SCREEN_SCALE_Y(4.0f));
++	#else
++	rect.Grow(2.0f, 4.0f);
++	#endif
++#else
++	#ifdef FIX_BUGS
++	rect.Grow(SCREEN_SCALE_X(4.0f), SCREEN_SCALE_X(4.0f), SCREEN_SCALE_Y(4.0f), SCREEN_SCALE_Y(4.0f));
++	#else
++	rect.Grow(4.0f);
++	#endif
++#endif
++	CHud::Sprites[HUD_RADARDISC].Draw(rect, RADARDISC_COLOR);
++	CRadar::DrawBlips();
++}
++
++// Money, health, armour and the wanted level, in screen coordinates. Kept
++// apart from CHud::Draw for the same reason the radar is: the wrist status
++// panel runs exactly this code into a texture of its own, before the frame
++// opens its render pass.
++static void
++DrawStatusContents(void)
++{
++	CPlayerPed *playerPed = FindPlayerPed();
++	if (playerPed == nil)
++		return;
++
++	wchar sPrint[16];
++	wchar sPrintIcon[16];
++	char sTemp[16];
++
++	/*
++		DrawMoneyCounter
++	*/
++	sprintf(sTemp, "$%08d", CWorld::Players[CWorld::PlayerInFocus].m_nVisibleMoney);
++	AsciiToUnicode(sTemp, sPrint);
++
++	CFont::SetPropOff();
++	CFont::SetBackgroundOff();
++	CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++	CFont::SetCentreOff();
++	CFont::SetRightJustifyOn();
++	CFont::SetRightJustifyWrap(0.0f);
++	CFont::SetBackGroundOnlyTextOff();
++	CFont::SetFontStyle(FONT_HEADING);
++	CFont::SetPropOff();
++	CFont::SetColor(CRGBA(0, 0, 0, 255));
++	CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(MONEY_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(43.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
++	CFont::SetColor(MONEY_COLOR);
++	CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(MONEY_X), SCREEN_SCALE_Y(43.0f), sPrint);
++
++	/*
++		DrawHealth
++	*/
++	CFont::SetBackgroundOff();
++	CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++	CFont::SetJustifyOff();
++	CFont::SetCentreOff();
++	CFont::SetRightJustifyWrap(0.0f);
++	CFont::SetRightJustifyOn();
++	CFont::SetPropOff();
++	CFont::SetFontStyle(FONT_HEADING);
++
++	if (CHud::m_ItemToFlash == ITEM_HEALTH && FRAMECOUNTER & 8
++		|| CHud::m_ItemToFlash != ITEM_HEALTH
++		|| playerPed->m_fHealth < 10
++		&& FRAMECOUNTER & 8) {
++		if (playerPed->m_fHealth >= 10
++			|| playerPed->m_fHealth < 10 && FRAMECOUNTER & 8) {
++
++			AsciiToUnicode("{", sPrintIcon);
++#ifdef FIX_BUGS
++			sprintf(sTemp, "%03d", int32(playerPed->m_fHealth + 0.5f));
++#else
++			sprintf(sTemp, "%03d", (int32)playerPed->m_fHealth);
++#endif
++			AsciiToUnicode(sTemp, sPrint);
++			CFont::SetColor(CRGBA(0, 0, 0, 255));
++			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
++
++			if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss + 2000 || FRAMECOUNTER & 4)
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(56.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
++			
++			CFont::SetColor(HEALTH_COLOR);
++
++			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X), SCREEN_SCALE_Y(65.0f), sPrint);
++
++			if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss + 2000 || FRAMECOUNTER & 4)
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(56.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
++		}
++	}
++
++	/*
++		DrawArmour
++	*/
++	if (CHud::m_ItemToFlash == ITEM_ARMOUR && FRAMECOUNTER & 8 || CHud::m_ItemToFlash != ITEM_ARMOUR) {
++		CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++		if (playerPed->m_fArmour > 1.0f) {
++			AsciiToUnicode("[", sPrintIcon);
++#ifdef FIX_BUGS
++			sprintf(sTemp, "%03d", int32(playerPed->m_fArmour + 0.5f));
++#else
++			sprintf(sTemp, "%03d", (int32)playerPed->m_fArmour);
++#endif
++			AsciiToUnicode(sTemp, sPrint);
++
++			CFont::SetColor(CRGBA(0, 0, 0, 255));
++			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
++
++			if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss + 2000 || FRAMECOUNTER & 4)
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(54.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
++
++			CFont::SetColor(ARMOUR_COLOR);
++
++			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f), SCREEN_SCALE_Y(65.0f), sPrint);
++
++			if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss + 2000 || FRAMECOUNTER & 1) {					
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) - SCREEN_SCALE_X(54.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
++			}
++		}
++	}
++
++	/*
++		DrawWantedLevel
++	*/
++	CFont::SetBackgroundOff();
++	CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++	CFont::SetJustifyOff();
++	CFont::SetCentreOff();
++	CFont::SetRightJustifyOff();
++	CFont::SetPropOn();
++	CFont::SetFontStyle(FONT_HEADING);
++
++	AsciiToUnicode("]", sPrintIcon);
++	
++	float fStarsX = SCREEN_SCALE_FROM_RIGHT(STARS_X);
++
++	for (int i = 0; i < 6; i++) {
++		CFont::SetColor(CRGBA(0, 0, 0, 255));
++		CFont::PrintString(fStarsX + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(87.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
++
++		if (playerPed->m_pWanted->GetWantedLevel() > i
++			&& (CTimer::GetTimeInMilliseconds() > playerPed->m_pWanted->m_nLastWantedLevelChange
++				+ 2000 || FRAMECOUNTER & 4)) {
++
++			CFont::SetColor(WANTED_COLOR);
++			CFont::PrintString(fStarsX, SCREEN_SCALE_Y(87.0f), sPrintIcon);
++		}
++		
++		fStarsX -= SCREEN_SCALE_X(23.0f);
++	}
++}
++
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++void
++VrDrawWristRadarContents(void)
++{
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
++	DrawRadarContents();
++}
++
++static bool
++VrWristPanelsRideAlong(void)
++{
++	return androidgame::VrWristPanelsInVehicle() &&
++		OculusVR::IsImmersiveDrivingActive();
++}
++
++static bool
++DrawWristRadarQuad(void)
++{
++	if (!androidgame::VrWristPanelEnabled(VR_WRIST_PANEL_MAP))
++		return false;
++	if (FindPlayerVehicle() != nil && !VrWristPanelsRideAlong())
++		return false;
++
++	const float width = SCREEN_SCALE_X(RADAR_WIDTH)+SCREEN_SCALE_X(12.0f);
++	const float height = SCREEN_SCALE_Y(RADAR_HEIGHT)+SCREEN_SCALE_Y(12.0f);
++	const float centreX = SCREEN_SCALE_X_FIX(RADAR_LEFT)+
++		SCREEN_SCALE_X(RADAR_WIDTH)*0.5f;
++	const float centreY = SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM+RADAR_HEIGHT)+
++		SCREEN_SCALE_Y(RADAR_HEIGHT)*0.5f;
++	RwRaster *map = (RwRaster*)androidgame::BeginVrWristPanel(
++		VR_WRIST_PANEL_MAP, centreX, centreY, width, height);
++	if (map == nil)
++		return true;
++
++	CRect rect(centreX-width*0.5f, centreY-height*0.5f,
++		centreX+width*0.5f, centreY+height*0.5f);
++	const int alpha = (int)(255.0f*
++		androidgame::VrWristPanelOpacity(VR_WRIST_PANEL_MAP));
++	const CRGBA white(255, 255, 255, alpha);
++	CSprite2d::SetVertices(rect, white, white, white, white);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, map);
++	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::GetVertices(), 4);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	androidgame::EndVrWristPanel();
++	return true;
++}
++
++void
++VrDrawWristStatusContents(void)
++{
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	DrawStatusContents();
++	CFont::DrawFonts();
++}
++
++static bool
++DrawWristStatusQuad(void)
++{
++	if (!androidgame::VrWristPanelEnabled(VR_WRIST_PANEL_STATUS))
++		return false;
++	if (FindPlayerVehicle() != nil && !VrWristPanelsRideAlong())
++		return false;
++
++	const float left = SCREEN_SCALE_FROM_RIGHT(292.0f);
++	const float right = SCREEN_SCALE_FROM_RIGHT(96.0f);
++	const float top = SCREEN_SCALE_Y(30.0f);
++	const float bottom = SCREEN_SCALE_Y(106.0f);
++	const float width = right-left;
++	const float height = bottom-top;
++	RwRaster *panel = (RwRaster*)androidgame::BeginVrWristPanel(
++		VR_WRIST_PANEL_STATUS, (left+right)*0.5f, (top+bottom)*0.5f,
++		width, height);
++	if (panel == nil)
++		return true;
++
++	CRect rect(left, top, right, bottom);
++	const int alpha = (int)(255.0f*
++		androidgame::VrWristPanelOpacity(VR_WRIST_PANEL_STATUS));
++	const CRGBA white(255, 255, 255, alpha);
++	CSprite2d::SetVertices(rect, white, white, white, white);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, panel);
++	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::GetVertices(), 4);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	androidgame::EndVrWristPanel();
++	return true;
++}
++
++void
++VrDrawWristClockContents(void)
++{
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	CFont::SetJustifyOff();
++	CFont::SetBackgroundOff();
++	CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++	CFont::SetBackGroundOnlyTextOff();
++	CFont::SetPropOff();
++	CFont::SetFontStyle(FONT_HEADING);
++	CFont::SetRightJustifyOff();
++	CFont::SetCentreOn();
++	CFont::SetCentreSize(SCREEN_SCALE_X(VR_WRIST_CLOCK_WIDTH));
++	CFont::SetDropShadowPosition(2);
++	CFont::SetDropColor(CRGBA(0, 0, 0, 255));
++	CFont::SetColor(CLOCK_COLOR);
++	char text[16];
++	wchar wide[16];
++	sprintf(text, "%02d:%02d", CClock::GetHours(), CClock::GetMinutes());
++	AsciiToUnicode(text, wide);
++	CFont::PrintString(SCREEN_SCALE_X(VR_WRIST_CLOCK_WIDTH)*0.5f,
++		SCREEN_SCALE_Y(VR_WRIST_CLOCK_MARGIN), wide);
++	CFont::DrawFonts();
++	CFont::SetCentreOff();
++}
++
++void
++VrDrawWristAmmoContents(void)
++{
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	CPlayerPed *player = FindPlayerPed();
++	if (player == nil)
++		return;
++	CWeapon *weapon = &player->m_weapons[player->m_currentWeapon];
++	if (weapon == nil)
++		return;
++	const int32 type = weapon->m_eWeaponType;
++	const int32 amount =
++		CWeaponInfo::GetWeaponInfo((eWeaponType)type)->m_nAmountofAmmunition;
++	char text[24];
++	if (amount <= 1 || amount >= 1000)
++		sprintf(text, "%d", weapon->m_nAmmoTotal);
++	else {
++		const int32 divisor = type == WEAPONTYPE_FLAMETHROWER ? 10 : 1;
++		const int32 clip = weapon->m_nAmmoInClip/divisor;
++		const int32 reserve = Min((weapon->m_nAmmoTotal-
++			weapon->m_nAmmoInClip)/divisor, 9999);
++		sprintf(text, "%d-%d", reserve, clip);
++	}
++	uint8 red = 90, green = 235, blue = 120;
++	androidgame::VrWristAmmoColour(&red, &green, &blue);
++	CFont::SetJustifyOff();
++	CFont::SetBackgroundOff();
++	CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
++	CFont::SetBackGroundOnlyTextOff();
++	CFont::SetPropOff();
++	CFont::SetFontStyle(FONT_HEADING);
++	CFont::SetRightJustifyOff();
++	CFont::SetCentreOn();
++	CFont::SetCentreSize(SCREEN_SCALE_X(VR_WRIST_AMMO_WIDTH));
++	CFont::SetDropShadowPosition(2);
++	CFont::SetDropColor(CRGBA(0, 0, 0, 255));
++	CFont::SetColor(CRGBA(red, green, blue, 255));
++	wchar wide[24];
++	AsciiToUnicode(text, wide);
++	CFont::PrintString(SCREEN_SCALE_X(VR_WRIST_AMMO_WIDTH)*0.5f,
++		SCREEN_SCALE_Y(VR_WRIST_AMMO_MARGIN), wide);
++	CFont::DrawFonts();
++	CFont::SetCentreOff();
++}
++
++static void
++DrawWristAmmoOnHand(int hand, float width, float height)
++{
++	RwRaster *panel = (RwRaster*)androidgame::BeginVrWristPanel(
++		VR_WRIST_PANEL_AMMO, width*0.5f, height*0.5f, width, height,
++		hand);
++	if (panel == nil)
++		return;
++
++	CRect rect(0.0f, 0.0f, width, height);
++	const int alpha = (int)(255.0f*
++		androidgame::VrWristPanelOpacity(VR_WRIST_PANEL_AMMO));
++	const CRGBA white(255, 255, 255, alpha);
++	CSprite2d::SetVertices(rect, white, white, white, white);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, panel);
++	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::GetVertices(), 4);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	androidgame::EndVrWristPanel();
++}
++
++static bool
++DrawWristAmmoQuad(void)
++{
++	if (!androidgame::VrWristPanelEnabled(VR_WRIST_PANEL_AMMO))
++		return false;
++	if (FindPlayerVehicle() != nil && !VrWristPanelsRideAlong())
++		return false;
++	CPlayerPed *player = FindPlayerPed();
++	if (player == nil)
++		return false;
++	CWeapon *weapon = &player->m_weapons[player->m_currentWeapon];
++	if (weapon == nil || weapon->m_eWeaponType == WEAPONTYPE_UNARMED)
++		return false;
++	CWeaponInfo *info = CWeaponInfo::GetWeaponInfo((eWeaponType)weapon->m_eWeaponType);
++	if (info == nil || info->m_eWeaponFire == WEAPON_FIRE_MELEE)
++		return false;
++
++	const float width = SCREEN_SCALE_X(VR_WRIST_AMMO_WIDTH);
++	const float height = SCREEN_SCALE_Y(VR_WRIST_AMMO_HEIGHT);
++	bool drawn = false;
++	for (int hand = 0; hand < 2; hand++)
++		if (OculusVR::GetHeldWeaponSlot(hand) >= 0) {
++			DrawWristAmmoOnHand(hand, width, height);
++			drawn = true;
++		}
++	if (!drawn)
++		DrawWristAmmoOnHand(
++			androidgame::VrWristPanelHand(VR_WRIST_PANEL_AMMO) ? 1 : 0,
++			width, height);
++	return true;
++}
++
++static bool
++DrawWristClockQuad(void)
++{
++	if (!androidgame::VrWristPanelEnabled(VR_WRIST_PANEL_CLOCK))
++		return false;
++	if (FindPlayerVehicle() != nil && !VrWristPanelsRideAlong())
++		return false;
++
++	const float width = SCREEN_SCALE_X(VR_WRIST_CLOCK_WIDTH);
++	const float height = SCREEN_SCALE_Y(VR_WRIST_CLOCK_HEIGHT);
++	RwRaster *panel = (RwRaster*)androidgame::BeginVrWristPanel(
++		VR_WRIST_PANEL_CLOCK, width*0.5f, height*0.5f, width, height);
++	if (panel == nil)
++		return true;
++
++	CRect rect(0.0f, 0.0f, width, height);
++	const int alpha = (int)(255.0f*
++		androidgame::VrWristPanelOpacity(VR_WRIST_PANEL_CLOCK));
++	const CRGBA white(255, 255, 255, alpha);
++	CSprite2d::SetVertices(rect, white, white, white, white);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, panel);
++	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::GetVertices(), 4);
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
++	androidgame::EndVrWristPanel();
++	return true;
++}
++#endif
++
+ void CHud::Draw()
+ {
+ 	// disable hud via second controller
+@@ -332,13 +831,32 @@ void CHud::Draw()
+ 		return;
+ #endif
+ 
+-	if (m_Wants_To_Draw_Hud && !TheCamera.m_WideScreenOn) {
++	bool vrTrackedScope = false;
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	vrTrackedScope = OculusVR::IsTrackedScopeActive();
++#endif
++	bool drawGameplayHud = m_Wants_To_Draw_Hud;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// The setting affects only immersive gameplay. Flat menus, loading frames
++	// and cinema-mode cutscenes keep their original 2D presentation.
++	drawGameplayHud = drawGameplayHud &&
++		(androidgame::VrShouldUseTheaterMode() ||
++		 androidgame::VrGameplayHudEnabled());
++#endif
++
++	if ((drawGameplayHud || vrTrackedScope) && !TheCamera.m_WideScreenOn) {
+ 		bool DrawCrossHair = false;
++		bool CrossHairHidesHud = false;
+ #ifdef GTA_PC
+ 		bool DrawCrossHairPC = false;
+ #endif
+ 
+-		int32 WeaponType = FindPlayerPed()->m_weapons[FindPlayerPed()->m_currentWeapon].m_eWeaponType;
++		CPlayerPed *playerPed = FindPlayerPed();
++		int32 WeaponType = playerPed ? playerPed->m_weapons[playerPed->m_currentWeapon].m_eWeaponType : WEAPONTYPE_UNARMED;
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		if (vrTrackedScope)
++			WeaponType = OculusVR::GetTrackedScopeWeaponType();
++#endif
+ 		int32 Mode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
+ 
+ 		if (Mode == CCam::MODE_SNIPER || Mode == CCam::MODE_ROCKETLAUNCHER || Mode == CCam::MODE_M16_1STPERSON
+@@ -359,13 +877,31 @@ void CHud::Draw()
+ 		*/
+ 		if (TheCamera.Cams[TheCamera.ActiveCam].Using3rdPersonMouseCam() &&
+ 		    (!CPad::GetPad(0)->GetLookBehindForPed() || TheCamera.m_bPlayerIsInGarage) || Mode == CCam::MODE_1STPERSON_RUNABOUT) {
+-			if (FindPlayerPed() && !FindPlayerPed()->EnteringCar()) {
++			if (playerPed && !playerPed->EnteringCar()) {
+ 				if ((WeaponType >= WEAPONTYPE_COLT45 && WeaponType <= WEAPONTYPE_M16) || WeaponType == WEAPONTYPE_FLAMETHROWER)
+ 					DrawCrossHairPC = true;
+ 			}
+ 		}
+ #endif
+ 
++		if (vrTrackedScope) {
++			DrawCrossHair = true;
++#ifdef GTA_PC
++			DrawCrossHairPC = false;
++#endif
++			CrossHairHidesHud = true;
++		}
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		else if (OculusVR::CanSkipDesktopGameplayRender()) {
++			// Tracked weapons provide their own aim direction. Preserve actual
++			// optical scope/camera masks, but remove legacy screen-space sights.
++			DrawCrossHair = false;
++#ifdef GTA_PC
++			DrawCrossHairPC = false;
++#endif
++		}
++#endif
++
+ 		if ( DrawCrossHair 
+ #ifdef GTA_PC
+ 			|| DrawCrossHairPC  
+@@ -439,7 +975,7 @@ void CHud::Draw()
+ #ifdef GTA_PC
+ 					|| Mode == CCam::MODE_ROCKETLAUNCHER_RUNABOUT
+ #endif
+-					)
++					|| (vrTrackedScope && WeaponType == WEAPONTYPE_ROCKETLAUNCHER))
+ 				{
+ 					RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void *)TRUE);
+ 					RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDONE);
+@@ -488,189 +1024,85 @@ void CHud::Draw()
+ 			SpriteBrightness = 0;
+ 		}
+ 
+-		/*
+-			DrawMoneyCounter
+-		*/
+-		wchar sPrint[16];
+-		wchar sPrintIcon[16];
+-		char sTemp[16];
+-
+-		sprintf(sTemp, "$%08d", CWorld::Players[CWorld::PlayerInFocus].m_nVisibleMoney);
+-		AsciiToUnicode(sTemp, sPrint);
+-
+-		CFont::SetPropOff();
+-		CFont::SetBackgroundOff();
+-		CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
+-		CFont::SetCentreOff();
+-		CFont::SetRightJustifyOn();
+-		CFont::SetRightJustifyWrap(0.0f);
+-		CFont::SetBackGroundOnlyTextOff();
+-		CFont::SetFontStyle(FONT_HEADING);
+-		CFont::SetPropOff();
+-		CFont::SetColor(CRGBA(0, 0, 0, 255));
+-		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(MONEY_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(43.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
+-		CFont::SetColor(MONEY_COLOR);
+-		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(MONEY_X), SCREEN_SCALE_Y(43.0f), sPrint);
+-
+-		/*
+-			DrawAmmo
+-		*/
+-		int32 AmmoAmount = CWeaponInfo::GetWeaponInfo(FindPlayerPed()->GetWeapon()->m_eWeaponType)->m_nAmountofAmmunition;
+-		int32 AmmoInClip = FindPlayerPed()->m_weapons[FindPlayerPed()->m_currentWeapon].m_nAmmoInClip;
+-		int32 TotalAmmo = FindPlayerPed()->m_weapons[FindPlayerPed()->m_currentWeapon].m_nAmmoTotal;
+-		int32 Ammo, Clip;
+-
+-		if (AmmoAmount <= 1 || AmmoAmount >= 1000)
+-			sprintf(sTemp, "%d", TotalAmmo);
+-		else {
+-			if (WeaponType == WEAPONTYPE_FLAMETHROWER) {
+-				Clip = AmmoInClip / 10;
+-
+-				Ammo = Min((TotalAmmo - AmmoInClip) / 10, 9999);
+-			}
+-			else {
+-				Clip = AmmoInClip;
+-
+-				Ammo = Min(TotalAmmo - AmmoInClip, 9999);
+-			}
+-
+-			sprintf(sTemp, "%d-%d", Ammo, Clip);
+-		}
+-
+-		AsciiToUnicode(sTemp, sPrint);
+-
+-		/*
+-			DrawWeaponIcon
+-		*/
+-		Sprites[WeaponType].Draw(
+-			CRect(
+-				SCREEN_SCALE_FROM_RIGHT(WEAPON_X),
+-				SCREEN_SCALE_Y(27.0f),
+-				SCREEN_SCALE_FROM_RIGHT(WEAPON_X)+SCREEN_SCALE_X(64.0f),
+-				SCREEN_SCALE_Y(27.0f)+SCREEN_SCALE_Y(64.0f)),
+-			CRGBA(255, 255, 255, 255),
+-			0.015f,
+-			0.015f,
+-			1.0f,
+-			0.0f,
+-			0.015f,
+-			1.0f,
+-			1.0f,
+-			1.0f);
+-		
+-		CFont::SetBackgroundOff();
+-		CFont::SetScale(SCREEN_SCALE_X(0.4f), SCREEN_SCALE_Y(0.6f));
+-		CFont::SetJustifyOff();
+-		CFont::SetCentreOn();
+-		CFont::SetCentreSize(SCREEN_WIDTH);
+-		CFont::SetPropOn();
+-		CFont::SetFontStyle(FONT_BANK);
+-
+-		if (!CDarkel::FrenzyOnGoing() && WeaponType != WEAPONTYPE_UNARMED && WeaponType != WEAPONTYPE_BASEBALLBAT) {
+-			CFont::SetColor(AMMO_COLOR);
+-			CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(AMMO_X), SCREEN_SCALE_Y(73.0f), sPrint);
+-		}
+-
+-		/*
+-			DrawHealth
+-		*/
+-		CFont::SetBackgroundOff();
+-		CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
+-		CFont::SetJustifyOff();
+-		CFont::SetCentreOff();
+-		CFont::SetRightJustifyWrap(0.0f);
+-		CFont::SetRightJustifyOn();
+-		CFont::SetPropOff();
+-		CFont::SetFontStyle(FONT_HEADING);
+-
+-		if (m_ItemToFlash == ITEM_HEALTH && FRAMECOUNTER & 8
+-			|| m_ItemToFlash != ITEM_HEALTH
+-			|| FindPlayerPed()->m_fHealth < 10
+-			&& FRAMECOUNTER & 8) {
+-			if (FindPlayerPed()->m_fHealth >= 10
+-				|| FindPlayerPed()->m_fHealth < 10 && FRAMECOUNTER & 8) {
++		if (CrossHairHidesHud)
++			return;
+ 
+-				AsciiToUnicode("{", sPrintIcon);
+-#ifdef FIX_BUGS
+-				sprintf(sTemp, "%03d", int32(FindPlayerPed()->m_fHealth + 0.5f));
+-#else
+-				sprintf(sTemp, "%03d", (int32)FindPlayerPed()->m_fHealth);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		// Money, health, armour and the wanted level live on the player's
++		// other wrist in that mode: they were rendered into a texture of
++		// their own before this frame opened its pass.
++		if (!DrawWristStatusQuad())
+ #endif
+-				AsciiToUnicode(sTemp, sPrint);
+-				CFont::SetColor(CRGBA(0, 0, 0, 255));
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
+-
+-				if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss + 2000 || FRAMECOUNTER & 4)
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(56.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
+-				
+-				CFont::SetColor(HEALTH_COLOR);
+-
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X), SCREEN_SCALE_Y(65.0f), sPrint);
+-
+-				if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastHealthLoss + 2000 || FRAMECOUNTER & 4)
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(HEALTH_X) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(56.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
+-			}
+-		}
++		DrawStatusContents();
+ 
+ 		/*
+-			DrawArmour
++			DrawAmmo & DrawWeaponIcon
+ 		*/
+-		if (m_ItemToFlash == ITEM_ARMOUR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_ARMOUR) {
+-			CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
+-			if (FindPlayerPed()->m_fArmour > 1.0f) {
+-				AsciiToUnicode("[", sPrintIcon);
+-#ifdef FIX_BUGS
+-				sprintf(sTemp, "%03d", int32(FindPlayerPed()->m_fArmour + 0.5f));
+-#else
+-				sprintf(sTemp, "%03d", (int32)FindPlayerPed()->m_fArmour);
++		wchar sPrint[16];
++		char sTemp[16];
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if (androidgame::VrHudWeaponPanelEnabled()) {
+ #endif
+-				AsciiToUnicode(sTemp, sPrint);
+-
+-				CFont::SetColor(CRGBA(0, 0, 0, 255));
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
+-
+-				if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss + 2000 || FRAMECOUNTER & 4)
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) + SCREEN_SCALE_X_FIX(2.0f) - SCREEN_SCALE_X(54.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
+-
+-				CFont::SetColor(ARMOUR_COLOR);
+-
+-				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f), SCREEN_SCALE_Y(65.0f), sPrint);
++		if (playerPed) {
++			int32 AmmoAmount = CWeaponInfo::GetWeaponInfo(playerPed->GetWeapon()->m_eWeaponType)->m_nAmountofAmmunition;
++			int32 AmmoInClip = playerPed->m_weapons[playerPed->m_currentWeapon].m_nAmmoInClip;
++			int32 TotalAmmo = playerPed->m_weapons[playerPed->m_currentWeapon].m_nAmmoTotal;
++			int32 Ammo, Clip;
++
++			if (AmmoAmount <= 1 || AmmoAmount >= 1000)
++				sprintf(sTemp, "%d", TotalAmmo);
++			else {
++				if (WeaponType == WEAPONTYPE_FLAMETHROWER) {
++					Clip = AmmoInClip / 10;
+ 
+-				if (!CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss || CTimer::GetTimeInMilliseconds() > CWorld::Players[CWorld::PlayerInFocus].m_nTimeLastArmourLoss + 2000 || FRAMECOUNTER & 1) {					
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(182.0f) - SCREEN_SCALE_X(54.0f) + SCREEN_SCALE_X(2.0f), SCREEN_SCALE_Y(65.0f), sPrintIcon);
++					Ammo = Min((TotalAmmo - AmmoInClip) / 10, 9999);
+ 				}
+-			}
+-		}
+-
+-		/*
+-			DrawWantedLevel
+-		*/
+-		CFont::SetBackgroundOff();
+-		CFont::SetScale(SCREEN_SCALE_X(0.8f), SCREEN_SCALE_Y(1.35f));
+-		CFont::SetJustifyOff();
+-		CFont::SetCentreOff();
+-		CFont::SetRightJustifyOff();
+-		CFont::SetPropOn();
+-		CFont::SetFontStyle(FONT_HEADING);
++				else {
++					Clip = AmmoInClip;
+ 
+-		AsciiToUnicode("]", sPrintIcon);
+-		
+-		float fStarsX = SCREEN_SCALE_FROM_RIGHT(STARS_X);
++					Ammo = Min(TotalAmmo - AmmoInClip, 9999);
++				}
+ 
+-		for (int i = 0; i < 6; i++) {
+-			CFont::SetColor(CRGBA(0, 0, 0, 255));
+-			CFont::PrintString(fStarsX + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(87.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrintIcon);
++				sprintf(sTemp, "%d-%d", Ammo, Clip);
++			}
+ 
+-			if (FindPlayerPed()->m_pWanted->GetWantedLevel() > i
+-				&& (CTimer::GetTimeInMilliseconds() > FindPlayerPed()->m_pWanted->m_nLastWantedLevelChange
+-					+ 2000 || FRAMECOUNTER & 4)) {
++			AsciiToUnicode(sTemp, sPrint);
++
++			/*
++				DrawWeaponIcon
++			*/
++			Sprites[WeaponType].Draw(
++				CRect(
++					SCREEN_SCALE_FROM_RIGHT(WEAPON_X),
++					SCREEN_SCALE_Y(27.0f),
++					SCREEN_SCALE_FROM_RIGHT(WEAPON_X)+SCREEN_SCALE_X(64.0f),
++					SCREEN_SCALE_Y(27.0f)+SCREEN_SCALE_Y(64.0f)),
++				CRGBA(255, 255, 255, 255),
++				0.015f,
++				0.015f,
++				1.0f,
++				0.0f,
++				0.015f,
++				1.0f,
++				1.0f,
++				1.0f);
++			
++			CFont::SetBackgroundOff();
++			CFont::SetScale(SCREEN_SCALE_X(0.4f), SCREEN_SCALE_Y(0.6f));
++			CFont::SetJustifyOff();
++			CFont::SetCentreOn();
++			CFont::SetCentreSize(SCREEN_WIDTH);
++			CFont::SetPropOn();
++			CFont::SetFontStyle(FONT_BANK);
+ 
+-				CFont::SetColor(WANTED_COLOR);
+-				CFont::PrintString(fStarsX, SCREEN_SCALE_Y(87.0f), sPrintIcon);
++			if (!CDarkel::FrenzyOnGoing() && WeaponType != WEAPONTYPE_UNARMED && WeaponType != WEAPONTYPE_BASEBALLBAT) {
++				CFont::SetColor(AMMO_COLOR);
++				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(AMMO_X), SCREEN_SCALE_Y(73.0f), sPrint);
+ 			}
+-			
+-			fStarsX -= SCREEN_SCALE_X(23.0f);
+ 		}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		}
++#endif
+ 
+ 		/*
+ 			DrawZoneName
+@@ -870,6 +1302,17 @@ void CHud::Draw()
+ 		/*
+ 			DrawClock
+ 		*/
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		// The watch has its own switch and is armed from here every frame it is
++		// worn, whatever the corner clock is set to. When it draws, the corner
++		// one stands down: nobody wants the time in two places.
++		const bool wristClock = DrawWristClockQuad();
++		DrawWristAmmoQuad();
++#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if (androidgame::VrHudClockEnabled() && !wristClock)
++#endif
++		{
+ 		CFont::SetJustifyOff();
+ 		CFont::SetCentreOff();
+ 		CFont::SetBackgroundOff();
+@@ -887,6 +1330,7 @@ void CHud::Draw()
+ 		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(22.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
+ 		CFont::SetColor(CLOCK_COLOR);
+ 		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X), SCREEN_SCALE_Y(22.0f), sPrint);
++		}
+ 
+ 		/*
+ 			DrawOnScreenTimer
+@@ -1060,25 +1504,13 @@ void CHud::Draw()
+ 			DrawRadar
+ 		*/
+ 		if (m_ItemToFlash == ITEM_RADAR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_RADAR) {
+-			CRadar::DrawMap();
+-			CRect rect(0.0f, 0.0f, SCREEN_SCALE_X(RADAR_WIDTH), SCREEN_SCALE_Y(RADAR_HEIGHT));
+-			rect.Translate(SCREEN_SCALE_X_FIX(RADAR_LEFT), SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT));
+-
+-#ifdef PS2_HUD
+-	#ifdef FIX_BUGS
+-			rect.Grow(SCREEN_SCALE_X(2.0f), SCREEN_SCALE_X(4.0f), SCREEN_SCALE_Y(2.0f), SCREEN_SCALE_Y(4.0f));
+-	#else
+-			rect.Grow(2.0f, 4.0f);
+-	#endif
+-#else
+-	#ifdef FIX_BUGS
+-			rect.Grow(SCREEN_SCALE_X(4.0f), SCREEN_SCALE_X(4.0f), SCREEN_SCALE_Y(4.0f), SCREEN_SCALE_Y(4.0f));
+-	#else
+-			rect.Grow(4.0f);
+-	#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			// Wrist mode draws no map here. It was rendered into a texture of
++			// its own before this frame opened its pass -- see
++			// VrDrawWristRadarContents -- and lands on the arm as one quad.
++			if (!DrawWristRadarQuad())
+ #endif
+-			Sprites[HUD_RADARDISC].Draw(rect, RADARDISC_COLOR);
+-			CRadar::DrawBlips();
++			DrawRadarContents();
+ 		}
+ 	}
+ 
+diff --git a/src/renderer/Hud.h b/src/renderer/Hud.h
+index c8ac405f..6d29def3 100644
+--- a/src/renderer/Hud.h
++++ b/src/renderer/Hud.h
+@@ -40,6 +40,9 @@ class CHud
+ public:
+ 	static int16 m_ItemToFlash;
+ 	static CSprite2d Sprites[NUM_HUD_SPRITES];
++	// Returns the same borrowed texture used by the regular weapon HUD.  The
++	// caller must not destroy it: its lifetime is owned by the HUD/model TXD.
++	static RwTexture *GetWeaponIconTexture(int32 weaponType);
+ 	static wchar *m_pZoneName;
+ 	static wchar *m_pLastZoneName;
+ 	static wchar *m_ZoneToPrint;
+diff --git a/src/renderer/Lines.cpp b/src/renderer/Lines.cpp
+index b5c85149..10a672a2 100644
+--- a/src/renderer/Lines.cpp
++++ b/src/renderer/Lines.cpp
+@@ -2,6 +2,7 @@
+ 
+ #include "main.h"
+ #include "Lines.h"
++#include "GameRenderCommand.h"
+ 
+ // This is super inefficient, why split the line into segments at all?
+ void
+@@ -44,9 +45,9 @@ CLines::RenderLineWithClipping(float x1, float y1, float z1, float x2, float y2,
+ 		RwIm3DVertexSetPos(&v[1], x1 + dx*f2, y1 + dy*f2, z1 + dz*f2);
+ 
+ 		LittleTest();
+-		if(RwIm3DTransform(v, 2, nil, 0)){
+-			RwIm3DRenderLine(0, 1);
+-			RwIm3DEnd();
++		if(GameRender::BeginImmediate3D(v, 2, nil, 0, GameRender::IMMEDIATE3D_DRAW_LINES)){
++			GameRender::SubmitImmediate3DLine(0, 1);
++			GameRender::EndImmediate3D();
+ 		}
+ 	}
+ #else
+@@ -66,9 +67,9 @@ CLines::RenderLineWithClipping(float x1, float y1, float z1, float x2, float y2,
+ 	RwIm3DVertexSetPos(&v[0], x1, y1, z1);
+ 	RwIm3DVertexSetPos(&v[1], x2, y2, z2);
+ 	LittleTest();
+-	if(RwIm3DTransform(v, 2, nil, 0)){
+-		RwIm3DRenderLine(0, 1);
+-		RwIm3DEnd();
++	if(GameRender::BeginImmediate3D(v, 2, nil, 0, GameRender::IMMEDIATE3D_DRAW_LINES)){
++		GameRender::SubmitImmediate3DLine(0, 1);
++		GameRender::EndImmediate3D();
+ 	}
+ #endif
+ }
+diff --git a/src/renderer/MBlur.cpp b/src/renderer/MBlur.cpp
+index 7bcc4be2..606022cf 100644
+--- a/src/renderer/MBlur.cpp
++++ b/src/renderer/MBlur.cpp
+@@ -13,6 +13,7 @@
+ #include "Camera.h"
+ #include "MBlur.h"
+ #include "postfx.h"
++#include "GameRenderCommand.h"
+ 
+ // Originally taken from RW example 'mblur'
+ 
+@@ -359,7 +360,8 @@ CMBlur::OverlayRender(RwCamera *cam, RwRaster *raster, RwRGBA color, int32 type,
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+-	RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
++	GameRender::SubmitImmediate2DIndexed(rwPRIMTYPETRILIST, Vertex, 4, Index, 6,
++		GameRender::IMMEDIATE2D_DRAW_POST_FX);
+ 
+ 	a = bluralpha/2;
+ 	if(a < 30)
+@@ -370,7 +372,8 @@ CMBlur::OverlayRender(RwCamera *cam, RwRaster *raster, RwRGBA color, int32 type,
+ 		RwIm2DVertexSetIntRGBA(&Vertex[1], 255, 255, 255, a);
+ 		RwIm2DVertexSetIntRGBA(&Vertex[2], 255, 255, 255, a);
+ 		RwIm2DVertexSetIntRGBA(&Vertex[3], 255, 255, 255, a);
+-		RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST, Vertex, 4, Index, 6);
++		GameRender::SubmitImmediate2DIndexed(rwPRIMTYPETRILIST, Vertex, 4, Index, 6,
++			GameRender::IMMEDIATE2D_DRAW_POST_FX);
+ 	}
+ 
+ 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+diff --git a/src/renderer/Particle.cpp b/src/renderer/Particle.cpp
+index 76ddde50..399da198 100644
+--- a/src/renderer/Particle.cpp
++++ b/src/renderer/Particle.cpp
+@@ -1477,6 +1477,27 @@ void CParticle::Update()
+ 	}
+ }
+ 
++int32
++CParticle::GetActiveCount(tParticleType type)
++{
++	if(type < 0 || type >= MAX_PARTICLES)
++		return 0;
++	int32 count = 0;
++	for(CParticle *particle = mod_ParticleSystemManager.m_aParticles[type].m_pParticles;
++	    particle; particle = particle->m_pNext)
++		count++;
++	return count;
++}
++
++int32
++CParticle::GetTotalActiveCount(void)
++{
++	int32 count = 0;
++	for(int32 type = 0; type < MAX_PARTICLES; type++)
++		count += GetActiveCount((tParticleType)type);
++	return count;
++}
++
+ void CParticle::Render()
+ {
+ 	PUSH_RENDERGROUP("CParticle::Render");
+diff --git a/src/renderer/Particle.h b/src/renderer/Particle.h
+index 9b5630d2..ba5050a3 100644
+--- a/src/renderer/Particle.h
++++ b/src/renderer/Particle.h
+@@ -66,6 +66,8 @@ public:
+ 
+ 	static void Update();
+ 	static void Render();
++	static int32 GetActiveCount(tParticleType type);
++	static int32 GetTotalActiveCount(void);
+ 
+ 	static void RemovePSystem(tParticleType type);
+ 	static void RemoveParticle(CParticle *pParticle, CParticle *pPrevParticle, tParticleSystemData *pPSystemData);
+diff --git a/src/renderer/PlayerSkin.cpp b/src/renderer/PlayerSkin.cpp
+index f0fae45a..acf6a20f 100644
+--- a/src/renderer/PlayerSkin.cpp
++++ b/src/renderer/PlayerSkin.cpp
+@@ -15,6 +15,7 @@
+ #include "Timer.h"
+ #include "Lights.h"
+ #include "MemoryMgr.h"
++#include "GameRenderCommand.h"
+ 
+ RpClump *gpPlayerClump;
+ float gOldFov;
+@@ -162,5 +163,5 @@ CPlayerSkin::RenderFrontendSkinEdit(void)
+ 	RwFrameRotate(frame, &axis2, rotation, rwCOMBINEPRECONCAT);
+ 	RwFrameUpdateObjects(frame);
+ 	SetAmbientColours(&AmbientColor);
+-	RpClumpRender(gpPlayerClump);
++	GameRender::SubmitClump(gpPlayerClump, GameRender::OBJECT_DRAW_PLAYER_PREVIEW);
+ }
+diff --git a/src/renderer/RenderBuffer.cpp b/src/renderer/RenderBuffer.cpp
+index 6120dfe2..dffd3c83 100644
+--- a/src/renderer/RenderBuffer.cpp
++++ b/src/renderer/RenderBuffer.cpp
+@@ -1,6 +1,7 @@
+ #include "common.h"
+ 
+ #include "RenderBuffer.h"
++#include "GameRenderCommand.h"
+ 
+ int32 TempBufferVerticesStored;
+ int32 TempBufferIndicesStored;
+@@ -44,9 +45,10 @@ RenderBuffer::StopStoring(void)
+ void
+ RenderBuffer::RenderStuffInBuffer(void)
+ {
+-	if(TempBufferVerticesStored && RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV)){
+-		RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-		RwIm3DEnd();
++	if(TempBufferVerticesStored && GameRender::BeginImmediate3D(TempBufferRenderVertices,
++		TempBufferVerticesStored, nil, rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_WORLD)){
++		GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++		GameRender::EndImmediate3D();
+ 	}
+ 	ClearRenderBuffer();
+ }
+diff --git a/src/renderer/Renderer.cpp b/src/renderer/Renderer.cpp
+index 2a757863..985e0d46 100644
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -24,6 +24,21 @@
+ #include "Frontend.h"
+ #include "custompipes.h"
+ #include "Debug.h"
++#include "GameRenderCommand.h"
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++#include "CarCtrl.h"
++#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++#include "../skel/android/QuestProfiler.h"
++#include "VehicleVisualDirector.h"
++#endif
++
++#ifdef RW_VULKAN
++#include "vulkan/rwvk.h"
++extern bool gVrFirstPersonActive;
++extern bool gVrHidePlayerBody;
++extern CEntity *gVrPlayerEntity;
++#endif
+ 
+ bool gbShowPedRoadGroups;
+ bool gbShowCarRoadGroups;
+@@ -81,6 +96,11 @@ CLinkList<EntityInfo> gSortedBuildings;
+ 
+ CVUVECTOR CRenderer::ms_vecCameraPosition;
+ CVehicle *CRenderer::m_pFirstPersonVehicle;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++bool CRenderer::ms_bVrOmnidirectionalScan;
++bool CRenderer::ms_bVrPerViewCulling;
++int32 CRenderer::ms_nVrOcclusionCullingMode = VR_OCCLUSION_CULLING_AUTHORED;
++#endif
+ bool CRenderer::m_loadingPriority;
+ #ifdef GTA_PS2
+ float CRenderer::ms_lodDistScale = 1.0f;
+@@ -161,6 +181,9 @@ CRenderer::RenderOneRoad(CEntity *e)
+ #ifndef MASTER
+ 	if(gbDontRenderBuildings)
+ 		return;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	androidgame::QuestProfilerCountVisibleBuilding(e);
++#endif
+ 	if(gbShowCollisionPolys)
+ 		CCollision::DrawColModel_Coloured(e->GetMatrix(), *CModelInfo::GetColModel(e->GetModelIndex()), e->GetModelIndex());
+ 	else
+@@ -174,23 +197,36 @@ CRenderer::RenderOneRoad(CEntity *e)
+ #ifdef EXTRA_MODEL_FLAGS
+ 	if(!e->IsBuilding() || CModelInfo::GetModelInfo(e->GetModelIndex())->RenderDoubleSided()){
+ 		BACKFACE_CULLING_OFF;
+-		e->Render();
++		GameRender::SubmitEntity(e);
+ 		BACKFACE_CULLING_ON;
+ 	}else
+ #endif
+-		e->Render();
++		GameRender::SubmitEntity(e);
+ 
+ 		POP_RENDERGROUP();
+ 	}
+ }
+ 
+ void
+-CRenderer::RenderOneNonRoad(CEntity *e)
++CRenderer::RenderOneNonRoad(CEntity *e, bool fadingPath)
+ {
++	// Stereo reuses a render list for multiple passes. A transition can remove
++	// an entity's RenderWare object after the list was constructed.
++	if(e == nil || e->m_rwObject == nil)
++		return;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	// Apply the same tracked-view rejection as the other submission points.
++	if(!ShouldRenderInCurrentView(e))
++		return;
++#endif
++
+ 	CPed *ped;
+-	CVehicle *veh;
++	CVehicle *veh = nil;
+ 	int i;
+ 	bool resetLights;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	bool useVehicleVisualVlo = false;
++#endif
+ 
+ #ifndef MASTER
+ 	if(gbShowCollisionPolys){
+@@ -228,43 +264,178 @@ CRenderer::RenderOneNonRoad(CEntity *e)
+ 	}
+ #endif
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const bool profileRenderEntity =
++		androidgame::QuestProfilerIsEnabled();
++	androidgame::QuestRenderEntitySample renderSample = {};
++	uint64 renderEntityStartedNs = 0;
++	if(profileRenderEntity){
++		renderSample.entityClass = e->IsVehicle() ?
++			androidgame::QUEST_RENDER_ENTITY_VEHICLE :
++			(e->IsPed() ? androidgame::QUEST_RENDER_ENTITY_PED :
++			 androidgame::QUEST_RENDER_ENTITY_STATIC);
++		renderSample.fadingPath = fadingPath;
++		renderEntityStartedNs =
++			androidgame::QuestProfilerNowNanoseconds();
++	}
++#endif
++
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(e->IsBuilding())
++		androidgame::QuestProfilerCountVisibleBuilding(e);
++#endif
++
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	if(e->IsVehicle())
++		CCarCtrl::MarkVrVehicleRendered((CVehicle*)e);
++#endif
++
+ 	PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const uint64 vehicleLightingSetupStartedNs =
++		profileRenderEntity && e->IsVehicle() ?
++			androidgame::QuestProfilerNowNanoseconds() : 0;
++#endif
+ 	resetLights = e->SetupLighting();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(vehicleLightingSetupStartedNs != 0)
++		renderSample.vehiclePhaseNs
++			[androidgame::QUEST_VEHICLE_RENDER_PHASE_LIGHTING] +=
++			androidgame::QuestProfilerNowNanoseconds()-
++			vehicleLightingSetupStartedNs;
++#endif
+ 
+-	if(e->IsVehicle())
++	if(e->IsVehicle()){
+ 		CVisibilityPlugins::InitAlphaAtomicList();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		useVehicleVisualVlo =
++			androidgame::QuestVehicleVisualBudgetBeginVehicle((CVehicle*)e);
++#endif
++	}
+ 
+ 	// Render Peds in vehicle before vehicle itself
+ 	if(e->IsVehicle()){
+ 		veh = (CVehicle*)e;
+-		if(veh->pDriver && veh->pDriver->m_nPedState == PED_DRIVING)
+-			veh->pDriver->Render();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		const uint64 occupantsStartedNs = profileRenderEntity ?
++			androidgame::QuestProfilerNowNanoseconds() : 0;
++#endif
++		if(veh->pDriver && veh->pDriver->m_nPedState == PED_DRIVING
++#ifdef RW_VULKAN
++		   // In first person the player drives from inside their own model;
++		   // it must not render, same as on foot.
++		   && !(gVrHidePlayerBody && gVrFirstPersonActive &&
++		        (CEntity*)veh->pDriver == gVrPlayerEntity)
++#endif
++		   ){
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(useVehicleVisualVlo)
++				androidgame::QuestVehicleVisualBudgetRecordOccupantSkipped();
++			else
++#endif
++			GameRender::SubmitEntity(veh->pDriver, GameRender::ENTITY_DRAW_VEHICLE_OCCUPANT);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(profileRenderEntity && !useVehicleVisualVlo)
++				renderSample.vehicleOccupantsSubmitted++;
++#endif
++		}
+ 		for(i = 0; i < 8; i++)
+-			if(veh->pPassengers[i] && veh->pPassengers[i]->m_nPedState == PED_DRIVING)
+-				veh->pPassengers[i]->Render();
++			if(veh->pPassengers[i] && veh->pPassengers[i]->m_nPedState == PED_DRIVING){
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++				if(useVehicleVisualVlo)
++					androidgame::QuestVehicleVisualBudgetRecordOccupantSkipped();
++				else
++#endif
++				GameRender::SubmitEntity(veh->pPassengers[i], GameRender::ENTITY_DRAW_VEHICLE_OCCUPANT);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++				if(profileRenderEntity && !useVehicleVisualVlo)
++					renderSample.vehicleOccupantsSubmitted++;
++#endif
++			}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if(occupantsStartedNs != 0)
++			renderSample.vehiclePhaseNs
++				[androidgame::QUEST_VEHICLE_RENDER_PHASE_OCCUPANTS] +=
++				androidgame::QuestProfilerNowNanoseconds()-
++				occupantsStartedNs;
++#endif
+ 		BACKFACE_CULLING_OFF;
+ 	}
++
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const uint64 bodySubmitStartedNs =
++		profileRenderEntity && e->IsVehicle() ?
++			androidgame::QuestProfilerNowNanoseconds() : 0;
++#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const bool renderedVehicleVisualVlo = useVehicleVisualVlo &&
++		androidgame::QuestVehicleVisualBudgetRenderPreparedVehicle(veh);
++	if(!renderedVehicleVisualVlo)
++#endif
++	{
+ #ifdef EXTRA_MODEL_FLAGS
+-	if(!e->IsBuilding() || CModelInfo::GetModelInfo(e->GetModelIndex())->RenderDoubleSided()){
+-		BACKFACE_CULLING_OFF;
+-		e->Render();
+-		BACKFACE_CULLING_ON;
+-	}else
++		if(!e->IsBuilding() || CModelInfo::GetModelInfo(e->GetModelIndex())->RenderDoubleSided()){
++			BACKFACE_CULLING_OFF;
++			GameRender::SubmitEntity(e);
++			BACKFACE_CULLING_ON;
++		}else
++#endif
++			GameRender::SubmitEntity(e);
++	}
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(bodySubmitStartedNs != 0)
++		renderSample.vehiclePhaseNs
++			[androidgame::QUEST_VEHICLE_RENDER_PHASE_BODY_SUBMIT] +=
++			androidgame::QuestProfilerNowNanoseconds()-
++			bodySubmitStartedNs;
+ #endif
+-	e->Render();
+ 
+ 	if(e->IsVehicle()){
+ 		BACKFACE_CULLING_OFF;
+ 		e->bImBeingRendered = true;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		const uint64 alphaAtomicsStartedNs = profileRenderEntity ?
++			androidgame::QuestProfilerNowNanoseconds() : 0;
++#endif
+ 		CVisibilityPlugins::RenderAlphaAtomics();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		if(alphaAtomicsStartedNs != 0)
++			renderSample.vehiclePhaseNs
++				[androidgame::QUEST_VEHICLE_RENDER_PHASE_ALPHA_ATOMICS] +=
++				androidgame::QuestProfilerNowNanoseconds()-
++				alphaAtomicsStartedNs;
++#endif
+ 		e->bImBeingRendered = false;
+ 		BACKFACE_CULLING_ON;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		androidgame::QuestVehicleVisualBudgetEndVehicle();
++#endif
+ 	}
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	const uint64 vehicleLightingRemoveStartedNs =
++		profileRenderEntity && e->IsVehicle() ?
++			androidgame::QuestProfilerNowNanoseconds() : 0;
++#endif
+ 	e->RemoveLighting(resetLights);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(vehicleLightingRemoveStartedNs != 0)
++		renderSample.vehiclePhaseNs
++			[androidgame::QUEST_VEHICLE_RENDER_PHASE_LIGHTING] +=
++			androidgame::QuestProfilerNowNanoseconds()-
++			vehicleLightingRemoveStartedNs;
++#endif
+ 
+ 	POP_RENDERGROUP();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(profileRenderEntity){
++		renderSample.totalNs =
++			androidgame::QuestProfilerNowNanoseconds()-
++			renderEntityStartedNs;
++		androidgame::QuestProfilerSubmitRenderEntitySample(renderSample);
++	}
++#endif
+ }
+ 
+ void
+@@ -333,6 +504,14 @@ CRenderer::RenderEverythingBarRoads(void)
+ 
+ 	for(i = 0; i < ms_nNoOfVisibleEntities; i++){
+ 		e = ms_aVisibleEntityPtrs[i];
++		if(e == nil || e->m_rwObject == nil)
++			continue;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++		// Cull before transparent vehicles and peds enter the sorted list;
++		// otherwise the full 360 degree set accumulates once per eye.
++		if(!ShouldRenderInCurrentView(e))
++			continue;
++#endif
+ 
+ 		if(IsRoad(e))
+ 			continue;
+@@ -392,6 +571,8 @@ CRenderer::RenderBoats(void)
+ 	    node = node->prev){
+ 		// only boats in this list
+ 		CVehicle *v = (CVehicle*)node->item.ent;
++		if(v == nil || v->m_rwObject == nil)
++			continue;
+ 		if(v->IsBoat())
+ 			RenderOneNonRoad(v);
+ 	}
+@@ -446,6 +627,16 @@ CRenderer::RenderOneBuilding(CEntity *ent, float camdist)
+ {
+ 	if(ent->m_rwObject == nil)
+ 		return;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	// NEW_RENDERER owns a separate building list and bypasses
++	// RenderOneRoad/RenderOneNonRoad. Apply the same tracked-view rejection at
++	// its actual submission point, matching the desktop VR path.
++	if(!ShouldRenderInCurrentView(ent))
++		return;
++#endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	androidgame::QuestProfilerCountVisibleBuilding(ent);
++#endif
+ 
+ 	ent->bImBeingRendered = true;	// TODO: this seems wrong, but do we even need it?
+ 
+@@ -736,6 +927,95 @@ enum Visbility
+ #define OTHERUNAVAILABLE (other != -1 && CModelInfo::GetModelInfo(other)->GetRwObject() == nil)
+ #define CANTIMECULL (!OTHERUNAVAILABLE)
+ 
++bool
++CRenderer::IsEntityOutsideCurrentView(CEntity *ent, bool complex)
++{
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	if(ms_bVrOmnidirectionalScan)
++		return false;
++#endif
++	return complex ? !ent->GetIsOnScreenComplex() : !ent->GetIsOnScreen();
++}
++
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++void
++CRenderer::SetVrOcclusionCullingMode(int32 mode)
++{
++	ms_nVrOcclusionCullingMode = Min(Max(mode,
++		(int32)VR_OCCLUSION_CULLING_OFF),
++		(int32)VR_OCCLUSION_CULLING_MODE_COUNT-1);
++}
++
++const char *
++CRenderer::GetVrOcclusionCullingModeName(void)
++{
++	static const char *const names[VR_OCCLUSION_CULLING_MODE_COUNT] = {
++		"OFF - FULL 360", "STEREO SAFE", "AUTHORED EXPERIMENTAL",
++		"AGGRESSIVE EXPERIMENTAL"
++	};
++	return names[ms_nVrOcclusionCullingMode];
++}
++
++bool
++CRenderer::ShouldRenderInCurrentView(CEntity *ent)
++{
++	if(!ms_bVrPerViewCulling)
++		return true;
++	if(ent == nil || ent->m_rwObject == nil)
++		return false;
++#ifdef RW_VULKAN
++	if(ms_nVrOcclusionCullingMode == VR_OCCLUSION_CULLING_OFF)
++		return true;
++	{
++		const bool aggressive = ms_nVrOcclusionCullingMode ==
++			VR_OCCLUSION_CULLING_AGGRESSIVE;
++		const float radius = ent->GetBoundRadius();
++		const CVector boundCentre = ent->GetBoundCentre();
++		const float angularMarginTangent =
++			ms_nVrOcclusionCullingMode == VR_OCCLUSION_CULLING_SAFE ?
++			0.14054083f : (aggressive ? 0.05240778f : 0.08748866f);
++		bool stereoVisible = true;
++		if(ent->IsBuilding()){
++			CColModel *colModel = CModelInfo::GetModelInfo(
++				ent->GetModelIndex())->GetColModel();
++			if(colModel != nil){
++				const CVector &boxMin = colModel->boundingBox.min;
++				const CVector &boxMax = colModel->boundingBox.max;
++				float worldCorners[8][3];
++				for(int corner = 0; corner < 8; corner++){
++					const CVector local(
++						(corner & 1) ? boxMax.x : boxMin.x,
++						(corner & 2) ? boxMax.y : boxMin.y,
++						(corner & 4) ? boxMax.z : boxMin.z);
++					const CVector world = ent->GetMatrix()*local;
++					worldCorners[corner][0] = world.x;
++					worldCorners[corner][1] = world.y;
++					worldCorners[corner][2] = world.z;
++				}
++				stereoVisible = rw::vulkan::
++					isFirstPersonWorldBoxVisibleInStereo(
++						worldCorners, angularMarginTangent) != 0;
++			}else
++				stereoVisible = rw::vulkan::
++					isFirstPersonWorldSphereVisibleInStereo(
++						&boundCentre.x, radius,
++						angularMarginTangent) != 0;
++		}else
++			stereoVisible = rw::vulkan::
++				isFirstPersonWorldSphereVisibleInStereo(
++					&boundCentre.x, radius,
++					angularMarginTangent) != 0;
++		if(!stereoVisible)
++			return false;
++		return true;
++	}
++#endif
++	if(!(ent->bIsBIGBuilding ? ent->GetIsOnScreenComplex() : ent->GetIsOnScreen()))
++		return false;
++	return true;
++}
++#endif
++
+ int32
+ CRenderer::SetupEntityVisibility(CEntity *ent)
+ {
+@@ -779,7 +1059,7 @@ CRenderer::SetupEntityVisibility(CEntity *ent)
+ 			// All sorts of Clumps
+ 			if(ent->m_rwObject == nil || !ent->bIsVisible)
+ 				return VIS_INVISIBLE;
+-			if(!ent->GetIsOnScreen())
++			if(IsEntityOutsideCurrentView(ent))
+ 				return VIS_OFFSCREEN;
+ 			if(ent->bDrawLast){
+ 				dist = (ent->GetPosition() - ms_vecCameraPosition).Magnitude();
+@@ -793,7 +1073,7 @@ CRenderer::SetupEntityVisibility(CEntity *ent)
+ 		   ((CObject*)ent)->ObjectCreatedBy == TEMP_OBJECT){
+ 			if(ent->m_rwObject == nil || !ent->bIsVisible)
+ 				return VIS_INVISIBLE;
+-			return ent->GetIsOnScreen() ? VIS_VISIBLE : VIS_OFFSCREEN;
++			return IsEntityOutsideCurrentView(ent) ? VIS_OFFSCREEN : VIS_VISIBLE;
+ 		}
+ 	}
+ 
+@@ -824,15 +1104,27 @@ CRenderer::SetupEntityVisibility(CEntity *ent)
+ 		if(ent->m_rwObject == nil || !ent->bIsVisible)
+ 			return VIS_INVISIBLE;
+ 
+-		if(!ent->GetIsOnScreen()){
++		if(IsEntityOutsideCurrentView(ent)){
+ 			mi->m_alpha = 255;
+ 			return VIS_OFFSCREEN;
+ 		}
+ 
+ 		if(mi->m_alpha != 255){
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++			// A full sorted list must never make the entity vanish for
++			// the frame: snap it solid and fall through to the normal
++			// render instead. Silent drop here was the deterministic
++			// "same props blink out at the same spots" bug.
++			if(CVisibilityPlugins::InsertEntityIntoSortedList(ent, dist)){
++				ent->bDistanceFade = true;
++				return VIS_INVISIBLE;
++			}
++			mi->m_alpha = 255;
++#else
+ 			CVisibilityPlugins::InsertEntityIntoSortedList(ent, dist);
+ 			ent->bDistanceFade = true;
+ 			return VIS_INVISIBLE;
++#endif
+ 		}
+ 
+ 		if(mi->m_drawLast || ent->bDrawLast){
+@@ -874,7 +1166,7 @@ CRenderer::SetupEntityVisibility(CEntity *ent)
+ 	if(ent->m_rwObject == nil || !ent->bIsVisible)
+ 		return VIS_INVISIBLE;
+ 
+-	if(!ent->GetIsOnScreen()){
++	if(IsEntityOutsideCurrentView(ent)){
+ 		mi->m_alpha = 255;
+ 		return VIS_OFFSCREEN;
+ 	}else{
+@@ -935,7 +1227,7 @@ CRenderer::SetupBigBuildingVisibility(CEntity *ent)
+ 		// that of an atomic for another draw distance.
+ 		if(RpAtomicGetGeometry(a) != RpAtomicGetGeometry(rwobj))
+ 			RpAtomicSetGeometry(rwobj, RpAtomicGetGeometry(a), rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
+-		if (!ent->IsVisible() || !ent->GetIsOnScreenComplex())
++		if(ent->m_rwObject == nil || !ent->bIsVisible || IsEntityOutsideCurrentView(ent, true))
+ 			return VIS_INVISIBLE;
+ 		if(mi->m_drawLast){
+ 			CVisibilityPlugins::InsertEntityIntoSortedList(ent, dist);
+@@ -965,7 +1257,7 @@ CRenderer::SetupBigBuildingVisibility(CEntity *ent)
+ 	RpAtomic *rwobj = (RpAtomic*)ent->m_rwObject;
+ 	if(RpAtomicGetGeometry(a) != RpAtomicGetGeometry(rwobj))
+ 		RpAtomicSetGeometry(rwobj, RpAtomicGetGeometry(a), rpATOMICSAMEBOUNDINGSPHERE); // originally 5 (mistake?)
+-	if (ent->IsVisible() && ent->GetIsOnScreenComplex())
++	if (ent->m_rwObject != nil && ent->bIsVisible && !IsEntityOutsideCurrentView(ent, true))
+ 		CVisibilityPlugins::InsertEntityIntoSortedList(ent, dist);
+ 	return VIS_INVISIBLE;
+ }
+@@ -1069,6 +1361,43 @@ CRenderer::ScanWorld(void)
+ 	CVisibilityPlugins::InitAlphaEntityList();
+ 	CWorld::AdvanceCurrentScanCode();
+ 
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	// The monitor renderer scans only the triangular wedge in front of its
++	// camera. The headset can turn after this shared list is built, so VR needs
++	// a complete area around the player and lets each eye clip it at draw time.
++	ms_bVrOmnidirectionalScan = true;
++	m_loadingPriority = false;
++	const float radius = LOD_DISTANCE;
++	int x1 = CWorld::GetSectorIndexX(ms_vecCameraPosition.x - radius);
++	int x2 = CWorld::GetSectorIndexX(ms_vecCameraPosition.x + radius);
++	int y1 = CWorld::GetSectorIndexY(ms_vecCameraPosition.y - radius);
++	int y2 = CWorld::GetSectorIndexY(ms_vecCameraPosition.y + radius);
++	if(x1 < 0) x1 = 0;
++	if(x2 >= NUMSECTORS_X) x2 = NUMSECTORS_X - 1;
++	if(y1 < 0) y1 = 0;
++	if(y2 >= NUMSECTORS_Y) y2 = NUMSECTORS_Y - 1;
++	for(int x = x1; x <= x2; x++)
++		for(int y = y1; y <= y2; y++)
++			ScanSectorList(CWorld::GetSector(x, y)->m_lists);
++
++#ifdef NO_ISLAND_LOADING
++	if(CMenuManager::m_PrefsIslandLoading == CMenuManager::ISLAND_LOADING_HIGH){
++		ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_INDUSTRIAL));
++		ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_COMMERCIAL));
++		ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_SUBURBAN));
++	}else
++#endif
++	{
++#ifdef FIX_BUGS
++		if(CCollision::ms_collisionInMemory != LEVEL_GENERIC)
++#endif
++			ScanBigBuildingList(CWorld::GetBigBuildingList(CCollision::ms_collisionInMemory));
++	}
++	ScanBigBuildingList(CWorld::GetBigBuildingList(LEVEL_GENERIC));
++	ms_bVrOmnidirectionalScan = false;
++	return;
++#endif
++
+ 	if(cammatrix->at.z > 0.0f){
+ 		// looking up, bottom corners are further away
+ 		vectors[CORNER_LOD_LEFT] = vectors[CORNER_FAR_BOTLEFT] * LOD_DISTANCE/f;
+@@ -1474,9 +1803,10 @@ CRenderer::InsertEntityIntoList(CEntity *ent)
+ 
+ #ifdef NEW_RENDERER
+ 	// TODO: there are more flags being checked here
+-	if(gbNewRenderer && (ent->IsVehicle() || ent->IsPed()))
+-		ms_aVisibleVehiclePtrs[ms_nNoOfVisibleVehicles++] = ent;
+-	else if(gbNewRenderer && ent->IsBuilding()){
++	if(gbNewRenderer && (ent->IsVehicle() || ent->IsPed())){
++		if(ms_nNoOfVisibleVehicles < NUMVISIBLEENTITIES)
++			ms_aVisibleVehiclePtrs[ms_nNoOfVisibleVehicles++] = ent;
++	}else if(gbNewRenderer && ent->IsBuilding()){
+ 		EntityInfo info;
+ 		info.ent = ent;
+ 		info.sort = -(ent->GetPosition() - ms_vecCameraPosition).MagnitudeSqr();
+@@ -1484,7 +1814,8 @@ CRenderer::InsertEntityIntoList(CEntity *ent)
+ //		ms_aVisibleBuildingPtrs[ms_nNoOfVisibleBuildings++] = ent;
+ 	}else
+ #endif
+-		ms_aVisibleEntityPtrs[ms_nNoOfVisibleEntities++] = ent;
++		if(ms_nNoOfVisibleEntities < NUMVISIBLEENTITIES)
++			ms_aVisibleEntityPtrs[ms_nNoOfVisibleEntities++] = ent;
+ }
+ 
+ void
+diff --git a/src/renderer/Renderer.h b/src/renderer/Renderer.h
+index 70f83c08..c744302d 100644
+--- a/src/renderer/Renderer.h
++++ b/src/renderer/Renderer.h
+@@ -8,8 +8,13 @@ class CEntity;
+ #else
+ #define LOD_DISTANCE 300.0f
+ #endif
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++#define FADE_DISTANCE 40.0f
++#define STREAM_DISTANCE 80.0f
++#else
+ #define FADE_DISTANCE 20.0f
+ #define STREAM_DISTANCE 30.0f
++#endif
+ 
+ #ifdef EXTRA_MODEL_FLAGS
+ #define BACKFACE_CULLING_ON SetCullMode(rwCULLMODECULLBACK)
+@@ -36,6 +41,17 @@ extern bool gbDontRenderVehicles;
+ class CVehicle;
+ class CPtrList;
+ 
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++enum eVrOcclusionCullingMode
++{
++	VR_OCCLUSION_CULLING_OFF = 0,
++	VR_OCCLUSION_CULLING_SAFE,
++	VR_OCCLUSION_CULLING_AUTHORED,
++	VR_OCCLUSION_CULLING_AGGRESSIVE,
++	VR_OCCLUSION_CULLING_MODE_COUNT
++};
++#endif
++
+ // unused
+ struct BlockedRange
+ {
+@@ -59,6 +75,12 @@ class CRenderer
+ 
+ 	static CVUVECTOR ms_vecCameraPosition;
+ 	static CVehicle *m_pFirstPersonVehicle;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	static bool ms_bVrOmnidirectionalScan;
++	static bool ms_bVrPerViewCulling;
++	static int32 ms_nVrOcclusionCullingMode;
++#endif
++	static bool IsEntityOutsideCurrentView(CEntity *ent, bool complex = false);
+ 
+ 	// unused
+ 	static BlockedRange aBlockedRanges[16];
+@@ -67,6 +89,28 @@ class CRenderer
+ public:
+ 	static float ms_lodDistScale;
+ 	static bool m_loadingPriority;
++	// Read-only diagnostics for the native Quest profiler. Keeping these behind
++	// accessors avoids exposing the renderer's internal arrays.
++	static int32 GetVisibleEntityCount(void) { return ms_nNoOfVisibleEntities; }
++	static int32 GetInvisibleEntityCount(void) { return ms_nNoOfInVisibleEntities; }
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	static void SetVrPerViewCulling(bool enabled) { ms_bVrPerViewCulling = enabled; }
++	static void SetVrViewCameraPosition(const CVector &position) { ms_vecCameraPosition = position; }
++	static void SetVrOcclusionCulling(bool enabled) {
++		SetVrOcclusionCullingMode(enabled ? VR_OCCLUSION_CULLING_SAFE :
++			VR_OCCLUSION_CULLING_OFF);
++	}
++	static void SetVrOcclusionCullingMode(int32 mode);
++	static int32 GetVrOcclusionCullingMode(void) { return ms_nVrOcclusionCullingMode; }
++	static const char *GetVrOcclusionCullingModeName(void);
++	static bool IsVrOcclusionCullingEnabled(void) {
++		return ms_nVrOcclusionCullingMode != VR_OCCLUSION_CULLING_OFF;
++	}
++#ifdef RW_VULKAN
++	static void PrepareQuestOcclusionContexts(void) {}
++#endif
++	static bool ShouldRenderInCurrentView(CEntity *ent);
++#endif
+ 
+ 	static void Init(void);
+ 	static void Shutdown(void);
+@@ -78,7 +122,7 @@ public:
+ 	static void RenderVehiclesButNotBoats(void);
+ 	static void RenderBoats(void);
+ 	static void RenderOneRoad(CEntity *);
+-	static void RenderOneNonRoad(CEntity *);
++	static void RenderOneNonRoad(CEntity *, bool fadingPath = false);
+ 	static void RenderFirstPersonVehicle(void);
+ 
+ 	static void RenderCollisionLines(void);
+diff --git a/src/renderer/Rubbish.cpp b/src/renderer/Rubbish.cpp
+index 8da6b025..f46c2ccd 100644
+--- a/src/renderer/Rubbish.cpp
++++ b/src/renderer/Rubbish.cpp
+@@ -11,6 +11,7 @@
+ #include "TxdStore.h"
+ #include "RenderBuffer.h"
+ #include "Rubbish.h"
++#include "GameRenderCommand.h"
+ 
+ #define RUBBISH_MAX_DIST (18.0f)
+ #define RUBBISH_FADE_DIST (16.5f)
+@@ -129,9 +130,10 @@ CRubbish::Render(void)
+ 
+ 		if(TempBufferIndicesStored != 0){
+ 			LittleTest();
+-			if(RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV)){
+-				RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-				RwIm3DEnd();
++			if(GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStored, nil,
++				rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_WORLD)){
++				GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++				GameRender::EndImmediate3D();
+ 			}
+ 		}
+ 	}
+diff --git a/src/renderer/Shadows.cpp b/src/renderer/Shadows.cpp
+index 3884d3bb..90200fd4 100644
+--- a/src/renderer/Shadows.cpp
++++ b/src/renderer/Shadows.cpp
+@@ -44,6 +44,8 @@ RwTexture *gpPostShadowTex;
+ RwTexture *gpGoalTex;
+ 
+ int16            CShadows::ShadowsStoredToBeRendered;
++bool             CShadows::PreserveStoredShadowsAfterRender;
++bool             CShadows::RenderEnabled = true;
+ CStoredShadow    CShadows::asShadowsStored  [MAX_STOREDSHADOWS];
+ CPolyBunch       CShadows::aPolyBunches     [MAX_POLYBUNCHES];
+ CStaticShadow    CShadows::aStaticShadows   [MAX_STATICSHADOWS];
+@@ -54,6 +56,7 @@ CPermanentShadow CShadows::aPermanentShadows[MAX_PERMAMENTSHADOWS];
+ void
+ CShadows::Init(void)
+ {
++	PreserveStoredShadowsAfterRender = false;
+ 	CTxdStore::PushCurrentTxd();
+ 
+ 	int32 slut = CTxdStore::FindTxdSlot("particle");
+@@ -687,6 +690,11 @@ CShadows::SetRenderModeForShadowType(uint8 ShadowType)
+ void
+ CShadows::RenderStoredShadows(void)
+ {
++	if(!RenderEnabled){
++		if(!PreserveStoredShadowsAfterRender)
++			ShadowsStoredToBeRendered = 0;
++		return;
++	}
+ 	PUSH_RENDERGROUP("CShadows::RenderStoredShadows");
+ 
+ 	RenderBuffer::ClearRenderBuffer();
+@@ -785,14 +793,42 @@ CShadows::RenderStoredShadows(void)
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,      (void *)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE,       (void *)TRUE);
+ 
+-	ShadowsStoredToBeRendered = 0;
++	if(!PreserveStoredShadowsAfterRender)
++		ShadowsStoredToBeRendered = 0;
+ 
+ 	POP_RENDERGROUP();
+ }
+ 
++void
++CShadows::SetPreserveAfterRender(bool preserve)
++{
++	PreserveStoredShadowsAfterRender = preserve;
++}
++
++void
++CShadows::SetRenderEnabled(bool enabled)
++{
++	RenderEnabled = enabled;
++}
++
++bool
++CShadows::IsRenderEnabled(void)
++{
++	return RenderEnabled;
++}
++
++void
++CShadows::FinishStereoRender(void)
++{
++	PreserveStoredShadowsAfterRender = false;
++	ShadowsStoredToBeRendered = 0;
++}
++
+ void
+ CShadows::RenderStaticShadows(void)
+ {
++	if(!RenderEnabled)
++		return;
+ 	PUSH_RENDERGROUP("CShadows::RenderStaticShadows");
+ 
+ 	RenderBuffer::ClearRenderBuffer();
+diff --git a/src/renderer/Shadows.h b/src/renderer/Shadows.h
+index 4fa52df9..a3ec0174 100644
+--- a/src/renderer/Shadows.h
++++ b/src/renderer/Shadows.h
+@@ -130,6 +130,8 @@ class CShadows
+ {
+ public:
+ 	static int16            ShadowsStoredToBeRendered;
++	static bool             PreserveStoredShadowsAfterRender;
++	static bool             RenderEnabled;
+ 	static CStoredShadow    asShadowsStored  [MAX_STOREDSHADOWS];
+ 	static CPolyBunch       aPolyBunches     [MAX_POLYBUNCHES];
+ 	static CStaticShadow    aStaticShadows   [MAX_STATICSHADOWS];
+@@ -151,6 +153,10 @@ public:
+ 	static void SetRenderModeForShadowType   (uint8 ShadowType);
+ 	static void RenderStoredShadows          (void);
+ 	static void RenderStaticShadows          (void);
++	static void SetRenderEnabled               (bool enabled);
++	static bool IsRenderEnabled                (void);
++	static void SetPreserveAfterRender          (bool preserve);
++	static void FinishStereoRender              (void);
+ 	static void GeneratePolysForStaticShadow (int16 nStaticShadowID);
+ 	static void CastShadowSectorList         (CPtrList &PtrList, float fStartX, float fStartY, float fEndX, float fEndY,
+ 																							     CVector *pPosn, float fFrontX, float fFrontY, float fSideX, float fSideY, int16 nIntensity, uint8 nRed, uint8 nGreen, uint8 nBlue, float fZDistance,               float fScale, CPolyBunch **ppPolyBunch);
+diff --git a/src/renderer/Skidmarks.cpp b/src/renderer/Skidmarks.cpp
+index 4c662a79..acde7176 100644
+--- a/src/renderer/Skidmarks.cpp
++++ b/src/renderer/Skidmarks.cpp
+@@ -5,6 +5,7 @@
+ #include "Timer.h"
+ #include "Replay.h"
+ #include "Skidmarks.h"
++#include "GameRenderCommand.h"
+ 
+ CSkidmark CSkidmarks::aSkidmarks[NUMSKIDMARKS];
+ 
+@@ -167,9 +168,10 @@ CSkidmarks::Render(void)
+ 		}
+ 
+ 		LittleTest();
+-		if(RwIm3DTransform(SkidmarkVertices, 2*(aSkidmarks[i].m_last+1), nil, rwIM3D_VERTEXUV)){
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, SkidmarkIndexList, 6*aSkidmarks[i].m_last);
+-			RwIm3DEnd();
++		if(GameRender::BeginImmediate3D(SkidmarkVertices, 2*(aSkidmarks[i].m_last+1), nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_WORLD)){
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, SkidmarkIndexList, 6*aSkidmarks[i].m_last);
++			GameRender::EndImmediate3D();
+ 		}
+ 	}
+ 
+diff --git a/src/renderer/SpecialFX.cpp b/src/renderer/SpecialFX.cpp
+index 6d96d21a..010669f4 100644
+--- a/src/renderer/SpecialFX.cpp
++++ b/src/renderer/SpecialFX.cpp
+@@ -21,6 +21,7 @@
+ #include "Camera.h"
+ #include "Shadows.h"
+ #include "main.h"
++#include "GameRenderCommand.h"
+ 
+ RwIm3DVertex StreakVertices[4];
+ RwImVertexIndex StreakIndexList[12];
+@@ -328,9 +329,10 @@ void CBulletTraces::Render(void)
+ 		RwIm3DVertexSetPos(&TraceVertices[4], sup.x + width.x, sup.y + width.y, sup.z + width.z);
+ 		RwIm3DVertexSetPos(&TraceVertices[5], sup.x - width.x, sup.y - width.y, sup.z - width.z);
+ 		LittleTest();
+-		if (RwIm3DTransform(TraceVertices, ARRAY_SIZE(TraceVertices), nil, rwIM3D_VERTEXUV)) {
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TraceIndexList, ARRAY_SIZE(TraceIndexList));
+-			RwIm3DEnd();
++		if (GameRender::BeginImmediate3D(TraceVertices, ARRAY_SIZE(TraceVertices), nil, rwIM3D_VERTEXUV,
++			GameRender::IMMEDIATE3D_DRAW_EFFECT)) {
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TraceIndexList, ARRAY_SIZE(TraceIndexList));
++			GameRender::EndImmediate3D();
+ 		}
+ 	}
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+@@ -444,7 +446,7 @@ C3dMarker::Render()
+ 	SetBrightMarkerColours(m_fBrightness);
+ 	if (m_nType != MARKERTYPE_ARROW)
+ 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+-	RpAtomicRender(m_pAtomic);
++	GameRender::SubmitAtomic(m_pAtomic, GameRender::OBJECT_DRAW_SPECIAL_FX);
+ 	if (m_nType != MARKERTYPE_ARROW)
+ 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ 	ReSetAmbientAndDirectionalColours();
+@@ -453,6 +455,10 @@ C3dMarker::Render()
+ C3dMarker C3dMarkers::m_aMarkerArray[NUM3DMARKERS];
+ int32 C3dMarkers::NumActiveMarkers;
+ RpClump* C3dMarkers::m_pRpClumpArray[NUMMARKERTYPES];
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++static bool gStereoMarkerUsed[NUM3DMARKERS];
++static bool gPreserveMarkersAfterRender;
++#endif
+ 
+ void
+ C3dMarkers::Init()
+@@ -509,13 +515,54 @@ C3dMarkers::Render()
+ 			if (m_aMarkerArray[i].m_fCameraRange < 120.0f)
+ 				m_aMarkerArray[i].Render();
+ 			NumActiveMarkers++;
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++			if (!gPreserveMarkersAfterRender)
++#endif
+ 			m_aMarkerArray[i].m_bIsUsed = false;
+-		} else if (m_aMarkerArray[i].m_pAtomic != nil) {
++		} else if (m_aMarkerArray[i].m_pAtomic != nil
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++			&& !gPreserveMarkersAfterRender
++#endif
++		) {
+ 			m_aMarkerArray[i].DeleteMarkerObject();
+ 		}
+ 	}
+ }
+ 
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++void
++C3dMarkers::SaveStateForStereo()
++{
++	for (int i = 0; i < NUM3DMARKERS; i++)
++		gStereoMarkerUsed[i] = m_aMarkerArray[i].m_bIsUsed;
++}
++
++void
++C3dMarkers::RestoreStateForStereo()
++{
++	for (int i = 0; i < NUM3DMARKERS; i++)
++		if (gStereoMarkerUsed[i])
++			m_aMarkerArray[i].m_bIsUsed = true;
++}
++
++void
++C3dMarkers::SetPreserveAfterRender(bool preserve)
++{
++	gPreserveMarkersAfterRender = preserve;
++}
++
++void
++C3dMarkers::FinishStereoRender()
++{
++	gPreserveMarkersAfterRender = false;
++	for (int i = 0; i < NUM3DMARKERS; i++) {
++		if (gStereoMarkerUsed[i])
++			m_aMarkerArray[i].m_bIsUsed = false;
++		gStereoMarkerUsed[i] = false;
++	}
++}
++#endif
++
+ C3dMarker *
+ C3dMarkers::PlaceMarker(uint32 identifier, uint16 type, CVector &pos, float size, uint8 r, uint8 g, uint8 b, uint8 a, uint16 pulsePeriod, float pulseFraction, int16 rotateRate)
+ {
+@@ -659,13 +706,18 @@ C3dMarkers::Update()
+ 
+ int CBrightLights::NumBrightLights;
+ CBrightLight CBrightLights::aBrightLights[NUMBRIGHTLIGHTS];
++bool CBrightLights::PreserveAfterRender;
+ 
+ void
+ CBrightLights::Init(void)
+ {
+ 	NumBrightLights = 0;
++	PreserveAfterRender = false;
+ }
+ 
++void CBrightLights::SetPreserveAfterRender(bool preserve) { PreserveAfterRender = preserve; }
++void CBrightLights::FinishStereoRender(void) { PreserveAfterRender = false; NumBrightLights = 0; }
++
+ void
+ CBrightLights::RegisterOne(CVector pos, CVector up, CVector side, CVector front,
+ 	uint8 type, uint8 red, uint8 green, uint8 blue)
+@@ -722,6 +774,11 @@ CBrightLights::Render(void)
+ 		return;
+ 
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	// Bright-light prisms are world geometry. Make their occlusion explicit
++	// instead of inheriting the depth state of the preceding transient effect;
++	// otherwise headlights and traffic lights can show through buildings on
++	// the Vulkan effects pass.
++	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+@@ -880,7 +937,8 @@ CBrightLights::Render(void)
+ 
+ 	RenderOutGeometryBuffer();
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+-	NumBrightLights = 0;
++	if(!PreserveAfterRender)
++		NumBrightLights = 0;
+ }
+ 
+ void
+@@ -888,9 +946,10 @@ CBrightLights::RenderOutGeometryBuffer(void)
+ {
+ 	if(TempBufferIndicesStored != 0){
+ 		LittleTest();
+-		if(RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV)){
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-			RwIm3DEnd();
++		if(GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStored, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_EFFECT)){
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++			GameRender::EndImmediate3D();
+ 		}
+ 		TempBufferVerticesStored = 0;
+ 		TempBufferIndicesStored = 0;
+@@ -899,13 +958,18 @@ CBrightLights::RenderOutGeometryBuffer(void)
+ 
+ int CShinyTexts::NumShinyTexts;
+ CShinyText CShinyTexts::aShinyTexts[NUMSHINYTEXTS];
++bool CShinyTexts::PreserveAfterRender;
+ 
+ void
+ CShinyTexts::Init(void)
+ {
+ 	NumShinyTexts = 0;
++	PreserveAfterRender = false;
+ }
+ 
++void CShinyTexts::SetPreserveAfterRender(bool preserve) { PreserveAfterRender = preserve; }
++void CShinyTexts::FinishStereoRender(void) { PreserveAfterRender = false; NumShinyTexts = 0; }
++
+ void
+ CShinyTexts::RegisterOne(CVector p0, CVector p1, CVector p2, CVector p3,
+ 	float u0, float v0, float u1, float v1, float u2, float v2, float u3, float v3,
+@@ -1017,7 +1081,8 @@ CShinyTexts::Render(void)
+ 	}
+ 
+ 	RenderOutGeometryBuffer();
+-	NumShinyTexts = 0;
++	if(!PreserveAfterRender)
++		NumShinyTexts = 0;
+ 
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+@@ -1030,9 +1095,10 @@ CShinyTexts::RenderOutGeometryBuffer(void)
+ {
+ 	if(TempBufferIndicesStored != 0){
+ 		LittleTest();
+-		if(RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV)){
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-			RwIm3DEnd();
++		if(GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStored, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_EFFECT)){
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++			GameRender::EndImmediate3D();
+ 		}
+ 		TempBufferVerticesStored = 0;
+ 		TempBufferIndicesStored = 0;
+diff --git a/src/renderer/SpecialFX.h b/src/renderer/SpecialFX.h
+index 09666fc9..7236685b 100644
+--- a/src/renderer/SpecialFX.h
++++ b/src/renderer/SpecialFX.h
+@@ -103,6 +103,12 @@ public:
+ 	static void PlaceMarkerSet(uint32 id, uint16 type, CVector &pos, float size, uint8 r, uint8 g, uint8 b, uint8 a, uint16 pulsePeriod, float pulseFraction, int16 rotateRate);
+ 	static void Render();
+ 	static void Update();
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	static void SaveStateForStereo();
++	static void RestoreStateForStereo();
++	static void SetPreserveAfterRender(bool preserve);
++	static void FinishStereoRender();
++#endif
+ 
+ 	static C3dMarker m_aMarkerArray[NUM3DMARKERS];
+ 	static int32 NumActiveMarkers;
+@@ -152,12 +158,15 @@ class CBrightLights
+ {
+ 	static int NumBrightLights;
+ 	static CBrightLight aBrightLights[NUMBRIGHTLIGHTS];
++	static bool PreserveAfterRender;
+ public:
+ 	static void Init(void);
+ 	static void RegisterOne(CVector pos, CVector up, CVector side, CVector front,
+ 		uint8 type, uint8 red = 0, uint8 green = 0, uint8 blue = 0);
+ 	static void Render(void);
+ 	static void RenderOutGeometryBuffer(void);
++	static void SetPreserveAfterRender(bool preserve);
++	static void FinishStereoRender(void);
+ };
+ 
+ 
+@@ -183,6 +192,7 @@ class CShinyTexts
+ {
+ 	static int NumShinyTexts;
+ 	static CShinyText aShinyTexts[NUMSHINYTEXTS];
++	static bool PreserveAfterRender;
+ public:
+ 	static void Init(void);
+ 	static void RegisterOne(CVector p0, CVector p1, CVector p2, CVector p3,
+@@ -190,6 +200,8 @@ public:
+ 		uint8 type, uint8 red, uint8 green, uint8 blue, float maxDist);
+ 	static void Render(void);
+ 	static void RenderOutGeometryBuffer(void);
++	static void SetPreserveAfterRender(bool preserve);
++	static void FinishStereoRender(void);
+ };
+ 
+ class CMoneyMessage
+diff --git a/src/renderer/Sprite.cpp b/src/renderer/Sprite.cpp
+index 3fef0733..1e03e804 100644
+--- a/src/renderer/Sprite.cpp
++++ b/src/renderer/Sprite.cpp
+@@ -4,6 +4,7 @@
+ #include "Draw.h"
+ #include "Camera.h"
+ #include "Sprite.h"
++#include "GameRenderCommand.h"
+ 
+ #ifdef ASPECT_RATIO_SCALE
+ #include "Frontend.h"
+@@ -72,10 +73,10 @@ CSprite::FlushSpriteBuffer(void)
+ 	if(nSpriteBufferIndex > 0){
+ 		if(m_bFlushSpriteBufferSwitchZTest){
+ 			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+-			RwIm2DRenderPrimitive(rwPRIMTYPETRILIST, SpriteBufferVerts, nSpriteBufferIndex*6);
++			GameRender::SubmitImmediate2D(rwPRIMTYPETRILIST, SpriteBufferVerts, nSpriteBufferIndex*6);
+ 			RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 		}else
+-			RwIm2DRenderPrimitive(rwPRIMTYPETRILIST, SpriteBufferVerts, nSpriteBufferIndex*6);
++			GameRender::SubmitImmediate2D(rwPRIMTYPETRILIST, SpriteBufferVerts, nSpriteBufferIndex*6);
+ 		nSpriteBufferIndex = 0;
+ 	}
+ }
+@@ -139,7 +140,7 @@ CSprite::RenderOneXLUSprite(float x, float y, float z, float w, float h, uint8 r
+ 		RwIm2DVertexSetU(&verts[i], us[i], recipz);
+ 		RwIm2DVertexSetV(&verts[i], vs[i], recipz);
+ 	}
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, verts, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, verts, 4);
+ }
+ 
+ void
+@@ -198,7 +199,7 @@ CSprite::RenderOneXLUSprite_Rotate_Aspect(float x, float y, float z, float w, fl
+ 		RwIm2DVertexSetU(&verts[i], us[i], recipz);
+ 		RwIm2DVertexSetV(&verts[i], vs[i], recipz);
+ 	}
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, verts, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, verts, 4);
+ }
+ 
+ void
+diff --git a/src/renderer/Sprite2d.cpp b/src/renderer/Sprite2d.cpp
+index cbb447ad..cb2feeb8 100644
+--- a/src/renderer/Sprite2d.cpp
++++ b/src/renderer/Sprite2d.cpp
+@@ -5,8 +5,9 @@
+ #include "Camera.h"
+ #include "Sprite2d.h"
+ #include "Font.h"
++#include "GameRenderCommand.h"
+ 
+-RwIm2DVertex CSprite2d::maVertices[8];
++RwIm2DVertex CSprite2d::maVertices[40];
+ float CSprite2d::RecipNearClip;
+ int32 CSprite2d::mCurrentBank;
+ RwTexture *CSprite2d::mpBankTextures[10];
+@@ -72,7 +73,7 @@ CSprite2d::DrawBank(int32 bank)
+ #endif
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRILIST, &maBankVertices[6*mBankStart[bank]], 6*mCurrentSprite[bank]);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRILIST, &maBankVertices[6*mBankStart[bank]], 6*mCurrentSprite[bank]);
+ 	mCurrentSprite[bank] = 0;
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+ }
+@@ -124,7 +125,7 @@ CSprite2d::Draw(float x, float y, float w, float h, const CRGBA &col)
+ {
+ 	SetVertices(CRect(x, y, x + w, y + h), col, col, col, col, 0);
+ 	SetRenderState();
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ }
+ 
+ void
+@@ -132,7 +133,7 @@ CSprite2d::Draw(const CRect &rect, const CRGBA &col)
+ {
+ 	SetVertices(rect, col, col, col, col, 0);
+ 	SetRenderState();
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ }
+ 
+ void
+@@ -141,7 +142,7 @@ CSprite2d::Draw(const CRect &rect, const CRGBA &col,
+ {
+ 	SetVertices(rect, col, col, col, col, u0, v0, u1, v1, u3, v3, u2, v2);
+ 	SetRenderState();
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ }
+ 
+ void
+@@ -149,7 +150,7 @@ CSprite2d::Draw(const CRect &rect, const CRGBA &c0, const CRGBA &c1, const CRGBA
+ {
+ 	SetVertices(rect, c0, c1, c2, c3, 0);
+ 	SetRenderState();
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ }
+ 
+ void
+@@ -157,7 +158,7 @@ CSprite2d::Draw(float x1, float y1, float x2, float y2, float x3, float y3, floa
+ {
+ 	SetVertices(x1, y1, x2, y2, x3, y3, x4, y4, col, col, col, col);
+ 	SetRenderState();
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ }
+ 
+ 
+@@ -445,7 +446,7 @@ CSprite2d::DrawRect(const CRect &r, const CRGBA &col)
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)(col.a != 255));
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, maVertices, 4);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)rwSHADEMODEGOURAUD);
+@@ -459,7 +460,7 @@ CSprite2d::DrawRect(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGB
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, maVertices, 4);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ }
+@@ -474,7 +475,7 @@ CSprite2d::DrawRectXLU(const CRect &r, const CRGBA &c0, const CRGBA &c1, const C
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ }
+@@ -487,7 +488,7 @@ void CSprite2d::Draw2DPolygon(float x1, float y1, float x2, float y2, float x3,
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)(color.a != 255));
+-	RwIm2DRenderPrimitive(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN, CSprite2d::maVertices, 4);
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ 	RwRenderStateSet(rwRENDERSTATESHADEMODE, (void*)rwSHADEMODEGOURAUD);
+diff --git a/src/renderer/Sprite2d.h b/src/renderer/Sprite2d.h
+index 35a8bbb7..5463f370 100644
+--- a/src/renderer/Sprite2d.h
++++ b/src/renderer/Sprite2d.h
+@@ -9,7 +9,10 @@ class CSprite2d
+ 	static int32 mCurrentSprite[10];
+ 	static int32 mBankStart[10];
+ 	static RwIm2DVertex maBankVertices[500];
+-	static RwIm2DVertex maVertices[8];
++	// Most sprites need four vertices and the original radar mask used eight.
++	// Quest clips radar tiles geometrically to a 24-sided circle, so a tile can
++	// legitimately contain more than eight vertices.
++	static RwIm2DVertex maVertices[40];
+ public:
+ 	RwTexture *m_pTexture;
+ 
+@@ -34,7 +37,7 @@ public:
+ 	void Draw(const CRect &rect, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3);
+ 	void Draw(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, const CRGBA &col);
+ 
+-	static void SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3, uint32 far);
++	static void SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3, uint32 far = 0);
+ 	static void SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3,
+ 		float u0, float v0, float u1, float v1, float u3, float v3, float u2, float v2);
+ 	static void SetVertices(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4,
+diff --git a/src/renderer/WaterCannon.cpp b/src/renderer/WaterCannon.cpp
+index 08898be8..81efd46e 100644
+--- a/src/renderer/WaterCannon.cpp
++++ b/src/renderer/WaterCannon.cpp
+@@ -11,6 +11,7 @@
+ #include "Fire.h"
+ #include "WaterLevel.h"
+ #include "Camera.h"
++#include "GameRenderCommand.h"
+ 
+ #define WATERCANNONVERTS 4
+ #define WATERCANNONINDEXES 12
+@@ -164,10 +165,11 @@ void CWaterCannon::Render(void)
+ 			
+ 			LittleTest();
+ 
+-			if ( RwIm3DTransform(WaterCannonVertices, WATERCANNONVERTS, NULL, rwIM3D_VERTEXUV) )
++			if (GameRender::BeginImmediate3D(WaterCannonVertices, WATERCANNONVERTS, nil,
++				rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_WATER))
+ 			{
+-				RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, WaterCannonIndexList, WATERCANNONINDEXES);
+-				RwIm3DEnd();
++				GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, WaterCannonIndexList, WATERCANNONINDEXES);
++				GameRender::EndImmediate3D();
+ 			}
+ 		}
+ 		
+diff --git a/src/renderer/WaterLevel.cpp b/src/renderer/WaterLevel.cpp
+index ab87ec8f..95d5d8ac 100644
+--- a/src/renderer/WaterLevel.cpp
++++ b/src/renderer/WaterLevel.cpp
+@@ -23,7 +23,30 @@
+ #include <rpworld.h>
+ #include "WaterLevel.h"
+ #include "MemoryHeap.h"
++#include "GameRenderCommand.h"
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++namespace androidgame {
++bool VrGetViewBasis(float position[3], float right[3], float up[3],
++                    float forward[3]);
++}
++#endif
++
++// Which way the water is built is chosen from the view direction: the sector
++// window is biased along it and the far blocks behind it are never filled.
++// TheCamera keeps the heading the character faces, so in a headset the sea
++// was assembled for wherever Tommy happened to look and had holes in it
++// everywhere else.
++static CVector
++WaterViewForward(void)
++{
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	float forward[3];
++	if(androidgame::VrGetViewBasis(nil, nil, nil, forward))
++		return CVector(forward[0], forward[1], forward[2]);
++#endif
++	return TheCamera.GetForward();
++}
+ 
+ float TEXTURE_ADDU;
+ float TEXTURE_ADDV;
+@@ -610,18 +633,18 @@ _GetWavyDrawDist()
+ inline void
+ _GetCamBounds(bool *bUseCamStartY, bool *bUseCamEndY, bool *bUseCamStartX, bool *bUseCamEndX)
+ {
+-	if ( TheCamera.GetForward().z > -0.8f )
++	if ( WaterViewForward().z > -0.8f )
+ 	{
+-		if ( Abs(TheCamera.GetForward().x) > Abs(TheCamera.GetForward().y) )
++		if ( Abs(WaterViewForward().x) > Abs(WaterViewForward().y) )
+ 		{
+-			if ( TheCamera.GetForward().x > 0.0f )
++			if ( WaterViewForward().x > 0.0f )
+ 				*bUseCamStartX = true;
+ 			else
+ 				*bUseCamEndX = true;
+ 		}
+ 		else
+ 		{
+-			if ( TheCamera.GetForward().y > 0.0f )
++			if ( WaterViewForward().y > 0.0f )
+ 				*bUseCamStartY = true;
+ 			else
+ 				*bUseCamEndY = true;
+@@ -1375,7 +1398,7 @@ CWaterLevel::RenderOneWavySector(float fX, float fY, float fZ, RwRGBA const &col
+ 
+ 		RwFrameTranslate(RpAtomicGetFrame(atomic), &pos, rwCOMBINEREPLACE);
+ 
+-		RpAtomicRender(atomic);
++		GameRender::SubmitAtomic(atomic, GameRender::OBJECT_DRAW_WATER);
+ 		
+ 		RpAtomicDestroy(atomic);
+ 		RwFrameDestroy(frame);
+@@ -1392,7 +1415,7 @@ CWaterLevel::RenderOneWavySector(float fX, float fY, float fZ, RwRGBA const &col
+ 		
+ 		RwFrameTranslate(RpAtomicGetFrame(ms_pWavyAtomic), &pos, rwCOMBINEREPLACE);
+ 		
+-		RpAtomicRender(ms_pWavyAtomic);
++		GameRender::SubmitAtomic(ms_pWavyAtomic, GameRender::OBJECT_DRAW_WATER);
+ 	}
+ }
+ 
+@@ -1443,10 +1466,11 @@ CWaterLevel::RenderAndEmptyRenderBuffer()
+ 	{
+ 		LittleTest();
+ 
+-		if ( RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, rwIM3D_VERTEXUV) )
++		if ( GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStored, nil,
++			rwIM3D_VERTEXUV, GameRender::IMMEDIATE3D_DRAW_WATER) )
+ 		{
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++			GameRender::EndImmediate3D();
+ 		}
+ 	}
+ 	
+diff --git a/src/renderer/Weather.cpp b/src/renderer/Weather.cpp
+index e57d57d6..b3b1dd47 100644
+--- a/src/renderer/Weather.cpp
++++ b/src/renderer/Weather.cpp
+@@ -17,6 +17,7 @@
+ #include "Vehicle.h"
+ #include "World.h"
+ #include "ZoneCull.h"
++#include "GameRenderCommand.h"
+ 
+ int32 CWeather::SoundHandle = -1;
+ 
+@@ -286,6 +287,9 @@ void CWeather::ReleaseWeather()
+ 
+ void CWeather::AddRain()
+ {
++#ifdef __ANDROID__
++	static float rainDropCarry = 0.0f;
++#endif
+ 	if (CCullZones::CamNoRain() || CCullZones::PlayerNoRain())
+ 		return;
+ 	if (TheCamera.GetLookingLRBFirstPerson()) {
+@@ -296,12 +300,28 @@ void CWeather::AddRain()
+ 		}
+ 	}
+ 	if (Rain <= 0.1f)
++	{
++#ifdef __ANDROID__
++		rainDropCarry = 0.0f;
++#endif
+ 		return;
++	}
+ 	static RwRGBA colour;
+ 	float screen_width = SCREEN_WIDTH;
+ 	float screen_height = SCREEN_HEIGHT;
+ 	int cur_frame = (int)(3 * Rain) & 3;
+-	int num_drops = (int)(2 * Rain) + 2;
++	int num_drops;
++#ifdef __ANDROID__
++	const float frameScale30Hz = Min(Max(
++		CTimer::GetTimeStepInSeconds()*30.0f, 0.0f), 1.0f);
++	const float vrRainDensity = 0.65f;
++	const float requestedDrops = ((2.0f * Rain) + 2.0f)*frameScale30Hz*vrRainDensity +
++		rainDropCarry;
++	num_drops = (int)requestedDrops;
++	rainDropCarry = requestedDrops-num_drops;
++#else
++	num_drops = (int)(2 * Rain) + 2;
++#endif
+ 	static int STATIC_RAIN_ANGLE = -45;
+ 	static int count = 1500;
+ 	static int add_angle = 1;
+@@ -453,7 +473,7 @@ void RenderOneRainStreak(CVector pos, CVector unused, int intensity, bool scale,
+ 	RwIm3DVertexSetU(&TempBufferRenderVertices[TempBufferVerticesStored + 3], u + RandomTexX);
+ 	RwIm3DVertexSetV(&TempBufferRenderVertices[TempBufferVerticesStored + 3], RandomTexY);
+ 	RwIm3DVertexSetU(&TempBufferRenderVertices[TempBufferVerticesStored + 4], 0.5f * u + RandomTex + RandomTexX);
+-	RwIm3DVertexSetV(&TempBufferRenderVertices[TempBufferVerticesStored + 5], 0.5f * v + RandomTexY);
++	RwIm3DVertexSetV(&TempBufferRenderVertices[TempBufferVerticesStored + 4], 0.5f * v + RandomTexY);
+ 	TempBufferIndicesStored += 12;
+ 	TempBufferVerticesStored += 5;
+ }
+@@ -515,10 +535,11 @@ void CWeather::RenderRainStreaks(void)
+ 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+ 		RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
+ 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gpRainDropTex[3]));
+-		if (RwIm3DTransform(TempBufferRenderVertices, TempBufferVerticesStored, nil, 1))
++		if (GameRender::BeginImmediate3D(TempBufferRenderVertices, TempBufferVerticesStored, nil, 1,
++			GameRender::IMMEDIATE3D_DRAW_WEATHER))
+ 		{
+-			RwIm3DRenderIndexedPrimitive(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
+-			RwIm3DEnd();
++			GameRender::SubmitImmediate3DIndexed(rwPRIMTYPETRILIST, TempBufferRenderIndexList, TempBufferIndicesStored);
++			GameRender::EndImmediate3D();
+ 		}
+ 		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
+ 		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+diff --git a/src/rw/RwHelper.h b/src/rw/RwHelper.h
+index 665ee60c..1bf9396f 100644
+--- a/src/rw/RwHelper.h
++++ b/src/rw/RwHelper.h
+@@ -29,8 +29,9 @@ void RenderSkeleton(RpHAnimHierarchy *hier);
+ #endif
+ 
+ RwTexDictionary *RwTexDictionaryGtaStreamRead(RwStream *stream);
+-RwTexDictionary *RwTexDictionaryGtaStreamRead1(RwStream *stream);
+-RwTexDictionary *RwTexDictionaryGtaStreamRead2(RwStream *stream, RwTexDictionary *texDict);
++RwTexDictionary *RwTexDictionaryGtaStreamRead1(RwStream *stream, int32 *texturesRemaining, int32 *streamPosition);
++int32 RwTexDictionaryGtaStreamRead2(RwStream *stream, RwTexDictionary *texDict,
++	int32 *texturesRemaining, int32 *streamPosition, int32 maxTextures);
+ void ReadVideoCardCapsFile(uint32&, uint32&, uint32&, uint32&);
+ bool CheckVideoCardCaps(void);
+ void WriteVideoCardCapsFile(void);
+diff --git a/src/rw/TexRead.cpp b/src/rw/TexRead.cpp
+index 4d339e7f..9733b883 100644
+--- a/src/rw/TexRead.cpp
++++ b/src/rw/TexRead.cpp
+@@ -102,18 +102,16 @@ RwTexDictionaryGtaStreamRead(RwStream *stream)
+ 	return texDict;
+ }
+ 
+-static int32 numberTextures = -1;
+-static int32 streamPosition;
+-
+ RwTexDictionary*
+-RwTexDictionaryGtaStreamRead1(RwStream *stream)
++RwTexDictionaryGtaStreamRead1(RwStream *stream, int32 *texturesRemaining,
++	int32 *streamPosition)
+ {
+ 	RwUInt32 size, version;
+ 	RwInt32 numTextures;
+ 	RwTexDictionary *texDict;
+-	RwTexture *tex;
+ 
+-	numberTextures = 0;
++	*texturesRemaining = 0;
++	*streamPosition = 0;
+ 	if(!RwStreamFindChunk(stream, rwID_STRUCT, &size, &version))
+ 		return nil;
+ 	assert(size == 4);
+@@ -124,44 +122,36 @@ RwTexDictionaryGtaStreamRead1(RwStream *stream)
+ 	if(texDict == nil)
+ 		return nil;
+ 
+-	numberTextures = numTextures/2;
+-
+-	while(numTextures > numberTextures){
+-		numTextures--;
+-
+-		tex = RwTextureGtaStreamRead(stream);
+-		if(tex == nil){
+-			RwTexDictionaryForAllTextures(texDict, destroyTexture, nil);
+-			RwTexDictionaryDestroy(texDict);
+-			return nil;
+-		}
+-		RwTexDictionaryAddTexture(texDict, tex);
+-	}
+-
+-	numberTextures = numTextures;
+-	streamPosition = STREAMPOS(stream);
++	// Keep the IMG buffer owned by the streaming channel and decode native
++	// textures incrementally.  D3D12/Vulkan texture creation/upload is relatively
++	// expensive, so decoding an entire TXD here causes visible 20-100 ms stalls.
++	*texturesRemaining = numTextures;
++	*streamPosition = STREAMPOS(stream);
+ 
+ 	return texDict;
+ }
+ 
+-RwTexDictionary*
+-RwTexDictionaryGtaStreamRead2(RwStream *stream, RwTexDictionary *texDict)
++int32
++RwTexDictionaryGtaStreamRead2(RwStream *stream, RwTexDictionary *texDict,
++	int32 *texturesRemaining, int32 *streamPosition, int32 maxTextures)
+ {
+ 	RwTexture *tex;
+ 
+-	RwStreamSkip(stream, streamPosition - STREAMPOS(stream));
++	RwStreamSkip(stream, *streamPosition - STREAMPOS(stream));
+ 
+-	while(numberTextures--){
++	while(*texturesRemaining > 0 && maxTextures-- > 0){
+ 		tex = RwTextureGtaStreamRead(stream);
+ 		if(tex == nil){
+ 			RwTexDictionaryForAllTextures(texDict, destroyTexture, nil);
+ 			RwTexDictionaryDestroy(texDict);
+-			return nil;
++			return -1;
+ 		}
+ 		RwTexDictionaryAddTexture(texDict, tex);
++		(*texturesRemaining)--;
+ 	}
+ 
+-	return texDict;
++	*streamPosition = STREAMPOS(stream);
++	return *texturesRemaining == 0 ? 1 : 0;
+ }
+ 
+ #ifdef GTA_PC
+diff --git a/src/rw/TxdStore.cpp b/src/rw/TxdStore.cpp
+index ec68fab8..e6793e4e 100644
+--- a/src/rw/TxdStore.cpp
++++ b/src/rw/TxdStore.cpp
+@@ -42,6 +42,8 @@ CTxdStore::AddTxdSlot(const char *name)
+ 	assert(def);
+ 	def->texDict = nil;
+ 	def->refCount = 0;
++	def->streamTexturesRemaining = 0;
++	def->streamPosition = 0;
+ 	strcpy(def->name, name);
+ 	return ms_pTxdPool->GetJustIndex(def);
+ }
+@@ -146,9 +148,20 @@ CTxdStore::LoadTxd(int slot, const char *filename)
+ #ifdef GTA_PC
+ 	_rwD3D8TexDictionaryEnableRasterFormatConversion(true);
+ #endif
+-	do
++	// Upstream retries forever here, assuming a failure to open can only ever
++	// be transient. Against a staged copy of the game data one unreadable file
++	// turns that into a hang at full CPU with nothing in the log -- which is
++	// exactly how the splash screen presented on the headset. Bound it, and
++	// say which file failed.
++	for(int attempt = 0; attempt < 16; attempt++){
+ 		stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, filename);
+-	while(stream == nil);
++		if(stream != nil)
++			break;
++	}
++	if(stream == nil){
++		printf("Failed to open TXD '%s' for slot %d\n", filename, slot);
++		return false;
++	}
+ 	ret = LoadTxd(slot, stream);
+ 	RwStreamClose(stream, nil);
+ 	return ret;
+@@ -159,7 +172,8 @@ CTxdStore::StartLoadTxd(int slot, RwStream *stream)
+ {
+ 	TxdDef *def = GetSlot(slot);
+ 	if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil)){
+-		def->texDict = RwTexDictionaryGtaStreamRead1(stream);
++		def->texDict = RwTexDictionaryGtaStreamRead1(stream,
++			&def->streamTexturesRemaining, &def->streamPosition);
+ 		return def->texDict != nil;
+ 	}else{
+ 		printf("Failed to load TXD\n");
+@@ -167,12 +181,18 @@ CTxdStore::StartLoadTxd(int slot, RwStream *stream)
+ 	}
+ }
+ 
+-bool
++int32
+ CTxdStore::FinishLoadTxd(int slot, RwStream *stream)
+ {
+ 	TxdDef *def = GetSlot(slot);
+-	def->texDict = RwTexDictionaryGtaStreamRead2(stream, def->texDict);
+-	return def->texDict != nil;
++	const int32 result = RwTexDictionaryGtaStreamRead2(stream, def->texDict,
++		&def->streamTexturesRemaining, &def->streamPosition, 1);
++	if(result < 0){
++		def->texDict = nil;
++		def->streamTexturesRemaining = 0;
++		def->streamPosition = 0;
++	}
++	return result;
+ }
+ 
+ void
+@@ -182,4 +202,6 @@ CTxdStore::RemoveTxd(int slot)
+ 	if(def->texDict)
+ 		RwTexDictionaryDestroy(def->texDict);
+ 	def->texDict = nil;
++	def->streamTexturesRemaining = 0;
++	def->streamPosition = 0;
+ }
+diff --git a/src/rw/TxdStore.h b/src/rw/TxdStore.h
+index 603752c2..84f3a122 100644
+--- a/src/rw/TxdStore.h
++++ b/src/rw/TxdStore.h
+@@ -7,6 +7,8 @@ struct TxdDef {
+ 	RwTexDictionary *texDict;
+ 	int refCount;
+ 	char name[20];
++	int32 streamTexturesRemaining;
++	int32 streamPosition;
+ };
+ 
+ class CTxdStore
+@@ -32,7 +34,8 @@ public:
+ 	static bool LoadTxd(int slot, RwStream *stream);
+ 	static bool LoadTxd(int slot, const char *filename);
+ 	static bool StartLoadTxd(int slot, RwStream *stream);
+-	static bool FinishLoadTxd(int slot, RwStream *stream);
++	// -1 = failure, 0 = more textures pending, 1 = complete.
++	static int32 FinishLoadTxd(int slot, RwStream *stream);
+ 	static void RemoveTxd(int slot);
+ 
+ 	static TxdDef *GetSlot(int slot) {
+diff --git a/src/rw/VisibilityPlugins.cpp b/src/rw/VisibilityPlugins.cpp
+index 40f719a4..af866866 100644
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -12,6 +12,13 @@
+ #include "World.h"
+ #include "custompipes.h"
+ #include "MemoryHeap.h"
++#ifdef RW_VULKAN
++#include "vulkan/rwvk.h"
++#ifdef __ANDROID__
++#include "QuestProfiler.h"
++#include "VrRagdoll.h"
++#endif
++#endif
+ 
+ CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaList;
+ CLinkList<CVisibilityPlugins::AlphaObjectInfo> CVisibilityPlugins::m_alphaEntityList;
+@@ -207,6 +214,15 @@ CVisibilityPlugins::InsertEntityIntoSortedList(CEntity *e, float dist)
+ #ifdef FIX_BUGS
+ 	if (!e->m_rwObject) return true;
+ #endif
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	// The desktop pass and both eyes share this list. A transparent entity only
++	// needs one entry because all three views sort from the same head centre.
++	CLink<AlphaObjectInfo> *existing;
++	for(existing = m_alphaEntityList.head.next;
++	    existing != &m_alphaEntityList.tail; existing = existing->next)
++		if(existing->item.entity == e)
++			return true;
++#endif
+ 
+ 	AlphaObjectInfo item;
+ 	item.entity = e;
+@@ -264,9 +280,18 @@ CVisibilityPlugins::SetRenderWareCamera(RwCamera *camera)
+         ms_vehicleFadeDist = sq(100.0f * VEHICLE_LODDIST_MULTIPLIER);
+         ms_bigVehicleLod0Dist = sq(60.0f * VEHICLE_LODDIST_MULTIPLIER);
+         ms_bigVehicleLod1Dist = sq(150.0f * VEHICLE_LODDIST_MULTIPLIER);
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	// The VR renderer builds an omnidirectional list out to LOD_DISTANCE. The
++	// original 60 m ped callback cutoff makes valid entries disappear long before
++	// the surrounding world does, which is especially obvious with head turning.
++	// Keep every ped already admitted to that bounded list renderable.
++	ms_pedLod1Dist = sq(LOD_DISTANCE);
++	ms_pedFadeDist = sq(LOD_DISTANCE);
++#else
+         ms_pedLod0Dist = sq(25.0f * TheCamera.LODDistMultiplier);
+         ms_pedLod1Dist = sq(60.0f * TheCamera.LODDistMultiplier);
+         ms_pedFadeDist = sq(70.0f * TheCamera.LODDistMultiplier);
++#endif
+ }
+ 
+ RpMaterial*
+@@ -286,11 +311,31 @@ SetTextureCB(RpMaterial *material, void *data)
+ void
+ CVisibilityPlugins::RenderAlphaAtomics(void)
+ {
++#ifdef RW_VULKAN
++	rw::vulkan::setVehicleAlphaPass(TRUE);
++#endif
+ 	CLink<AlphaObjectInfo> *node;
+ 	for(node = m_alphaList.tail.prev;
+ 	    node != &m_alphaList.head;
+-	    node = node->prev)
++	    node = node->prev){
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++		// Only the windscreen must stay out of the depth buffer. Disabling depth
++		// writes for the whole vehicle alpha list also affects paint/reflection
++		// atomics and makes the complete car appear translucent.
++		const bool isWindscreen =
++			(GetAtomicId(node->item.atomic) & ATOMIC_FLAG_WINDSCREEN) != 0;
++		if(isWindscreen)
++			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
++#endif
+ 		RENDERCALLBACK(node->item.atomic);
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++		if(isWindscreen)
++			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)TRUE);
++#endif
++	}
++#ifdef RW_VULKAN
++	rw::vulkan::setVehicleAlphaPass(FALSE);
++#endif
+ }
+ 
+ void
+@@ -304,6 +349,10 @@ CVisibilityPlugins::RenderFadingEntities(void)
+ 		CEntity *e = node->item.entity;
+ 		if(e->m_rwObject == nil)
+ 			continue;
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		if(!CRenderer::ShouldRenderInCurrentView(e))
++			continue;
++#endif
+ #ifdef EXTENDED_PIPELINES
+ 		if(CustomPipes::bRenderingEnvMap && (e->IsPed() || e->IsVehicle()))
+ 			continue;
+@@ -324,6 +373,10 @@ CVisibilityPlugins::RenderFadingEntities(void)
+ #endif
+ 
+ 		if(e->bDistanceFade){
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			if(e->IsBuilding())
++				androidgame::QuestProfilerCountVisibleBuilding(e);
++#endif
+ 			DeActivateDirectional();
+ 			SetAmbientColours();
+ 			e->bImBeingRendered = true;
+@@ -332,7 +385,7 @@ CVisibilityPlugins::RenderFadingEntities(void)
+ 			POP_RENDERGROUP();
+ 			e->bImBeingRendered = false;
+ 		}else
+-			CRenderer::RenderOneNonRoad(e);
++			CRenderer::RenderOneNonRoad(e, true);
+ 
+ #ifdef EXTRA_MODEL_FLAGS
+ 		if(mi->m_bIsTree)
+@@ -407,6 +460,13 @@ CVisibilityPlugins::RenderAlphaAtomic(RpAtomic *atomic, int alpha)
+ 	return atomic;
+ }
+ 
++RpAtomic*
++CVisibilityPlugins::RenderAtomicDefault(RpAtomic *atomic)
++{
++	RENDERCALLBACK(atomic);
++	return atomic;
++}
++
+ RpAtomic*
+ CVisibilityPlugins::RenderFadingAtomic(RpAtomic *atomic, float camdist)
+ {
+@@ -742,7 +802,16 @@ CVisibilityPlugins::RenderPedCB(RpAtomic *atomic)
+ 	RwV3d cam2atm;
+ 
+ 	RwV3dSub(&cam2atm, &RwFrameGetLTM(RpAtomicGetFrame(atomic))->pos, ms_pCameraPosn);
+-	if(RwV3dDotProduct(&cam2atm, &cam2atm) < ms_pedLod1Dist){
++	float lodDistanceSq = ms_pedLod1Dist;
++#if defined(__ANDROID__) && defined(RW_VULKAN)
++	CVector centre;
++	float radius;
++	if(VrRagdoll::GetClumpBounds(RpAtomicGetClump(atomic), centre, radius)){
++		cam2atm = centre - CVector(*ms_pCameraPosn);
++		lodDistanceSq = sq(Sqrt(ms_pedLod1Dist) + radius);
++	}
++#endif
++	if(RwV3dDotProduct(&cam2atm, &cam2atm) < lodDistanceSq){
+ 		alpha = GetClumpAlpha(RpAtomicGetClump(atomic));
+ 		if(alpha == 255)
+ 			RENDERCALLBACK(atomic);
+diff --git a/src/rw/VisibilityPlugins.h b/src/rw/VisibilityPlugins.h
+index faa1ad4f..b5db5f51 100644
+--- a/src/rw/VisibilityPlugins.h
++++ b/src/rw/VisibilityPlugins.h
+@@ -50,6 +50,9 @@ public:
+ 	static RpAtomic *RenderWheelAtomicCB(RpAtomic *atomic);
+ 	static RpAtomic *RenderObjNormalAtomic(RpAtomic *atomic);
+ 	static RpAtomic *RenderAlphaAtomic(RpAtomic *atomic, int alpha);
++	// Bypass an atomic's installed LOD callback after an external policy has
++	// already selected the exact geometry to draw.
++	static RpAtomic *RenderAtomicDefault(RpAtomic *atomic);
+ 	static RpAtomic *RenderFadingAtomic(RpAtomic *atm, float dist);
+ 
+ 	static RpAtomic *RenderVehicleHiDetailCB(RpAtomic *atomic);
+-- 
+2.56.0.windows.1
+
