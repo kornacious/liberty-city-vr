@@ -585,7 +585,13 @@ if [ "$SKIP_GAME_DATA" -eq 0 ]; then
       folder="$(find_child_directory "$RESOLVED_GAME" "$name")" || die "Required game-data folder '$name' is missing from $RESOLVED_GAME. Use a complete PC installation."
       resolved_folders[$name]="${folder%/}"
     done
-    for opt_name in mp3 skins; do
+    audio_folder="${resolved_folders[Audio]}"
+    sfx_raw="$(find "$audio_folder" -maxdepth 1 -iname "sfx.raw" -print -quit 2>/dev/null)"
+    sfx_sdt="$(find "$audio_folder" -maxdepth 1 -iname "sfx.sdt" -print -quit 2>/dev/null)"
+    if [ -z "$sfx_raw" ] || [ -z "$sfx_sdt" ]; then
+      die "Required sound effect archive sfx.RAW/sfx.SDT is missing from $audio_folder. In retail GTA III PC, sfx.RAW and sfx.SDT are installed by Disc 1 (Install CD), while radio station/dialogue audio is on Disc 2 (Play CD). Ensure both sets are merged into the Audio folder."
+    fi
+    for opt_name in mp3 skins txd; do
       if opt_folder="$(find_child_directory "$RESOLVED_GAME" "$opt_name")"; then
         resolved_folders[$opt_name]="${opt_folder%/}"
       fi

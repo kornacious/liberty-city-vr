@@ -177,6 +177,32 @@ index da0dbb81..89bbd870 100644
  }
  
  
+diff --git a/src/fakerw/fake.cpp b/src/fakerw/fake.cpp
+index 6dfebb39..b2a8d110 100644
+--- a/src/fakerw/fake.cpp
++++ b/src/fakerw/fake.cpp
+@@ -303,7 +303,19 @@ RwBool rwNativeTextureHackRead(RwStream *stream, RwTexture **tex, RwInt32 size)
+ {
+ 	*tex = Texture::streamReadNative(stream);
+ #ifdef LIBRW
+-	(*tex)->raster = rw::Raster::convertTexToCurrentPlatform((*tex)->raster);
++	if(*tex == nil || (*tex)->raster == nil){
++		if(*tex)
++			(*tex)->destroy();
++		*tex = nil;
++		return false;
++	}
++	rw::Raster *converted = rw::Raster::convertTexToCurrentPlatform((*tex)->raster);
++	if(converted == nil){
++		(*tex)->destroy();
++		*tex = nil;
++		return false;
++	}
++	(*tex)->raster = converted;
+ #endif
+ 	return *tex != nil;
+ }
+
 diff --git a/src/objects/ParticleObject.h b/src/objects/ParticleObject.h
 index 34c1fa64..3dc4bcfc 100644
 --- a/src/objects/ParticleObject.h

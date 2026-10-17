@@ -567,7 +567,13 @@ try {
                 }
                 $resolvedFolders[$name] = $folder
             }
-            foreach ($optName in @("mp3", "skins")) {
+            $audioFolder = $resolvedFolders["Audio"]
+            $sfxRaw = Get-ChildItem -LiteralPath $audioFolder.FullName -File | Where-Object { $_.Name.Equals("sfx.raw", [StringComparison]::OrdinalIgnoreCase) }
+            $sfxSdt = Get-ChildItem -LiteralPath $audioFolder.FullName -File | Where-Object { $_.Name.Equals("sfx.sdt", [StringComparison]::OrdinalIgnoreCase) }
+            if ($null -eq $sfxRaw -or $null -eq $sfxSdt) {
+                throw "Required sound effect archive sfx.RAW/sfx.SDT is missing from $($audioFolder.FullName). In retail GTA III PC, sfx.RAW and sfx.SDT are installed by Disc 1 (Install CD), while radio station/dialogue audio is on Disc 2 (Play CD). Ensure both sets are merged into the Audio folder."
+            }
+            foreach ($optName in @("mp3", "skins", "txd")) {
                 $optFolder = Find-ChildDirectory -Parent $resolvedGame -Name $optName
                 if ($null -ne $optFolder) {
                     $resolvedFolders[$optName] = $optFolder
