@@ -6,6 +6,12 @@
 
 #ifdef __ANDROID__
 #include "platform_android.h"
+#include <android/log.h>
+#define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)
+#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LibertyVR", __VA_ARGS__)
+#else
+#define ALOG(...)
+#define ALOGE(...)
 #endif
 
 #ifdef _WIN32
@@ -13,6 +19,7 @@
 #define MODELSET_STRICMP _stricmp
 #define MODELSET_STRNICMP _strnicmp
 #else
+#include <sys/stat.h>
 #include <strings.h>
 #define MODELSET_STRICMP strcasecmp
 #define MODELSET_STRNICMP strncasecmp
@@ -67,11 +74,16 @@ const int gCategoryDefaults[MODEL_CATEGORY_COUNT] = {
 
 bool FileExists(const char *path)
 {
+	if(!path || path[0] == '\0')
+		return false;
 #ifdef _WIN32
 	const DWORD attributes = GetFileAttributesA(path);
 	return attributes != INVALID_FILE_ATTRIBUTES &&
 		(attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 #else
+	struct stat st;
+	if(stat(path, &st) == 0 && S_ISREG(st.st_mode))
+		return true;
 	FILE *file = fcaseopen(path, "rb");
 	if(!file)
 		return false;
@@ -156,10 +168,17 @@ void BuildOverlayPath(eModelSet modelSet, const char *relativePath, char *destin
 		#else
 		if(*cursor == '\\') *cursor = '/';
 		#endif
+	const char *setName = modelSet == MODEL_SET_XBOX ? "xbox" : "modern";
 #ifdef _WIN32
-	snprintf(destination, destinationSize, "%smodelsets\\%s\\%s", gGameRoot, modelSet == MODEL_SET_XBOX ? "xbox" : "modern", normalized);
+	snprintf(destination, destinationSize, "%smodelsets\\%s\\%s", gGameRoot, setName, normalized);
 #else
-	snprintf(destination, destinationSize, "%smodelsets/%s/%s", gGameRoot, modelSet == MODEL_SET_XBOX ? "xbox" : "modern", normalized);
+	snprintf(destination, destinationSize, "%smodelsets/%s/%s", gGameRoot, setName, normalized);
+	if(!FileExists(destination)){
+		char rel[512];
+		snprintf(rel, sizeof(rel), "modelsets/%s/%s", setName, normalized);
+		if(FileExists(rel))
+			strncpy(destination, rel, destinationSize-1);
+	}
 #endif
 }
 
@@ -246,6 +265,11 @@ void InitializeStartup(const char *gameRoot)
 		gActiveCategory[category] = gRequestedCategory[category] = (eModelSet)selected;
 	}
 	gInitialized = true;
+	ALOG("ModelSets::InitializeStartup: root='%s' modern=%d xbox=%d active=%s (vehicles=%s world=%s)",
+		gGameRoot, (int)gModernArchivePairAvailable, (int)gXboxAvailable,
+		GetName(gActiveModelSet),
+		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)),
+		GetName(GetActiveForCategory(MODEL_CATEGORY_WORLD)));
 	debug("Model sets: preset=%s modern=%d xbox=%d vehicles=%s world=%s\n",
 		GetName(gActiveModelSet), gModernArchivePairAvailable, gXboxAvailable,
 		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)),

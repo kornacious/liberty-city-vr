@@ -2561,13 +2561,13 @@ VrDebugUpdate(const PadInput &in)
 				for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT;
 				    category++){
 					const ModelSets::eModelSet requested =
-						preset == ModelSets::MODEL_SET_MODERN &&
-						(category == ModelSets::MODEL_CATEGORY_WORLD ||
-						 category == ModelSets::MODEL_CATEGORY_WEAPONS) ?
-						ModelSets::MODEL_SET_MODERN :
-						(preset == ModelSets::MODEL_SET_XBOX &&
-						 category == ModelSets::MODEL_CATEGORY_VEHICLES ?
-						 ModelSets::MODEL_SET_XBOX : ModelSets::MODEL_SET_CLASSIC);
+						preset == ModelSets::MODEL_SET_MODERN ?
+						(category == ModelSets::MODEL_CATEGORY_VEGETATION ?
+						 ModelSets::MODEL_SET_CLASSIC : ModelSets::MODEL_SET_MODERN) :
+						(preset == ModelSets::MODEL_SET_XBOX ?
+						 (category == ModelSets::MODEL_CATEGORY_VEGETATION ?
+						  ModelSets::MODEL_SET_CLASSIC : ModelSets::MODEL_SET_XBOX) :
+						 ModelSets::MODEL_SET_CLASSIC);
 					ModelSets::SetRequestedForCategory(
 						(ModelSets::eModelCategory)category, requested);
 				}
@@ -3342,7 +3342,7 @@ BeginFullVrMenuPage(const char *heading, const char *subtitle = nil)
 		5, 10, 20, 238);
 	FillVrMenuRect(28, 28, VR_MENU_WIDTH-28, VR_MENU_HEIGHT-28,
 		10, 22, 38, 245);
-	DrawVrMenuText("VICE CITY VR", VR_MENU_WIDTH/2, 55, 7,
+	DrawVrMenuText("LIBERTY CITY VR", VR_MENU_WIDTH/2, 55, 7,
 		255, 120, 205);
 	uint8 red, green, blue;
 	QuestMenuPageColour(&red, &green, &blue);
@@ -3412,7 +3412,7 @@ DrawQuestSettingsPage(void)
 	strcpy(rows[VR_MAIN_WEAPONS], "WEAPONS  < OPEN >");
 	strcpy(rows[VR_MAIN_HOLSTERS], "HOLSTER LOADOUT  < OPEN >");
 	strcpy(rows[VR_MAIN_CHEATS], "CHEAT MENU  < OPEN >");
-	strcpy(rows[VR_MAIN_ABOUT], "ABOUT VICE CITY VR  < OPEN >");
+	strcpy(rows[VR_MAIN_ABOUT], "ABOUT LIBERTY CITY VR  < OPEN >");
 
 	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
 		DrawFullVrMenuRow(rows[item], 160+item*50, 3,
@@ -4507,7 +4507,7 @@ static void
 DrawQuestAboutPage(void)
 {
 	BeginFullVrMenuPage(gVrWelcomeFirstRun ?
-		"WELCOME TO VICE CITY VR" : "ABOUT VICE CITY VR",
+		"WELCOME TO LIBERTY CITY VR" : "ABOUT LIBERTY CITY VR",
 		"VERSION " MIAMIVR_VERSION_TEXT " - NOT FOR SALE");
 	static const char *lines[] = {
 		"OPEN THE VR MENU: HOLD BOTH GRIPS + MENU",

@@ -42,13 +42,14 @@
 #include "Renderer.h"
 #include "Streaming.h"
 #include "vulkan/rwvk.h"
+#include "ModelSets.h"
 #ifdef GTA_VR_WEAPONS
 #include "OculusVR.h"
 #endif
 
 #include <android/log.h>
-#define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "MiamiVR", __VA_ARGS__)
-#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "MiamiVR", __VA_ARGS__)
+#define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)
+#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LibertyVR", __VA_ARGS__)
 
 template<typename T, typename U, typename V>
 static inline T clamp(T val, U low, V high) {
@@ -1460,7 +1461,7 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 {
 	if(renderTargetStartupFailure != nil)
 		*renderTargetStartupFailure = false;
-	RsGlobal.appName = "Vice City VR";
+	RsGlobal.appName = "Liberty City VR";
 	RsGlobal.maximumWidth = (RwInt32)context.width;
 	RsGlobal.maximumHeight = (RwInt32)context.height;
 	RsGlobal.width = (RwInt32)context.width;
@@ -1480,6 +1481,10 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 		return false;
 	}
 	ALOG("working directory: %s", dataRoot);
+
+	// Select the base/optional overlay before RenderWare or streaming opens any
+	// asset. Category changes are next-launch requests by design.
+	ModelSets::InitializeStartup(dataRoot);
 
 	if(RsEventHandler(rsINITIALIZE, nil) == rsEVENTERROR){
 		ALOGE("rsINITIALIZE failed");
