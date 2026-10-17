@@ -37,9 +37,11 @@
 			android:exported="true"
 			android:grantUriPermissions="false" />
 
-		<!-- com.oculus.supportedDevices is deliberately absent. It gates store
-		     submissions, and an unrecognised token there can make Horizon OS
-		     refuse to launch a sideloaded build. -->
+		<!-- Declare supported devices so Horizon OS exposes full Quest 2/Pro/3/3S
+		     capabilities (including 80Hz, 90Hz, and 120Hz display refresh rates). -->
+		<meta-data
+			android:name="com.oculus.supportedDevices"
+			android:value="quest2|questpro|quest3|quest3s" />
 
 		<activity
 			android:name="android.app.NativeActivity"
