@@ -1749,7 +1749,17 @@ index 085490f1..982bb6b4 100644
  	NUMINVISIBLEENTITIES = 150,
  
  	NUM_AUDIOENTITY_EVENTS = 4,
-@@ -312,11 +331,13 @@ enum Config {
+@@ -300,7 +315,9 @@ enum Config {
+ #define ASPECT_RATIO_SCALE	// Not just makes everything scale with aspect ratio, also adds support for all aspect ratios
+ #define PROPER_SCALING		// use original DEFAULT_SCREEN_WIDTH/DEFAULT_SCREEN_HEIGHT from PS2 instead of PC(R* changed HEIGHT here to make radar look better, but broke other hud elements aspect ratio).
+ #define DEFAULT_NATIVE_RESOLUTION	// Set default video mode to your native resolution (fixes Windows 10 launch)
++#ifndef RW_VULKAN
+ #define USE_TXD_CDIMAGE		// generate and load textures from txd.img
++#endif
+ #define PS2_ALPHA_TEST		// emulate ps2 alpha test 
+ #define IMPROVED_VIDEOMODE	// save and load videomode parameters instead of a magic number
+ #define DISABLE_LOADING_SCREEN // disable the loading screen which vastly improves the loading time
+@@ -312,11 +329,13 @@ enum Config {
  #define ANISOTROPIC_FILTERING	// set all textures to max anisotropic filtering
  //#define USE_TEXTURE_POOL
  #ifdef LIBRW
