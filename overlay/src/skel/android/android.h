@@ -123,6 +123,7 @@ const PadInput &GetPadInput(void);
 void TriggerWeaponHaptic(int hand, float strength);
 // Preferred display refresh rate in Hz; forwarded to the OpenXR session.
 void SetPreferredRefreshRate(int hz);
+int GetSupportedRefreshRates(int *outRates, int maxRates);
 
 // Renders the native Quest tracked hands after the world/effects pass. The
 // function is a no-op in cinema mode and until both OpenXR and the player

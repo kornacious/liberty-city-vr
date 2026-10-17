@@ -317,9 +317,6 @@ struct State
 	PFN_xrGetDisplayRefreshRateFB getRefreshRate = nullptr;
 	PFN_xrRequestDisplayRefreshRateFB requestRefreshRate = nullptr;
 	bool refreshRateRequestAttempted = false;
-	// Keep application layers hidden while the headset panel changes refresh
-	// rate. Quest otherwise presents several menu frames at the old frequency.
-	bool refreshRateReadyForFrames = false;
 	int refreshRateRetryCount = 0;
 	XrTime nextRefreshRateRetryTime = 0;
 	float currentRefreshRateHz = kTargetDisplayRefreshRateHz;
@@ -604,7 +601,6 @@ createInstance(android_app *app)
 			g.hasRefreshRateExt = false;
 		}
 	}
-	g.refreshRateReadyForFrames = !g.hasRefreshRateExt;
 	if(g.hasPerformanceSettingsExt){
 		const XrResult result = xrGetInstanceProcAddr(
 			g.instance, "xrPerfSettingsSetPerformanceLevelEXT",
@@ -2088,6 +2084,8 @@ requestPreferredDisplayRefreshRate(void)
 	     "result %d, immediate %.1f (%d)",
 	     before, (int)beforeResult, target, (int)result,
 	     after, (int)afterResult);
+	if(XR_SUCCEEDED(result))
+		g.targetRefreshRateHz = target;
 	return XR_SUCCEEDED(result);
 }
 
@@ -2685,7 +2683,32 @@ setPreferredDisplayRefreshRate(float hz)
 	// focused frame and keeps retrying until the display confirms.
 	g.refreshRateRetryCount = 0;
 	g.nextRefreshRateRetryTime = 0;
+	if(g.session != XR_NULL_HANDLE && g.sessionState == XR_SESSION_STATE_FOCUSED)
+		requestPreferredDisplayRefreshRate();
 	LOGI("display refresh target set to %.1f Hz", hz);
+}
+
+int
+getSupportedDisplayRefreshRates(float *outRates, int maxRates)
+{
+	if(g.session == XR_NULL_HANDLE || !g.hasRefreshRateExt ||
+	   g.enumerateRefreshRates == nullptr || outRates == nullptr || maxRates <= 0)
+		return 0;
+
+	uint32_t count = 0;
+	XrResult result = g.enumerateRefreshRates(g.session, 0, &count, nullptr);
+	if(XR_FAILED(result) || count == 0)
+		return 0;
+
+	std::vector<float> rates(count);
+	result = g.enumerateRefreshRates(g.session, count, &count, rates.data());
+	if(XR_FAILED(result))
+		return 0;
+
+	int copyCount = (int)count < maxRates ? (int)count : maxRates;
+	for(int i = 0; i < copyCount; i++)
+		outRates[i] = rates[i];
+	return copyCount;
 }
 
 void
@@ -2807,7 +2830,6 @@ pollEvents(void)
 					XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 				if(XR_SUCCEEDED(xrBeginSession(g.session, &beginInfo))){
 					g.running = true;
-					g.refreshRateReadyForFrames = !g.hasRefreshRateExt;
 					applyAndroidThreadSettings("session READY");
 					g.refreshRateRequestAttempted = false;
 					g.refreshRateRetryCount = 0;
@@ -2821,20 +2843,10 @@ pollEvents(void)
 				// reassert explicit hints after the session gains focus.
 				applyPerformanceMode(true);
 				applyGpuPerformanceMode(true);
-				// Apply the stable 72 Hz target after the session owns focus.
-				// This avoids frame-rate changes while the game is running.
+				// Apply the target refresh rate after the session owns focus.
 				if(!g.refreshRateRequestAttempted){
 					g.refreshRateRequestAttempted = true;
-					const bool requested =
-						requestPreferredDisplayRefreshRate();
-					g.refreshRateReadyForFrames =
-						!requested ||
-						fabsf(g.currentRefreshRateHz -
-						      g.targetRefreshRateHz) < 0.5f;
-					if(!g.refreshRateReadyForFrames)
-						LOGI("holding application layers until display "
-						     "refresh settles at %.1f Hz",
-						     g.targetRefreshRateHz);
+					requestPreferredDisplayRefreshRate();
 					g.refreshRateRetryCount = 1;
 				}
 			}else if(g.sessionState == XR_SESSION_STATE_STOPPING){
@@ -2878,14 +2890,13 @@ pollEvents(void)
 			const XrEventDataDisplayRefreshRateChangedFB &changed =
 				*(const XrEventDataDisplayRefreshRateChangedFB *)&event;
 			g.currentRefreshRateHz = changed.toDisplayRefreshRate;
-			g.refreshRateReadyForFrames =
-				fabsf(changed.toDisplayRefreshRate -
-				      g.targetRefreshRateHz) < 0.5f;
 			LOGI("display refresh changed: %.1f -> %.1f Hz",
 			     changed.fromDisplayRefreshRate,
 			     changed.toDisplayRefreshRate);
 			if(fabsf(changed.toDisplayRefreshRate -
-			         g.targetRefreshRateHz) >= 0.5f){
+			         g.targetRefreshRateHz) < 0.5f){
+				g.refreshRateRetryCount = 8;
+			}else{
 				g.refreshRateRetryCount = 0;
 				g.nextRefreshRateRetryTime = 0;
 			}
@@ -2951,7 +2962,6 @@ renderFrame(void)
 		if(XR_SUCCEEDED(currentResult) &&
 		   fabsf(current - g.targetRefreshRateHz) < 0.5f){
 			g.currentRefreshRateHz = current;
-			g.refreshRateReadyForFrames = true;
 			LOGI("display refresh confirmed at %.1f Hz", current);
 			g.refreshRateRetryCount = 8;
 		}else{
@@ -2977,7 +2987,7 @@ renderFrame(void)
 	const XrCompositionLayerBaseHeader *layers[2] = { nullptr, nullptr };
 	uint32_t layerCount = 0;
 
-	if(frameState.shouldRender && g.refreshRateReadyForFrames){
+	if(frameState.shouldRender){
 		XrViewState viewState = { XR_TYPE_VIEW_STATE };
 		XrViewLocateInfo locateInfo = { XR_TYPE_VIEW_LOCATE_INFO };
 		locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -3127,7 +3137,7 @@ renderFrame(void)
 	// An empty frame is what makes Horizon OS drop the app back to its "still
 	// running" panel, so say the first few times it happens and why, instead of
 	// letting it pass silently.
-	if(layerCount == 0 && g.refreshRateReadyForFrames){
+	if(layerCount == 0){
 		static int reportedEmpty = 0;
 		if(reportedEmpty < 5){
 			reportedEmpty++;

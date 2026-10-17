@@ -400,9 +400,9 @@ VrApplyPadBindings(CControllerState *state, const PadInput &input,
 	// shoulder buttons as a 0..255 scale, the same way the desktop VR layer
 	// hands them over.
 	const int16 leftTrigger =
-		(int16)(Clamp(input.leftTrigger, 0.0f, 1.0f)*255.0f);
+		(int16)(clamp(input.leftTrigger, 0.0f, 1.0f)*255.0f);
 	const int16 rightTrigger =
-		(int16)(Clamp(input.rightTrigger, 0.0f, 1.0f)*255.0f);
+		(int16)(clamp(input.rightTrigger, 0.0f, 1.0f)*255.0f);
 	const int16 values[VR_PAD_SOURCE_COUNT] = {
 		(int16)(input.a ? 255 : 0),
 		(int16)(input.b ? 255 : 0),
@@ -410,8 +410,8 @@ VrApplyPadBindings(CControllerState *state, const PadInput &input,
 		(int16)(input.y ? 255 : 0),
 		includeTriggers ? leftTrigger : (int16)0,
 		includeTriggers ? rightTrigger : (int16)0,
-		(int16)(Clamp(input.leftGrip,  0.0f, 1.0f)*255.0f),
-		(int16)(Clamp(input.rightGrip, 0.0f, 1.0f)*255.0f),
+		(int16)(clamp(input.leftGrip,  0.0f, 1.0f)*255.0f),
+		(int16)(clamp(input.rightGrip, 0.0f, 1.0f)*255.0f),
 		(int16)(input.leftStickClick  ? 255 : 0),
 		(int16)(input.rightStickClick ? 255 : 0)
 	};
@@ -449,6 +449,19 @@ void
 SetPreferredRefreshRate(int hz)
 {
 	xrvk::setPreferredDisplayRefreshRate((float)hz);
+}
+
+int
+GetSupportedRefreshRates(int *outRates, int maxRates)
+{
+	float rates[16];
+	int count = xrvk::getSupportedDisplayRefreshRates(rates, 16);
+	if(count <= 0)
+		return 0;
+	int copyCount = count < maxRates ? count : maxRates;
+	for(int i = 0; i < copyCount; i++)
+		outRates[i] = (int)(rates[i] + 0.5f);
+	return copyCount;
 }
 
 void
@@ -823,9 +836,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		(player->m_objective == OBJECTIVE_ENTER_CAR_AS_DRIVER ||
 		 player->m_objective == OBJECTIVE_ENTER_CAR_AS_PASSENGER ||
 		 player->m_objective == OBJECTIVE_LEAVE_CAR ||
-#ifdef VC_PED_PORTS
 		 player->m_objective == OBJECTIVE_LEAVE_CAR_AND_DIE ||
-#endif
 		 playerVehicleState == PED_SEEK_CAR ||
 		 playerVehicleState == PED_SEEK_IN_BOAT ||
 		 playerVehicleState == PED_OPEN_DOOR ||
@@ -1219,7 +1230,7 @@ CapturePad(RwInt32 padID)
 	// walls. The 0.3 deadzone and the leave-alone-when-inside behaviour match
 	// the desktop skeletons in glfw.cpp and win.cpp.
 	const float stickDeadzone = 0.3f;
-	float rightStickX = Clamp(in.rightStickX, -1.0f, 1.0f);
+	float rightStickX = clamp(in.rightStickX, -1.0f, 1.0f);
 	const bool remoteMode =
 		CWorld::Players[CWorld::PlayerInFocus].IsPlayerInRemoteMode();
 	ApplyQuestSnapTurn(rightStickX);
@@ -1247,7 +1258,7 @@ CapturePad(RwInt32 padID)
 		if(androidgame::VrUsesSnapTurn())
 			rightStickX = 0.0f;
 		else
-			rightStickX = Clamp(
+			rightStickX = clamp(
 				rightStickX*androidgame::VrSmoothTurnScale(),
 				-1.0f, 1.0f);
 		if(localHeadYawValid &&
@@ -1260,13 +1271,13 @@ CapturePad(RwInt32 padID)
 				const float fullSpeedAngle = DEGTORAD(55.0f);
 				const float absoluteYaw = fabsf(localHeadYaw);
 				if(absoluteYaw > deadZone){
-					float axis = Clamp(
+					float axis = clamp(
 						(absoluteYaw-deadZone)/
 						(fullSpeedAngle-deadZone),
 						0.0f, 1.0f);
 					axis = axis*axis*(3.0f-2.0f*axis);
 					axis = copysignf(axis, -localHeadYaw);
-					rightStickX = Clamp(
+					rightStickX = clamp(
 						rightStickX+
 						axis*androidgame::VrHeadTurnScale(),
 						-1.0f, 1.0f);
@@ -1274,8 +1285,8 @@ CapturePad(RwInt32 padID)
 			}
 		}
 	}
-	float moveStickX = Clamp(in.leftStickX, -1.0f, 1.0f);
-	float moveStickY = Clamp(in.leftStickY, -1.0f, 1.0f);
+	float moveStickX = clamp(in.leftStickX, -1.0f, 1.0f);
+	float moveStickY = clamp(in.leftStickY, -1.0f, 1.0f);
 	if(localHeadYawValid && androidgame::VrUsesHeadRelativeMovement()){
 		// Rotate only by local HMD yaw. Pitch/roll never alter locomotion and
 		// the latched facing makes recentering a true new forward direction.
@@ -1301,7 +1312,7 @@ CapturePad(RwInt32 padID)
 
 	const float sticks[2] = {
 		rightStickX,
-		Clamp(-in.rightStickY, -1.0f, 1.0f)
+		clamp(-in.rightStickY, -1.0f, 1.0f)
 	};
 	int16 *const axes[2] = {
 		&state.RightStickX, &state.RightStickY
@@ -1646,7 +1657,7 @@ EnforceQuestTextureBudget(void)
 	// visible hitch, and the ceiling is not a cliff.
 	int removed = 0;
 	while(removed < 8 && rw::vulkan::getTextureMemoryUsed() > budget &&
-	      CStreaming::RemoveLeastUsedModel())
+	      CStreaming::RemoveLeastUsedModel(0))
 		removed++;
 	static uint32 reportAt;
 	if(CTimer::GetTimeInMilliseconds() >= reportAt){

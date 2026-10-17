@@ -1226,7 +1226,7 @@ LoadVrSettings(void)
 	gQuestHeadBobbing = GetPrivateProfileIntA("VR", "HeadBobbing", 0,
 		".\\vr_settings.ini") != 0;
 	gQuestRefreshRateHz = Min(Max(GetPrivateProfileIntA("VR",
-		"RefreshRate", 72, ".\\vr_settings.ini"), 72), 120);
+		"RefreshRate", 72, ".\\vr_settings.ini"), 60), 144);
 	androidgame::SetPreferredRefreshRate(gQuestRefreshRateHz);
 	const int persistedCpuPerformanceMode = GetPrivateProfileIntA("VR",
 		"CpuPerformanceMode", QUEST_CPU_PERFORMANCE_SUSTAINED,
@@ -3138,9 +3138,14 @@ VrDebugUpdate(const PadInput &in)
 				SaveVrInteger("HeadBobbing", gQuestHeadBobbing);
 				break;
 			case VR_LOCOMOTION_REFRESH_RATE: {
-				static const int rates[] = { 72, 80, 90, 120 };
-				const int count =
-					(int)(sizeof(rates)/sizeof(rates[0]));
+				int rates[16];
+				int count = androidgame::GetSupportedRefreshRates(rates, 16);
+				if(count <= 0){
+					static const int fallbackRates[] = { 72, 80, 90, 120 };
+					count = (int)(sizeof(fallbackRates)/sizeof(fallbackRates[0]));
+					for(int i = 0; i < count; i++)
+						rates[i] = fallbackRates[i];
+				}
 				int index = 0;
 				for(int i = 0; i < count; i++)
 					if(rates[i] == gQuestRefreshRateHz)

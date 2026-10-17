@@ -32,6 +32,10 @@ void triggerHaptic(int hand, float amplitude, float frequencyHz, float durationM
 // to call any time.
 void setPreferredDisplayRefreshRate(float hz);
 
+// Returns the number of display refresh rates supported by the device, copied
+// into outRates up to maxRates. Returns 0 if rates cannot be enumerated.
+int getSupportedDisplayRefreshRates(float *outRates, int maxRates);
+
 // OpenXR performance hint for the standalone runtime. Auto leaves a fresh
 // session entirely under runtime control; the two explicit modes provide
 // performance-policy hints for profiling and demanding traffic scenes.
