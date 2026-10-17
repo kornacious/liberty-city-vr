@@ -21,7 +21,7 @@ layout(set = 3, binding = 2) uniform sampler2D waterNormals;
 
 layout(location = 0) in vec4 fragColour;
 layout(location = 1) in vec2 fragTexCoord;
-layout(location = 2) in float fragFog;
+layout(location = 2) in vec2 fragFog;
 layout(location = 3) flat in vec2 fragDynamicMotion;
 layout(location = 4) in vec3 fragWorldPos;
 layout(location = 5) in vec3 fragNormal;
@@ -421,7 +421,8 @@ void main()
 	}
 #endif
 
-	colour.rgb = mix(scene.fogColour.rgb, colour.rgb, fragFog);
+	vec3 fogTarget = mix(scene.fogColour.rgb, scene.skyColour.rgb, fragFog.y);
+	colour.rgb = mix(fogTarget, colour.rgb, fragFog.x);
 	outColour = colour;
 	// Compact dynamic-vector transport. The post pass divides by the same gain.
 	outDynamicMotion = clamp(fragDynamicMotion*8.0, vec2(-1.0), vec2(1.0));

@@ -103,14 +103,13 @@ makeTheaterMatrices(float viewProj[16], float im2dWorld[16],
 
 	const float aspect = androidgame::VrTheaterAspectRatio();
 	const float nearZ = 0.05f;
-	const float farZ = 1000.0f;
 	const float tanHalfY = tanf(60.0f*0.5f*3.1415926535f/180.0f);
 	viewProj[0] = 1.0f/(tanHalfY*aspect);
 	// Vulkan's framebuffer Y axis points down.
 	viewProj[5] = -1.0f/tanHalfY;
-	viewProj[10] = -farZ/(farZ-nearZ);
+	viewProj[10] = -1.0f;
 	viewProj[11] = -1.0f;
-	viewProj[14] = -(farZ*nearZ)/(farZ-nearZ);
+	viewProj[14] = -nearZ;
 
 	const float distance = 2.0f;
 	const float planeHeight = 2.0f*distance*tanHalfY;

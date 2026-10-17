@@ -95,9 +95,15 @@ projectionFromFov(const XrFovf &fov, float nearZ, float farZ)
 	r.m[5]  = 2.0f / tanHeight;
 	r.m[8]  = (tanRight + tanLeft) / tanWidth;
 	r.m[9]  = (tanUp + tanDown) / tanHeight;
-	r.m[10] = -farZ / (farZ - nearZ);
-	r.m[11] = -1.0f;
-	r.m[14] = -(farZ * nearZ) / (farZ - nearZ);
+	if(farZ <= 0.0f || isinf(farZ)){
+		r.m[10] = -1.0f;
+		r.m[11] = -1.0f;
+		r.m[14] = -nearZ;
+	}else{
+		r.m[10] = -farZ / (farZ - nearZ);
+		r.m[11] = -1.0f;
+		r.m[14] = -(farZ * nearZ) / (farZ - nearZ);
+	}
 	return r;
 }
 
@@ -1898,7 +1904,7 @@ renderLayer(const XrView views[2])
 				atanf(tanf(renderFov[eye].angleDown)/scopeZoom);
 		}
 		const Mat4 projection = projectionFromFov(
-			renderFov[eye], 0.05f, 1000.0f);
+			renderFov[eye], 0.05f, 0.0f);
 		const Mat4 viewMatrix = viewFromPose(views[eye].pose);
 		viewProj[eye] = multiply(projection, viewMatrix);
 	}

@@ -2276,7 +2276,7 @@ index 2a757863..985e0d46 100644
  
  	ent->bImBeingRendered = true;	// TODO: this seems wrong, but do we even need it?
  
-@@ -736,6 +927,95 @@ enum Visbility
+@@ -736,6 +927,97 @@ enum Visbility
  #define OTHERUNAVAILABLE (other != -1 && CModelInfo::GetModelInfo(other)->GetRwObject() == nil)
  #define CANTIMECULL (!OTHERUNAVAILABLE)
  
@@ -2348,6 +2348,8 @@ index 2a757863..985e0d46 100644
 +				stereoVisible = rw::vulkan::
 +					isFirstPersonWorldBoxVisibleInStereo(
 +						worldCorners, angularMarginTangent) != 0;
++			}else if(ent->bIsBIGBuilding && radius <= 5.0f){
++				stereoVisible = true;
 +			}else
 +				stereoVisible = rw::vulkan::
 +					isFirstPersonWorldSphereVisibleInStereo(

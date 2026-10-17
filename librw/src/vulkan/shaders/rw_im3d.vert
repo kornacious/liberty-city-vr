@@ -14,7 +14,7 @@ layout(location = 2) in vec2 inTexCoord;
 
 layout(location = 0) out vec4 fragColour;
 layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out float fragFog;
+layout(location = 2) out vec2 fragFog;
 layout(location = 3) flat out vec2 fragDynamicMotion;
 // Present only because this stage shares rw_world.frag with the atomic
 // pipelines. Immediate geometry pushes a zero diffuse coefficient, which is
@@ -39,8 +39,12 @@ void main()
 	// Planar depth makes the fog a wall perpendicular to the gaze, and in a
 	// headset that wall turns with the head: the mist appears to follow the
 	// player instead of sitting still in the world.
-	float fogDistance = length(world.xyz - scene.im2dParams.yzw);
-	fragFog = (scene.fogParams.w * push.ambientLight.w) > 0.5 ?
+	vec3 viewOffset = world.xyz - scene.im2dParams.yzw;
+	float fogDistance = length(viewOffset);
+	float fogFactor = (scene.fogParams.w * push.ambientLight.w) > 0.5 ?
 		clamp((scene.fogParams.y - fogDistance) * scene.fogParams.z, 0.0, 1.0) :
 		1.0;
+	float elevation = fogDistance > 1e-4 ? (viewOffset.y / fogDistance) : 0.0;
+	float skyBlend = clamp(elevation * 4.0 + 0.1, 0.0, 1.0);
+	fragFog = vec2(fogFactor, skyBlend);
 }

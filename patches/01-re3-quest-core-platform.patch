@@ -11,7 +11,7 @@ index 80bd2ce5..b52fa440 100644
  	static char *GetCutsceneName(void) { return ms_cutsceneName; }
  	static void SetCutsceneOffset(const CVector& vec) { ms_cutsceneOffset = vec; }
 diff --git a/src/core/Camera.cpp b/src/core/Camera.cpp
-index 68bc3c49..9ae14656 100644
+index 68bc3c49..f006feb7 100644
 --- a/src/core/Camera.cpp
 +++ b/src/core/Camera.cpp
 @@ -728,6 +728,13 @@ CCamera::Process(void)
@@ -28,6 +28,48 @@ index 68bc3c49..9ae14656 100644
  #else
  	GenerationDistMultiplier = 1.0f;	// temporary
  #endif
+@@ -3647,7 +3654,11 @@ CCamera::IsPointVisible(const CVector &center, const CMatrix *mat)
+ 	#endif
+ #endif
+ 	if(c.y < CDraw::GetNearClipZ()) return false;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	if(c.MagnitudeSqr() > sq(CDraw::GetFarClipZ())) return false;
++#else
+ 	if(c.y > CDraw::GetFarClipZ()) return false;
++#endif
+ 	if(c.x*m_vecFrustumNormals[0].x + c.y*m_vecFrustumNormals[0].y > 0.0f) return false;
+ 	if(c.x*m_vecFrustumNormals[1].x + c.y*m_vecFrustumNormals[1].y > 0.0f) return false;
+ 	if(c.y*m_vecFrustumNormals[2].y + c.z*m_vecFrustumNormals[2].z > 0.0f) return false;
+@@ -3670,7 +3681,12 @@ CCamera::IsSphereVisible(const CVector &center, float radius, Const CMatrix *mat
+ 	#endif
+ #endif
+ 	if(c.y + radius < CDraw::GetNearClipZ()) return false;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	const float maxDist = CDraw::GetFarClipZ() + radius;
++	if(c.MagnitudeSqr() > maxDist * maxDist) return false;
++#else
+ 	if(c.y - radius > CDraw::GetFarClipZ()) return false;
++#endif
+ 	if(c.x*m_vecFrustumNormals[0].x + c.y*m_vecFrustumNormals[0].y > radius) return false;
+ 	if(c.x*m_vecFrustumNormals[1].x + c.y*m_vecFrustumNormals[1].y > radius) return false;
+ 	if(c.y*m_vecFrustumNormals[2].y + c.z*m_vecFrustumNormals[2].z > radius) return false;
+@@ -3707,9 +3723,16 @@ CCamera::IsBoxVisible(CVUVECTOR *box, const CMatrix *mat)
+ 	#endif
+ #endif
+ 
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	const float farDistSqr = sq(CDraw::GetFarClipZ());
++#endif
+ 	for(i = 0; i < 8; i++){
+ 		if(box[i].y < CDraw::GetNearClipZ()) frustumTests[0]++;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++		if(box[i].MagnitudeSqr() > farDistSqr) frustumTests[1]++;
++#else
+ 		if(box[i].y > CDraw::GetFarClipZ()) frustumTests[1]++;
++#endif
+ 		if(box[i].x*m_vecFrustumNormals[0].x + box[i].y*m_vecFrustumNormals[0].y > 0.0f) frustumTests[2]++;
+ 		if(box[i].x*m_vecFrustumNormals[1].x + box[i].y*m_vecFrustumNormals[1].y > 0.0f) frustumTests[3]++;
+ //	Why not test z?
 diff --git a/src/core/CdStream.h b/src/core/CdStream.h
 index 7b665fda..f91093cb 100644
 --- a/src/core/CdStream.h
@@ -3379,7 +3421,7 @@ index d6c02b9d..0b997078 100644
  
  void
 diff --git a/src/core/re3.cpp b/src/core/re3.cpp
-index a721c238..9d84058c 100644
+index a721c238..8d8cf7be 100644
 --- a/src/core/re3.cpp
 +++ b/src/core/re3.cpp
 @@ -565,12 +565,20 @@ bool LoadINISettings()
@@ -3393,7 +3435,7 @@ index a721c238..9d84058c 100644
  #endif
  
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
-+	// The Quest streamer is handed 1.5GB — the whole map stays resident.
++	// The Quest streamer is handed 1.5GB ╬ô├ç├╢ the whole map stays resident.
 +	// Force full island residency regardless of what an older ini stored:
 +	// it removes the island-transition purge and its loading pause, and
 +	// keeps bridge traffic continuous.
@@ -3428,30 +3470,98 @@ index 0f7f91cd..85a13435 100644
  
  template<typename T>
 diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
-index c38f12c7..e57c5afc 100644
+index c38f12c7..708b39a9 100644
 --- a/src/entities/Entity.cpp
 +++ b/src/entities/Entity.cpp
-@@ -193,6 +193,12 @@ CEntity::GetBoundRect(void)
+@@ -187,12 +187,75 @@ CEntity::DeleteRwObject(void)
+ 	}
+ }
+ 
++static RpAtomic*
++FindLargestAtomicSphereCB(RpAtomic *atomic, void *data)
++{
++	RwSphere *sphere = RpAtomicGetBoundingSphere(atomic);
++	RwSphere *outSphere = (RwSphere*)data;
++	if (sphere && sphere->radius > outSphere->radius) {
++		*outSphere = *sphere;
++	}
++	return atomic;
++}
++
++static bool
++GetEntityFallbackBoundingSphere(CEntity *ent, CVector &centerOut, float &radiusOut)
++{
++	if (ent->m_rwObject) {
++		if (RwObjectGetType(ent->m_rwObject) == rpATOMIC) {
++			RpAtomic *atomic = (RpAtomic*)ent->m_rwObject;
++			RwSphere *sphere = RpAtomicGetBoundingSphere(atomic);
++			if (sphere && sphere->radius > 0.0f) {
++				centerOut = ent->GetMatrix() * CVector(sphere->center.x, sphere->center.y, sphere->center.z);
++				radiusOut = sphere->radius;
++				return true;
++			}
++		} else if (RwObjectGetType(ent->m_rwObject) == rpCLUMP) {
++			RpClump *clump = (RpClump*)ent->m_rwObject;
++			RwSphere bestSphere = { { 0.0f, 0.0f, 0.0f }, 0.0f };
++			RpClumpForAllAtomics(clump, FindLargestAtomicSphereCB, &bestSphere);
++			if (bestSphere.radius > 0.0f) {
++				centerOut = ent->GetMatrix() * CVector(bestSphere.center.x, bestSphere.center.y, bestSphere.center.z);
++				radiusOut = bestSphere.radius;
++				return true;
++			}
++		}
++	}
++	CBaseModelInfo *mi = CModelInfo::GetModelInfo(ent->GetModelIndex());
++	if (mi && mi->IsSimple()) {
++		CSimpleModelInfo *smi = (CSimpleModelInfo*)mi;
++		if (smi->m_atomics[0]) {
++			RwSphere *sphere = RpAtomicGetBoundingSphere(smi->m_atomics[0]);
++			if (sphere && sphere->radius > 0.0f) {
++				centerOut = ent->GetMatrix() * CVector(sphere->center.x, sphere->center.y, sphere->center.z);
++				radiusOut = sphere->radius;
++				return true;
++			}
++		}
++	}
++	return false;
++}
++
+ CRect
+ CEntity::GetBoundRect(void)
+ {
  	CRect rect;
  	CVector v;
  	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 +	if (!col) {
++		CVector fallbackCenter;
++		float fallbackRadius;
++		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
++			rect.ContainPoint(CVector(fallbackCenter.x - fallbackRadius, fallbackCenter.y - fallbackRadius, fallbackCenter.z));
++			rect.ContainPoint(CVector(fallbackCenter.x + fallbackRadius, fallbackCenter.y + fallbackRadius, fallbackCenter.z));
++			return rect;
++		}
 +		CVector pos = GetPosition();
-+		rect.ContainPoint(CVector(pos.x - 1.0f, pos.y - 1.0f, pos.z));
-+		rect.ContainPoint(CVector(pos.x + 1.0f, pos.y + 1.0f, pos.z));
++		const float r = bIsBIGBuilding ? 500.0f : 1.0f;
++		rect.ContainPoint(CVector(pos.x - r, pos.y - r, pos.z));
++		rect.ContainPoint(CVector(pos.x + r, pos.y + r, pos.z));
 +		return rect;
 +	}
  
  	rect.ContainPoint(GetMatrix() * col->boundingBox.min);
  	rect.ContainPoint(GetMatrix() * col->boundingBox.max);
-@@ -211,27 +217,43 @@ CEntity::GetBoundRect(void)
+@@ -211,27 +274,67 @@ CEntity::GetBoundRect(void)
  CVector
  CEntity::GetBoundCentre(void)
  {
 -	return GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
 +	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
-+	if (!col)
++	if (!col) {
++		CVector fallbackCenter;
++		float fallbackRadius;
++		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius))
++			return fallbackCenter;
 +		return GetPosition();
++	}
 +	return GetMatrix() * col->boundingSphere.center;
  }
  
@@ -3462,6 +3572,12 @@ index c38f12c7..e57c5afc 100644
 -	TransformPoint(out, GetMatrix(), CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center);
 +	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 +	if (!col) {
++		CVector fallbackCenter;
++		float fallbackRadius;
++		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
++			out = (CVuVector)fallbackCenter;
++			return;
++		}
 +		out = (CVuVector)GetPosition();
 +		return;
 +	}
@@ -3474,6 +3590,12 @@ index c38f12c7..e57c5afc 100644
 -	out = GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
 +	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 +	if (!col) {
++		CVector fallbackCenter;
++		float fallbackRadius;
++		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
++			out = fallbackCenter;
++			return;
++		}
 +		out = GetPosition();
 +		return;
 +	}
@@ -3486,13 +3608,20 @@ index c38f12c7..e57c5afc 100644
  {
 -	return CModelInfo::GetColModel(m_modelIndex)->boundingSphere.radius;
 +	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
-+	if (!col)
++	if (!col) {
++		CVector fallbackCenter;
++		float fallbackRadius;
++		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius))
++			return fallbackRadius;
++		if (bIsBIGBuilding)
++			return 500.0f;
 +		return 1.0f;
++	}
 +	return col->boundingSphere.radius;
  }
  
  void
-@@ -427,6 +449,8 @@ CEntity::GetIsOnScreenComplex(void)
+@@ -427,6 +530,8 @@ CEntity::GetIsOnScreenComplex(void)
  
  	CRect rect = GetBoundRect();
  	CColModel *colmodel = CModelInfo::GetColModel(m_modelIndex);
@@ -3501,7 +3630,7 @@ index c38f12c7..e57c5afc 100644
  	float z = GetPosition().z;
  	float minz = z + colmodel->boundingBox.min.z;
  	float maxz = z + colmodel->boundingBox.max.z;
-@@ -581,7 +605,10 @@ CEntity::Remove(void)
+@@ -581,7 +686,10 @@ CEntity::Remove(void)
  float
  CEntity::GetDistanceFromCentreOfMassToBaseOfModel(void)
  {

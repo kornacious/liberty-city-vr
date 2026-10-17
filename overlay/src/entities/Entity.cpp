@@ -187,6 +187,55 @@ CEntity::DeleteRwObject(void)
 	}
 }
 
+static RpAtomic*
+FindLargestAtomicSphereCB(RpAtomic *atomic, void *data)
+{
+	RwSphere *sphere = RpAtomicGetBoundingSphere(atomic);
+	RwSphere *outSphere = (RwSphere*)data;
+	if (sphere && sphere->radius > outSphere->radius) {
+		*outSphere = *sphere;
+	}
+	return atomic;
+}
+
+static bool
+GetEntityFallbackBoundingSphere(CEntity *ent, CVector &centerOut, float &radiusOut)
+{
+	if (ent->m_rwObject) {
+		if (RwObjectGetType(ent->m_rwObject) == rpATOMIC) {
+			RpAtomic *atomic = (RpAtomic*)ent->m_rwObject;
+			RwSphere *sphere = RpAtomicGetBoundingSphere(atomic);
+			if (sphere && sphere->radius > 0.0f) {
+				centerOut = ent->GetMatrix() * CVector(sphere->center.x, sphere->center.y, sphere->center.z);
+				radiusOut = sphere->radius;
+				return true;
+			}
+		} else if (RwObjectGetType(ent->m_rwObject) == rpCLUMP) {
+			RpClump *clump = (RpClump*)ent->m_rwObject;
+			RwSphere bestSphere = { { 0.0f, 0.0f, 0.0f }, 0.0f };
+			RpClumpForAllAtomics(clump, FindLargestAtomicSphereCB, &bestSphere);
+			if (bestSphere.radius > 0.0f) {
+				centerOut = ent->GetMatrix() * CVector(bestSphere.center.x, bestSphere.center.y, bestSphere.center.z);
+				radiusOut = bestSphere.radius;
+				return true;
+			}
+		}
+	}
+	CBaseModelInfo *mi = CModelInfo::GetModelInfo(ent->GetModelIndex());
+	if (mi && mi->IsSimple()) {
+		CSimpleModelInfo *smi = (CSimpleModelInfo*)mi;
+		if (smi->m_atomics[0]) {
+			RwSphere *sphere = RpAtomicGetBoundingSphere(smi->m_atomics[0]);
+			if (sphere && sphere->radius > 0.0f) {
+				centerOut = ent->GetMatrix() * CVector(sphere->center.x, sphere->center.y, sphere->center.z);
+				radiusOut = sphere->radius;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 CRect
 CEntity::GetBoundRect(void)
 {
@@ -194,9 +243,17 @@ CEntity::GetBoundRect(void)
 	CVector v;
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
+		CVector fallbackCenter;
+		float fallbackRadius;
+		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
+			rect.ContainPoint(CVector(fallbackCenter.x - fallbackRadius, fallbackCenter.y - fallbackRadius, fallbackCenter.z));
+			rect.ContainPoint(CVector(fallbackCenter.x + fallbackRadius, fallbackCenter.y + fallbackRadius, fallbackCenter.z));
+			return rect;
+		}
 		CVector pos = GetPosition();
-		rect.ContainPoint(CVector(pos.x - 1.0f, pos.y - 1.0f, pos.z));
-		rect.ContainPoint(CVector(pos.x + 1.0f, pos.y + 1.0f, pos.z));
+		const float r = bIsBIGBuilding ? 500.0f : 1.0f;
+		rect.ContainPoint(CVector(pos.x - r, pos.y - r, pos.z));
+		rect.ContainPoint(CVector(pos.x + r, pos.y + r, pos.z));
 		return rect;
 	}
 
@@ -218,8 +275,13 @@ CVector
 CEntity::GetBoundCentre(void)
 {
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
-	if (!col)
+	if (!col) {
+		CVector fallbackCenter;
+		float fallbackRadius;
+		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius))
+			return fallbackCenter;
 		return GetPosition();
+	}
 	return GetMatrix() * col->boundingSphere.center;
 }
 
@@ -229,6 +291,12 @@ CEntity::GetBoundCentre(CVuVector &out)
 {
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
+		CVector fallbackCenter;
+		float fallbackRadius;
+		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
+			out = (CVuVector)fallbackCenter;
+			return;
+		}
 		out = (CVuVector)GetPosition();
 		return;
 	}
@@ -240,6 +308,12 @@ CEntity::GetBoundCentre(CVector &out)
 {
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
+		CVector fallbackCenter;
+		float fallbackRadius;
+		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius)) {
+			out = fallbackCenter;
+			return;
+		}
 		out = GetPosition();
 		return;
 	}
@@ -251,8 +325,15 @@ float
 CEntity::GetBoundRadius(void)
 {
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
-	if (!col)
+	if (!col) {
+		CVector fallbackCenter;
+		float fallbackRadius;
+		if (GetEntityFallbackBoundingSphere(this, fallbackCenter, fallbackRadius))
+			return fallbackRadius;
+		if (bIsBIGBuilding)
+			return 500.0f;
 		return 1.0f;
+	}
 	return col->boundingSphere.radius;
 }
 
