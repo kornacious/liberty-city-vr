@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Linux port of INSTALL_MODERN_MODELS.bat.
+# Linux port of INSTALL_MODERN_MODELS.bat for Liberty City VR.
 set -uo pipefail
 
-title "Vice City VR - Download Build and Install Modern Models" 2>/dev/null || true
+title "Liberty City VR - Download Build and Install Modern / Xbox Models" 2>/dev/null || true
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 echo "================================================================"
-echo " VICE CITY VR - DOWNLOAD, BUILD AND INSTALL MODERN MODELS"
+echo " LIBERTY CITY VR - DOWNLOAD, BUILD AND INSTALL MODERN / XBOX MODELS"
 echo "================================================================"
 echo ""
 
@@ -26,9 +26,9 @@ RESULT=$?
 goto_finish() {
     echo ""
     if [ "$RESULT" -ne 0 ]; then
-        echo "FAILED. Read the error above; the previous Modern folder was not replaced silently."
+        echo "FAILED. Read the error above; the previous overlay folder was not replaced silently."
     else
-        echo "COMPLETE. Fully restart Vice City VR on the headset."
+        echo "COMPLETE. Fully restart Liberty City VR on the headset."
     fi
     echo ""
     echo "This window will remain open. Press any key when you are done reading it."

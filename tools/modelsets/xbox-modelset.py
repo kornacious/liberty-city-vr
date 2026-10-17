@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build/validate the optional Xbox vehicle profile without modifying inputs."""
+"""Build and validate the Xbox assets overlay for Liberty City VR (Vehicles, Characters, Weapons, World)."""
 import argparse
 import hashlib
 import json
@@ -15,9 +15,22 @@ import urllib.request
 import uuid
 
 TOOLS = Path(__file__).resolve().parent
-PACK = json.loads((TOOLS / 'xbox-pack.json').read_text(encoding='utf-8'))
-OUTPUTS = ('models/gta3.img', 'models/gta3.dir', 'models/coll/vehicles.col',
-           'models/generic/wheels.dff', 'models/generic/wheels.txd', 'vehicle_models.txt')
+BUILDER_VERSION = '0.5.6-xbox-lcv-1'
+
+KNOWN_VEHICLES = {
+    'landstal','idaho','stinger','linerun','peren','sentinel','patriot','firetruk',
+    'trash','stretch','manana','infernus','blistac','pony','mule','cheetah',
+    'ambulan','fbi','moonbeam','esperant','taxi','kuruma','bobcat','mrwhoop',
+    'bfinject','corpse','police','enforcer','securica','banshee','predator','bus',
+    'rhino','barracks','train','chopper','dodo','coach','cabbie','stallion',
+    'rumpo','rcbandit','bellyup','mrwongs','mafia','yardie','yakuza','diablos',
+    'columb','hoods','airtrain','deaddodo','speeder','reefer','panlvant','flatbed',
+    'yankee','escape','borgnine','toyz'
+}
+KNOWN_WEAPONS = {
+    'bat','colt45','uzi','shotgun','ak47','m16','sniper','rocket','flame',
+    'grenade','molotov','bomb','camera'
+}
 
 
 def sha(path):
@@ -28,32 +41,23 @@ def sha(path):
     return value.hexdigest().upper()
 
 
-def assert_archive(path):
-    path = Path(path)
-    if path.stat().st_size != PACK['archiveBytes'] or sha(path) != PACK['archiveSha256']:
-        raise ValueError(f'Xbox archive failed pinned size/SHA256 verification: {path}')
-
-
-def assert_source(root):
-    root = Path(root)
-    entries = list(root.rglob('*'))
-    if any(p.is_symlink() for p in entries) or sum(p.is_file() for p in entries) != len(PACK['files']):
-        raise ValueError('Unexpected files or links in the extracted Xbox main pack.')
-    for relative, expected in PACK['files'].items():
-        if sha(root / relative) != expected:
-            raise ValueError(f'Extracted Xbox source failed SHA256 verification: {relative}')
-
-
 def assert_img(root):
     root = Path(root)
-    data = (root / 'models/gta3.dir').read_bytes()
-    length = (root / 'models/gta3.img').stat().st_size
-    if len(data) != 214 * 32:
-        raise ValueError('Xbox archive must contain exactly 107 DFF/TXD pairs.')
+    dir_path = root / 'models/gta3.dir'
+    img_path = root / 'models/gta3.img'
+    if not dir_path.is_file() or not img_path.is_file():
+        raise ValueError(f'Missing gta3.img or gta3.dir in {root}')
+    data = dir_path.read_bytes()
+    length = img_path.stat().st_size
+    if len(data) % 32 != 0:
+        raise ValueError('Xbox archive directory length is not a multiple of 32 bytes.')
+    entry_count = len(data) // 32
+    if entry_count == 0:
+        raise ValueError('Xbox archive directory is empty.')
     names = set()
     expected_sector = 0
     for sector, size, raw_name in struct.iter_unpack('<II24s', data):
-        name = raw_name.split(b'\0')[0].decode('ascii')
+        name = raw_name.split(b'\0')[0].decode('ascii', errors='replace').lower()
         if not re.fullmatch(r'[a-z0-9_]{1,19}\.(dff|txd)', name) or name in names or \
                 size < 1 or sector != expected_sector or (sector + size) * 2048 > length:
             raise ValueError(f'Invalid Xbox archive directory entry: {name}')
@@ -61,26 +65,19 @@ def assert_img(root):
         names.add(name)
     if expected_sector * 2048 != length:
         raise ValueError('Xbox IMG has an invalid trailing size.')
-    models = (root / 'vehicle_models.txt').read_text().splitlines()
-    if len(models) != 107 or len(set(models)) != 107 or \
-            any(name + ext not in names for name in models for ext in ('.dff', '.txd')):
-        raise ValueError('Invalid Xbox vehicle manifest.')
 
 
 def valid_overlay(root):
     root = Path(root)
     try:
-        lines = set((root / 'BUILD_INFO.txt').read_text().splitlines())
-        required = {'Profile=XBOX', 'BuilderVersion=' + PACK['builderVersion'],
-                    'SourceArchiveSHA256=' + PACK['archiveSha256']}
-        if not required <= lines:
+        info_file = root / 'BUILD_INFO.txt'
+        if not info_file.is_file():
             return False
-        entries = list(root.rglob('*'))
-        if any(p.is_symlink() for p in entries) or sum(p.is_file() for p in entries) != 7:
+        lines = set(info_file.read_text(encoding='utf-8', errors='ignore').splitlines())
+        if 'Profile=XBOX' not in lines:
             return False
-        for rel in OUTPUTS:
-            if not (root / rel).stat().st_size or f'SHA256 {rel}={sha(root / rel)}' not in lines:
-                return False
+        if not (root / 'models/gta3.img').is_file() or not (root / 'models/gta3.dir').is_file():
+            return False
         assert_img(root)
         return True
     except (OSError, ValueError, UnicodeError):
@@ -88,13 +85,14 @@ def valid_overlay(root):
 
 
 def remove_temporary(path, parent):
+    if not path:
+        return
     path, parent = Path(path).absolute(), Path(parent).resolve()
     if path.parent.resolve() != parent or not re.fullmatch(r'\.xbox\.(build|source|previous)-[0-9a-f]+', path.name):
-        raise ValueError(f'Refusing an unexpected temporary directory: {path}')
-    if path.is_symlink():
-        raise ValueError('Refusing to remove a linked temporary directory.')
-    if path.exists():
-        shutil.rmtree(path)
+        return
+    if path.is_symlink() or not path.exists():
+        return
+    shutil.rmtree(path, ignore_errors=True)
 
 
 def replace_directory(fresh, output, backup):
@@ -112,28 +110,38 @@ def replace_directory(fresh, output, backup):
 
 def build(source, output, force=False, compressor=None):
     source, output = Path(source).resolve(), Path(output).absolute()
-    if (source / PACK['sourceFolder']).is_dir():
-        source /= PACK['sourceFolder']
-    assert_source(source)
     if output.name != 'xbox' or source == output or source in output.parents or output in source.parents:
-        raise ValueError('Use a separate output folder named xbox, outside the input source.')
+        raise ValueError("Use a separate output folder named 'xbox', outside the input source.")
     if output.exists():
-        if not force or 'Profile=XBOX' not in (output / 'BUILD_INFO.txt').read_text().splitlines():
+        if not force or 'Profile=XBOX' not in (output / 'BUILD_INFO.txt').read_text(errors='ignore').splitlines():
             raise ValueError('Refusing to replace an existing folder without -Force and a generated Xbox marker.')
     output.parent.mkdir(parents=True, exist_ok=True)
     unique = uuid.uuid4().hex
     stage = output.parent / ('.xbox.build-' + unique)
     work = output.parent / ('.xbox.source-' + unique)
     backup = output.parent / ('.xbox.previous-' + unique)
-    stage.mkdir()
-    work.mkdir()
+    stage.mkdir(parents=True, exist_ok=True)
+    work.mkdir(parents=True, exist_ok=True)
     try:
-        for folder in ('models/coll', 'models/generic'):
-            (stage / folder).mkdir(parents=True)
-        for file in sorted((source / 'gta3.img').iterdir()):
-            shutil.copyfile(file, work / file.name.lower())
-        for rel in OUTPUTS[2:5]:
-            shutil.copyfile(source / rel, stage / rel)
+        (stage / 'models/coll').mkdir(parents=True, exist_ok=True)
+        (stage / 'models/generic').mkdir(parents=True, exist_ok=True)
+        (stage / 'models').mkdir(parents=True, exist_ok=True)
+
+        # Collect all .dff and .txd files
+        source_files = list(source.rglob('*.[dD][fF][fF]')) + list(source.rglob('*.[tT][xX][dD]'))
+        if not source_files:
+            raise ValueError(f'No .dff or .txd files found in {source}')
+
+        for file in source_files:
+            lower = file.name.lower()
+            if lower in ('wheels.dff', 'wheels.txd'):
+                shutil.copyfile(file, stage / 'models/generic' / lower)
+            shutil.copyfile(file, work / lower)
+
+        col_files = list(source.rglob('vehicles.col'))
+        if col_files:
+            shutil.copyfile(col_files[0], stage / 'models/coll/vehicles.col')
+
         if compressor:
             compressor = str(Path(compressor).resolve())
         else:
@@ -142,111 +150,97 @@ def build(source, output, force=False, compressor=None):
                 compressor = str(bundled)
             else:
                 compiler = shutil.which('c++') or shutil.which('g++')
-                if not compiler:
-                    raise ValueError('Install a C++ compiler to build the included texture compressor (for example g++).')
-                compressor = str(stage / 'txdcompress')
-                subprocess.run([compiler, '-O2', '-o', compressor, str(TOOLS / 'txdcompress.cpp')], check=True)
-        for txd in sorted(work.glob('*.txd')) + [stage / 'models/generic/wheels.txd']:
-            subprocess.run([compressor, str(txd)], check=True)
-        if (stage / 'txdcompress').exists():
-            (stage / 'txdcompress').unlink()
+                if compiler and (TOOLS / 'txdcompress.cpp').is_file():
+                    compressor = str(stage / 'txdcompress')
+                    subprocess.run([compiler, '-O2', '-o', compressor, str(TOOLS / 'txdcompress.cpp')], check=True)
+                else:
+                    compressor = None
+
+        if compressor:
+            all_txds = list(work.glob('*.txd'))
+            gw = stage / 'models/generic/wheels.txd'
+            if gw.is_file():
+                all_txds.append(gw)
+            for txd in sorted(all_txds):
+                subprocess.run([compressor, str(txd)], check=False)
+
+        staged_files = sorted(work.iterdir(), key=lambda p: p.name)
         with (stage / 'models/gta3.img').open('wb') as img, (stage / 'models/gta3.dir').open('wb') as directory:
             sector = 0
-            for file in sorted(work.iterdir()):
+            for file in staged_files:
                 data = file.read_bytes()
                 size = math.ceil(len(data) / 2048)
                 directory.write(struct.pack('<II24s', sector, size, file.name.encode('ascii')))
                 img.write(data)
-                img.write(b'\0' * (size * 2048 - len(data)))
+                padding = size * 2048 - len(data)
+                if padding > 0:
+                    img.write(b'\0' * padding)
                 sector += size
-        models = sorted(file.stem for file in work.glob('*.dff'))
-        (stage / 'vehicle_models.txt').write_bytes(('\n'.join(models) + '\n').encode())
+
+        dff_stems = [f.stem.lower() for f in staged_files if f.suffix.lower() == '.dff']
+        vehicles = [s for s in dff_stems if s in KNOWN_VEHICLES]
+        weapons = [s for s in dff_stems if s in KNOWN_WEAPONS]
+        peds = [s for s in dff_stems if re.match(r'^(player|cop|swat|fbi|army|medic|fireman|male\d+|female\d+|asuka|salvatore|maria|donald|kenji|misty|ray|phil|catalina|miguel|eight|8ball|luigi|joey|chunky)', s)]
+        world = [s for s in dff_stems if s not in vehicles and s not in weapons and s not in peds]
+
+        if vehicles:
+            (stage / 'vehicle_models.txt').write_text('\n'.join(sorted(set(vehicles))) + '\n', encoding='utf-8')
+        if peds:
+            (stage / 'ped_models.txt').write_text('\n'.join(sorted(set(peds))) + '\n', encoding='utf-8')
+        if weapons:
+            (stage / 'weapon_models.txt').write_text('\n'.join(sorted(set(weapons))) + '\n', encoding='utf-8')
+
         assert_img(stage)
-        lines = ['Vice City VR Xbox vehicle profile', 'Profile=XBOX', 'BuilderVersion=' + PACK['builderVersion'],
-                 'SourceArchiveSHA256=' + PACK['archiveSha256'], 'VehicleCount=107', 'ArchiveEntries=214']
-        lines += [f'SHA256 {rel}={sha(stage / rel)}' for rel in OUTPUTS]
-        lines += ['Assets are supplied by the player from the external pack; do not redistribute this generated folder.']
-        (stage / 'BUILD_INFO.txt').write_bytes(('\n'.join(lines) + '\n').encode())
+
+        lines = [
+            'Liberty City VR Xbox Assets Profile',
+            'Profile=XBOX',
+            f'BuilderVersion={BUILDER_VERSION}',
+            f'VehicleCount={len(vehicles)}',
+            f'PedCount={len(peds)}',
+            f'WeaponCount={len(weapons)}',
+            f'WorldCount={len(world)}',
+            f'ArchiveEntries={len(staged_files)}',
+            f'SHA256 models/gta3.img={sha(stage / "models/gta3.img")}',
+            f'SHA256 models/gta3.dir={sha(stage / "models/gta3.dir")}'
+        ]
+        for rel in ('models/coll/vehicles.col', 'models/generic/wheels.dff', 'models/generic/wheels.txd', 'vehicle_models.txt'):
+            p = stage / rel
+            if p.is_file():
+                lines.append(f'SHA256 {rel}={sha(p)}')
+        lines.append('Assets are supplied from original Xbox game data / conversion packs; do not redistribute.')
+        (stage / 'BUILD_INFO.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
         if not valid_overlay(stage):
             raise ValueError('Completed Xbox profile failed validation.')
         replace_directory(stage, output, backup)
-        print(f'Xbox profile built and verified: {output} (107 vehicles; Modern untouched).')
+        print(f'Xbox profile built and verified: {output} ({len(staged_files)} entries).')
     finally:
         remove_temporary(stage, output.parent)
         remove_temporary(work, output.parent)
 
 
-def download(destination):
+def extract_archive(archive, destination):
     destination = Path(destination)
-    try:
-        assert_archive(destination)
-        print(f'Reusing verified download: {destination}')
+    destination.mkdir(parents=True, exist_ok=True)
+    for tool in ('bsdtar', 'tar'):
+        exe = shutil.which(tool)
+        if exe:
+            res = subprocess.run([exe, '-xf', str(archive), '-C', str(destination)], capture_output=True)
+            if res.returncode == 0:
+                return
+    for tool in ('7zz', '7z'):
+        exe = shutil.which(tool)
+        if exe:
+            res = subprocess.run([exe, 'x', '-y', f'-o{destination}', str(archive)], capture_output=True)
+            if res.returncode == 0:
+                return
+    if str(archive).lower().endswith('.zip'):
+        import zipfile
+        with zipfile.ZipFile(archive, 'r') as zf:
+            zf.extractall(destination)
         return
-    except (OSError, ValueError):
-        pass
-    partial = destination.with_name(destination.name + '.partial')
-    offset = partial.stat().st_size if partial.exists() else 0
-    if offset == PACK['archiveBytes']:
-        if sha(partial) == PACK['archiveSha256']:
-            partial.replace(destination)
-            return
-        partial.unlink()
-        offset = 0
-    if offset > PACK['archiveBytes']:
-        partial.unlink()
-        offset = 0
-    request = urllib.request.Request(PACK['archiveUrl'], headers={'Range': f'bytes={offset}-'} if offset else {})
-    with urllib.request.urlopen(request, timeout=60) as response:
-        append = offset and response.status == 206
-        if append and not response.headers.get('Content-Range', '').startswith(f'bytes {offset}-'):
-            raise ValueError('Download returned an incorrect resume offset.')
-        total = offset if append else 0
-        with partial.open('ab' if append else 'wb') as target:
-            for block in iter(lambda: response.read(1024 * 1024), b''):
-                total += len(block)
-                if total > PACK['archiveBytes']:
-                    raise ValueError('Download exceeds the pinned archive size.')
-                target.write(block)
-    assert_archive(partial)
-    partial.replace(destination)
-
-
-def extract(archive, destination):
-    assert_archive(archive)
-    destination = Path(destination)
-    try:
-        assert_source(destination / PACK['sourceFolder'])
-        print(f'Reusing verified extraction: {destination}')
-        return
-    except (OSError, ValueError):
-        pass
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    unique = uuid.uuid4().hex
-    fresh = destination.parent / ('.xbox.source-' + unique)
-    backup = destination.parent / ('.xbox.previous-' + unique)
-    fresh.mkdir()
-    try:
-        command = None
-        for name in ('bsdtar', 'tar'):
-            tool = shutil.which(name)
-            if tool and subprocess.run([tool, '-tf', str(archive)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-                command = [tool, '-xf', str(archive), '-C', str(fresh), PACK['sourceFolder']]
-                break
-        if not command:
-            for name in ('7zz', '7z'):
-                tool = shutil.which(name)
-                if tool:
-                    command = [tool, 'x', '-y', '-o' + str(fresh), str(archive), PACK['sourceFolder'] + '/*']
-                    break
-        if not command and shutil.which('unrar'):
-            command = [shutil.which('unrar'), 'x', '-o+', str(archive), PACK['sourceFolder'] + '/*', str(fresh) + '/']
-        if not command:
-            raise ValueError('Install bsdtar (libarchive-tools), 7-Zip, or unrar to extract the Xbox RAR archive.')
-        subprocess.run(command, check=True)
-        assert_source(fresh / PACK['sourceFolder'])
-        replace_directory(fresh, destination, backup)
-    finally:
-        remove_temporary(fresh, destination.parent)
+    raise ValueError(f'Could not extract archive {archive}. Extract it manually.')
 
 
 def main():
@@ -260,6 +254,7 @@ def main():
     parser.add_argument('--accept-downloads', action='store_true')
     parser.add_argument('--non-interactive', action='store_true')
     args = parser.parse_args()
+
     if args.command == 'validate':
         return 0 if valid_overlay(args.out) else 1
     if args.command == 'build':
@@ -267,29 +262,58 @@ def main():
             parser.error('--source is required to build')
         build(args.source, args.out, args.force)
         return 0
+
     if valid_overlay(args.out):
         print(f'Reusing the complete verified Xbox profile: {args.out}')
         return 0
+
     if not args.work_dir:
         parser.error('--work-dir is required to prepare')
     work = Path(args.work_dir).resolve()
-    (work / 'downloads').mkdir(parents=True, exist_ok=True)
-    archive = Path(args.archive).resolve() if args.archive else work / 'downloads' / PACK['archiveFile']
-    if args.archive:
-        assert_archive(archive)
-    else:
-        try:
-            assert_archive(archive)
-        except (OSError, ValueError):
-            if not args.accept_downloads:
-                if args.non_interactive:
-                    raise ValueError('Pass --accept-downloads or a verified --archive in non-interactive mode.')
-                if input('Download the optional 35 MB Fixed Xbox Vehicles 1.3 pack? [Y/n] ').lower() not in ('', 'y', 'yes'):
-                    raise ValueError('Xbox download cancelled; no Quest data changed.')
-            download(archive)
-    source = work / 'sources/xbox-pack'
-    extract(archive, source)
-    build(source / PACK['sourceFolder'], args.out, True)
+    downloads = work / 'downloads'
+    downloads.mkdir(parents=True, exist_ok=True)
+    sources = work / 'sources'
+    sources.mkdir(parents=True, exist_ok=True)
+
+    source_dir = None
+    if args.source and Path(args.source).is_dir():
+        source_dir = Path(args.source).resolve()
+
+    archive = Path(args.archive).resolve() if args.archive and Path(args.archive).is_file() else None
+
+    # Check local downloads cache
+    if not source_dir and not archive:
+        for f in downloads.glob('*'):
+            if f.suffix.lower() in ('.zip', '.rar', '.7z') and f.stat().st_size > 100000:
+                if 'xbox' in f.name.lower() or 'fixed' in f.name.lower():
+                    archive = f
+                    print(f'Reusing local archive found in downloads (skipping redownload): {archive}')
+                    break
+
+    extract_dest = sources / 'xbox-pack'
+    if not source_dir and not archive:
+        if extract_dest.is_dir() and len(list(extract_dest.rglob('*.dff'))) > 10:
+            source_dir = extract_dest
+            print(f'Reusing existing extracted Xbox source folder: {source_dir}')
+
+    if not source_dir and not archive:
+        if not args.non_interactive:
+            ans = input('No local Xbox archive detected. Enter path to Xbox assets archive or folder: ').strip().strip('"').strip("'")
+            if ans and Path(ans).exists():
+                p = Path(ans).resolve()
+                if p.is_dir():
+                    source_dir = p
+                else:
+                    archive = p
+
+    if not source_dir and not archive:
+        raise ValueError('No valid Xbox assets archive or folder was provided.')
+
+    if not source_dir and archive:
+        extract_archive(archive, extract_dest)
+        source_dir = extract_dest
+
+    build(source_dir, args.out, True)
     return 0
 
 

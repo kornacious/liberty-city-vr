@@ -6,22 +6,22 @@ param(
     [ValidateSet("Modern","Xbox")][string]$Profile="Modern",
     [string]$AndroidSdk,
     [string]$Serial,
-    [string]$LogPath = (Join-Path $env:TEMP "ViceCityVR-Install-Modern-Models.log"),
+    [string]$LogPath = (Join-Path $env:TEMP "LibertyCityVR-Install-Modern-Models.log"),
     [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$installerVersion = "0.5.6-models-5"
-$profileDirectory=$Profile.ToLowerInvariant()
-$profileRequiredFiles=@("vegetation_models.txt","models/gta3.img","models/gta3.dir","models/generic/wheels.dff","models/generic/wheels.txd")
-$profileHashFiles=@("models/generic/wheels.dff","models/generic/wheels.txd")
+$installerVersion = "0.5.6-models-lcv-1"
+$profileDirectory = $Profile.ToLowerInvariant()
+$profileRequiredFiles = @("models/gta3.img", "models/gta3.dir", "BUILD_INFO.txt")
+$profileHashFiles = @("models/gta3.img", "models/gta3.dir")
 if ($Profile -eq "Xbox") {
     . (Join-Path $PSScriptRoot "modelsets/xbox-modelset.ps1")
-    $profileRequiredFiles=$XboxOutputFiles+@("BUILD_INFO.txt")
-    $profileHashFiles=$profileRequiredFiles
+    $profileRequiredFiles = @("models/gta3.img", "models/gta3.dir", "BUILD_INFO.txt")
+    $profileHashFiles = @("models/gta3.img", "models/gta3.dir")
 }
-$packageName = "com.miamivr.quest"
+$packageName = "com.libertyvr.quest"
 $remoteModelSets = "/sdcard/Android/data/$packageName/files/gamedata/modelsets"
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $script:transcriptStarted = $false
@@ -202,7 +202,7 @@ function Select-QuestDevice {
 }
 
 try {
-    Write-Host "Vice City VR - $Profile model installer ($installerVersion)" -ForegroundColor Green
+    Write-Host "Liberty City VR - $Profile model installer ($installerVersion)" -ForegroundColor Green
     Write-Host "This copies a model overlay generated locally by the player; it downloads no model assets."
 
     $modern = Resolve-ModernFolder -Requested $ModernDir
@@ -216,17 +216,17 @@ try {
     $packageResult = Invoke-AdbCapture -Arguments @("shell", "pm", "path", $packageName)
     if ($packageResult.ExitCode -ne 0 -or
         (($packageResult.Lines | Out-String) -notmatch "package:")) {
-        throw "Vice City VR is not installed on the selected Quest. Run BUILD_AND_INSTALL.bat first."
+        throw "Liberty City VR is not installed on the selected Quest. Run BUILD_AND_INSTALL.bat first."
     }
 
     # Starting the provider creates the application-owned external directory on
     # a fresh install before the ADB shell writes any children into it.
     Invoke-AdbChecked -Arguments @(
-        "shell", "content", "query", "--uri", "content://com.miamivr.quest.saves/slot/1",
+        "shell", "content", "query", "--uri", "content://$packageName.saves/slot/1",
         "--projection", "_display_name:_size"
-    ) -FailureMessage "Could not bootstrap Vice City VR application storage" -Quiet | Out-Null
+    ) -FailureMessage "Could not bootstrap Liberty City VR application storage" -Quiet | Out-Null
     Invoke-AdbChecked -Arguments @("shell", "am", "force-stop", $packageName) `
-        -FailureMessage "Could not stop Vice City VR before copying" -Quiet | Out-Null
+        -FailureMessage "Could not stop Liberty City VR before copying" -Quiet | Out-Null
 
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     $script:stagingRemote = "$remoteModelSets/.$profileDirectory-incoming-$stamp"
@@ -321,7 +321,7 @@ try {
     Invoke-AdbChecked -Arguments @("shell", "ls", "$finalRemote/$manifestFile") `
         -FailureMessage "Final profile manifest verification failed" | Out-Null
     Invoke-AdbChecked -Arguments @("shell", "am", "force-stop", $packageName) `
-        -FailureMessage "Could not leave Vice City VR stopped" -Quiet | Out-Null
+        -FailureMessage "Could not leave Liberty City VR stopped" -Quiet | Out-Null
 
     Write-Host ""
     Write-Host "$Profile MODELS INSTALLED." -ForegroundColor Green

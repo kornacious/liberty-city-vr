@@ -50,6 +50,11 @@
 #define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "MiamiVR", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "MiamiVR", __VA_ARGS__)
 
+template<typename T, typename U, typename V>
+static inline T clamp(T val, U low, V high) {
+	return val < (T)low ? (T)low : (val > (T)high ? (T)high : val);
+}
+
 // ---------------------------------------------------------------------------
 // Platform globals
 // ---------------------------------------------------------------------------
@@ -836,7 +841,6 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		(player->m_objective == OBJECTIVE_ENTER_CAR_AS_DRIVER ||
 		 player->m_objective == OBJECTIVE_ENTER_CAR_AS_PASSENGER ||
 		 player->m_objective == OBJECTIVE_LEAVE_CAR ||
-		 player->m_objective == OBJECTIVE_LEAVE_CAR_AND_DIE ||
 		 playerVehicleState == PED_SEEK_CAR ||
 		 playerVehicleState == PED_SEEK_IN_BOAT ||
 		 playerVehicleState == PED_OPEN_DOOR ||
@@ -1657,7 +1661,7 @@ EnforceQuestTextureBudget(void)
 	// visible hitch, and the ceiling is not a cliff.
 	int removed = 0;
 	while(removed < 8 && rw::vulkan::getTextureMemoryUsed() > budget &&
-	      CStreaming::RemoveLeastUsedModel(0))
+	      CStreaming::RemoveLeastUsedModel())
 		removed++;
 	static uint32 reportAt;
 	if(CTimer::GetTimeInMilliseconds() >= reportAt){

@@ -1,35 +1,35 @@
-# One-click preparation of the optional Modern overlay from a legal GTA Vice
-# City installation and two externally hosted source packs. The packs are
-# downloaded for the individual user and are never bundled in this repository.
+# One-click preparation of the optional Modern and Xbox model overlays for
+# Liberty City VR from a legal GTA III installation and external source packs.
+# The packs are downloaded for the individual user and are never bundled in this repository.
 [CmdletBinding()]
 param(
     [string]$GameDir,
-    [string]$WorkDir = "C:\VCVRBuild\modern-assets",
+    [string]$WorkDir = "C:\LCVRBuild\modern-assets",
     [string]$OutputDir,
+    [ValidateSet("Xbox", "Modern", "Both")][string]$Profile = "Xbox",
     [string]$AndroidSdk,
     [string]$Serial,
+    [string]$XboxArchive,
+    [string]$XboxSource,
     [string]$HdArchive,
     [string]$ModsArchive,
-    [string]$XboxArchive,
+    [string]$ModernArchive,
     [switch]$SkipXbox,
     [switch]$XboxOnly,
+    [switch]$ModernOnly,
     [switch]$BuildOnly,
     [switch]$AcceptDownloads,
     [switch]$NonInteractive,
-    [string]$LogPath = (Join-Path $env:TEMP "ViceCityVR-Prepare-Modern-Models.log")
+    [string]$LogPath = (Join-Path $env:TEMP "LibertyCityVR-Prepare-Modern-Models.log")
 )
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$wizardVersion = "0.5.6-models-4"
-$hdUrl = "https://drive.usercontent.google.com/download?id=1Swe1dVWDnKz8ad51y8L0ihPWVCxmFRYj&export=download&confirm=t"
-$modsUrl = "https://drive.usercontent.google.com/download?id=1y9KpKjLSna76bjz1Lf2DzP0G4AnkN_2d&export=download&confirm=t"
-$hdSize = 1878280127L
-$modsSize = 2377186981L
-$hdSha256 = "81A7962479752F3A07004A2E12964815435CAF4B0A0F637EE982460171A5D94C"
-$modsSha256 = "F33031091DBE50A3BEDCEEFAF3FDE6F6DDD96F9841AABE1ECD3713818DED9725"
+$wizardVersion = "0.5.6-lcv-1"
+
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $builder = Join-Path $PSScriptRoot "modelsets\build-modern-modelset.ps1"
+$xboxBuilder = Join-Path $PSScriptRoot "prepare-xbox-models.ps1"
 $questInstaller = Join-Path $PSScriptRoot "install-modern-models.ps1"
 $script:transcriptStarted = $false
 
@@ -56,9 +56,6 @@ function Invoke-NativeChecked {
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [string]$FailureMessage = "Command failed"
     )
-    # Windows PowerShell 5.1 can turn ordinary native stderr (for example,
-    # curl's progress meter) into a terminating ErrorRecord when the caller
-    # uses Stop. Judge native tools by their exit code instead.
     $previousErrorAction = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
@@ -79,30 +76,68 @@ function Resolve-GameFolder {
         try {
             Add-Type -AssemblyName System.Windows.Forms
             $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-            $dialog.Description = "Select the original GTA Vice City installation folder"
+            $dialog.Description = "Select the original GTA III PC installation folder"
             $dialog.ShowNewFolderButton = $false
             if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-                throw "No GTA Vice City folder was selected."
+                throw "No GTA III folder was selected."
             }
             $Requested = $dialog.SelectedPath
         } catch [System.Management.Automation.RuntimeException] {
             throw
         } catch {
-            Write-Host "Folder picker was unavailable. Paste the original GTA Vice City folder path." -ForegroundColor Yellow
-            $Requested = Read-Host "GTA Vice City folder"
+            Write-Host "Folder picker was unavailable. Paste the original GTA III folder path." -ForegroundColor Yellow
+            $Requested = Read-Host "GTA III folder"
         }
     }
     if ([string]::IsNullOrWhiteSpace($Requested) -or
         -not (Test-Path -LiteralPath $Requested -PathType Container)) {
-        throw "The GTA Vice City folder does not exist: $Requested"
+        throw "The GTA III folder does not exist: $Requested"
     }
     $resolved = (Resolve-Path -LiteralPath $Requested).Path
-    foreach ($relative in @("models\gta3.img", "models\gta3.dir", "models\generic.txd")) {
+    foreach ($relative in @("models\gta3.img", "models\gta3.dir")) {
         if (-not (Test-Path -LiteralPath (Join-Path $resolved $relative) -PathType Leaf)) {
-            throw "The selected folder is not a complete original GTA Vice City installation. Missing: $relative"
+            throw "The selected folder is not a complete original GTA III installation. Missing: $relative"
         }
     }
     return $resolved
+}
+
+function Prompt-UserForFileOrFolder {
+    param([string]$Title, [string]$Description)
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host " MANUAL FILE SELECTION REQUIRED" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host $Description -ForegroundColor Cyan
+    Write-Host ""
+
+    $selectedPath = $null
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Title = $Title
+        $dialog.Filter = "Archive files (*.zip;*.rar;*.7z)|*.zip;*.rar;*.7z|All files (*.*)|*.*"
+        $dialog.CheckFileExists = $true
+        Write-Host "Opening file picker window... (check your taskbar if it is not in front)" -ForegroundColor Yellow
+        $result = $dialog.ShowDialog()
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dialog.FileName)) {
+            $selectedPath = $dialog.FileName
+        }
+    } catch { }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPath)) {
+        Write-Host "Paste or enter the full path to the archive file or extracted folder:" -ForegroundColor Yellow
+        $userInput = Read-Host "Path"
+        if (-not [string]::IsNullOrWhiteSpace($userInput)) {
+            $selectedPath = $userInput.Trim('"').Trim("'")
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPath) -or -not (Test-Path -LiteralPath $selectedPath)) {
+        throw "No valid file or folder was provided: $selectedPath"
+    }
+
+    return (Resolve-Path -LiteralPath $selectedPath).Path
 }
 
 function Assert-FreeSpace {
@@ -112,262 +147,203 @@ function Assert-FreeSpace {
     $workDrive = New-Object IO.DriveInfo($workRoot)
     $gameDrive = New-Object IO.DriveInfo($gameRoot)
     if ($workRoot -eq $gameRoot) {
-        if ($workDrive.AvailableFreeSpace -lt 24GB) {
-            throw ("At least 24 GB free is required on {0} for downloads, extraction and the staged build; only {1:N1} GB is available." -f $workRoot, ($workDrive.AvailableFreeSpace / 1GB))
+        if ($workDrive.AvailableFreeSpace -lt 8GB) {
+            Write-Host ("Warning: low free space on {0} ({1:N1} GB available)." -f $workRoot, ($workDrive.AvailableFreeSpace / 1GB)) -ForegroundColor Yellow
         }
     } else {
-        if ($workDrive.AvailableFreeSpace -lt 14GB) {
-            throw ("At least 14 GB free is required on {0} for downloads and extraction; only {1:N1} GB is available." -f $workRoot, ($workDrive.AvailableFreeSpace / 1GB))
-        }
-        if ($gameDrive.AvailableFreeSpace -lt 12GB) {
-            throw ("At least 12 GB free is required on {0} for the staged model build; only {1:N1} GB is available." -f $gameRoot, ($gameDrive.AvailableFreeSpace / 1GB))
+        if ($workDrive.AvailableFreeSpace -lt 6GB) {
+            Write-Host ("Warning: low free space on {0} ({1:N1} GB available)." -f $workRoot, ($workDrive.AvailableFreeSpace / 1GB)) -ForegroundColor Yellow
         }
     }
-}
-
-function Test-FileIdentity {
-    param([string]$Path, [long]$Size, [string]$Sha256)
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
-    if ((Get-Item -LiteralPath $Path).Length -ne $Size) { return $false }
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Sha256
-}
-
-function Ensure-Download {
-    param(
-        [string]$Name,
-        [string]$Url,
-        [string]$Destination,
-        [long]$Size,
-        [string]$Sha256,
-        [string]$Provided
-    )
-    if (-not [string]::IsNullOrWhiteSpace($Provided)) {
-        $providedPath = [IO.Path]::GetFullPath($Provided)
-        Write-Host "Verifying supplied $Name archive..." -ForegroundColor Cyan
-        if (-not (Test-FileIdentity -Path $providedPath -Size $Size -Sha256 $Sha256)) {
-            throw "The supplied $Name archive does not match the tested size/SHA256: $providedPath"
-        }
-        return $providedPath
-    }
-    if (Test-FileIdentity -Path $Destination -Size $Size -Sha256 $Sha256) {
-        Write-Host "Reusing verified download: $Destination" -ForegroundColor Green
-        return $Destination
-    }
-    if (Test-Path -LiteralPath $Destination) {
-        Remove-Item -LiteralPath $Destination -Force
-    }
-    $partial = "$Destination.partial"
-    if ((Test-Path -LiteralPath $partial) -and
-        (Get-Item -LiteralPath $partial).Length -gt $Size) {
-        Remove-Item -LiteralPath $partial -Force
-    }
-    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-    if ($null -eq $curl) {
-        throw "Windows curl.exe was not found. Install current Windows updates, then rerun."
-    }
-    Write-Host "Downloading $Name ($([Math]::Round($Size / 1GB, 2)) GB). Interrupted downloads resume automatically..." -ForegroundColor Cyan
-    Invoke-NativeChecked -FilePath $curl.Source -Arguments @(
-        "--fail", "--location", "--retry", "5", "--retry-all-errors",
-        "--continue-at", "-", "--output", $partial, $Url
-    ) -FailureMessage "$Name download failed"
-    Write-Host "Verifying $Name SHA256..." -ForegroundColor Cyan
-    if (-not (Test-FileIdentity -Path $partial -Size $Size -Sha256 $Sha256)) {
-        throw "$Name download completed but failed the pinned size/SHA256 check. Delete '$partial' and retry."
-    }
-    Move-Item -LiteralPath $partial -Destination $Destination -Force
-    return $Destination
 }
 
 function Ensure-Extracted {
-    param([string]$Name, [string]$Archive, [string]$Destination, [string]$Sha256)
-    $marker = Join-Path $Destination ".vcvr-source-sha256"
-    if ((Test-Path -LiteralPath $marker -PathType Leaf) -and
-        ((Get-Content -LiteralPath $marker -Raw).Trim() -eq $Sha256)) {
-        Write-Host "Reusing verified extraction: $Destination" -ForegroundColor Green
-        return $Destination
-    }
-    if (Test-Path -LiteralPath $Destination) {
-        Remove-Item -LiteralPath $Destination -Recurse -Force
-    }
-    $parent = Split-Path -Parent $Destination
-    New-Item -ItemType Directory -Path $parent,$Destination -Force | Out-Null
-    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if ($null -eq $tar) { throw "Windows tar.exe was not found; it is required to extract the verified ZIP archives." }
-    Write-Host "Extracting $Name..." -ForegroundColor Cyan
-    Invoke-NativeChecked -FilePath $tar.Source -Arguments @(
-        "-xf", $Archive, "-C", $Destination
-    ) -FailureMessage "$Name extraction failed"
-    [IO.File]::WriteAllText($marker, $Sha256, (New-Object Text.UTF8Encoding($false)))
-    return $Destination
-}
-
-function Get-ExpectedBuilderVersion {
-    $builderText = Get-Content -LiteralPath $builder -Raw
-    if ($builderText -notmatch '\$BuildScriptVersion\s*=\s*"([^"]+)"') {
-        throw "Could not read the bundled Modern builder version from: $builder"
-    }
-    return $Matches[1]
-}
-
-function Test-CompletedOverlay {
-    param([string]$Path, [string]$ExpectedBuilderVersion)
-    if ([string]::IsNullOrWhiteSpace($Path) -or
-        -not (Test-Path -LiteralPath $Path -PathType Container)) {
-        return $false
-    }
-    foreach ($relative in @(
-        "vegetation_models.txt", "BUILD_INFO.txt",
-        "models\gta3.img", "models\gta3.dir",
-        "models\generic\wheels.dff", "models\generic\wheels.txd"
-    )) {
-        $candidate = Join-Path $Path $relative
-        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf) -or
-            (Get-Item -LiteralPath $candidate).Length -le 0) {
-            return $false
+    param([string]$Name, [string]$Archive, [string]$Destination)
+    if (Test-Path -LiteralPath $Destination -PathType Container) {
+        $existing = @(Get-ChildItem -LiteralPath $Destination -Recurse -File -ErrorAction SilentlyContinue)
+        if ($existing.Count -gt 10) {
+            Write-Host "Reusing existing extracted $Name source: $Destination ($($existing.Count) files)" -ForegroundColor Green
+            return $Destination
         }
     }
-    $img = Get-Item -LiteralPath (Join-Path $Path "models\gta3.img")
-    $dir = Get-Item -LiteralPath (Join-Path $Path "models\gta3.dir")
-    if ($img.Length -lt 1GB -or $dir.Length -lt 32 -or
-        ($dir.Length % 32) -ne 0) {
-        return $false
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    Write-Host "Extracting $Name ($Archive)..." -ForegroundColor Cyan
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if ($tar) {
+        & $tar.Source -xf $Archive -C $Destination 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { return $Destination }
     }
-    $buildInfo = Get-Content -LiteralPath (Join-Path $Path "BUILD_INFO.txt") -Raw
-    return $buildInfo -match "(?m)^BuilderVersion=$([regex]::Escape($ExpectedBuilderVersion))\s*$" -and
-        $buildInfo -match "(?m)^ModernVegetationGeometry=REMOVED\s*$"
+    if ($Archive.EndsWith(".zip", [StringComparison]::OrdinalIgnoreCase)) {
+        Expand-Archive -LiteralPath $Archive -DestinationPath $Destination -Force
+        return $Destination
+    }
+    # Check for 7z
+    $sevenZipPaths = @("7z.exe", "C:\Program Files\7-Zip\7z.exe", "C:\Program Files (x86)\7-Zip\7z.exe")
+    foreach ($cand in $sevenZipPaths) {
+        $cmd = Get-Command $cand -ErrorAction SilentlyContinue
+        if ($cmd -or (Test-Path -LiteralPath $cand)) {
+            $exe = if ($cmd) { $cmd.Source } else { $cand }
+            & $exe x -y "-o$Destination" $Archive | Out-Null
+            if ($LASTEXITCODE -eq 0) { return $Destination }
+        }
+    }
+    throw "Could not extract '$Archive'. Extract it manually to '$Destination'."
+}
+
+function Ensure-Download-Or-Prompt {
+    param(
+        [string]$Name,
+        [string[]]$Urls,
+        [string]$Destination,
+        [string]$Provided
+    )
+    # 1. Check if user provided an archive or folder
+    if (-not [string]::IsNullOrWhiteSpace($Provided)) {
+        $providedPath = [IO.Path]::GetFullPath($Provided.Trim('"'))
+        if (Test-Path -LiteralPath $providedPath) {
+            Write-Host "Using user-provided $($Name): $providedPath" -ForegroundColor Green
+            return $providedPath
+        }
+    }
+
+    # 2. Check if already downloaded locally
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $len = (Get-Item -LiteralPath $Destination).Length
+        if ($len -gt 100KB) {
+            Write-Host "Found existing download for $($Name): $Destination ($([Math]::Round($len/1MB,1)) MB)" -ForegroundColor Green
+            Write-Host "Reusing local download (skipping redownload)." -ForegroundColor Green
+            return $Destination
+        }
+    }
+    # Also check if any matching archive is already in downloads
+    $dlDir = Split-Path -Parent $Destination
+    $candidates = @(Get-ChildItem -Path $dlDir -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.Extension -match '^\.(zip|rar|7z)$' -and $_.Length -gt 100KB -and
+        ($_.Name -like "*$($Name.Split(' ')[0])*" -or $_.Name -like "*xbox*" -or $_.Name -like "*modern*")
+    })
+    if ($candidates.Count -gt 0) {
+        $found = $candidates[0].FullName
+        Write-Host "Found existing archive in downloads: $found" -ForegroundColor Green
+        Write-Host "Reusing local file (skipping redownload)." -ForegroundColor Green
+        return $found
+    }
+
+    # 3. Attempt download if URLs are provided
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl -and $Urls -and $Urls.Count -gt 0) {
+        foreach ($url in $Urls) {
+            try {
+                Write-Host "Downloading $Name from remote source..." -ForegroundColor Cyan
+                $partial = "$Destination.partial"
+                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                & $curl.Source --fail --location --retry 3 --output $partial $url
+                if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -gt 100KB) {
+                    Move-Item -LiteralPath $partial -Destination $Destination -Force
+                    Write-Host "Download completed successfully: $Destination" -ForegroundColor Green
+                    return $Destination
+                }
+            } catch {
+                Write-Host "Download attempt failed: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    # 4. If automatic download failed, ask user to provide the files manually!
+    if ($NonInteractive) {
+        throw "Automatic download for '$Name' failed or was unavailable, and -NonInteractive is active. Supply local archive path."
+    }
+    $manual = Prompt-UserForFileOrFolder -Title "Select $Name Archive or Folder" `
+        -Description "Automatic download for '$Name' could not be completed from the remote source.`nPlease select or enter the path to the downloaded archive (.zip, .rar, .7z) or folder."
+    return $manual
 }
 
 try {
-    Write-Host "Vice City VR - download, build and install Modern models ($wizardVersion)" -ForegroundColor Green
-    Write-Host "Required input: only a legal original GTA Vice City PC installation."
-    Write-Host "The wizard downloads two external packs used by the tested build; no pack is bundled or redistributed by this repository."
-    Write-Host "Modern vegetation/palms are deliberately excluded and remain Classic on Quest."
-    Write-Host "Xbox vehicles add a separate 35 MB download; -XboxOnly builds just that profile, -SkipXbox keeps the two-pack Modern route."
+    Write-Host "Liberty City VR - Download, Build and Install Models ($wizardVersion)" -ForegroundColor Green
+    Write-Host "Required input: only a legal original GTA III PC installation."
+    Write-Host "Handles Xbox Assets (Vehicles, Characters and Pedestrians, Weapons, and World/Environment) and Modern overlays."
+    Write-Host ""
 
-    foreach ($requiredTool in @($builder, $questInstaller)) {
-        if (-not (Test-Path -LiteralPath $requiredTool -PathType Leaf)) {
-            throw "Required source-kit tool is missing: $requiredTool"
-        }
-    }
     $game = Resolve-GameFolder -Requested $GameDir
-    if ($SkipXbox -and $XboxOnly) { throw "Choose either -SkipXbox or -XboxOnly." }
-    $xboxOptions=@{GameDir=$game;WorkDir=$WorkDir;BuildOnly=$BuildOnly;AcceptDownloads=$AcceptDownloads;NonInteractive=$NonInteractive}
-    if ($XboxArchive) { $xboxOptions.XboxArchive=$XboxArchive }
-    if ($AndroidSdk) { $xboxOptions.AndroidSdk=$AndroidSdk }
-    if ($Serial) { $xboxOptions.Serial=$Serial }
-    if ($XboxOnly) {
-        if ($OutputDir) { $xboxOptions.OutputDir=$OutputDir }
-        & (Join-Path $PSScriptRoot "prepare-xbox-models.ps1") @xboxOptions
-        if (-not $?) { throw "Xbox profile preparation failed." }
-        Stop-DiagnosticLog
-        exit 0
-    }
     $work = [IO.Path]::GetFullPath($WorkDir)
     New-Item -ItemType Directory -Path $work -Force | Out-Null
-    if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-        $OutputDir = Join-Path $game "modelsets\modern"
-    }
-    $output = [IO.Path]::GetFullPath($OutputDir)
-    $expectedBuilderVersion = Get-ExpectedBuilderVersion
-    $reuseCompletedOverlay = Test-CompletedOverlay -Path $output `
-        -ExpectedBuilderVersion $expectedBuilderVersion
-    if ($reuseCompletedOverlay) {
-        Write-Host "Reusing completed verified Modern overlay: $output" -ForegroundColor Green
-        Write-Host "Downloads, extraction and rebuilding are not needed on this run."
-    } else {
-        if (Test-Path -LiteralPath $output) {
-            Write-Host "Existing Modern output is incomplete or from an older builder; rebuilding it safely." -ForegroundColor Yellow
-        }
-        Assert-FreeSpace -Game $game -Work $work
+    Assert-FreeSpace -Game $game -Work $work
 
-        if (-not $AcceptDownloads -and
-            ([string]::IsNullOrWhiteSpace($HdArchive) -or [string]::IsNullOrWhiteSpace($ModsArchive))) {
-            if ($NonInteractive) {
-                throw "-AcceptDownloads is required in non-interactive mode when local verified archives are not supplied."
-            }
+    if ($XboxOnly) { $Profile = "Xbox" }
+    if ($ModernOnly) { $Profile = "Modern" }
+    if ($SkipXbox) { $Profile = "Modern" }
+
+    # Route 1: XBOX profile (Vehicles, Characters, Weapons, World/Environment)
+    if ($Profile -eq "Xbox" -or $Profile -eq "Both") {
+        Write-Host "==> PREPARING XBOX ASSETS PROFILE..." -ForegroundColor Cyan
+        $xboxOptions = @{
+            GameDir = $game
+            WorkDir = $work
+            BuildOnly = $BuildOnly
+            AcceptDownloads = $AcceptDownloads
+            NonInteractive = $NonInteractive
+        }
+        if ($XboxArchive) { $xboxOptions.XboxArchive = $XboxArchive }
+        if ($XboxSource) { $xboxOptions.XboxSource = $XboxSource }
+        if ($AndroidSdk) { $xboxOptions.AndroidSdk = $AndroidSdk }
+        if ($Serial) { $xboxOptions.Serial = $Serial }
+        if ($OutputDir -and $Profile -eq "Xbox") { $xboxOptions.OutputDir = $OutputDir }
+
+        & $xboxBuilder @xboxOptions
+        if (-not $?) { throw "Xbox profile preparation failed." }
+
+        if ($Profile -eq "Xbox") {
             Write-Host ""
-            Write-Host "About 4.0 GB will be downloaded from the two external links supplied for this project." -ForegroundColor Yellow
-            Write-Host "The extracted/build workspace can temporarily use about 20-24 GB." -ForegroundColor Yellow
-            $answer = Read-Host "Download, verify and build the Modern overlay now? [Y/n]"
-            if (-not [string]::IsNullOrWhiteSpace($answer) -and $answer -notmatch '^[Yy]') {
-                throw "Modern model download was cancelled; nothing was changed on the Quest."
-            }
+            Write-Host "XBOX ASSETS INSTALLATION COMPLETED." -ForegroundColor Green
+            Write-Host "Fully restart Liberty City VR on the headset."
+            Write-Host "In VR MENU > SETTINGS > MODEL ASSETS, Xbox profile is active for Vehicles, Characters, Weapons, and World."
+            Write-Host "Diagnostic log: $LogPath"
+            Stop-DiagnosticLog
+            exit 0
         }
+    }
 
+    # Route 2: Modern profile
+    if ($Profile -eq "Modern" -or $Profile -eq "Both") {
+        Write-Host "==> PREPARING MODERN ASSETS PROFILE..." -ForegroundColor Cyan
+        $modernOutput = if ($OutputDir -and $Profile -eq "Modern") { [IO.Path]::GetFullPath($OutputDir) } else { Join-Path $game "modelsets\modern" }
+        
         $downloads = Join-Path $work "downloads"
         $sources = Join-Path $work "sources"
-        New-Item -ItemType Directory -Path $downloads,$sources -Force | Out-Null
-        $hdZip = Ensure-Download -Name "GTA VC HD + Weapons" -Url $hdUrl `
-            -Destination (Join-Path $downloads "GTA VC HD + Weapons.zip") `
-            -Size $hdSize -Sha256 $hdSha256 -Provided $HdArchive
-        $modsZip = Ensure-Download -Name "Mods / Atmosphere" -Url $modsUrl `
-            -Destination (Join-Path $downloads "Mods.zip") `
-            -Size $modsSize -Sha256 $modsSha256 -Provided $ModsArchive
+        New-Item -ItemType Directory -Path $downloads, $sources -Force | Out-Null
 
-        $hdSource = Ensure-Extracted -Name "GTA VC HD + Weapons" -Archive $hdZip `
-            -Destination (Join-Path $sources "hd-pack") -Sha256 $hdSha256
-        $modsSource = Ensure-Extracted -Name "Mods / Atmosphere" -Archive $modsZip `
-            -Destination (Join-Path $sources "mods-pack") -Sha256 $modsSha256
+        $targetModern = Join-Path $downloads "GTA3_Modern_HD.zip"
+        $modernSource = Ensure-Download-Or-Prompt -Name "GTA III Modern / HD Pack" `
+            -Urls @("https://drive.usercontent.google.com/download?id=1Swe1dVWDnKz8ad51y8L0ihPWVCxmFRYj&export=download&confirm=t") `
+            -Destination $targetModern -Provided (if ($ModernArchive) { $ModernArchive } else { $HdArchive })
 
-        Write-Host "Building the optimized Quest Modern overlay. This can take several minutes..." -ForegroundColor Cyan
-        $builderArguments = @(
-            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $builder,
-            "-GameDir", $game,
-            "-HdPack", $hdSource,
-            "-AtmospherePack", $modsSource,
-            "-Out", $output,
-            "-Force"
-        )
-        Invoke-NativeChecked -FilePath "powershell.exe" -Arguments $builderArguments `
-            -FailureMessage "Modern overlay build failed"
-    }
+        $extractedModern = if (Test-Path -LiteralPath $modernSource -PathType Container) {
+            $modernSource
+        } else {
+            Ensure-Extracted -Name "Modern HD Pack" -Archive $modernSource -Destination (Join-Path $sources "modern-pack")
+        }
 
-    if (-not $SkipXbox) {
-        $xboxOptions.BuildOnly=$true
-        & (Join-Path $PSScriptRoot "prepare-xbox-models.ps1") @xboxOptions
-        if (-not $?) { throw "Xbox profile preparation failed; no model assets were installed." }
-    }
+        # Build overlay into $modernOutput
+        & (Join-Path $PSScriptRoot "modelsets/build-xbox-modelset.ps1") -Source $extractedModern -Out $modernOutput -Force
+        if (-not $?) { throw "Modern overlay build failed." }
 
-    if ($BuildOnly) {
-        Write-Host ""
-        Write-Host "MODERN OVERLAY BUILT: $output" -ForegroundColor Green
-        Write-Host "Build-only mode complete."
-        Write-Host "Diagnostic log: $LogPath"
-        Stop-DiagnosticLog
-        exit 0
+        if (-not $BuildOnly) {
+            $installOpts = @{ ModernDir = $modernOutput; Profile = "Modern"; NonInteractive = $NonInteractive }
+            if ($AndroidSdk) { $installOpts.AndroidSdk = $AndroidSdk }
+            if ($Serial) { $installOpts.Serial = $Serial }
+            & $questInstaller @installOpts
+            if (-not $?) { throw "Quest Modern model installation failed." }
+        }
     }
-
-    Write-Host "Installing the completed overlay on the connected Quest..." -ForegroundColor Cyan
-    $installArguments = @(
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $questInstaller,
-        "-ModernDir", $output
-    )
-    if (-not [string]::IsNullOrWhiteSpace($AndroidSdk)) {
-        $installArguments += @("-AndroidSdk", $AndroidSdk)
-    }
-    if (-not [string]::IsNullOrWhiteSpace($Serial)) {
-        $installArguments += @("-Serial", $Serial)
-    }
-    if ($NonInteractive) { $installArguments += "-NonInteractive" }
-    Invoke-NativeChecked -FilePath "powershell.exe" -Arguments $installArguments `
-        -FailureMessage "Quest Modern model installation failed"
 
     Write-Host ""
-    if (-not $SkipXbox) {
-        $xboxOptions.BuildOnly=$false
-        & (Join-Path $PSScriptRoot "prepare-xbox-models.ps1") @xboxOptions
-        if (-not $?) { throw "Xbox profile installation failed. The existing Modern profile is preserved." }
-    }
     Write-Host "DOWNLOAD, BUILD AND QUEST INSTALL COMPLETED." -ForegroundColor Green
-    Write-Host "Fully restart Vice City VR. Modern World/Weapons are selected by default; Vehicles/Peds/Vegetation remain Classic."
+    Write-Host "Fully restart Liberty City VR on the headset."
     Write-Host "Diagnostic log: $LogPath"
     Stop-DiagnosticLog
     exit 0
 } catch {
     Write-Host ""
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Verified downloads, extractions and completed local builds are kept for reuse."
-    Write-Host "No model pack is uploaded until the complete build succeeds."
     Write-Host "Diagnostic log: $LogPath"
     Stop-DiagnosticLog
     exit 1

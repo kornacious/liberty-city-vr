@@ -221,9 +221,7 @@ void InitializeStartup(const char *gameRoot)
 	gModernArchivePairAvailable = FileExists(path);
 	BuildOverlayPath(MODEL_SET_MODERN, "models/gta3.dir", path, sizeof(path));
 	gModernArchivePairAvailable = gModernArchivePairAvailable && FileExists(path);
-	const char *xboxFiles[] = { "models/gta3.img", "models/gta3.dir",
-		"models/coll/vehicles.col", "models/generic/wheels.dff",
-		"models/generic/wheels.txd", "vehicle_models.txt" };
+	const char *xboxFiles[] = { "models/gta3.img", "models/gta3.dir" };
 	gXboxAvailable = true;
 	for(size_t i = 0; i < ARRAY_SIZE(xboxFiles); i++){
 		BuildOverlayPath(MODEL_SET_XBOX, xboxFiles[i], path, sizeof(path));
@@ -231,26 +229,27 @@ void InitializeStartup(const char *gameRoot)
 	}
 	LoadVegetationManifest();
 	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
-		MODEL_SET_MODERN, gSettingsPath);
+		MODEL_SET_XBOX, gSettingsPath);
 	if(requested < MODEL_SET_CLASSIC || requested >= MODEL_SET_COUNT ||
 	   !IsAvailable((eModelSet)requested))
 		requested = MODEL_SET_CLASSIC;
 	gRequestedModelSet = gActiveModelSet = (eModelSet)requested;
 	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++){
 		const int fallback = requested == MODEL_SET_XBOX ?
-			(category == MODEL_CATEGORY_VEHICLES ? MODEL_SET_XBOX : MODEL_SET_CLASSIC) :
+			(category == MODEL_CATEGORY_VEGETATION ? MODEL_SET_CLASSIC : MODEL_SET_XBOX) :
 			gCategoryDefaults[category];
 		int selected = (int)(int32)GetPrivateProfileIntA("VR",
 			gCategorySettingNames[category], fallback, gSettingsPath);
 		if(selected < MODEL_SET_CLASSIC || selected >= MODEL_SET_COUNT ||
-		   (selected == MODEL_SET_XBOX && category != MODEL_CATEGORY_VEHICLES))
+		   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION))
 			selected = MODEL_SET_CLASSIC;
 		gActiveCategory[category] = gRequestedCategory[category] = (eModelSet)selected;
 	}
 	gInitialized = true;
-	debug("Model sets: preset=%s modern=%d xbox=%d vehicles=%s\n",
+	debug("Model sets: preset=%s modern=%d xbox=%d vehicles=%s world=%s\n",
 		GetName(gActiveModelSet), gModernArchivePairAvailable, gXboxAvailable,
-		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)));
+		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)),
+		GetName(GetActiveForCategory(MODEL_CATEGORY_WORLD)));
 }
 
 eModelSet GetActive() { return gActiveModelSet; }
@@ -292,7 +291,12 @@ bool IsModernActive()
 
 bool IsXboxActive()
 {
-	return GetActiveForCategory(MODEL_CATEGORY_VEHICLES) == MODEL_SET_XBOX;
+	if(gActiveModelSet == MODEL_SET_XBOX && gXboxAvailable)
+		return true;
+	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++)
+		if(GetActiveForCategory((eModelCategory)category) == MODEL_SET_XBOX)
+			return true;
+	return false;
 }
 
 bool IsRestartRequired()
@@ -318,7 +322,7 @@ const char *GetName(eModelSet modelSet)
 
 const char *GetSourceName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_XBOX ? "XBOX VEHICLES" :
+	return modelSet == MODEL_SET_XBOX ? "XBOX ASSETS" :
 		modelSet == MODEL_SET_MODERN ? "MODERN OVERLAY" : "BASE INSTALL";
 }
 
@@ -329,7 +333,7 @@ static eModelSet EffectiveCategory(eModelCategory category, eModelSet preset,
 		return MODEL_SET_CLASSIC;
 	const eModelSet selected = selections[category];
 	if(!IsAvailable(selected) ||
-	   (selected == MODEL_SET_XBOX && category != MODEL_CATEGORY_VEHICLES) ||
+	   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
 	   (selected == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
 	    !gVegetationManifestAvailable))
 		return MODEL_SET_CLASSIC;
@@ -351,7 +355,7 @@ void SetRequestedForCategory(eModelCategory category, eModelSet modelSet)
 	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
 		return;
 	if(!IsAvailable(modelSet) ||
-	   (modelSet == MODEL_SET_XBOX && category != MODEL_CATEGORY_VEHICLES) ||
+	   (modelSet == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
 	   (modelSet == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
 	    !gVegetationManifestAvailable))
 		modelSet = MODEL_SET_CLASSIC;
@@ -372,7 +376,7 @@ void CycleRequestedCategory(eModelCategory category, int direction)
 	for(int i = 0; i < MODEL_SET_COUNT; i++){
 		selected = (selected+MODEL_SET_COUNT+(direction > 0 ? 1 : -1)) % MODEL_SET_COUNT;
 		if(!IsAvailable((eModelSet)selected) ||
-		   (selected == MODEL_SET_XBOX && category != MODEL_CATEGORY_VEHICLES) ||
+		   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
 		   (selected == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
 		    !gVegetationManifestAvailable))
 			continue;
@@ -397,9 +401,9 @@ bool IsCategoryAvailable(eModelCategory category)
 {
 	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
 		return false;
-	return (category == MODEL_CATEGORY_VEHICLES && gXboxAvailable) ||
-		(gModernArchivePairAvailable &&
-		 (category != MODEL_CATEGORY_VEGETATION || gVegetationManifestAvailable));
+	if(category == MODEL_CATEGORY_VEGETATION)
+		return gModernArchivePairAvailable && gVegetationManifestAvailable;
+	return gXboxAvailable || gModernArchivePairAvailable;
 }
 
 const char *GetCategoryName(eModelCategory category)
@@ -471,34 +475,27 @@ const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	// Loose TXDs still use the ordinary Modern fallback behavior.
 	if(IsGta3ArchivePath(relative))
 		return originalPath;
-	// Xbox replaces only the matching vehicle collision and shared wheels.
-	if(IsXboxActive() &&
-	   (MODELSET_STRICMP(relative, "models\\coll\\vehicles.col") == 0 ||
-	    MODELSET_STRICMP(relative, "models/coll/vehicles.col") == 0 ||
-	    MODELSET_STRICMP(relative, "models\\generic\\wheels.dff") == 0 ||
-	    MODELSET_STRICMP(relative, "models/generic/wheels.dff") == 0 ||
-	    MODELSET_STRICMP(relative, "models\\generic\\wheels.txd") == 0 ||
-	    MODELSET_STRICMP(relative, "models/generic/wheels.txd") == 0)){
-		BuildOverlayPath(MODEL_SET_XBOX, relative, resolvedPath, resolvedPathSize);
-		return FileExists(resolvedPath) ? resolvedPath : originalPath;
-	}
-	bool useModern = true;
+	eModelCategory cat = MODEL_CATEGORY_WORLD;
 	if(MODELSET_STRNICMP(relative, "models\\coll\\", 12) == 0 ||
 	   MODELSET_STRNICMP(relative, "models/coll/", 12) == 0 ||
 	   MODELSET_STRNICMP(relative, "models\\generic\\", 15) == 0 ||
 	   MODELSET_STRNICMP(relative, "models/generic/", 15) == 0)
-		useModern = IsCategoryModernActive(MODEL_CATEGORY_VEHICLES);
+		cat = MODEL_CATEGORY_VEHICLES;
 	else if(MODELSET_STRICMP(relative, "models\\generic.txd") == 0 ||
 	        MODELSET_STRICMP(relative, "models/generic.txd") == 0)
-		useModern = IsCategoryModernActive(MODEL_CATEGORY_VEGETATION);
-	else if(MODELSET_STRNICMP(relative, "models\\", 7) == 0 ||
-	        MODELSET_STRNICMP(relative, "models/", 7) == 0 ||
-	        MODELSET_STRNICMP(relative, "txd\\", 4) == 0 ||
-	        MODELSET_STRNICMP(relative, "txd/", 4) == 0)
-		useModern = IsCategoryModernActive(MODEL_CATEGORY_WORLD);
-	if(!useModern)
-		return originalPath;
-	BuildOverlayPath(MODEL_SET_MODERN, relative, resolvedPath, resolvedPathSize);
-	return FileExists(resolvedPath) ? resolvedPath : originalPath;
+		cat = MODEL_CATEGORY_VEGETATION;
+
+	eModelSet active = GetActiveForCategory(cat);
+	if(active == MODEL_SET_XBOX && gXboxAvailable){
+		BuildOverlayPath(MODEL_SET_XBOX, relative, resolvedPath, resolvedPathSize);
+		if(FileExists(resolvedPath))
+			return resolvedPath;
+	}
+	if(active == MODEL_SET_MODERN && gModernArchivePairAvailable){
+		BuildOverlayPath(MODEL_SET_MODERN, relative, resolvedPath, resolvedPathSize);
+		if(FileExists(resolvedPath))
+			return resolvedPath;
+	}
+	return originalPath;
 }
 }

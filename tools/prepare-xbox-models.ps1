@@ -1,93 +1,254 @@
-# Downloads the optional Xbox vehicle pack and builds a separate overlay.
+# Prepares and installs the complete Xbox Assets profile for Liberty City VR
+# (Vehicles, characters and pedestrians, weapons, and world/environment).
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][string]$GameDir,
-    [string]$WorkDir="C:\VCVRBuild\modern-assets",
+    [Parameter(Mandatory=$false)][string]$GameDir,
+    [string]$WorkDir = "C:\LCVRBuild\modern-assets",
     [string]$OutputDir,
     [string]$XboxArchive,
+    [string]$XboxSource,
     [string]$AndroidSdk,
     [string]$Serial,
     [switch]$BuildOnly,
     [switch]$AcceptDownloads,
     [switch]$NonInteractive
 )
-$ErrorActionPreference="Stop"
+$ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "modelsets/xbox-modelset.ps1")
-try {
-    $game=(Resolve-Path -LiteralPath $GameDir).Path
-    foreach ($relative in @("models/gta3.img","models/gta3.dir")) {
-        if (-not (Test-Path -LiteralPath (Join-Path $game $relative) -PathType Leaf)) { throw "Select the legal original Vice City game folder; missing $relative" }
+
+function Resolve-GameFolder {
+    param([string]$Requested)
+    if ([string]::IsNullOrWhiteSpace($Requested)) {
+        if ($NonInteractive) { throw "-GameDir is required in non-interactive mode." }
+        try {
+            Add-Type -AssemblyName System.Windows.Forms
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = "Select the original GTA III PC installation folder"
+            $dialog.ShowNewFolderButton = $false
+            if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+                throw "No GTA III folder was selected."
+            }
+            $Requested = $dialog.SelectedPath
+        } catch [System.Management.Automation.RuntimeException] {
+            throw
+        } catch {
+            Write-Host "Folder picker was unavailable. Paste the original GTA III folder path." -ForegroundColor Yellow
+            $Requested = Read-Host "GTA III folder"
+        }
     }
-    if (-not $OutputDir) { $OutputDir=Join-Path $game "modelsets/xbox" }
-    $output=[IO.Path]::GetFullPath($OutputDir)
+    if ([string]::IsNullOrWhiteSpace($Requested) -or -not (Test-Path -LiteralPath $Requested -PathType Container)) {
+        throw "The GTA III folder does not exist: $Requested"
+    }
+    $resolved = (Resolve-Path -LiteralPath $Requested).Path
+    foreach ($relative in @("models/gta3.img", "models/gta3.dir")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $resolved $relative) -PathType Leaf)) {
+            throw "The selected folder is not a complete original GTA III installation. Missing: $relative"
+        }
+    }
+    return $resolved
+}
+
+function Prompt-UserForManualSource {
+    param([string]$Title, [string]$Description)
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host " MANUAL XBOX ASSETS SELECTION REQUIRED" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host $Description -ForegroundColor Cyan
+    Write-Host ""
+
+    $selectedPath = $null
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Title = $Title
+        $dialog.Filter = "Archive files (*.zip;*.rar;*.7z)|*.zip;*.rar;*.7z|All files (*.*)|*.*"
+        $dialog.CheckFileExists = $true
+        Write-Host "Opening file picker window... (check your taskbar if it is not in front)" -ForegroundColor Yellow
+        $result = $dialog.ShowDialog()
+        if ($result -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dialog.FileName)) {
+            $selectedPath = $dialog.FileName
+        }
+    } catch { }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPath)) {
+        Write-Host "Paste or enter the full path to the Xbox archive file (.zip/.rar/.7z) or extracted folder:" -ForegroundColor Yellow
+        $userInput = Read-Host "Xbox Assets path"
+        if (-not [string]::IsNullOrWhiteSpace($userInput)) {
+            $selectedPath = $userInput.Trim('"').Trim("'")
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPath) -or -not (Test-Path -LiteralPath $selectedPath)) {
+        throw "No valid file or folder was provided: $selectedPath"
+    }
+
+    return (Resolve-Path -LiteralPath $selectedPath).Path
+}
+
+function Extract-ArchiveSafe {
+    param([string]$Archive, [string]$Destination)
+    New-Item -ItemType Directory -Path $Destination -Force | Out-Null
+    Write-Host "Extracting archive: $Archive -> $Destination" -ForegroundColor Cyan
+    
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if ($tar) {
+        $tarResult = & $tar.Source -xf $Archive -C $Destination 2>&1
+        if ($LASTEXITCODE -eq 0) { return }
+    }
+    # Check for 7z
+    $sevenZipPaths = @("7z.exe", "C:\Program Files\7-Zip\7z.exe", "C:\Program Files (x86)\7-Zip\7z.exe")
+    foreach ($cand in $sevenZipPaths) {
+        $cmd = Get-Command $cand -ErrorAction SilentlyContinue
+        if ($cmd -or (Test-Path -LiteralPath $cand)) {
+            $exe = if ($cmd) { $cmd.Source } else { $cand }
+            & $exe x -y "-o$Destination" $Archive | Out-Null
+            if ($LASTEXITCODE -eq 0) { return }
+        }
+    }
+    # Fallback to Expand-Archive for .zip
+    if ($Archive.EndsWith(".zip", [StringComparison]::OrdinalIgnoreCase)) {
+        Expand-Archive -LiteralPath $Archive -DestinationPath $Destination -Force
+        return
+    }
+    throw "Could not extract '$Archive'. Please extract it manually and pass the folder with -XboxSource."
+}
+
+try {
+    Write-Host "Liberty City VR - Xbox Assets Profile Setup" -ForegroundColor Green
+    Write-Host "Handles Vehicles, Characters and Pedestrians, Weapons, and World/Environment." -ForegroundColor Green
+    Write-Host ""
+
+    $game = Resolve-GameFolder -Requested $GameDir
+    if (-not $OutputDir) { $OutputDir = Join-Path $game "modelsets/xbox" }
+    $output = [IO.Path]::GetFullPath($OutputDir)
+
     if (Test-XboxOverlay $output) {
-        Write-Host "Reusing the complete verified Xbox profile: $output"
+        Write-Host "Reusing the complete verified Xbox profile: $output" -ForegroundColor Green
     } else {
-        $work=[IO.Path]::GetFullPath($WorkDir)
-        $downloads=Join-Path $work "downloads"
-        New-Item -ItemType Directory -Path $downloads -Force | Out-Null
-        $archive=Join-Path $downloads "Fixed_Xbox_Vehs_1.3.rar"
-        if ($XboxArchive) {
-            $archive=[IO.Path]::GetFullPath($XboxArchive)
-            Assert-XboxArchive $archive
-        } else {
-            $valid=$false
-            try { Assert-XboxArchive $archive; $valid=$true } catch { }
-            if (-not $valid) {
-                if (-not $AcceptDownloads) {
-                    if ($NonInteractive) { throw "Pass -AcceptDownloads or a verified -XboxArchive in non-interactive mode." }
-                    $answer=Read-Host "Download the optional 35 MB Fixed Xbox Vehicles 1.3 pack? [Y/n]"
-                    if ($answer -and $answer -notmatch '^[Yy]') { throw "Xbox download cancelled; no Quest data changed." }
-                }
-                $partial="$archive.partial"
-                if ((Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -gt $XboxArchiveSize) { Remove-Item -LiteralPath $partial -Force }
-                $partialReady=$false
-                if ((Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -eq $XboxArchiveSize) {
-                    if ((Get-XboxHash $partial) -eq $XboxArchiveSha256) { $partialReady=$true }
-                    else { Remove-Item -LiteralPath $partial -Force }
-                }
-                if (-not $partialReady) {
-                    $curl=(Get-Command curl.exe -ErrorAction Stop).Source
-                    Invoke-XboxTool $curl @("--fail","--location","--retry","5","--retry-all-errors","--continue-at","-","--output",$partial,$XboxArchiveUrl)
-                }
-                Assert-XboxArchive $partial
-                Move-Item -LiteralPath $partial -Destination $archive -Force
+        $work = [IO.Path]::GetFullPath($WorkDir)
+        $downloads = Join-Path $work "downloads"
+        $sources = Join-Path $work "sources"
+        New-Item -ItemType Directory -Path $downloads, $sources -Force | Out-Null
+
+        $sourceDirectory = $null
+
+        # 1. Check if user passed -XboxSource folder
+        if ($XboxSource -and (Test-Path -LiteralPath $XboxSource -PathType Container)) {
+            $sourceDirectory = (Resolve-Path -LiteralPath $XboxSource).Path
+            Write-Host "Using user-specified Xbox source folder: $sourceDirectory" -ForegroundColor Green
+        }
+
+        # 2. Check if already extracted in sources\xbox-pack
+        $extract = Join-Path $sources "xbox-pack"
+        if (-not $sourceDirectory -and (Test-Path -LiteralPath $extract -PathType Container)) {
+            $existingExtracted = @(Get-ChildItem -LiteralPath $extract -Recurse -File | Where-Object { $_.Extension -match '^\.(dff|txd)$' })
+            if ($existingExtracted.Count -ge 20) {
+                Write-Host "Reusing existing extracted Xbox source folder: $extract ($($existingExtracted.Count) models found)" -ForegroundColor Green
+                $sourceDirectory = $extract
             }
         }
-        $sources=Join-Path $work "sources"
-        New-Item -ItemType Directory -Path $sources -Force | Out-Null
-        $extract=Join-Path $sources "xbox-pack"
-        $main=Join-Path $extract "Fixed Xbox Vehicles"
-        $valid=$false
-        try { Assert-XboxSource $main; $valid=$true } catch { }
-        if (-not $valid) {
-            $id=[Guid]::NewGuid().ToString("N")
-            $fresh=Join-Path $sources ".xbox.source-$id"
-            New-Item -ItemType Directory -Path $fresh | Out-Null
-            try {
-                # The archive identity is checked before extraction. Only the
-                # main vehicles are extracted; optional prop/cutscene variants
-                # and unrelated archive content are never copied to the profile.
-                Assert-XboxArchive $archive
-                $tar=(Get-Command tar.exe -ErrorAction Stop).Source
-                Invoke-XboxTool $tar @("-xf",$archive,"-C",$fresh,"Fixed Xbox Vehicles")
-                Assert-XboxSource (Join-Path $fresh "Fixed Xbox Vehicles")
-                if (Test-Path -LiteralPath $extract) {
-                    $old=Join-Path $sources ".xbox.previous-$id"
-                    Move-Item -LiteralPath $extract -Destination $old
-                    try { Move-Item -LiteralPath $fresh -Destination $extract }
-                    catch { Move-Item -LiteralPath $old -Destination $extract; throw }
-                    Remove-XboxTemporary $old $sources
-                } else { Move-Item -LiteralPath $fresh -Destination $extract }
-            } finally { Remove-XboxTemporary $fresh $sources }
+
+        # 3. Check for local archives (either specified, or previously downloaded in $downloads)
+        $archive = $null
+        if (-not $sourceDirectory) {
+            if ($XboxArchive -and (Test-Path -LiteralPath $XboxArchive -PathType Leaf)) {
+                $archive = (Resolve-Path -LiteralPath $XboxArchive).Path
+                Write-Host "Using user-specified local Xbox archive: $archive" -ForegroundColor Green
+            } else {
+                # Look in downloads for any matching archive
+                $localCandidates = @(Get-ChildItem -Path $downloads -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Extension -match '^\.(zip|rar|7z)$' -and ($_.Name -like "*xbox*" -or $_.Name -like "*fixed*") })
+                if ($localCandidates.Count -gt 0) {
+                    $archive = $localCandidates[0].FullName
+                    Write-Host "Reusing local archive found in downloads (skipping download): $archive" -ForegroundColor Green
+                }
+            }
         }
-        & (Join-Path $PSScriptRoot "modelsets/build-xbox-modelset.ps1") -Source $main -Out $output -Force
-        if (-not $? -or -not (Test-XboxOverlay $output)) { throw "Xbox profile build failed." }
+
+        # 4. If neither extracted source nor local archive exists, try automatic download
+        if (-not $sourceDirectory -and -not $archive) {
+            $candidateUrls = @(
+                "https://drive.usercontent.google.com/download?id=1wqUggAT4VJGW6RHJiXhft8Ni8uxe3N5v&export=download&confirm=t"
+            )
+            $targetDownload = Join-Path $downloads "GTA3_Xbox_Assets.zip"
+
+            if (-not $AcceptDownloads -and -not $NonInteractive) {
+                Write-Host "No local Xbox assets archive was detected." -ForegroundColor Yellow
+                $ans = Read-Host "Attempt to download the Xbox Assets pack automatically? [Y/n]"
+                if ($ans -and $ans -notmatch '^[Yy]') {
+                    $archive = $null
+                } else {
+                    $AcceptDownloads = $true
+                }
+            }
+
+            if ($AcceptDownloads) {
+                $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+                if ($curl) {
+                    foreach ($url in $candidateUrls) {
+                        try {
+                            Write-Host "Attempting download from: $url" -ForegroundColor Cyan
+                            $partial = "$targetDownload.partial"
+                            if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                            & $curl.Source --fail --location --retry 3 --output $partial $url
+                            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -gt 100KB) {
+                                Move-Item -LiteralPath $partial -Destination $targetDownload -Force
+                                $archive = $targetDownload
+                                Write-Host "Download completed successfully: $archive" -ForegroundColor Green
+                                break
+                            }
+                        } catch {
+                            Write-Host "Automatic download attempt failed." -ForegroundColor Yellow
+                        }
+                    }
+                }
+            }
+
+            # 5. If automatic download didn't succeed, ask user to provide the files manually!
+            if (-not $archive) {
+                if ($NonInteractive) {
+                    throw "Automatic download for Xbox Assets was unavailable. Supply -XboxArchive or -XboxSource in non-interactive mode."
+                }
+                $manual = Prompt-UserForManualSource -Title "Select Xbox Assets Archive or Folder" `
+                    -Description "Automatic download could not be completed from the remote source.`nPlease select or enter the path to the Xbox Assets (.zip, .rar, .7z) or extracted folder."
+                if (Test-Path -LiteralPath $manual -PathType Container) {
+                    $sourceDirectory = $manual
+                } else {
+                    $archive = $manual
+                }
+            }
+        }
+
+        # 6. Extract archive if sourceDirectory is not yet a folder
+        if (-not $sourceDirectory -and $archive) {
+            Extract-ArchiveSafe -Archive $archive -Destination $extract
+            $sourceDirectory = $extract
+        }
+
+        if (-not $sourceDirectory -or -not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
+            throw "Failed to obtain valid Xbox assets source directory."
+        }
+
+        Write-Host "Building Xbox overlay from source: $sourceDirectory" -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot "modelsets/build-xbox-modelset.ps1") -Source $sourceDirectory -Out $output -Force
+        if (-not $? -or -not (Test-XboxOverlay $output)) {
+            throw "Xbox profile build failed."
+        }
     }
-    if ($BuildOnly) { Write-Host "Xbox profile ready; no device commands were sent."; return }
-    $options=@{ModernDir=$output;Profile="Xbox";NonInteractive=$NonInteractive}
-    if ($AndroidSdk) { $options.AndroidSdk=$AndroidSdk }
-    if ($Serial) { $options.Serial=$Serial }
+
+    if ($BuildOnly) {
+        Write-Host "Xbox profile ready; no device commands were sent." -ForegroundColor Green
+        return
+    }
+
+    $options = @{ ModernDir = $output; Profile = "Xbox"; NonInteractive = $NonInteractive }
+    if ($AndroidSdk) { $options.AndroidSdk = $AndroidSdk }
+    if ($Serial) { $options.Serial = $Serial }
+
     & (Join-Path $PSScriptRoot "install-modern-models.ps1") @options
     if (-not $?) { throw "Xbox profile installation failed." }
-} catch { Write-Error $_; exit 1 }
+} catch {
+    Write-Error $_
+    exit 1
+}

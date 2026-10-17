@@ -13,7 +13,7 @@ enum eModelSet
 	MODEL_SET_COUNT
 };
 
-// Overlays can be mixed by category; Xbox is available only for vehicles.
+// Overlays can be mixed by category (World, Vehicles, Peds, Weapons for Xbox and Modern; Vegetation remains Classic on Quest).
 // Changes require a restart so loaded RenderWare objects are not replaced.
 enum eModelCategory
 {

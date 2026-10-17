@@ -19,11 +19,11 @@ PROFILE="modern"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_SDK=""
 SERIAL=""
-LOG_PATH="${TMPDIR:-/tmp}/ViceCityVR-Install-Modern-Models.log"
+LOG_PATH="${TMPDIR:-/tmp}/LibertyCityVR-Install-Modern-Models.log"
 NON_INTERACTIVE=0
 
-INSTALLER_VERSION="0.5.6-models-5"
-PACKAGE_NAME="com.miamivr.quest"
+INSTALLER_VERSION="0.5.6-models-lcv-1"
+PACKAGE_NAME="com.libertyvr.quest"
 REMOTE_MODELSETS="/sdcard/Android/data/${PACKAGE_NAME}/files/gamedata/modelsets"
 STAGING_REMOTE=""
 
@@ -43,12 +43,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in modern|xbox) ;; *) echo 'Profile must be modern or xbox.' >&2; exit 1 ;; esac
-REQUIRED=("vegetation_models.txt" "models/gta3.img" "models/gta3.dir" "models/generic/wheels.dff" "models/generic/wheels.txd")
-HASH_FILES=("models/generic/wheels.dff" "models/generic/wheels.txd")
-if [ "$PROFILE" = xbox ]; then
-  REQUIRED=("models/gta3.img" "models/gta3.dir" "models/coll/vehicles.col" "models/generic/wheels.dff" "models/generic/wheels.txd" "vehicle_models.txt" "BUILD_INFO.txt")
-  HASH_FILES=("${REQUIRED[@]}")
-fi
+REQUIRED=("models/gta3.img" "models/gta3.dir" "BUILD_INFO.txt")
+HASH_FILES=("models/gta3.img" "models/gta3.dir")
 LOG_DIR="$(dirname "$LOG_PATH")"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 exec > >(tee "$LOG_PATH") 2>&1
@@ -204,7 +200,7 @@ select_quest_device() {
   SERIAL="${devices[$selection]}"
 }
 
-echo "Vice City VR - Modern model installer ($INSTALLER_VERSION)"
+echo "Liberty City VR - Modern / Xbox model installer ($INSTALLER_VERSION)"
 echo "This copies a model overlay generated locally by the player; it downloads no model assets."
 
 MODERN="$(resolve_modern_folder "$MODERN_DIR")" || die "Profile validation failed; no device commands were sent."
@@ -217,7 +213,7 @@ echo "Quest: $SERIAL"
 
 adb_capture shell pm path "$PACKAGE_NAME"
 if [ "$CAPTURED_EXIT" -ne 0 ] || ! echo "$CAPTURED_OUTPUT" | grep -q "package:"; then
-  die "Vice City VR is not installed on the selected Quest. Run BUILD_AND_INSTALL.sh first."
+  die "Liberty City VR is not installed on the selected Quest. Run BUILD_AND_INSTALL.sh first."
 fi
 
 # Starting the provider creates the application-owned external directory on

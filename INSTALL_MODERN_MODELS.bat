@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title Vice City VR - Download Build and Install Modern Models
+title Liberty City VR - Download Build and Install Modern / Xbox Models
 cd /d "%~dp0"
 
 echo ================================================================
-echo  VICE CITY VR - DOWNLOAD, BUILD AND INSTALL MODERN MODELS
+echo  LIBERTY CITY VR - DOWNLOAD, BUILD AND INSTALL MODERN / XBOX MODELS
 echo ================================================================
 echo.
 
@@ -24,9 +24,9 @@ set "RESULT=%ERRORLEVEL%"
 :finish
 echo.
 if not "%RESULT%"=="0" (
-    echo FAILED. Read the error above; the previous Modern folder was not replaced silently.
+    echo FAILED. Read the error above; the previous overlay folder was not replaced silently.
 ) else (
-    echo COMPLETE. Fully restart Vice City VR on the headset.
+    echo COMPLETE. Fully restart Liberty City VR on the headset.
 )
 echo.
 echo This window will remain open. Press any key when you are done reading it.
