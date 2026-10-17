@@ -1,39 +1,3 @@
-From 24164a3ac8d34228cb8f50d2d4043f207d61b40a Mon Sep 17 00:00:00 2001
-From: Liberty City VR Developer <dev@libertyvr.quest>
-Date: Fri, 16 Oct 2026 22:18:11 +0300
-Subject: [PATCH 1/4] re3 quest core and platform subsystem
-
----
- src/animation/CutsceneMgr.h  |    1 +
- src/core/Camera.cpp          |    7 +
- src/core/CdStream.h          |    1 +
- src/core/CdStream_posix.cpp  |   72 +-
- src/core/ControllerConfig.h  |    6 +-
- src/core/FileLoader.cpp      |   27 +-
- src/core/FileMgr.cpp         |   12 +
- src/core/Frontend.cpp        |   45 +-
- src/core/Game.cpp            |   12 +-
- src/core/Pad.cpp             |  519 +++++++++++++-
- src/core/PlayerInfo.cpp      |    2 +
- src/core/Radar.cpp           |  108 ++-
- src/core/Streaming.cpp       |   91 ++-
- src/core/Wanted.cpp          |   25 +-
- src/core/Wanted.h            |    6 +-
- src/core/World.cpp           |    6 +
- src/core/World.h             |    8 +
- src/core/common.h            |   11 +-
- src/core/config.h            |   29 +-
- src/core/main.cpp            | 1315 +++++++++++++++++++++++++++++++++-
- src/core/re3.cpp             |   14 +-
- src/core/templates.h         |    1 +
- src/entities/Physical.h      |    4 +
- src/math/Matrix.h            |    7 +
- src/modelinfo/ModelIndices.h |    1 +
- src/skel/crossplatform.cpp   |    2 +
- src/skel/crossplatform.h     |   19 +-
- src/weapons/WeaponType.h     |   14 +
- 28 files changed, 2284 insertions(+), 81 deletions(-)
-
 diff --git a/src/animation/CutsceneMgr.h b/src/animation/CutsceneMgr.h
 index 80bd2ce5..b52fa440 100644
 --- a/src/animation/CutsceneMgr.h
@@ -243,14 +207,15 @@ index 8823597b..b21ac27e 100644
  	GlfwJoyState           m_NewState;
  #else
 diff --git a/src/core/FileLoader.cpp b/src/core/FileLoader.cpp
-index f6581e9e..757f052e 100644
+index f6581e9e..9b81f1ea 100644
 --- a/src/core/FileLoader.cpp
 +++ b/src/core/FileLoader.cpp
-@@ -25,6 +25,19 @@
+@@ -25,6 +25,41 @@
  #include "CdStream.h"
  #include "FileLoader.h"
  #include "MemoryHeap.h"
 +#include "ModelSets.h"
++#include "crossplatform.h"
 +
 +static RwStream *
 +OpenModelSetRwStream(const char *filename)
@@ -258,15 +223,36 @@ index f6581e9e..757f052e 100644
 +	char resolved[1024];
 +	const char *selected = ModelSets::ResolveAssetPath(filename, resolved,
 +		sizeof(resolved));
-+	RwStream *stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, selected);
-+	if(!stream && selected != filename)
-+		stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, filename);
++#ifndef _WIN32
++	char *real = casepath(selected, false);
++	const char *openPath = real ? real : selected;
++#else
++	const char *openPath = selected;
++#endif
++	RwStream *stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, openPath);
++#ifndef _WIN32
++	if(real)
++		free(real);
++#endif
++	if(!stream && selected != filename){
++#ifndef _WIN32
++		char *origReal = casepath(filename, false);
++		const char *origOpenPath = origReal ? origReal : filename;
++#else
++		const char *origOpenPath = filename;
++#endif
++		stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, origOpenPath);
++#ifndef _WIN32
++		if(origReal)
++			free(origReal);
++#endif
++	}
 +	return stream;
 +}
  
  char CFileLoader::ms_line[256];
  
-@@ -186,7 +199,7 @@ CFileLoader::LoadTexDictionary(const char *filename)
+@@ -186,7 +221,7 @@ CFileLoader::LoadTexDictionary(const char *filename)
  	RwStream *stream;
  
  	txd = nil;
@@ -275,18 +261,42 @@ index f6581e9e..757f052e 100644
  	debug("Loading texture dictionary file %s\n", filename);
  	if(stream){
  		if(RwStreamFindChunk(stream, rwID_TEXDICTIONARY, nil, nil))
-@@ -381,7 +394,9 @@ CFileLoader::LoadModelFile(const char *filename)
+@@ -381,7 +416,33 @@ CFileLoader::LoadModelFile(const char *filename)
  	RpClump *clump;
  
  	debug("Loading model file %s\n", filename);
 -	stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, filename);
++
++	char txdname[1024];
++	strncpy(txdname, filename, sizeof(txdname)-1);
++	txdname[sizeof(txdname)-1] = '\0';
++	char *dot = strrchr(txdname, '.');
++	if(dot){
++		strcpy(dot, ".txd");
++		RwStream *txdStream = OpenModelSetRwStream(txdname);
++		if(!txdStream){
++			strcpy(dot, ".TXD");
++			txdStream = OpenModelSetRwStream(txdname);
++		}
++		if(txdStream){
++			if(RwStreamFindChunk(txdStream, rwID_TEXDICTIONARY, nil, nil)){
++				RwTexDictionary *txd = RwTexDictionaryGtaStreamRead(txdStream);
++				if(txd){
++					AddTexDictionaries(RwTexDictionaryGetCurrent(), txd);
++					RwTexDictionaryDestroy(txd);
++				}
++			}
++			RwStreamClose(txdStream, nil);
++		}
++	}
++
 +	stream = OpenModelSetRwStream(filename);
 +	if(!stream)
 +		return;
  	if(RwStreamFindChunk(stream, rwID_CLUMP, nil, nil)){
  		clump = RpClumpStreamRead(stream);
  		if(clump){
-@@ -403,7 +418,9 @@ CFileLoader::LoadClumpFile(const char *filename)
+@@ -403,7 +464,9 @@ CFileLoader::LoadClumpFile(const char *filename)
  	CClumpModelInfo *mi;
  
  	debug("Loading model file %s\n", filename);
@@ -297,7 +307,7 @@ index f6581e9e..757f052e 100644
  	while(RwStreamFindChunk(stream, rwID_CLUMP, nil, nil)){
  		clump = RpClumpStreamRead(stream);
  		if(clump){
-@@ -942,7 +959,9 @@ CFileLoader::LoadAtomicFile2Return(const char *filename)
+@@ -942,7 +1005,9 @@ CFileLoader::LoadAtomicFile2Return(const char *filename)
  
  	clump = nil;
  	debug("Loading model file %s\n", filename);
@@ -1684,7 +1694,7 @@ index 1c2aee00..ba76f886 100644
  
  #define Clamp2(v, center, radius) ((v) > (center) ? Min(v, center + radius) : Max(v, center - radius))
 diff --git a/src/core/config.h b/src/core/config.h
-index 085490f1..982bb6b4 100644
+index 085490f1..f5e6b4ce 100644
 --- a/src/core/config.h
 +++ b/src/core/config.h
 @@ -14,7 +14,9 @@ enum Config {
@@ -1749,7 +1759,7 @@ index 085490f1..982bb6b4 100644
  	NUMINVISIBLEENTITIES = 150,
  
  	NUM_AUDIOENTITY_EVENTS = 4,
-@@ -300,7 +315,9 @@ enum Config {
+@@ -300,7 +319,9 @@ enum Config {
  #define ASPECT_RATIO_SCALE	// Not just makes everything scale with aspect ratio, also adds support for all aspect ratios
  #define PROPER_SCALING		// use original DEFAULT_SCREEN_WIDTH/DEFAULT_SCREEN_HEIGHT from PS2 instead of PC(R* changed HEIGHT here to make radar look better, but broke other hud elements aspect ratio).
  #define DEFAULT_NATIVE_RESOLUTION	// Set default video mode to your native resolution (fixes Windows 10 launch)
@@ -1759,7 +1769,7 @@ index 085490f1..982bb6b4 100644
  #define PS2_ALPHA_TEST		// emulate ps2 alpha test 
  #define IMPROVED_VIDEOMODE	// save and load videomode parameters instead of a magic number
  #define DISABLE_LOADING_SCREEN // disable the loading screen which vastly improves the loading time
-@@ -312,11 +329,13 @@ enum Config {
+@@ -312,11 +333,13 @@ enum Config {
  #define ANISOTROPIC_FILTERING	// set all textures to max anisotropic filtering
  //#define USE_TEXTURE_POOL
  #ifdef LIBRW
@@ -3418,7 +3428,7 @@ index 0f7f91cd..85a13435 100644
  
  template<typename T>
 diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
-index c38f12c..fbe2ea5 100644
+index c38f12c7..e57c5afc 100644
 --- a/src/entities/Entity.cpp
 +++ b/src/entities/Entity.cpp
 @@ -193,6 +193,12 @@ CEntity::GetBoundRect(void)
@@ -3623,6 +3633,3 @@ index 4f88e290..6e2f5cc8 100644
  enum eWeaponFire {
  	WEAPON_FIRE_MELEE,
  	WEAPON_FIRE_INSTANT_HIT,
--- 
-2.56.0.windows.1
-

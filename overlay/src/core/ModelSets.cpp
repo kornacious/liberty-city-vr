@@ -173,10 +173,20 @@ void BuildOverlayPath(eModelSet modelSet, const char *relativePath, char *destin
 	snprintf(destination, destinationSize, "%smodelsets\\%s\\%s", gGameRoot, setName, normalized);
 #else
 	snprintf(destination, destinationSize, "%smodelsets/%s/%s", gGameRoot, setName, normalized);
-	if(!FileExists(destination)){
+	char *real = casepath(destination, false);
+	if(real){
+		strncpy(destination, real, destinationSize-1);
+		destination[destinationSize-1] = '\0';
+		free(real);
+	} else if(!FileExists(destination)){
 		char rel[512];
 		snprintf(rel, sizeof(rel), "modelsets/%s/%s", setName, normalized);
-		if(FileExists(rel))
+		char *realRel = casepath(rel, false);
+		if(realRel){
+			strncpy(destination, realRel, destinationSize-1);
+			destination[destinationSize-1] = '\0';
+			free(realRel);
+		} else if(FileExists(rel))
 			strncpy(destination, rel, destinationSize-1);
 	}
 #endif
