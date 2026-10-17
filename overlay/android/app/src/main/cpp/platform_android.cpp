@@ -440,50 +440,88 @@ convertImaAdpcmWav(const std::string &source, const std::string &destination)
 	const uint16_t blockAlign = readLe16(format + 12);
 	const uint16_t bitsPerSample = readLe16(format + 14);
 	const uint16_t samplesPerBlock = readLe16(format + 18);
-	if(channels != 1 || sampleRate == 0 || blockAlign < 4 ||
-	   bitsPerSample != 4 || samplesPerBlock == 0)
+	if((channels != 1 && channels != 2) || sampleRate == 0 ||
+	   blockAlign < (channels * 4) || bitsPerSample != 4 || samplesPerBlock == 0)
 		return ImaWavConversion::Failed;
 
 	const size_t fullBlocks = compressedSize / blockAlign;
 	const size_t trailingBytes = compressedSize % blockAlign;
-	size_t estimatedSamples = fullBlocks * size_t(samplesPerBlock);
-	if(trailingBytes >= 4)
-		estimatedSamples += 1 + (trailingBytes - 4) * 2;
+	size_t estimatedSamples = fullBlocks * size_t(samplesPerBlock) * channels;
+	if(trailingBytes >= (channels * 4u))
+		estimatedSamples += (1 + (trailingBytes - channels * 4u) * 2 / channels) * channels;
 	if(factSamples != 0)
-		estimatedSamples = std::min(estimatedSamples, size_t(factSamples));
+		estimatedSamples = std::min(estimatedSamples, size_t(factSamples) * channels);
 	std::vector<int16_t> pcm;
 	pcm.reserve(estimatedSamples);
 
 	size_t offset = 0;
-	while(offset + 4 <= compressedSize &&
-	      (factSamples == 0 || pcm.size() < factSamples)){
-		const size_t bytesInBlock =
-			std::min(size_t(blockAlign), compressedSize - offset);
-		const uint8_t *block = compressed + offset;
-		int predictor = int16_t(readLe16(block));
-		int stepIndex = block[2];
-		if(stepIndex > 88)
-			return ImaWavConversion::Failed;
-		pcm.push_back(int16_t(predictor));
-		size_t samplesInBlock = 1;
-		for(size_t i = 4; i < bytesInBlock &&
-		    samplesInBlock < samplesPerBlock; ++i){
-			pcm.push_back(decodeImaNibble(block[i] & 0x0F,
-				predictor, stepIndex));
-			++samplesInBlock;
-			if(samplesInBlock >= samplesPerBlock ||
-			   (factSamples != 0 && pcm.size() >= factSamples))
-				break;
-			pcm.push_back(decodeImaNibble(block[i] >> 4,
-				predictor, stepIndex));
-			++samplesInBlock;
-			if(factSamples != 0 && pcm.size() >= factSamples)
-				break;
+	if(channels == 1){
+		while(offset + 4 <= compressedSize &&
+		      (factSamples == 0 || pcm.size() < factSamples)){
+			const size_t bytesInBlock =
+				std::min(size_t(blockAlign), compressedSize - offset);
+			const uint8_t *block = compressed + offset;
+			int predictor = int16_t(readLe16(block));
+			int stepIndex = block[2];
+			if(stepIndex > 88)
+				return ImaWavConversion::Failed;
+			pcm.push_back(int16_t(predictor));
+			size_t samplesInBlock = 1;
+			for(size_t i = 4; i < bytesInBlock &&
+			    samplesInBlock < samplesPerBlock; ++i){
+				pcm.push_back(decodeImaNibble(block[i] & 0x0F,
+					predictor, stepIndex));
+				++samplesInBlock;
+				if(samplesInBlock >= samplesPerBlock ||
+				   (factSamples != 0 && pcm.size() >= factSamples))
+					break;
+				pcm.push_back(decodeImaNibble(block[i] >> 4,
+					predictor, stepIndex));
+				++samplesInBlock;
+				if(factSamples != 0 && pcm.size() >= factSamples)
+					break;
+			}
+			offset += bytesInBlock;
 		}
-		offset += bytesInBlock;
+	}else{
+		const size_t maxTotalSamples = factSamples != 0 ? size_t(factSamples) * 2 : SIZE_MAX;
+		while(offset + 8 <= compressedSize && pcm.size() < maxTotalSamples){
+			const size_t bytesInBlock =
+				std::min(size_t(blockAlign), compressedSize - offset);
+			const uint8_t *block = compressed + offset;
+			int leftPred = int16_t(readLe16(block));
+			int leftStep = block[2];
+			int rightPred = int16_t(readLe16(block + 4));
+			int rightStep = block[6];
+			if(leftStep > 88 || rightStep > 88)
+				return ImaWavConversion::Failed;
+			pcm.push_back(int16_t(leftPred));
+			pcm.push_back(int16_t(rightPred));
+			size_t samplePairsInBlock = 1;
+			size_t pos = 8;
+			while(pos + 8 <= bytesInBlock && samplePairsInBlock < samplesPerBlock && pcm.size() < maxTotalSamples){
+				int16_t leftBuf[8];
+				for(size_t i = 0; i < 4; ++i){
+					leftBuf[i * 2 + 0] = decodeImaNibble(block[pos + i] & 0x0F, leftPred, leftStep);
+					leftBuf[i * 2 + 1] = decodeImaNibble(block[pos + i] >> 4, leftPred, leftStep);
+				}
+				int16_t rightBuf[8];
+				for(size_t i = 0; i < 4; ++i){
+					rightBuf[i * 2 + 0] = decodeImaNibble(block[pos + 4 + i] & 0x0F, rightPred, rightStep);
+					rightBuf[i * 2 + 1] = decodeImaNibble(block[pos + 4 + i] >> 4, rightPred, rightStep);
+				}
+				for(size_t s = 0; s < 8 && samplePairsInBlock < samplesPerBlock && pcm.size() < maxTotalSamples; ++s){
+					pcm.push_back(leftBuf[s]);
+					pcm.push_back(rightBuf[s]);
+					++samplePairsInBlock;
+				}
+				pos += 8;
+			}
+			offset += bytesInBlock;
+		}
 	}
-	if(factSamples != 0 && pcm.size() > factSamples)
-		pcm.resize(factSamples);
+	if(factSamples != 0 && pcm.size() > size_t(factSamples) * channels)
+		pcm.resize(size_t(factSamples) * channels);
 	if(pcm.empty() || pcm.size() > (UINT32_MAX - 36u) / 2u)
 		return ImaWavConversion::Failed;
 
@@ -494,10 +532,10 @@ convertImaAdpcmWav(const std::string &source, const std::string &destination)
 	memcpy(header + 8, "WAVEfmt ", 8);
 	writeLe32(header + 16, 16);
 	writeLe16(header + 20, 1);
-	writeLe16(header + 22, 1);
+	writeLe16(header + 22, channels);
 	writeLe32(header + 24, sampleRate);
-	writeLe32(header + 28, sampleRate * sizeof(int16_t));
-	writeLe16(header + 32, sizeof(int16_t));
+	writeLe32(header + 28, sampleRate * channels * sizeof(int16_t));
+	writeLe16(header + 32, channels * sizeof(int16_t));
 	writeLe16(header + 34, 16);
 	memcpy(header + 36, "data", 4);
 	writeLe32(header + 40, pcmBytes);
