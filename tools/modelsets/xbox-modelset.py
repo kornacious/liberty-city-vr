@@ -140,7 +140,21 @@ def build(source, output, force=False, compressor=None):
 
         col_files = list(source.rglob('vehicles.col'))
         if col_files:
-            shutil.copyfile(col_files[0], stage / 'models/coll/vehicles.col')
+            try:
+                col_data = col_files[0].read_bytes()
+                has_train = False
+                for i in range(0, len(col_data) - 30):
+                    if col_data[i:i+4] in (b'COLL', b'COL2', b'COL3'):
+                        name = col_data[i+8:i+30].split(b'\0')[0].decode('ascii', errors='ignore').lower()
+                        if name == 'train':
+                            has_train = True
+                            break
+                if has_train:
+                    shutil.copyfile(col_files[0], stage / 'models/coll/vehicles.col')
+                else:
+                    print('Note: Skipping vehicles.col from Xbox source (missing GTA III train record, likely a foreign/Vice City collision file).')
+            except Exception as e:
+                print(f'Note: Skipping vehicles.col: {e}')
 
         if compressor:
             compressor = str(Path(compressor).resolve())

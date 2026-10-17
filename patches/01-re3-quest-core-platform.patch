@@ -3417,6 +3417,92 @@ index 0f7f91cd..85a13435 100644
  };
  
  template<typename T>
+diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
+index c38f12c..fbe2ea5 100644
+--- a/src/entities/Entity.cpp
++++ b/src/entities/Entity.cpp
+@@ -193,6 +193,12 @@ CEntity::GetBoundRect(void)
+ 	CRect rect;
+ 	CVector v;
+ 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if (!col) {
++		CVector pos = GetPosition();
++		rect.ContainPoint(CVector(pos.x - 1.0f, pos.y - 1.0f, pos.z));
++		rect.ContainPoint(CVector(pos.x + 1.0f, pos.y + 1.0f, pos.z));
++		return rect;
++	}
+ 
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.min);
+ 	rect.ContainPoint(GetMatrix() * col->boundingBox.max);
+@@ -211,27 +217,43 @@ CEntity::GetBoundRect(void)
+ CVector
+ CEntity::GetBoundCentre(void)
+ {
+-	return GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if (!col)
++		return GetPosition();
++	return GetMatrix() * col->boundingSphere.center;
+ }
+ 
+ #ifdef GTA_PS2
+ void
+ CEntity::GetBoundCentre(CVuVector &out)
+ {
+-	TransformPoint(out, GetMatrix(), CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center);
++	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if (!col) {
++		out = (CVuVector)GetPosition();
++		return;
++	}
++	TransformPoint(out, GetMatrix(), col->boundingSphere.center);
+ }
+ #else
+ void
+ CEntity::GetBoundCentre(CVector &out)
+ {
+-	out = GetMatrix() * CModelInfo::GetColModel(m_modelIndex)->boundingSphere.center;
++	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if (!col) {
++		out = GetPosition();
++		return;
++	}
++	out = GetMatrix() * col->boundingSphere.center;
+ }
+ #endif
+ 
+ float
+ CEntity::GetBoundRadius(void)
+ {
+-	return CModelInfo::GetColModel(m_modelIndex)->boundingSphere.radius;
++	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if (!col)
++		return 1.0f;
++	return col->boundingSphere.radius;
+ }
+ 
+ void
+@@ -427,6 +449,8 @@ CEntity::GetIsOnScreenComplex(void)
+ 
+ 	CRect rect = GetBoundRect();
+ 	CColModel *colmodel = CModelInfo::GetColModel(m_modelIndex);
++	if(!colmodel)
++		return true;
+ 	float z = GetPosition().z;
+ 	float minz = z + colmodel->boundingBox.min.z;
+ 	float maxz = z + colmodel->boundingBox.max.z;
+@@ -581,7 +605,10 @@ CEntity::Remove(void)
+ float
+ CEntity::GetDistanceFromCentreOfMassToBaseOfModel(void)
+ {
+-	return -CModelInfo::GetColModel(m_modelIndex)->boundingBox.min.z;
++	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
++	if(!col)
++		return 0.0f;
++	return -col->boundingBox.min.z;
+ }
+ 
+ void
 diff --git a/src/entities/Physical.h b/src/entities/Physical.h
 index ac4a81df..5d08de87 100644
 --- a/src/entities/Physical.h

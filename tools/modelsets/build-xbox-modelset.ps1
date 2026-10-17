@@ -76,10 +76,20 @@ try {
         Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $work $lowerName) -Force
     }
 
-    # Also look for vehicles.col
+    # Also look for vehicles.col (only if it is a valid GTA III col containing train)
     $collFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter "vehicles.col" -ErrorAction SilentlyContinue)
     if ($collFiles.Count -gt 0) {
-        Copy-Item -LiteralPath $collFiles[0].FullName -Destination (Join-Path $stage "models/coll/vehicles.col") -Force
+        $hasTrain = $false
+        try {
+            $bytes = [System.IO.File]::ReadAllBytes($collFiles[0].FullName)
+            $str = [System.Text.Encoding]::ASCII.GetString($bytes)
+            if ($str -match "train") { $hasTrain = $true }
+        } catch {}
+        if ($hasTrain) {
+            Copy-Item -LiteralPath $collFiles[0].FullName -Destination (Join-Path $stage "models/coll/vehicles.col") -Force
+        } else {
+            Write-Host "Note: Skipping vehicles.col from Xbox source (missing GTA III train record, likely a foreign/Vice City collision file)."
+        }
     }
 
     # List of known vehicles, weapons, and peds in GTA III to categorize

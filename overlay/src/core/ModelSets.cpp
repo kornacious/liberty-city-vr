@@ -499,6 +499,13 @@ const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	// Loose TXDs still use the ordinary Modern fallback behavior.
 	if(IsGta3ArchivePath(relative))
 		return originalPath;
+	// Collision files (.col in models/coll/) must NEVER be redirected.
+	// Retail models/coll/ contains the complete collision sets for all 59 GTA III vehicles
+	// (including train and boats), weapons, and peds. External Xbox packs frequently bundle
+	// Vice City vehicles.col files which lack train collision and cause fatal crashes.
+	if(MODELSET_STRNICMP(relative, "models\\coll\\", 12) == 0 ||
+	   MODELSET_STRNICMP(relative, "models/coll/", 12) == 0)
+		return originalPath;
 	eModelCategory cat = MODEL_CATEGORY_WORLD;
 	if(MODELSET_STRNICMP(relative, "models\\coll\\", 12) == 0 ||
 	   MODELSET_STRNICMP(relative, "models/coll/", 12) == 0 ||
