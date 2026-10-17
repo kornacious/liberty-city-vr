@@ -3609,6 +3609,7 @@ index 40f719a4..af866866 100644
          ms_vehicleFadeDist = sq(100.0f * VEHICLE_LODDIST_MULTIPLIER);
          ms_bigVehicleLod0Dist = sq(60.0f * VEHICLE_LODDIST_MULTIPLIER);
          ms_bigVehicleLod1Dist = sq(150.0f * VEHICLE_LODDIST_MULTIPLIER);
+         ms_pedLod0Dist = sq(25.0f * TheCamera.LODDistMultiplier);
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
 +	// The VR renderer builds an omnidirectional list out to LOD_DISTANCE. The
 +	// original 60 m ped callback cutoff makes valid entries disappear long before
@@ -3617,7 +3618,6 @@ index 40f719a4..af866866 100644
 +	ms_pedLod1Dist = sq(LOD_DISTANCE);
 +	ms_pedFadeDist = sq(LOD_DISTANCE);
 +#else
-         ms_pedLod0Dist = sq(25.0f * TheCamera.LODDistMultiplier);
          ms_pedLod1Dist = sq(60.0f * TheCamera.LODDistMultiplier);
          ms_pedFadeDist = sq(70.0f * TheCamera.LODDistMultiplier);
 +#endif
