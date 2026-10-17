@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.provider.OpenableColumns;
@@ -27,13 +28,34 @@ public final class SaveProvider extends ContentProvider {
     private static final int SHELL_UID = 2000;
     private static final String[] GAME_DATA_DIRECTORIES = {
             "data", "TEXT", "anim", "txd", "skins", "mp3", "movies",
-            "models", "Audio", "data/maps", "data/maps/comnbtm",
-            "data/maps/comntop", "data/maps/industne", "data/maps/industsw",
-            "data/maps/subueast", "data/maps/subuwest", "data/maps/generic",
-            "data/paths", "models/coll", "models/generic", "models/vrhands",
+            "models", "Audio", "audio",
+            "data/maps",
+            "data/maps/comnbtm",
+            "data/maps/comntop",
+            "data/maps/comroad",
+            "data/maps/comse",
+            "data/maps/comsw",
+            "data/maps/indroads",
+            "data/maps/industne",
+            "data/maps/industnw",
+            "data/maps/industse",
+            "data/maps/industsw",
+            "data/maps/landne",
+            "data/maps/landsw",
+            "data/maps/making",
+            "data/maps/subroads",
+            "data/maps/temppart",
+            "data/maps/generic",
+            "data/paths",
+            "models/coll", "models/Coll",
+            "models/generic", "models/Generic",
+            "models/vrhands",
             "modelsets", "modelsets/modern", "modelsets/modern/models",
             "modelsets/modern/models/coll", "modelsets/modern/models/generic",
-            "modelsets/modern/txd"
+            "modelsets/modern/txd",
+            "modelsets/xbox", "modelsets/xbox/models",
+            "modelsets/xbox/models/coll", "modelsets/xbox/models/generic",
+            "modelsets/xbox/txd"
     };
 
     @Override
@@ -159,5 +181,21 @@ public final class SaveProvider extends ContentProvider {
     public int update(Uri uri, ContentValues values, String selection,
             String[] selectionArgs) {
         throw new UnsupportedOperationException("Use openFile in write mode");
+    }
+
+    @Override
+    public Bundle call(String method, String arg, Bundle extras) {
+        enforceAdbOrAppCaller();
+        if ("mkdir".equals(method) && arg != null && !arg.isEmpty()) {
+            if (getContext() != null) {
+                final File externalRoot = getContext().getExternalFilesDir(null);
+                if (externalRoot != null) {
+                    final File gameData = new File(externalRoot, "gamedata");
+                    final File target = new File(gameData, arg.replace('\\', '/'));
+                    target.mkdirs();
+                }
+            }
+        }
+        return null;
     }
 }

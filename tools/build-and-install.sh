@@ -593,6 +593,15 @@ if [ "$SKIP_GAME_DATA" -eq 0 ]; then
     for name in "${!resolved_folders[@]}"; do
       folder="${resolved_folders[$name]}"
       echo "Copying $(basename "$folder")..."
+      # Pre-create all subdirectories via SaveProvider to avoid Horizon OS scoped storage mkdir denial
+      find "$folder" -type d | while read -r subdir; do
+        rel="${subdir#"${RESOLVED_GAME%/}/"}"
+        if [ -n "$SERIAL" ]; then
+          "$ADB" -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
+        else
+          "$ADB" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
+        fi
+      done
       if [ -n "$SERIAL" ]; then
         "$ADB" -s "$SERIAL" push "$folder" "$REMOTE_GAME_DATA" || die "Failed to copy $folder"
       else
@@ -600,9 +609,9 @@ if [ "$SKIP_GAME_DATA" -eq 0 ]; then
       fi
     done
     if [ -n "$SERIAL" ]; then
-      "$ADB" -s "$SERIAL" shell mkdir -p "$REMOTE_GAME_DATA/txd" || die "Could not create txd folder on the headset"
+      "$ADB" -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
     else
-      "$ADB" shell mkdir -p "$REMOTE_GAME_DATA/txd" || die "Could not create txd folder on the headset"
+      "$ADB" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
     fi
   else
     echo "Game-data copy skipped. The app requires existing data under $REMOTE_GAME_DATA."

@@ -576,11 +576,15 @@ try {
             foreach ($name in $resolvedFolders.Keys) {
                 $folder = $resolvedFolders[$name]
                 Write-Host "Copying $($folder.Name)..." -ForegroundColor Cyan
+                # Pre-create all subdirectories via SaveProvider to avoid Horizon OS scoped storage mkdir denial
+                Get-ChildItem -LiteralPath $folder.FullName -Directory -Recurse | ForEach-Object {
+                    $rel = $_.FullName.Substring($resolvedGame.Length).TrimStart('\', '/').Replace('\', '/')
+                    & $script:adb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", $rel)) 2>&1 | Out-Null
+                }
                 Invoke-AdbChecked -Arguments @("push", $folder.FullName, $remoteGameData) `
                     -FailureMessage "Failed to copy $($folder.FullName)"
             }
-            Invoke-AdbChecked -Arguments @("shell", "mkdir", "-p", "$remoteGameData/txd") `
-                -FailureMessage "Could not create txd folder on the headset"
+            & $script:adb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", "txd")) 2>&1 | Out-Null
         } else {
             Write-Host "Game-data copy skipped. The app requires existing data under $remoteGameData." -ForegroundColor Yellow
         }
