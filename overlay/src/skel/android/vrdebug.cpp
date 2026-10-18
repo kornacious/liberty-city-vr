@@ -4834,7 +4834,7 @@ DrawQuestMissionPage(void)
 			char row[112];
 			snprintf(row, sizeof(row), "%s  < OPEN >",
 				GetVrMissionCategoryName(item));
-			DrawFullVrMenuRow(row, 235+item*90, 3,
+			DrawFullVrMenuRow(row, 195+item*85, 3,
 				item == gVrMissionCategorySelection);
 		}
 		DrawVrMenuText("MISSION NUMBERS COME FROM THE ACTIVE MAIN.SCM TABLE",
