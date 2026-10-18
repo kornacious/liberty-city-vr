@@ -99,6 +99,8 @@ bool IsPhysicalWeaponInteractionActive();
 bool IsQuestFirstPersonOnFoot();
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);
+int GetVrWeaponTypeForSlot(int slot);
+bool IsVrWeaponSlotOwned(int slot);
 // Applies the baked position-only LEFT-hand weapon correction selected from
 // the player's final completed calibration. There is no runtime calibration mode.
 void ApplyBakedLeftWeaponPositionToMatrix(int hand, CMatrix *matrix);

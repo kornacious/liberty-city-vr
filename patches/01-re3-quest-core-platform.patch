@@ -990,7 +990,18 @@ index 2acb7991..57cd5b27 100644
 +	case WEAPONSLOT_MELEE: return WEAPONTYPE_BASEBALLBAT;
 +	case WEAPONSLOT_PROJECTILE: {
 +		CPed *player = FindPlayerPed();
-+		if(player && player->HasWeapon(WEAPONTYPE_MOLOTOV)) return WEAPONTYPE_MOLOTOV;
++		if(player){
++			if(player->GetWeapon() &&
++			   (player->GetWeapon()->m_eWeaponType == WEAPONTYPE_MOLOTOV ||
++			    player->GetWeapon()->m_eWeaponType == WEAPONTYPE_GRENADE) &&
++			   player->HasWeapon(player->GetWeapon()->m_eWeaponType))
++				return player->GetWeapon()->m_eWeaponType;
++			if(player->HasWeapon(WEAPONTYPE_MOLOTOV) && player->GetWeapon(WEAPONTYPE_MOLOTOV).m_nAmmoTotal > 0)
++				return WEAPONTYPE_MOLOTOV;
++			if(player->HasWeapon(WEAPONTYPE_GRENADE) && player->GetWeapon(WEAPONTYPE_GRENADE).m_nAmmoTotal > 0)
++				return WEAPONTYPE_GRENADE;
++			if(player->HasWeapon(WEAPONTYPE_MOLOTOV)) return WEAPONTYPE_MOLOTOV;
++		}
 +		return WEAPONTYPE_GRENADE;
 +	}
 +	case WEAPONSLOT_HANDGUN: return WEAPONTYPE_COLT45;
@@ -998,12 +1009,28 @@ index 2acb7991..57cd5b27 100644
 +	case WEAPONSLOT_SUBMACHINEGUN: return WEAPONTYPE_UZI;
 +	case WEAPONSLOT_RIFLE: {
 +		CPed *player = FindPlayerPed();
-+		if(player && player->HasWeapon(WEAPONTYPE_M16)) return WEAPONTYPE_M16;
++		if(player){
++			if(player->GetWeapon() &&
++			   (player->GetWeapon()->m_eWeaponType == WEAPONTYPE_M16 ||
++			    player->GetWeapon()->m_eWeaponType == WEAPONTYPE_AK47) &&
++			   player->HasWeapon(player->GetWeapon()->m_eWeaponType))
++				return player->GetWeapon()->m_eWeaponType;
++			if(player->HasWeapon(WEAPONTYPE_M16)) return WEAPONTYPE_M16;
++			if(player->HasWeapon(WEAPONTYPE_AK47)) return WEAPONTYPE_AK47;
++		}
 +		return WEAPONTYPE_AK47;
 +	}
 +	case WEAPONSLOT_HEAVY: {
 +		CPed *player = FindPlayerPed();
-+		if(player && player->HasWeapon(WEAPONTYPE_FLAMETHROWER)) return WEAPONTYPE_FLAMETHROWER;
++		if(player){
++			if(player->GetWeapon() &&
++			   (player->GetWeapon()->m_eWeaponType == WEAPONTYPE_FLAMETHROWER ||
++			    player->GetWeapon()->m_eWeaponType == WEAPONTYPE_ROCKETLAUNCHER) &&
++			   player->HasWeapon(player->GetWeapon()->m_eWeaponType))
++				return player->GetWeapon()->m_eWeaponType;
++			if(player->HasWeapon(WEAPONTYPE_FLAMETHROWER)) return WEAPONTYPE_FLAMETHROWER;
++			if(player->HasWeapon(WEAPONTYPE_ROCKETLAUNCHER)) return WEAPONTYPE_ROCKETLAUNCHER;
++		}
 +		return WEAPONTYPE_ROCKETLAUNCHER;
 +	}
 +	case WEAPONSLOT_SNIPER: return WEAPONTYPE_SNIPERRIFLE;
@@ -1035,6 +1062,11 @@ index 2acb7991..57cd5b27 100644
 +	if(slot == WEAPONSLOT_HEAVY)
 +		return player->HasWeapon(WEAPONTYPE_ROCKETLAUNCHER) || player->HasWeapon(WEAPONTYPE_FLAMETHROWER);
 +	return player->HasWeapon(GetWeaponTypeForSlot(slot));
++}
++
++namespace OculusVR {
++int GetVrWeaponTypeForSlot(int slot) { return ::GetVrWeaponTypeForSlot(slot); }
++bool IsVrWeaponSlotOwned(int slot) { return ::IsVrWeaponSlotOwned(slot); }
 +}
 +
 +bool ActivateVrCheat(int index)
@@ -2445,8 +2477,11 @@ index d6c02b9d..0b997078 100644
 +	   (!OculusVR::ShouldUseTrackedWeapon(hand) || heldSlot < 0 ||
 +	    heldSlot >= TOTAL_WEAPON_SLOTS)))
 +		return;
++	const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++	if(!virtualDetonator && (resolvedType < 0 || !player->HasWeapon((uint8)resolvedType)))
++		return;
 +	const eWeaponType weaponType = virtualDetonator ? WEAPONTYPE_DETONATOR :
-+		player->GetWeapon(heldSlot).m_eWeaponType;
++		(eWeaponType)resolvedType;
 +	CWeaponInfo *weaponInfo = CWeaponInfo::GetWeaponInfo(weaponType);
 +	if(!weaponInfo)
 +		return;
@@ -2553,7 +2588,10 @@ index d6c02b9d..0b997078 100644
 +	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
 +	if(heldSlot < 0 || heldSlot >= TOTAL_WEAPON_SLOTS)
 +		return;
-+	CWeapon *weapon = &player->GetWeapon(heldSlot);
++	const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++	if(resolvedType < 0 || !player->HasWeapon((uint8)resolvedType))
++		return;
++	CWeapon *weapon = &player->GetWeapon((uint8)resolvedType);
 +	if(!weapon ||
 +	   !OculusVR::IsTrackedWeaponLaserEnabledForType(weapon->m_eWeaponType) ||
 +	   !OculusVR::IsPhysicalGunType(weapon->m_eWeaponType) ||
@@ -2623,7 +2661,10 @@ index d6c02b9d..0b997078 100644
 +	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
 +	if(heldSlot != WEAPONSLOT_PROJECTILE || heldSlot >= TOTAL_WEAPON_SLOTS)
 +		return;
-+	CWeapon *weapon = &player->GetWeapon(heldSlot);
++	const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++	if(resolvedType < 0 || !player->HasWeapon((uint8)resolvedType))
++		return;
++	CWeapon *weapon = &player->GetWeapon((uint8)resolvedType);
 +	if(!weapon || !OculusVR::IsPhysicalThrowableType(weapon->m_eWeaponType))
 +		return;
 +
@@ -2754,7 +2795,10 @@ index d6c02b9d..0b997078 100644
 +			OculusVR::GetDroppedWeaponMatrix(slot, &placement);
 +		if(!inHolster && !dropped)
 +			continue;
-+		CWeapon *weapon = &player->GetWeapon(slot);
++		const int weaponType = OculusVR::GetVrWeaponTypeForSlot(slot);
++		if(weaponType < 0 || !player->HasWeapon((uint8)weaponType))
++			continue;
++		CWeapon *weapon = &player->GetWeapon((uint8)weaponType);
 +		CWeaponInfo *weaponInfo = CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType);
 +		if(!weaponInfo)
 +			continue;

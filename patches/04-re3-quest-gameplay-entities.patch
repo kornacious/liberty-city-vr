@@ -477,7 +477,14 @@ index 067ccddf..ddef2fe4 100644
  #endif
  
  	bool HasWeapon(uint8 weaponType) { return m_weapons[weaponType].m_eWeaponType == weaponType; }
-+	bool HasWeaponSlot(uint8 slot) { return slot < WEAPONTYPE_TOTAL_INVENTORY_WEAPONS && HasWeapon(slot); }
++	bool HasWeaponSlot(uint8 slot) {
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		extern bool IsVrWeaponSlotOwned(int slot);
++		return IsVrWeaponSlotOwned(slot);
++#else
++		return slot < WEAPONTYPE_TOTAL_INVENTORY_WEAPONS && HasWeapon(slot);
++#endif
++	}
  	CWeapon &GetWeapon(uint8 weaponType) { return m_weapons[weaponType]; }
  	CWeapon *GetWeapon(void) { return &m_weapons[m_currentWeapon]; }
  
@@ -656,11 +663,13 @@ index ef877965..019ed3e8 100644
 +	if(OculusVR::IsPhysicalWeaponInteractionActive()){
 +		for(int hand = 0; hand < 2; hand++){
 +			const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+			if(heldSlot >= 0 && heldSlot < TOTAL_WEAPON_SLOTS &&
-+			   CWeaponInfo::GetWeaponInfo(
-+				player->GetWeapon(heldSlot).m_eWeaponType)->
-+				IsFlagSet(WEAPONFLAG_HEAVY))
-+				return true;
++			if(heldSlot >= 0 && heldSlot < TOTAL_WEAPON_SLOTS){
++				const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++				if(resolvedType >= 0 && player->HasWeapon((uint8)resolvedType) &&
++				   CWeaponInfo::GetWeaponInfo((eWeaponType)resolvedType)->
++					IsFlagSet(WEAPONFLAG_HEAVY))
++					return true;
++			}
 +		}
 +		return false;
 +	}
@@ -738,27 +747,30 @@ index ef877965..019ed3e8 100644
 +	if (OculusVR::IsPhysicalWeaponInteractionActive() &&
 +	    !padUsed->ArePlayerControlsDisabled() &&
 +	    GetWeapon()->m_eWeaponType != WEAPONTYPE_DETONATOR) {
-+		int desiredSlot = WEAPONTYPE_UNARMED;
++		int desiredWeapon = WEAPONTYPE_UNARMED;
 +		for (int hand = 0; hand < 2; hand++) {
 +			const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+			if (heldSlot <= WEAPONTYPE_UNARMED || heldSlot >= TOTAL_WEAPON_SLOTS ||
-+			    !HasWeaponSlot(heldSlot) ||
-+			    !OculusVR::IsPhysicalWeaponType(GetWeapon(heldSlot).m_eWeaponType))
++			if (heldSlot <= WEAPONSLOT_UNARMED || heldSlot >= TOTAL_WEAPON_SLOTS)
++				continue;
++			const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++			if (resolvedType <= WEAPONTYPE_UNARMED ||
++			    !HasWeapon((uint8)resolvedType) ||
++			    !OculusVR::IsPhysicalWeaponType(resolvedType))
 +				continue;
 +
-+			// Keep the current slot when it is still physically held. Otherwise
++			// Keep the current weapon when it is still physically held. Otherwise
 +			// use the first valid held gun (the most recent grab explicitly selects
-+			// its slot in ProcessPlayerWeapon).
-+			if (heldSlot == m_currentWeapon) {
-+				desiredSlot = heldSlot;
++			// its weapon in ProcessPlayerWeapon).
++			if (resolvedType == m_currentWeapon) {
++				desiredWeapon = resolvedType;
 +				break;
 +			}
-+			if (desiredSlot == WEAPONTYPE_UNARMED)
-+				desiredSlot = heldSlot;
++			if (desiredWeapon == WEAPONTYPE_UNARMED)
++				desiredWeapon = resolvedType;
 +		}
 +
-+		if (desiredSlot != m_currentWeapon)
-+			SetCurrentWeapon(desiredSlot);
++		if (desiredWeapon != m_currentWeapon)
++			SetCurrentWeapon((eWeaponType)desiredWeapon);
 +		m_nSelectedWepSlot = m_currentWeapon;
 +		return;
 +	}
@@ -918,13 +930,16 @@ index ef877965..019ed3e8 100644
 +	// group even while both hands are empty. Drive the body animation from the
 +	// actually held item and use the normal unarmed group when it is holstered.
 +	if(!unrestrictedLocomotion && OculusVR::IsPhysicalWeaponInteractionActive()){
-+		locomotionWeapon = &GetWeapon(WEAPONSLOT_UNARMED);
++		locomotionWeapon = &GetWeapon(WEAPONTYPE_UNARMED);
 +		for(int hand = 0; hand < 2; hand++){
 +			const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+			if(heldSlot >= WEAPONSLOT_UNARMED &&
-+			   heldSlot < TOTAL_WEAPON_SLOTS && HasWeaponSlot(heldSlot)){
-+				locomotionWeapon = &GetWeapon(heldSlot);
-+				break;
++			if(heldSlot > WEAPONSLOT_UNARMED &&
++			   heldSlot < TOTAL_WEAPON_SLOTS){
++				const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++				if(resolvedType >= 0 && HasWeapon((uint8)resolvedType)){
++					locomotionWeapon = &GetWeapon((uint8)resolvedType);
++					break;
++				}
 +			}
 +		}
 +	}
@@ -1130,25 +1145,30 @@ index ef877965..019ed3e8 100644
 +		int vrHolsterSelection = -1;
 +		if(OculusVR::ConsumeWeaponHolsterSelection(hand, &vrHolsterSelection) &&
 +		   vrHolsterSelection > WEAPONSLOT_UNARMED &&
-+		   vrHolsterSelection < TOTAL_WEAPON_SLOTS &&
-+		   HasWeaponSlot(vrHolsterSelection) &&
-+		   OculusVR::IsPhysicalWeaponType(GetWeapon(vrHolsterSelection).m_eWeaponType)){
-+			// Keep the most recently grabbed gun current for the classic HUD and
-+			// weapon-calibration menu. Physical ownership remains per hand.
-+			SetCurrentWeapon(vrHolsterSelection);
-+			m_nSelectedWepSlot = vrHolsterSelection;
-+			debug("[OpenXR] Weapon grabbed by %s hand from slot %d\n",
-+				hand == 0 ? "left" : "right", vrHolsterSelection);
++		   vrHolsterSelection < TOTAL_WEAPON_SLOTS){
++			const int weaponType = OculusVR::GetVrWeaponTypeForSlot(vrHolsterSelection);
++			if(weaponType > WEAPONTYPE_UNARMED &&
++			   HasWeapon((uint8)weaponType) &&
++			   OculusVR::IsPhysicalWeaponType(weaponType)){
++				// Keep the most recently grabbed gun current for the classic HUD and
++				// weapon-calibration menu. Physical ownership remains per hand.
++				SetCurrentWeapon((eWeaponType)weaponType);
++				m_nSelectedWepSlot = m_currentWeapon;
++				debug("[OpenXR] Weapon grabbed by %s hand from slot %d (type %d)\n",
++					hand == 0 ? "left" : "right", vrHolsterSelection, weaponType);
++			}
 +		}
 +	}
 +	uint32 vrHolsterMask = 0;
 +	for(int slot = WEAPONSLOT_MELEE; slot < TOTAL_WEAPON_SLOTS; slot++){
-+		CWeapon &vrSlotWeapon = GetWeapon(slot);
-+		if(HasWeaponSlot(slot) &&
-+		   OculusVR::IsPhysicalWeaponType(vrSlotWeapon.m_eWeaponType) &&
-+		   (!OculusVR::IsPhysicalThrowableType(vrSlotWeapon.m_eWeaponType) ||
-+		    vrSlotWeapon.m_nAmmoTotal > 0))
-+			vrHolsterMask |= 1u << slot;
++		const int weaponType = OculusVR::GetVrWeaponTypeForSlot(slot);
++		if(weaponType > WEAPONTYPE_UNARMED && HasWeapon((uint8)weaponType)){
++			CWeapon &vrSlotWeapon = GetWeapon((uint8)weaponType);
++			if(OculusVR::IsPhysicalWeaponType(vrSlotWeapon.m_eWeaponType) &&
++			   (!OculusVR::IsPhysicalThrowableType(vrSlotWeapon.m_eWeaponType) ||
++			    vrSlotWeapon.m_nAmmoTotal > 0))
++				vrHolsterMask |= 1u << slot;
++		}
 +	}
 +	OculusVR::SetWeaponHolsterMask(vrHolsterMask);
 +#endif
@@ -1225,7 +1245,11 @@ index ef877965..019ed3e8 100644
 +		   (!HasWeaponSlot(vrStrikeSlot) ||
 +		    OculusVR::GetHeldWeaponSlot(hand) != vrStrikeSlot))
 +			continue;
-+		CWeapon &vrMeleeWeapon = GetWeapon(vrStrikeSlot);
++		if(vrStrikeWeaponType < WEAPONTYPE_UNARMED ||
++		   vrStrikeWeaponType >= WEAPONTYPE_TOTAL_INVENTORY_WEAPONS ||
++		   !HasWeapon((uint8)vrStrikeWeaponType))
++			continue;
++		CWeapon &vrMeleeWeapon = GetWeapon((uint8)vrStrikeWeaponType);
 +		if((int)vrMeleeWeapon.m_eWeaponType != vrStrikeWeaponType ||
 +		   !OculusVR::IsPhysicalMeleeType(vrMeleeWeapon.m_eWeaponType))
 +			continue;
@@ -1268,15 +1292,22 @@ index ef877965..019ed3e8 100644
 +	}
 +	for(int hand = 0; hand < 2; hand++){
 +		const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+		if(heldSlot <= WEAPONSLOT_UNARMED || heldSlot >= TOTAL_WEAPON_SLOTS ||
-+		   !HasWeaponSlot(heldSlot)){
++		if(heldSlot <= WEAPONSLOT_UNARMED || heldSlot >= TOTAL_WEAPON_SLOTS){
 +			OculusVR::SetManualReloadWeaponState(hand, -1, -1, false);
 +			OculusVR::SetTrackedThrowablePreviewActive(hand, false);
 +			vrThrowableState[hand] = VrTrackedThrowableState();
 +			vrWaitForTriggerRelease[hand] = false;
 +			continue;
 +		}
-+		CWeapon &vrHeldWeapon = GetWeapon(heldSlot);
++		const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++		if(resolvedType <= WEAPONTYPE_UNARMED || !HasWeapon((uint8)resolvedType)){
++			OculusVR::SetManualReloadWeaponState(hand, -1, -1, false);
++			OculusVR::SetTrackedThrowablePreviewActive(hand, false);
++			vrThrowableState[hand] = VrTrackedThrowableState();
++			vrWaitForTriggerRelease[hand] = false;
++			continue;
++		}
++		CWeapon &vrHeldWeapon = GetWeapon((uint8)resolvedType);
 +		const eWeaponType vrWeaponType = vrHeldWeapon.m_eWeaponType;
 +		if(OculusVR::IsPhysicalMeleeType(vrWeaponType)){
 +			vrHasHeldPhysicalWeapon = true;
@@ -1503,14 +1534,17 @@ index ef877965..019ed3e8 100644
 +		// reload state as well without coupling it to Claude's hidden animation.
 +		for(int hand = 0; hand < 2; hand++){
 +			const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+			if(heldSlot > WEAPONSLOT_UNARMED && heldSlot < TOTAL_WEAPON_SLOTS &&
-+			   heldSlot != m_currentWeapon && HasWeaponSlot(heldSlot)){
-+				CWeapon &heldWeapon = GetWeapon(heldSlot);
-+				const bool deferHeldVrReload = OculusVR::ShouldUseManualReload() &&
-+					OculusVR::IsManualReloadWeaponType(heldWeapon.m_eWeaponType) &&
-+					heldWeapon.m_nAmmoInClip <= 0 && heldWeapon.m_nAmmoTotal > 0;
-+				if(!deferHeldVrReload)
-+					heldWeapon.Update(m_audioEntityId);
++			if(heldSlot > WEAPONSLOT_UNARMED && heldSlot < TOTAL_WEAPON_SLOTS){
++				const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
++				if(resolvedType > WEAPONTYPE_UNARMED &&
++				   resolvedType != m_currentWeapon && HasWeapon((uint8)resolvedType)){
++					CWeapon &heldWeapon = GetWeapon((uint8)resolvedType);
++					const bool deferHeldVrReload = OculusVR::ShouldUseManualReload() &&
++						OculusVR::IsManualReloadWeaponType(heldWeapon.m_eWeaponType) &&
++						heldWeapon.m_nAmmoInClip <= 0 && heldWeapon.m_nAmmoTotal > 0;
++					if(!deferHeldVrReload)
++						heldWeapon.Update(m_audioEntityId);
++				}
 +			}
 +		}
 +#endif
@@ -2384,11 +2418,12 @@ index 899398e8..65e56331 100644
 +		const uint32 now = CTimer::GetTimeInMilliseconds();
 +		for(int hand = 0; hand < 2; hand++){
 +			const int slot = OculusVR::GetHeldWeaponSlot(hand);
-+			if(slot <= WEAPONSLOT_UNARMED || slot >= TOTAL_WEAPON_SLOTS ||
-+			   !player->HasWeaponSlot(slot))
++			if(slot <= WEAPONSLOT_UNARMED || slot >= TOTAL_WEAPON_SLOTS)
 +				continue;
-+			CWeapon &trackedWeapon = player->GetWeapon(slot);
-+			const int weaponType = trackedWeapon.m_eWeaponType;
++			const int weaponType = OculusVR::GetVrWeaponTypeForSlot(slot);
++			if(weaponType <= WEAPONTYPE_UNARMED || !player->HasWeapon((uint8)weaponType))
++				continue;
++			CWeapon &trackedWeapon = player->GetWeapon((uint8)weaponType);
 +			if(!OculusVR::IsImmersiveVehicleSidearm(weaponType))
 +				continue;
 +			trackedWeapon.Update(player->m_audioEntityId);

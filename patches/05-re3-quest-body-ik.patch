@@ -76,8 +76,10 @@ index 0b997078..4466b2ba 100644
 +	    heldSlot >= 0 && heldSlot < TOTAL_WEAPON_SLOTS)){
 +		grip = Max(grip, 0.88f);
 +		CPed *player = FindPlayerPed();
++		const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
 +		const eWeaponType weaponType = holdingDetonator ? WEAPONTYPE_DETONATOR :
-+			(player ? player->GetWeapon(heldSlot).m_eWeaponType : WEAPONTYPE_UNARMED);
++			((player && resolvedType >= 0 && player->HasWeapon((uint8)resolvedType)) ?
++				player->GetWeapon((uint8)resolvedType).m_eWeaponType : WEAPONTYPE_UNARMED);
 +		if(!holdingDetonator && OculusVR::IsPhysicalGunType(weaponType))
 +			trigger = 0.38f + 0.62f*trigger;
 +		else

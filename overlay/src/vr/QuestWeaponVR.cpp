@@ -29,6 +29,7 @@
 
 extern bool gVrFirstPersonActive;
 extern int GetVrWeaponTypeForSlot(int slot);
+extern bool IsVrWeaponSlotOwned(int slot);
 extern const char *GetVrWeaponName(int weaponType);
 
 template<typename T, typename U, typename V>
@@ -995,6 +996,13 @@ FindHolsterPoint(int slot)
 	for(int point = 0; point < HOLSTER_POINT_COUNT; point++)
 		if(gHolsterPointSlot[point] == slot)
 			return point;
+	if(slot == WEAPONSLOT_SNIPER){
+		if(!IsVrWeaponSlotOwned(WEAPONSLOT_RIFLE))
+			return HOLSTER_BACK_LEFT;
+		if(!IsVrWeaponSlotOwned(WEAPONSLOT_HEAVY))
+			return HOLSTER_BACK_RIGHT;
+		return HOLSTER_BACK_LEFT;
+	}
 	return -1;
 }
 
@@ -1197,17 +1205,6 @@ BuildWeaponModelMatrixBase(int hand, const WeaponCalibration &calibration,
 	rotationZ.SetRotateZ(DEGTORAD((float)calibration.rotationZ/
 		WEAPON_VALUE_SCALE));
 	*matrix = *matrix*base*rotationX*rotationY*rotationZ;
-
-	if(VrBodyIK::WeaponOwnershipActive()){
-		// Preserve the exact pre-calibration v44 weapon behavior.
-		CVector barrel = matrix->GetRight();
-		if(barrel.MagnitudeSqr() > 0.0001f){
-			barrel.Normalise();
-			const float forwardOffset =
-				(hand == 0) ? 0.000f : 0.060f;
-			matrix->GetPosition() += barrel*forwardOffset;
-		}
-	}
 	return true;
 }
 
@@ -2191,96 +2188,85 @@ UpdateMelee()
 	}
 }
 
+static CVector
+GetWeaponLocalMuzzle(int weaponType)
+{
+	switch(weaponType){
+	case WEAPONTYPE_COLT45:
+		return CVector(0.276f, 0.005f, 0.078f);
+	case WEAPONTYPE_UZI:
+		return CVector(0.242f, 0.001f, 0.083f);
+	case WEAPONTYPE_SHOTGUN:
+		return CVector(0.812f, -0.086f, 0.103f);
+	case WEAPONTYPE_AK47:
+		return CVector(0.640f, -0.046f, 0.094f);
+	case WEAPONTYPE_M16:
+		return CVector(0.742f, -0.065f, 0.134f);
+	case WEAPONTYPE_SNIPERRIFLE:
+		return CVector(0.772f, -0.090f, 0.090f);
+	case WEAPONTYPE_ROCKETLAUNCHER:
+		return CVector(0.553f, 0.000f, 0.000f);
+	case WEAPONTYPE_FLAMETHROWER:
+		return CVector(0.782f, -0.058f, 0.095f);
+	default:
+		return CVector(0.250f, 0.0f, 0.080f);
+	}
+}
+
 static bool
 BuildAim(int hand, int weaponType, CVector *source, CVector *direction)
 {
 	if(!source || !direction || hand < 0 || hand >= VR_HAND_COUNT ||
 	   !gPoseValid[hand] || gHeldSlot[hand] < 0)
 		return false;
-	WeaponCalibration *calibration =
-		GetCalibration(hand, weaponType);
-	if(!calibration)
-		return false;
 
-	if(VrBodyIK::WeaponOwnershipActive()){
-		// Exact laser parity:
-		// 1) build the ORIGINAL non-IK gun transform
-		// 2) build the ORIGINAL non-IK aim ray
-		// 3) express that ray in the original gun's local coordinates
-		// 4) apply those SAME local coordinates to the final rigid IK gun
-		//
-		// This preserves the known-good non-IK laser-to-gun relationship
-		// exactly, regardless of IK-only tilt/forward/lateral presentation.
-		CMatrix legacyWeapon, finalWeapon;
-		CVector legacySource, legacyDirection;
-		if(!BuildLegacyWeaponModelMatrix(
-		   hand, *calibration, &legacyWeapon) ||
-		   !BuildLegacyAimNoTwoHand(
-		   hand, *calibration, &legacySource, &legacyDirection) ||
-		   !BuildWeaponModelMatrix(
-		   hand, *calibration, &finalWeapon))
-			return false;
-
-		CVector localSource = WeaponMatrixToLocalVector(
-			legacySource-legacyWeapon.GetPosition(), legacyWeapon);
-		CVector localDirection = WeaponMatrixToLocalVector(
-			legacyDirection, legacyWeapon);
-
-		*source = finalWeapon.GetPosition() +
-			WeaponMatrixFromLocalVector(localSource, finalWeapon);
-		*direction = WeaponMatrixFromLocalVector(
-			localDirection, finalWeapon);
-
+	if(IsPhysicalThrowable(weaponType)){
+		*direction = gAimMatrix[hand].GetForward();
 		if(direction->MagnitudeSqr() <= 0.0001f)
 			return false;
 		direction->Normalise();
+		*source = gAimMatrix[hand].GetPosition() + (*direction)*0.15f;
 		return true;
 	}
 
-	CVector right = gAimMatrix[hand].GetRight();
-	CVector up = gAimMatrix[hand].GetUp();
-	CVector forward = gAimMatrix[hand].GetForward();
-	forward.Normalise();
-	up -= forward*DotProduct(up, forward);
-	up.Normalise();
-	// Preserve the pose's own lateral axis. CrossProduct(up, forward) is
-	// -right in this coordinate system, which mirrored aimOffsetX and
-	// aimRotationX against the shared desktop calibration: every laser sat
-	// beside the barrel, displaced toward the wrong side.
-	right -= forward*DotProduct(right, forward);
-	right -= up*DotProduct(right, up);
-	right.Normalise();
-	const float pitch =
-		DEGTORAD((float)calibration->aimRotationX/WEAPON_VALUE_SCALE);
-	const float yaw =
-		DEGTORAD((float)calibration->aimRotationY/WEAPON_VALUE_SCALE);
-	const float roll =
-		DEGTORAD((float)calibration->aimRotationZ/WEAPON_VALUE_SCALE);
-	if(pitch != 0.0f){
-		forward = RotateAroundAxis(forward, right, pitch);
-		up = RotateAroundAxis(up, right, pitch);
+	CMatrix weaponMatrix;
+	bool haveMatrix = false;
+	const uint32 frame = CTimer::GetFrameCounter();
+	if(gWeaponContactFrame[hand] >= frame - 1U &&
+	   gWeaponContactSlot[hand] == gHeldSlot[hand] &&
+	   gWeaponContactType[hand] == weaponType){
+		weaponMatrix = gWeaponContactMatrix[hand];
+		haveMatrix = true;
+	}else{
+		WeaponCalibration *calibration = GetCalibration(hand, weaponType);
+		if(calibration && BuildWeaponModelMatrix(hand, *calibration, &weaponMatrix)){
+			if(!VrBodyIK::WeaponOwnershipActive()){
+				CVector pivot, axis;
+				float angle;
+				if(BuildTwoHandRotation(hand, weaponType, &pivot, &axis, &angle)){
+					weaponMatrix.GetRight() = RotateAroundAxis(weaponMatrix.GetRight(), axis, angle);
+					weaponMatrix.GetUp() = RotateAroundAxis(weaponMatrix.GetUp(), axis, angle);
+					weaponMatrix.GetForward() = RotateAroundAxis(weaponMatrix.GetForward(), axis, angle);
+					weaponMatrix.GetPosition() = pivot + RotateAroundAxis(weaponMatrix.GetPosition() - pivot, axis, angle);
+				}
+			}
+			haveMatrix = true;
+		}
 	}
-	if(yaw != 0.0f){
-		forward = RotateAroundAxis(forward, up, yaw);
-		right = RotateAroundAxis(right, up, yaw);
-	}
-	if(roll != 0.0f){
-		right = RotateAroundAxis(right, forward, roll);
-		up = RotateAroundAxis(up, forward, roll);
-	}
-	forward.Normalise();
-	*direction = forward;
-	*source = gAimMatrix[hand].GetPosition() +
-		right*((float)calibration->aimOffsetX/200.0f) +
-		up*((float)calibration->aimOffsetY/200.0f) +
-		forward*(0.18f+(float)calibration->aimOffsetZ/200.0f);
-	CVector pivot, axis;
-	float angle;
-	if(BuildTwoHandRotation(hand, weaponType, &pivot, &axis, &angle)){
-		*source = pivot+RotateAroundAxis(*source-pivot, axis, angle);
-		*direction = RotateAroundAxis(*direction, axis, angle);
-		direction->Normalise();
-	}
+
+	if(!haveMatrix)
+		return false;
+
+	*direction = weaponMatrix.GetRight();
+	if(direction->MagnitudeSqr() <= 0.0001f)
+		return false;
+	direction->Normalise();
+
+	const CVector localMuzzle = GetWeaponLocalMuzzle(weaponType);
+	*source = weaponMatrix.GetPosition() +
+		weaponMatrix.GetRight()*localMuzzle.x +
+		weaponMatrix.GetForward()*localMuzzle.y +
+		weaponMatrix.GetUp()*localMuzzle.z;
 	return true;
 }
 
@@ -3917,6 +3903,9 @@ PrepareForGameShutdown()
 	gBodyForwardValid = false;
 	VRHandModel::Shutdown();
 }
+
+int GetVrWeaponTypeForSlot(int slot) { return ::GetVrWeaponTypeForSlot(slot); }
+bool IsVrWeaponSlotOwned(int slot) { return ::IsVrWeaponSlotOwned(slot); }
 
 } // namespace OculusVR
 
