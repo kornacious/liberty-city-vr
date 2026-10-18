@@ -878,45 +878,54 @@ static CMatrix BuildDefaultHandPose(int handIndex, const CMatrix &tracked)
 	return out;
 }
 
-static bool CaptureArmSolveAnchor(CPed *ped, RwMatrix *mats,
-	const ArmBones &b, int handIndex)
+static bool CaptureArmSolveAnchorExplicit(const CMatrix &nativeBody,
+	const RwMatrix &upperMat, const RwMatrix &forearmMat, const RwMatrix &handMat,
+	int handIndex)
 {
 	ArmSolveAnchor &cal = gArmSolve[handIndex];
 	if(cal.valid)
 		return true;
 
-	const CMatrix &nativeBody = ped->GetMatrix();
-	const CVector shoulder = mats[b.upper].pos;
-	const CVector elbow = mats[b.forearm].pos;
-	const CVector wrist = mats[b.hand].pos;
+	const CVector shoulder = upperMat.pos;
+	const CVector elbow = forearmMat.pos;
+	const CVector wrist = handMat.pos;
 	const CVector upperDir = elbow-shoulder;
 	const CVector lowerDir = wrist-elbow;
 
 	cal.upperLen = upperDir.Magnitude();
 	cal.lowerLen = lowerDir.Magnitude();
-	if(cal.upperLen < 0.03f || cal.lowerLen < 0.03f)
-		return false;
+	if(cal.upperLen < 0.03f || cal.lowerLen < 0.03f){
+		cal.upperLen = 0.281f;
+		cal.lowerLen = 0.280f;
+	}
 
 	cal.upperDirLocal = ToBasisLocal(upperDir, nativeBody);
 	cal.lowerDirLocal = ToBasisLocal(lowerDir, nativeBody);
 	cal.elbowOffsetLocal = ToBasisLocal(elbow-shoulder, nativeBody);
 
 	cal.upperRightLocal =
-		ToBasisLocal(mats[b.upper].right, nativeBody);
+		ToBasisLocal(upperMat.right, nativeBody);
 	cal.upperUpLocal =
-		ToBasisLocal(mats[b.upper].up, nativeBody);
+		ToBasisLocal(upperMat.up, nativeBody);
 	cal.upperAtLocal =
-		ToBasisLocal(mats[b.upper].at, nativeBody);
+		ToBasisLocal(upperMat.at, nativeBody);
 
 	cal.foreRightLocal =
-		ToBasisLocal(mats[b.forearm].right, nativeBody);
+		ToBasisLocal(forearmMat.right, nativeBody);
 	cal.foreUpLocal =
-		ToBasisLocal(mats[b.forearm].up, nativeBody);
+		ToBasisLocal(forearmMat.up, nativeBody);
 	cal.foreAtLocal =
-		ToBasisLocal(mats[b.forearm].at, nativeBody);
+		ToBasisLocal(forearmMat.at, nativeBody);
 
 	cal.valid = true;
 	return true;
+}
+
+static bool CaptureArmSolveAnchor(CPed *ped, RwMatrix *mats,
+	const ArmBones &b, int handIndex)
+{
+	return CaptureArmSolveAnchorExplicit(ped->GetMatrix(),
+		mats[b.upper], mats[b.forearm], mats[b.hand], handIndex);
 }
 
 static void
@@ -943,18 +952,13 @@ StretchBoneAlongWorldDirection(RwMatrix &bone, const CVector &worldDirection,
 	bone.at = a;
 }
 
-static bool SolveArm(RpHAnimHierarchy *hier, RwMatrix *mats,
-	const int *parentOf, const ArmBones &b, int handIndex,
+static bool SolveArmMatrices(
+	RwMatrix &upper, RwMatrix &forearm, RwMatrix &hand,
+	int handIndex,
 	const CMatrix &tracked, const CMatrix &body,
 	const CVector &physicalPitchAxis, bool pitchWeaponHand,
-	float gripAmount, bool preserveWeaponContact)
+	bool preserveWeaponContact)
 {
-	RwMatrix &upper = mats[b.upper];
-	RwMatrix &forearm = mats[b.forearm];
-	RwMatrix &hand = mats[b.hand];
-
-	CaptureStaticHandPose(hier, mats, b.hand, handIndex, parentOf);
-
 	ArmSolveAnchor &cal = gArmSolve[handIndex];
 	const CVector shoulder = upper.pos;
 	if(!cal.valid)
@@ -1033,6 +1037,21 @@ static bool SolveArm(RpHAnimHierarchy *hier, RwMatrix *mats,
 			hand, physicalPitchAxis,
 			DEGTORAD(weaponHandPitchDeg));
 	}
+	return true;
+}
+
+static bool SolveArm(RpHAnimHierarchy *hier, RwMatrix *mats,
+	const int *parentOf, const ArmBones &b, int handIndex,
+	const CMatrix &tracked, const CMatrix &body,
+	const CVector &physicalPitchAxis, bool pitchWeaponHand,
+	float gripAmount, bool preserveWeaponContact)
+{
+	CaptureStaticHandPose(hier, mats, b.hand, handIndex, parentOf);
+
+	if(!SolveArmMatrices(mats[b.upper], mats[b.forearm], mats[b.hand],
+		handIndex, tracked, body, physicalPitchAxis, pitchWeaponHand,
+		preserveWeaponContact))
+		return false;
 
 	ApplyStaticGripHandPose(
 		hier, mats, b.hand, handIndex, parentOf,
@@ -1188,47 +1207,10 @@ GetRigidWeaponHandBasis(int hand, CVector *position, CVector *right,
 #endif
 }
 
-void Apply(CPed *ped)
+#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 {
-#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
-	(void)ped;
-	return;
-#else
-	if(ped == nil || !ped->IsPlayer() || VrRagdoll::Owns(ped))
-		return;
-
-	// In re3, player must have a skinned clump for HAnim bone IK.
-	if(!IsClumpSkinned(ped->GetClump()))
-		return;
-
-	if(!BodyIKGameplayContext() || gVehicleTransitionActive){
-		gSolvedHandValid[0] = false;
-		gSolvedHandValid[1] = false;
-		gRigidWeaponLink[0] = RigidWeaponHandLink();
-		gRigidWeaponLink[1] = RigidWeaponHandLink();
-		gHandCarrierPed = nil;
-		gHandCarrierValid = false;
-		return;
-	}
-
-	const bool onFootIK =
-		Enabled() && OculusVR::IsQuestFirstPersonOnFoot();
-	const bool vehicleIK =
-		VehicleEnabled() && ::gVrFirstPersonActive &&
-		ped->InVehicle() && ped->m_pMyVehicle != nil;
-	if(!onFootIK && !vehicleIK)
-		return;
-
-	if(gLastPlayer != ped){
-		Reset();
-		gLastPlayer = ped;
-	}
-
-	EnsureBakedCalibration();
-
-	gSolvedHandValid[0] = false;
-	gSolvedHandValid[1] = false;
-
+	(void)onFootIK;
 	RpHAnimHierarchy *hier =
 		GetAnimHierarchyFromSkinClump(ped->GetClump());
 	if(hier == nil)
@@ -1512,6 +1494,276 @@ void Apply(CPed *ped)
 		}else{
 			gSolvedHandValid[handIndex] = false;
 		}
+	}
+}
+
+static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
+{
+	(void)onFootIK;
+	CMatrix visualBody = ped->GetMatrix();
+	const CVector nativeRoot = ped->GetPosition();
+
+	if(!vehicleIK){
+		CVector follow(0.0f, 0.0f, 0.0f);
+		float eyePosRaw[3];
+		float forwardRaw[3];
+		float rightRaw[3];
+		float upRaw[3];
+		if(androidgame::VrGetViewBasis(eyePosRaw, rightRaw, upRaw, forwardRaw)){
+			CVector forward(forwardRaw[0], forwardRaw[1], forwardRaw[2]);
+			CVector right(rightRaw[0], rightRaw[1], rightRaw[2]);
+			CVector up(upRaw[0], upRaw[1], upRaw[2]);
+
+			CVector correctedForward = forward - up * DotProduct(forward, up);
+			if(correctedForward.MagnitudeSqr() > 1.0e-6f){
+				correctedForward.Normalise();
+				CVector correctedRight = CrossProduct(correctedForward, up);
+				correctedRight = Unit(correctedRight, right);
+				up = CrossProduct(correctedRight, correctedForward);
+				up.Normalise();
+
+				visualBody.GetRight() = correctedRight;
+				visualBody.GetUp() = up;
+				visualBody.GetForward() = correctedForward;
+			}
+
+			float anchorRaw[3];
+			if(androidgame::VrGetOnFootBodyAnchor(anchorRaw)){
+				const CVector eye(eyePosRaw[0], eyePosRaw[1], eyePosRaw[2]);
+				const CVector anchor(anchorRaw[0], anchorRaw[1], anchorRaw[2]);
+				CVector delta = eye - anchor;
+				delta.z = 0.0f;
+
+				const float horizontal = sqrtf(delta.x*delta.x + delta.y*delta.y);
+				if(horizontal > 0.0001f){
+					const float maxFollow = 2.0f;
+					const float scale = (horizontal > maxFollow) ? (maxFollow / horizontal) : 1.0f;
+					follow = CVector(delta.x * scale, delta.y * scale, 0.0f);
+				}
+			}
+		}
+
+		visualBody.GetPosition() = nativeRoot + follow;
+
+		// Offset root clump frame in roomscale
+		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
+		if(clumpFrame){
+			RwFrameGetMatrix(clumpFrame)->pos = nativeRoot + follow;
+			RwFrameUpdateObjects(clumpFrame);
+		}
+	}
+
+	OculusVR::RefreshQuestTrackedHandWorldPosesForRender();
+
+	CMatrix desiredWorld[2];
+	bool desiredValid[2] = { false, false };
+	bool weaponSupportLocked[2] = { false, false };
+	CVector physicalPitchAxis[2];
+	bool physicalPitchAxisValid[2] = { false, false };
+
+	for(int handIndex = 0; handIndex < 2; handIndex++){
+		WristCalibration &cal = gWrist[handIndex];
+
+		CMatrix raw;
+		if(vehicleIK){
+			if(!GetVehicleHandPresentationPose(handIndex, raw))
+				continue;
+		}else if(!GetFloatingHandPresentationPose(handIndex, raw))
+			continue;
+
+		weaponSupportLocked[handIndex] =
+			OculusVR::ApplyTrackedWeaponSupportHandLock(
+				handIndex, &raw);
+
+		physicalPitchAxis[handIndex] = raw.GetRight();
+		if(physicalPitchAxis[handIndex].MagnitudeSqr() > 1.0e-8f){
+			physicalPitchAxis[handIndex].Normalise();
+			physicalPitchAxisValid[handIndex] = true;
+		}
+
+		if(cal.valid)
+			desiredWorld[handIndex] = ApplyCalibration(raw, cal);
+		else
+			desiredWorld[handIndex] =
+				BuildDefaultHandPose(handIndex, raw);
+		if(weaponSupportLocked[handIndex])
+			desiredWorld[handIndex].GetPosition() = raw.GetPosition();
+
+		CaptureRigidWeaponLink(
+			handIndex, desiredWorld[handIndex], raw);
+
+		cal.lastPose = desiredWorld[handIndex];
+		cal.lastPoseValid = true;
+		desiredValid[handIndex] = true;
+	}
+
+	const bool carrierModeVehicle = vehicleIK;
+	const bool sameCarrierContext =
+		gHandCarrierValid &&
+		gHandCarrierPed == ped &&
+		gHandCarrierWasVehicle == carrierModeVehicle;
+
+	if(sameCarrierContext &&
+	   CarrierDeltaIsReasonable(gHandCarrierPrev, visualBody)){
+		for(int handIndex = 0; handIndex < 2; handIndex++){
+			if(!desiredValid[handIndex])
+				continue;
+
+			if(weaponSupportLocked[handIndex])
+				continue;
+			if(vehicleIK &&
+			   OculusVR::IsImmersiveSteeringHandleGrabbed(handIndex))
+				continue;
+
+			desiredWorld[handIndex].GetPosition() =
+				AdvancePositionBetweenCarriers(
+					desiredWorld[handIndex].GetPosition(),
+					gHandCarrierPrev, visualBody);
+		}
+	}
+
+	gHandCarrierPrev = visualBody;
+	gHandCarrierPed = ped;
+	gHandCarrierWasVehicle = carrierModeVehicle;
+	gHandCarrierValid = true;
+
+	int solveOrder[2] = { 0, 1 };
+	if(OculusVR::GetHeldWeaponSlot(1) >= 0 &&
+	   OculusVR::GetHeldWeaponSlot(0) < 0){
+		solveOrder[0] = 1;
+		solveOrder[1] = 0;
+	}
+
+	for(int solveIndex = 0; solveIndex < 2; solveIndex++){
+		const int handIndex = solveOrder[solveIndex];
+		if(!desiredValid[handIndex])
+			continue;
+
+		RwFrame *upperFrame = (handIndex == 0) ?
+			(ped->m_pFrames[PED_UPPERARML] ? ped->m_pFrames[PED_UPPERARML]->frame : nil) :
+			(ped->m_pFrames[PED_UPPERARMR] ? ped->m_pFrames[PED_UPPERARMR]->frame : nil);
+		RwFrame *handFrame = (handIndex == 0) ?
+			(ped->m_pFrames[PED_HANDL] ? ped->m_pFrames[PED_HANDL]->frame : nil) :
+			(ped->m_pFrames[PED_HANDR] ? ped->m_pFrames[PED_HANDR]->frame : nil);
+		if(!upperFrame || !handFrame)
+			continue;
+		RwFrame *forearmFrame = RwFrameGetParent(handFrame);
+		if(!forearmFrame)
+			continue;
+
+		RwMatrix upperMat = *RwFrameGetLTM(upperFrame);
+		RwMatrix forearmMat = *RwFrameGetLTM(forearmFrame);
+		RwMatrix handMat = *RwFrameGetLTM(handFrame);
+
+		if(!CaptureArmSolveAnchorExplicit(ped->GetMatrix(), upperMat, forearmMat, handMat, handIndex))
+			continue;
+
+		if(weaponSupportLocked[handIndex] &&
+		   OculusVR::GetHeldWeaponSlot(handIndex) < 0){
+			CMatrix currentSupportPose;
+			if(GetFloatingHandPresentationPose(handIndex, currentSupportPose) &&
+			   OculusVR::ApplyTrackedWeaponSupportHandLock(
+				   handIndex, &currentSupportPose, true)){
+				WristCalibration &cal = gWrist[handIndex];
+				if(cal.valid)
+					desiredWorld[handIndex] =
+						ApplyCalibration(currentSupportPose, cal);
+				else
+					desiredWorld[handIndex] =
+						BuildDefaultHandPose(handIndex, currentSupportPose);
+				desiredWorld[handIndex].GetPosition() =
+					currentSupportPose.GetPosition();
+			}
+		}
+
+		const bool pitchWeaponHand =
+			physicalPitchAxisValid[handIndex] &&
+			OculusVR::GetHeldWeaponSlot(handIndex) >= 0;
+
+		if(SolveArmMatrices(upperMat, forearmMat, handMat,
+		   handIndex, desiredWorld[handIndex], visualBody,
+		   physicalPitchAxis[handIndex], pitchWeaponHand,
+		   weaponSupportLocked[handIndex])){
+
+			// Apply solved world transforms back to the RwFrames in parent-to-child order
+			RwFrame *upperParent = RwFrameGetParent(upperFrame);
+			if(upperParent){
+				RwMatrix invParent;
+				rw::Matrix::invert(&invParent, RwFrameGetLTM(upperParent));
+				RwMatrix localUpper;
+				rw::Matrix::mult(&localUpper, &upperMat, &invParent);
+				*RwFrameGetMatrix(upperFrame) = localUpper;
+				RwFrameUpdateObjects(upperFrame);
+			}
+
+			RwMatrix invUpper;
+			rw::Matrix::invert(&invUpper, RwFrameGetLTM(upperFrame));
+			RwMatrix localForearm;
+			rw::Matrix::mult(&localForearm, &forearmMat, &invUpper);
+			*RwFrameGetMatrix(forearmFrame) = localForearm;
+			RwFrameUpdateObjects(forearmFrame);
+
+			RwMatrix invForearm;
+			rw::Matrix::invert(&invForearm, RwFrameGetLTM(forearmFrame));
+			RwMatrix localHand;
+			rw::Matrix::mult(&localHand, &handMat, &invForearm);
+			*RwFrameGetMatrix(handFrame) = localHand;
+			RwFrameUpdateObjects(handFrame);
+
+			gSolvedHandWorld[handIndex].GetPosition() = CVector(handMat.pos);
+			gSolvedHandWorld[handIndex].GetRight() = CVector(handMat.right);
+			gSolvedHandWorld[handIndex].GetUp() = CVector(handMat.up);
+			gSolvedHandWorld[handIndex].GetForward() = CVector(handMat.at);
+			OrthonormaliseBasis(gSolvedHandWorld[handIndex]);
+			gSolvedHandValid[handIndex] = true;
+		}else{
+			gSolvedHandValid[handIndex] = false;
+		}
+	}
+}
+#endif
+
+void Apply(CPed *ped)
+{
+#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
+	(void)ped;
+	return;
+#else
+	if(ped == nil || !ped->IsPlayer() || VrRagdoll::Owns(ped))
+		return;
+
+	if(!BodyIKGameplayContext() || gVehicleTransitionActive){
+		gSolvedHandValid[0] = false;
+		gSolvedHandValid[1] = false;
+		gRigidWeaponLink[0] = RigidWeaponHandLink();
+		gRigidWeaponLink[1] = RigidWeaponHandLink();
+		gHandCarrierPed = nil;
+		gHandCarrierValid = false;
+		return;
+	}
+
+	const bool onFootIK =
+		Enabled() && OculusVR::IsQuestFirstPersonOnFoot();
+	const bool vehicleIK =
+		VehicleEnabled() && ::gVrFirstPersonActive &&
+		ped->InVehicle() && ped->m_pMyVehicle != nil;
+	if(!onFootIK && !vehicleIK)
+		return;
+
+	if(gLastPlayer != ped){
+		Reset();
+		gLastPlayer = ped;
+	}
+
+	EnsureBakedCalibration();
+
+	gSolvedHandValid[0] = false;
+	gSolvedHandValid[1] = false;
+
+	if(IsClumpSkinned(ped->GetClump())){
+		ApplySkinned(ped, onFootIK, vehicleIK);
+	}else{
+		ApplyNonSkinned(ped, onFootIK, vehicleIK);
 	}
 #endif
 }

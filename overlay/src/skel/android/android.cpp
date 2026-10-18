@@ -1546,9 +1546,9 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				CVector up = player->GetUp();
 				up.Normalise();
 				if(player->bIsDucking){
-					head = player->GetPosition() + up * 0.24f;
+					head = player->GetPosition() + up * 0.32f;
 				}else{
-					head = player->GetPosition() + up * 0.59f;
+					head = player->GetPosition() + up * 0.68f;
 				}
 			}
 		}else{
