@@ -15,7 +15,7 @@ The header-only ragdoll suite works directly against the kit:
 .\tools\tests\test-ragdoll.ps1 -KitRoot .
 ```
 
-Tests that extract patched engine functions require a freshly assembled reVC
+Tests that extract patched engine functions require a freshly assembled re3
 tree via `-StageRoot`, `-KitRoot` or `-EngineRoot`, as declared by that runner.
 Some historical comparison fixtures additionally require a local
 `baseline-qbuild` subdirectory containing the comparison revision; that tree is
@@ -27,8 +27,8 @@ Actual-mesh diagnostics require the player's local, legally owned game data:
 
 ```powershell
 .\tools\tests\test-vehicle-deformation-body.ps1 `
-  -StageRoot C:\src\vice-city-vr-build `
-  -GameDataRoot 'C:\Games\Grand Theft Auto Vice City'
+  -StageRoot C:\LCVRBuild\liberty-city-vr-build `
+  -GameDataRoot 'C:\Games\Grand Theft Auto III'
 ```
 
 The vehicle readers access `models/gta3.img`, `models/gta3.dir` and

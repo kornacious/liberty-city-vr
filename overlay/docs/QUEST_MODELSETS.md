@@ -8,7 +8,7 @@ The Quest port supports the same category-based model overlay shell as PC:
 - Peds
 - Weapons
 
-Classic vegetation is mandatory in the tested Quest build. HD palm/tree models
+Classic vegetation is mandatory in the tested Quest build. HD tree models
 can be dramatically more expensive on a mobile GPU even when draw-call counts
 look modest, so the one-button builder does not download or use the separate
 vegetation pack.
@@ -17,18 +17,18 @@ vegetation pack.
 
 The player needs only:
 
-- a legal original GTA Vice City PC installation;
+- a legal original GTA III PC installation;
 - the Quest connected by USB with the computer authorized;
 - the APK already installed by `BUILD_AND_INSTALL.bat`;
 - about 4 GB of download bandwidth and at least 24 GB of temporary free space.
 
-Double-click `INSTALL_MODERN_MODELS.bat` and choose the original GTA Vice City
+Double-click `INSTALL_MODERN_MODELS.bat` and choose the original GTA III
 folder. The wizard downloads and pins the exact tested
 [GTA VC HD + Weapons](https://drive.google.com/file/d/1Swe1dVWDnKz8ad51y8L0ihPWVCxmFRYj/view)
 and [Mods / Atmosphere](https://drive.google.com/file/d/1y9KpKjLSna76bjz1Lf2DzP0G4AnkN_2d/view)
 archives. It then extracts, builds, validates and installs the overlay without
 requiring 7-Zip, Git, Android Studio or any manual ADB command. Downloads are
-cached under `C:\VCVRBuild\modern-assets` and resume after interruption. A
+cached under `C:\LCVRBuild\modern-assets` and resume after interruption. A
 second run reuses verified downloads and extractions. If a complete overlay was
 already built, it skips downloading, extracting and rebuilding and retries only
 the Quest installation. When the bundled builder is updated, an older overlay
@@ -49,13 +49,13 @@ modelsets/modern/vegetation_models.txt
 
 The LibertyCity/HD vegetation archive is not part of this workflow. The small
 `vegetation_models.txt` file contains only names used by the runtime to select
-the original Classic palm/tree entries. Matching Modern vegetation DFF entries
+the original Classic tree entries. Matching Modern vegetation DFF entries
 are physically removed from the generated archive as an additional fallback.
 
 The wizard installs the complete folder at:
 
 ```text
-/sdcard/Android/data/com.miamivr.quest/files/gamedata/modelsets/modern
+/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern
 ```
 
 The installer stages and verifies the complete folder before replacing any
@@ -73,21 +73,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install-modern-m
 The commands below are a lower-level fallback.
 
 The Windows wizard normally installs ADB under
-`C:\VCVRBuild\.android-sdk\platform-tools\adb.exe`. For example, in PowerShell:
+`C:\LCVRBuild\.android-sdk\platform-tools\adb.exe`. For example, in PowerShell:
 
 ```powershell
-$adb = "C:\VCVRBuild\.android-sdk\platform-tools\adb.exe"
-$modern = "C:\Games\Vice City VR\modelsets\modern"
-& $adb shell am force-stop com.miamivr.quest
-& $adb shell mkdir -p /sdcard/Android/data/com.miamivr.quest/files/gamedata/modelsets
-& $adb push $modern /sdcard/Android/data/com.miamivr.quest/files/gamedata/modelsets
+$adb = "C:\LCVRBuild\.android-sdk\platform-tools\adb.exe"
+$modern = "C:\Games\Liberty City VR\modelsets\modern"
+& $adb shell am force-stop com.libertyvr.quest
+& $adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets
+& $adb push $modern /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets
 ```
 
 The final device path must not contain `modern/modern`. Verify it with:
 
 ```powershell
-& $adb shell ls /sdcard/Android/data/com.miamivr.quest/files/gamedata/modelsets/modern/models
-& $adb shell ls /sdcard/Android/data/com.miamivr.quest/files/gamedata/modelsets/modern/vegetation_models.txt
+& $adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern/models
+& $adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern/vegetation_models.txt
 ```
 
 In the headset open `VR MENU > SETTINGS > MODEL ASSETS`. Category changes are startup
@@ -97,19 +97,16 @@ Vegetation on Classic.
 If the manifest is absent, the menu reports Vegetation as unavailable and the
 loader forces that category to Classic instead of guessing model names.
 
-## Xbox vehicle profile
+## Xbox assets profile
 
-The normal Modern preparation wizard also prepares **Fixed Xbox Vehicles 1.3**
-as a separate profile. Its 35 MB archive is downloaded from the
-[user-supplied external pack](https://drive.google.com/file/d/1wqUggAT4VJGW6RHJiXhft8Ni8uxe3N5v/view).
-The kit includes only download metadata and tools, not these model assets.
-The supplied archive contains no separate license/readme; it is not repackaged
+The normal preparation wizard also prepares the **Xbox Assets** profile
+(vehicles, characters and pedestrians, weapons, and world/environment) as a
+separate profile. The kit includes only download metadata and tools, not these
+model assets. The user-supplied archive contains no separate license/readme; it is not repackaged
 or redistributed by this project.
 
-The profile contains 107 vehicle DFF/TXD pairs, their collision data and the
-shared wheels. The optional GTA III Perennial, cutscene/prop replacements,
-alternative Comet and taxi/police badges in that archive are excluded. The
-main models already use PC-compatible RenderWare data. The builder preserves
+The profile contains Xbox DFF/TXD pairs, their collision data and shared assets.
+The main models use PC-compatible RenderWare data. The builder preserves
 geometry and COLL bytes and uses the existing compressor on staged texture
 copies. No handling, IDE, scripts or base game archives are replaced.
 

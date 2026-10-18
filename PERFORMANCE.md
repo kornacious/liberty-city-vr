@@ -65,7 +65,7 @@ Check these settings separately from the new effects:
   enabled on both compared builds or disabled on both.
 - Driving mode and control highlights: later missing-key defaults enable
   immersive driving and highlights. Match these separately for driving tests.
-- Generated mipmaps, PS2 alpha split, FXAA, distance fog, fountains, modern water,
+- Generated mipmaps, PS2 alpha split, FXAA, distance fog, modern water,
   car reflections and dynamic lights each have independent controls.
 
 Compare sustained frame times and stutters, including driving through new

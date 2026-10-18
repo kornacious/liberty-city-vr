@@ -5,7 +5,7 @@ next person does not spend that time again.
 
 ## The PS2 alpha rule is not optional
 
-Vice City draws masked geometry -- railings, fences, chain link, foliage,
+Liberty City draws masked geometry -- railings, fences, chain link, foliage,
 shop-front glass -- with an alpha test reference of **3 out of 255**, set in
 `DefinedState` in `src/rw/RwHelper.cpp`. That is deliberate: almost nothing is
 discarded, and the shape is meant to come out of blending rather than
@@ -16,11 +16,11 @@ texels with zero alpha, and RGB left at black. Those texels pass a reference of
 3, so they are drawn: they contribute no colour, and **they write depth**.
 Anything drawn afterwards that stands behind them fails the depth test. A
 railing therefore carves its own outline out of the wall behind it, and through
-that outline the player sees whatever is further away -- the sky, the beach,
-the sea. It reads as a faint blue fringe along the fence in daylight and
+that outline the player sees whatever is further away -- the sky, the skyline,
+the water. It reads as a faint blue fringe along the fence in daylight and
 disappears at night, because at night what shows through is dark too.
 
-Rockstar solved this in 2003 and librw carries the solution: `GSALPHATEST`, the
+Rockstar solved this on the PlayStation 2 and librw carries the solution: `GSALPHATEST`, the
 PlayStation 2 two-pass alpha rule. A blended mesh that writes depth is drawn
 twice:
 
@@ -30,8 +30,8 @@ twice:
 | 2 | `< GSALPHATESTREF` | off | the faint half |
 
 Nothing is discarded -- both halves reach the screen -- but the faint half no
-longer claims the depth buffer. reVC asks for this every frame from
-`gPS2alphaTest`, and the shipped `reVC.ini` has `PS2AlphaTest = 1`.
+longer claims the depth buffer. re3 asks for this every frame from
+`gPS2alphaTest`, and the shipped `re3.ini` has `PS2AlphaTest = 1`.
 
 `librw`'s `d3d`, `d3d9` and `gl3` backends all implement it
 (`drawInst_GSemu` in `src/d3d/d3d9render.cpp` is the clearest reference). **The
@@ -59,7 +59,7 @@ translucent peds, and routing world geometry through it means a much larger
 list, a per-frame sort of hundreds of entities and a linear duplicate scan on
 every insert.
 
-## Vice City ships single-level textures
+## Liberty City ships single-level textures
 
 No world texture in `gta3.img` carries a mip chain: `numLevels` is 1
 throughout. Distant fences, signs and window grids are therefore minified
@@ -102,7 +102,7 @@ Things that look like the cause and are not, each of them checked:
   in the class the two-pass rule carves out -- the fences and the neon were,
   which is why those answered to it and the leaves did not.
 - **Not the render scale.** San Andreas on the same headset runs 110 against
-  Vice City's 125 with multisampling off, and its palms sit still.
+  Liberty City's 125 with multisampling off, and its trees sit still.
 - **Not the vegetation pack.** The HD set carries many more separate leaves,
   which looks like a geometry density problem -- but stock 128x128 foliage
   with `ModelSetVegetation = 0` shimmers exactly the same.
@@ -125,7 +125,7 @@ the next:
 3. **The textures ask for `LINEAR`, and the sampler obeys.** This is the one
    that mattered.
 
-Vice City was authored when nothing carried a chain, so its materials declare
+Liberty City was authored when nothing carried a chain, so its materials declare
 `Texture::LINEAR` -- bilinear, no mip stage. `vkstate.cpp` honours that with
 `maxLod = 0`, and it has to: the port now builds a chain for everything, and
 without the clamp the fonts, the radar and the HUD sheets would start

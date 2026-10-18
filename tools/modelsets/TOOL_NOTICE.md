@@ -1,7 +1,7 @@
 # Modern model-set builder notice
 
 These utilities are distributed to let players assemble an optional Modern
-asset overlay locally from a legally owned Vice City installation and external
+asset overlay locally from a legally owned GTA III installation and external
 packs they obtain themselves.
 
 - `build-modern-modelset.ps1` / `build-modern-modelset.sh` orchestrate
@@ -26,5 +26,5 @@ assets. Generated `modelsets/modern` content is for the player's local,
 personal installation and must not be redistributed.
 
 This repository does not currently grant a general license to reuse or
-redistribute these utility sources separately from the Vice City VR release.
+redistribute these utility sources separately from the Liberty City VR release.
 Third-party components, where present, retain their own terms.

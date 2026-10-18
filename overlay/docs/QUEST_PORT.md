@@ -1,14 +1,14 @@
 # Quest runtime and data layout
 
-Vice City VR is a native arm64 Android/OpenXR application. The Meta runtime
+Liberty City VR is a native arm64 Android/OpenXR application. The Meta runtime
 creates the Vulkan instance/device and the renderer submits both eyes in one
 multiview pass to a two-layer OpenXR swapchain.
 
 ## Runtime layout
 
-- Package: `com.miamivr.quest`
-- Game data: `/sdcard/Android/data/com.miamivr.quest/files/gamedata/`
-- Saves/settings: `/sdcard/Android/data/com.miamivr.quest/files/userfiles/`
+- Package: `com.libertyvr.quest`
+- Game data: `/sdcard/Android/data/com.libertyvr.quest/files/gamedata/`
+- Saves/settings: `/sdcard/Android/data/com.libertyvr.quest/files/userfiles/`
 - VR settings: `gamedata/vr_settings.ini`
 
 The game directory must contain the data from the user's own PC copy. This
@@ -38,12 +38,12 @@ For a completely fresh installation, install the APK and invoke its narrow save
 provider **before** using `adb push`:
 
 ```sh
-adb shell content query --uri content://com.miamivr.quest.saves/slot/1 --projection _display_name:_size
+adb shell content query --uri content://com.libertyvr.quest.saves/slot/1 --projection _display_name:_size
 ```
 
-The expected result is a zero-byte `GTAVCsf1.b` row. This creates
+The expected result is a zero-byte `GTA3sf1.b` row. This creates
 `files/gamedata` and the standard retail-data children as the application UID.
-Never create `/sdcard/Android/data/com.miamivr.quest/files` yourself before
+Never create `/sdcard/Android/data/com.libertyvr.quest/files` yourself before
 this bootstrap, because current Horizon OS can assign it to the shell UID and
 the game will be unable to enter its own data directory.
 
@@ -52,9 +52,9 @@ happens, create the required tree with `adb shell mkdir -p` first. Push each
 source directory to the `gamedata` parent:
 
 ```sh
-adb push "C:\path\to\Vice City\models" /sdcard/Android/data/com.miamivr.quest/files/gamedata
-adb push "C:\path\to\Vice City\data" /sdcard/Android/data/com.miamivr.quest/files/gamedata
-adb push "C:\path\to\Vice City\TEXT" /sdcard/Android/data/com.miamivr.quest/files/gamedata
+adb push "C:\path\to\GTA3\models" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
+adb push "C:\path\to\GTA3\data" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
+adb push "C:\path\to\GTA3\TEXT" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
 ```
 
 Do not push `models` to an already existing `.../gamedata/models` target;
@@ -67,9 +67,9 @@ They remain outside the APK so the runtime loads them through the same game-data
 filesystem. From the assembled source tree run:
 
 ```sh
-adb shell mkdir -p /sdcard/Android/data/com.miamivr.quest/files/gamedata/models
-adb push gamefiles/models/vrhands /sdcard/Android/data/com.miamivr.quest/files/gamedata/models
-adb shell ls /sdcard/Android/data/com.miamivr.quest/files/gamedata/models/vrhands
+adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
+adb push gamefiles/models/vrhands /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
+adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models/vrhands
 ```
 
 The final directory must directly contain `BigHandLeft.uxrh`,
@@ -114,7 +114,7 @@ Classic while allowing Modern world textures and weapons. See
 Useful runtime log:
 
 ```sh
-adb logcat -s MiamiVR:V librw-vk:V
+adb logcat -s LibertyVR:V librw-vk:V
 ```
 
 Update APKs with `adb install -r` to preserve application data. Settings and

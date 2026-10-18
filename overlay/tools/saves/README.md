@@ -1,11 +1,11 @@
-# Vice City VR save transfer
+# Liberty City VR save transfer
 
-These tools transfer current Vice City VR saves between the Win64 PC build and
+These tools transfer current Liberty City VR saves between the Win64 PC build and
 the native Meta Quest build. They preserve the game's slot number, convert the
 small ABI-dependent garages section, validate the save checksum, and create a
 backup before overwriting an existing save.
 
-Original retail, old 32-bit, and `Vanilla` reVC saves are not supported. The
+Original retail, old 32-bit, and `Vanilla` re3 saves are not supported. The
 converter deliberately rejects unknown or corrupt files instead of risking a
 crash or damaged progress. Before an import writes anything to the Quest, it
 also verifies the current Win64 `Cranes`, `Pickups`, `Phone`, and `PlayerInfo`
@@ -27,23 +27,23 @@ Python is not required on Windows.
 Command-line examples:
 
 ```powershell
-.\transfer-vr-save.ps1 -Mode Import -Slot 3 -PcSaveDirectory "C:\Games\Vice City VR\userfiles"
-.\transfer-vr-save.ps1 -Mode Export -Slot 3 -PcSaveDirectory "C:\Games\Vice City VR\userfiles"
+.\transfer-vr-save.ps1 -Mode Import -Slot 3 -PcSaveDirectory "C:\Games\Liberty City VR\userfiles"
+.\transfer-vr-save.ps1 -Mode Export -Slot 3 -PcSaveDirectory "C:\Games\Liberty City VR\userfiles"
 ```
 
 ## Linux and Steam Deck
 
 Requirements: `adb`, `python3`, USB debugging, and an authorized headset with
-Vice City VR installed.
+Liberty City VR installed.
 
 ```bash
-bash ./import-pc-save-to-quest.sh 3 ~/Games/vice-city-vr/userfiles/GTAVCsf3.b
-bash ./export-quest-save-to-pc.sh 3 ~/Games/vice-city-vr/userfiles/GTAVCsf3.b
+bash ./import-pc-save-to-quest.sh 3 ~/Games/liberty-city-vr/userfiles/GTA3sf3.b
+bash ./export-quest-save-to-pc.sh 3 ~/Games/liberty-city-vr/userfiles/GTA3sf3.b
 ```
 
 You can also call `save_transfer.sh import ...` or `save_transfer.sh export ...`
 directly. Set `ADB_SERIAL` when more than one Android device is connected.
 
-Backups are stored in `MiamiVR-save-backups` on Windows and in
+Backups are stored in `LibertyVR-save-backups` on Windows and in
 `save-transfer/backups` on Linux by default. The game is force-stopped during a
 transfer; start it again after the script reports success.

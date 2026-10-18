@@ -1,8 +1,8 @@
 # Source-only release checklist
 
-The local `qbuild` directory is a private development/build tree containing a
-complete reVC checkout. **Never publish or archive that directory.** The public
-release root is this `miamivr-quest` repository only.
+The local `liberty-city-vr-build` directory is a private development/build tree containing a
+complete re3 checkout. **Never publish or archive that directory.** The public
+release root is this `libertyvr-quest` repository only.
 
 Before a tag or GitHub release:
 
@@ -15,8 +15,8 @@ Before a tag or GitHub release:
    `tools/modelsets/TOOL_NOTICE.md`. No other executable belongs in the kit.
    Exclude host-generated test `.inc` files and local iteration reports;
    preserve authored librw shader/font includes and source regression tests.
-3. Assemble from a clean public `mrxenginner/reVC` `miami` checkout at commit
-   `026cd10f3fdbd92c089830e5067c4457c53c1b51` into a new output directory.
+3. Assemble from a clean public `mrxenginner/re3` `master` checkout at commit
+   `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84` into a new output directory.
 4. Assemble a second time with git's line-ending conversion switched off, which
    is how every builder outside Git for Windows runs:
 
@@ -28,20 +28,20 @@ Before a tag or GitHub release:
    Git for Windows ships `core.autocrlf=true` in its system config, and that
    rewrites patch line endings during `git apply`. A patch that only works
    because of it fails for everyone else. Each hunk must carry the line endings
-   of the file it targets as reVC stores it: every reVC source is LF except
+   of the file it targets as re3 stores it: every re3 source is LF except
    `premake5.lua`, which is CRLF.
    Compare both freshly assembled trees against the intended release sources,
    including the complete bundled librw and all overlay files. Do not replace
    newer source-kit changes with older files from a private build directory.
 5. Build `:app:assembleDebug` from that new assembled tree with the toolchain
-   listed in `BUILDING.md`. Do not treat an incremental `qbuild` build as the
+   listed in `BUILDING.md`. Do not treat an incremental `liberty-city-vr-build` build as the
    reproducibility test.
 6. Inspect the generated APK locally. It should contain only application
-   metadata/resources and the arm64 `libmiamivr.so`, `libc++_shared.so` and
+   metadata/resources and the arm64 `liblibertyvr.so`, `libc++_shared.so` and
    Khronos OpenXR loader. Do not add the APK to this source repository.
 7. Publish the commit/tag only after reviewing the complete GitHub file list.
    If desired, use GitHub's automatic source archive; do not attach an APK,
-   assembled reVC tree, retail data or a generated Modern model set.
+   assembled re3 tree, retail data or a generated Modern model set.
 
 The public build scripts intentionally refuse to overwrite an existing output
 directory, and release signing intentionally fails unless the builder supplies

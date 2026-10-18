@@ -2,8 +2,8 @@
 
 ## 0.5.6
 
-- Added the optional Xbox vehicle profile to the model downloader and asset menu.
-- Restored vehicle gun controls: left grip + B left, right grip + B right. Forward B fire is optional in Default controls and disabled by default.
+- Added the optional Xbox assets profile to the model downloader and asset menu.
+- Restored vehicle drive-by gun controls: left grip + B left, right grip + B right.
 - Added explosion reactions for existing ragdolls and bounded late activation of nearby corpses.
 
 - Ragdolls and vehicle deformation are disabled by default.

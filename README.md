@@ -181,6 +181,14 @@ $adb = "C:\LCVRBuild\.android-sdk\platform-tools\adb.exe"
 & $adb push "C:\Games\GTA3\*" /sdcard/Android/data/com.libertyvr.quest/files/gamedata/
 ```
 
+## Credits and Acknowledgments
+
+- **GeT_RiCh** — Original author (based on his Discord account) of the [vice-city-vr-quest](https://github.com/dubrovskiy-yevhen-stakelogic/vice-city-vr-quest) VR port for the major implementation made for GTA Vice City using the reVC engine as a contribution for VR support.
+- **whachuvr** — For the full body IK implementation fork on top of GeT_RiCh's repository ([whachuvr/vice-city-vr-quest](https://github.com/whachuvr/vice-city-vr-quest)).
+- **re3 and reVC teams** — Huge thanks for their amazing effort and groundbreaking reverse-engineering work.
+- **Gemini 4 Argon and Gemini 3.8 Flash** — Huge thanks for porting GeT_RiCh and whachuvr's work from reVC / Vice City to re3 / GTA 3.
+- Their collective work offered a huge contribution for a solid starting point for the GTA III VR for standalone Quest porting efforts.
+
 ## Distribution boundary
 
 Do not upload assembled source trees, APKs, original game files, saves, built

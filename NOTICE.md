@@ -12,6 +12,12 @@
   at `librw/src/vulkan/SGSR_LICENSE.txt`.
 - **VR hand meshes** (`overlay/gamefiles/models/vrhands/`) — baked from the
   UltimateXR SDK hand models, copyright VRMADA, MIT License.
+- **VR Port Foundations & Contributions**:
+  - **GeT_RiCh** — Original author (based on his Discord account) of the [vice-city-vr-quest](https://github.com/dubrovskiy-yevhen-stakelogic/vice-city-vr-quest) VR port for the major implementation made for GTA Vice City using the reVC engine as a contribution for VR support.
+  - **whachuvr** — For the full body IK implementation fork on top of GeT_RiCh's repository ([whachuvr/vice-city-vr-quest](https://github.com/whachuvr/vice-city-vr-quest)).
+  - **re3 and reVC teams** — For their amazing effort and reverse-engineering work.
+  - **Gemini 4 Argon and Gemini 3.8 Flash** — For porting GeT_RiCh and whachuvr's work from reVC / Vice City to re3 / GTA 3.
+  - Their collective work offered a huge contribution for a solid starting point for the GTA III VR for standalone Quest porting efforts.
 - **This repository contains no complete re3 source tree and no assets from
   the original game or its publishers.** The patch files contain only the
   modifications and context required to transform a user-supplied re3 tree.
