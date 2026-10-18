@@ -1,5 +1,5 @@
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
-index 57cd5b27..2f618958 100644
+index 1335ef9..1d4c5b1 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
 @@ -19,6 +19,7 @@
@@ -10,7 +10,7 @@ index 57cd5b27..2f618958 100644
  }
  #endif
  #include "ControllerConfig.h"
-@@ -2911,6 +2912,21 @@ bool CPad::JumpJustDown(void)
+@@ -2943,6 +2944,21 @@ bool CPad::JumpJustDown(void)
  	return !!(NewState.Square && !OldState.Square);
  }
  
@@ -33,7 +33,7 @@ index 57cd5b27..2f618958 100644
  {
  	if ( ArePlayerControlsDisabled() )
 diff --git a/src/core/Pad.h b/src/core/Pad.h
-index 5c7c7ce8..c8388760 100644
+index 5c7c7ce..c838876 100644
 --- a/src/core/Pad.h
 +++ b/src/core/Pad.h
 @@ -255,6 +255,7 @@ public:
@@ -45,7 +45,7 @@ index 5c7c7ce8..c8388760 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index 0b997078..4466b2ba 100644
+index f04d522..f69b955 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -56,7 +56,7 @@ index 0b997078..4466b2ba 100644
  #include "VRHandModel.h"
  #endif
  #ifdef USE_OUR_VERSIONING
-@@ -1723,7 +1724,28 @@ RenderVrTrackedHand(int hand)
+@@ -1723,7 +1724,30 @@ RenderVrTrackedHand(int hand)
  	if(!OculusVR::IsImmersiveSteeringHandleGrabbed(hand) &&
  	   DotProduct(right, matrix.GetForward()) < 0.0f)
  		right = right * -1.0f;
@@ -88,7 +88,7 @@ index 0b997078..4466b2ba 100644
  	if(VRHandModel::Render(hand, position, right, up, forward, grip, trigger))
  		return;
  	RwIm3DVertex vertices[600];
-@@ -1771,6 +1793,10 @@ RenderVrTrackedHand(int hand)
+@@ -1771,6 +1795,10 @@ RenderVrTrackedHand(int hand)
  static bool
  GetVrHandBasis(int hand, CVector &position, CVector &right, CVector &up, CVector &forward)
  {
@@ -99,7 +99,7 @@ index 0b997078..4466b2ba 100644
  	CMatrix matrix;
  	if(!OculusVR::GetTrackedHandMatrix(hand, &matrix))
  		return false;
-@@ -1896,7 +1922,12 @@ RenderVrTrackedWeapon(CPed *player, int hand)
+@@ -1899,7 +1927,12 @@ RenderVrTrackedWeapon(CPed *player, int hand)
  	trackedWeapon = trackedWeapon * weaponRotationXAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationYAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationZAdjustment;
@@ -113,7 +113,7 @@ index 0b997078..4466b2ba 100644
  		OculusVR::ApplyTrackedWeaponTwoHandTransform(hand, weaponType,
  			&trackedWeapon);
  	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
-@@ -2348,7 +2379,8 @@ RenderVrTrackedHands(void)
+@@ -2360,7 +2393,8 @@ RenderVrTrackedHands(void)
  	   TheCamera.m_WideScreenOn ||
  	   CWorld::Players[CWorld::PlayerInFocus].m_bInRemoteMode ||
  	   (FindPlayerVehicle() &&
@@ -124,7 +124,7 @@ index 0b997078..4466b2ba 100644
  	CPed *player = FindPlayerPed();
  	if(!player || !player->m_rwObject || player->DyingOrDead())
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 29274093..720b083e 100644
+index 2927409..720b083 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,7 @@
@@ -432,10 +432,10 @@ index 29274093..720b083e 100644
  	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
  		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
-index 019ed3e8..326f0410 100644
+index 2c040e5..92c088f 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
-@@ -886,6 +886,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
+@@ -888,6 +888,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
  void
  CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
  {
@@ -458,7 +458,7 @@ index 019ed3e8..326f0410 100644
  	float leftRight = padUsed->GetPedWalkLeftRight();
  	float upDown = padUsed->GetPedWalkUpDown();
  	float padMove = CVector2D(leftRight, upDown).Magnitude();
-@@ -1891,6 +1907,22 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
+@@ -1912,6 +1928,22 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
  void
  CPlayerPed::PlayerControlZelda(CPad *padUsed)
  {

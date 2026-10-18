@@ -1,37 +1,5 @@
-From efc290817fad79769a3c30af37b0b4edee756ef6 Mon Sep 17 00:00:00 2001
-From: Liberty City VR Developer <dev@libertyvr.quest>
-Date: Sat, 17 Oct 2026 00:07:46 +0300
-Subject: [PATCH 4/4] re3 quest gameplay and entities subsystem
-
----
- src/animation/AnimManager.cpp   |  11 +-
- src/peds/CopPed.cpp             |  21 +-
- src/peds/Ped.cpp                | 199 ++++++++-
- src/peds/Ped.h                  |   9 +-
- src/peds/PedAI.cpp              |   2 +-
- src/peds/PedFight.cpp           |  64 ++-
- src/peds/PlayerPed.cpp          | 745 +++++++++++++++++++++++++++++++-
- src/peds/Population.cpp         | 237 ++++++++++
- src/peds/Population.h           |   3 +
- src/save/GenericGameStorage.cpp |  50 ++-
- src/vehicles/Automobile.cpp     | 236 +++++++++-
- src/vehicles/Automobile.h       |  16 +
- src/vehicles/Boat.cpp           |  24 +-
- src/vehicles/HandlingMgr.cpp    |   7 +-
- src/vehicles/Vehicle.cpp        |   4 +
- src/vehicles/Vehicle.h          |   2 +
- src/weapons/BulletInfo.cpp      |  15 +-
- src/weapons/ProjectileInfo.cpp  |  24 +-
- src/weapons/ProjectileInfo.h    |   3 +-
- src/weapons/Weapon.cpp          | 554 ++++++++++++++++++++----
- src/weapons/Weapon.h            |  16 +-
- src/weapons/WeaponEffects.cpp   |   9 +
- src/weapons/WeaponInfo.cpp      |   8 +
- src/weapons/WeaponInfo.h        |   1 +
- 24 files changed, 2095 insertions(+), 165 deletions(-)
-
 diff --git a/src/animation/AnimManager.cpp b/src/animation/AnimManager.cpp
-index c66997ce..14cf1d60 100644
+index c66997c..14cf1d6 100644
 --- a/src/animation/AnimManager.cpp
 +++ b/src/animation/AnimManager.cpp
 @@ -10,6 +10,7 @@
@@ -61,7 +29,7 @@ index c66997ce..14cf1d60 100644
  	CFileMgr::CloseFile(fd);
  }
 diff --git a/src/peds/CopPed.cpp b/src/peds/CopPed.cpp
-index 44e3baf0..c4cff76b 100644
+index 44e3baf..c4cff76 100644
 --- a/src/peds/CopPed.cpp
 +++ b/src/peds/CopPed.cpp
 @@ -261,6 +261,25 @@ CCopPed::ArrestPlayer(void)
@@ -100,7 +68,7 @@ index 44e3baf0..c4cff76b 100644
  			ClearPursuit();
  
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 4f4a3443..29274093 100644
+index 4f4a344..2927409 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,21 @@
@@ -434,7 +402,7 @@ index 4f4a3443..29274093 100644
 +}
 +#endif
 diff --git a/src/peds/Ped.h b/src/peds/Ped.h
-index 067ccddf..ddef2fe4 100644
+index 067ccdd..f153fd4 100644
 --- a/src/peds/Ped.h
 +++ b/src/peds/Ped.h
 @@ -436,6 +436,7 @@ public:
@@ -473,7 +441,7 @@ index 067ccddf..ddef2fe4 100644
  	void ClearFlee(void);
  	void ClearFall(void);
  	void SetGetUp(void);
-@@ -799,6 +803,7 @@ public:
+@@ -799,6 +803,14 @@ public:
  #endif
  
  	bool HasWeapon(uint8 weaponType) { return m_weapons[weaponType].m_eWeaponType == weaponType; }
@@ -489,7 +457,7 @@ index 067ccddf..ddef2fe4 100644
  	CWeapon *GetWeapon(void) { return &m_weapons[m_currentWeapon]; }
  
 diff --git a/src/peds/PedAI.cpp b/src/peds/PedAI.cpp
-index 3f7c4bca..25dd80ce 100644
+index 3f7c4bc..25dd80c 100644
 --- a/src/peds/PedAI.cpp
 +++ b/src/peds/PedAI.cpp
 @@ -957,7 +957,7 @@ CPed::ProcessObjective(void)
@@ -502,7 +470,7 @@ index 3f7c4bca..25dd80ce 100644
  						|| m_pedInObjective->bIsInWater
  						|| m_pedInObjective->m_nPedState == PED_ARRESTED) {
 diff --git a/src/peds/PedFight.cpp b/src/peds/PedFight.cpp
-index 14adb16f..9bff0668 100644
+index 14adb16..9bff066 100644
 --- a/src/peds/PedFight.cpp
 +++ b/src/peds/PedFight.cpp
 @@ -22,6 +22,10 @@
@@ -621,10 +589,10 @@ index 14adb16f..9bff0668 100644
  	// Killing gang members with car wasn't triggering a fight, until now... Taken from VC.
  	if (IsGangMember()) {
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
-index ef877965..019ed3e8 100644
+index ef87796..2c040e5 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
-@@ -17,9 +17,77 @@
+@@ -17,9 +17,79 @@
  #include "Darkel.h"
  #include "CarCtrl.h"
  #include "SaveBuf.h"
@@ -704,7 +672,7 @@ index ef877965..019ed3e8 100644
  #ifdef VC_PED_PORTS
  bool CPlayerPed::bDontAllowWeaponChange;
  #endif
-@@ -173,6 +241,11 @@ CPlayerPed::ReactivatePlayerPed(int32 index)
+@@ -173,6 +243,11 @@ CPlayerPed::ReactivatePlayerPed(int32 index)
  void
  CPlayerPed::UseSprintEnergy(void)
  {
@@ -716,7 +684,7 @@ index ef877965..019ed3e8 100644
  	if (m_fCurrentStamina > -150.0f && !CWorld::Players[CWorld::PlayerInFocus].m_bInfiniteSprint
  		&& !m_bAdrenalineActive) {
  		m_fCurrentStamina = m_fCurrentStamina - CTimer::GetTimeStep();
-@@ -387,7 +460,7 @@ CPlayerPed::SetRealMoveAnim(void)
+@@ -387,7 +462,7 @@ CPlayerPed::SetRealMoveAnim(void)
  				curRunAssoc->SetRun();
  			}
  			if (m_nMoveState == PEDMOVE_SPRINT) {
@@ -725,7 +693,7 @@ index ef877965..019ed3e8 100644
  					m_nMoveState = PEDMOVE_STILL;
  
  				if (curWalkStartAssoc)
-@@ -505,6 +578,8 @@ CPlayerPed::RestoreSprintEnergy(float restoreSpeed)
+@@ -505,6 +580,8 @@ CPlayerPed::RestoreSprintEnergy(float restoreSpeed)
  bool
  CPlayerPed::DoWeaponSmoothSpray(void)
  {
@@ -734,7 +702,7 @@ index ef877965..019ed3e8 100644
  	if (m_nPedState == PED_ATTACK && !m_pPointGunAt) {
  		eWeaponType weapon = GetWeapon()->m_eWeaponType;
  #ifdef FREE_CAM
-@@ -607,6 +682,41 @@ CPlayerPed::ProcessWeaponSwitch(CPad *padUsed)
+@@ -607,6 +684,41 @@ CPlayerPed::ProcessWeaponSwitch(CPad *padUsed)
  	if (CDarkel::FrenzyOnGoing())
  		goto switchDetectDone;
  
@@ -753,13 +721,10 @@ index ef877965..019ed3e8 100644
 +			if (heldSlot <= WEAPONSLOT_UNARMED || heldSlot >= TOTAL_WEAPON_SLOTS)
 +				continue;
 +			const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
-+			if (resolvedType <= WEAPONTYPE_UNARMED ||
-+			    !HasWeapon((uint8)resolvedType) ||
++			if (resolvedType <= WEAPONTYPE_UNARMED || !HasWeapon((uint8)resolvedType) ||
 +			    !OculusVR::IsPhysicalWeaponType(resolvedType))
 +				continue;
-+
-+			// Keep the current weapon when it is still physically held. Otherwise
-+			// use the first valid held gun (the most recent grab explicitly selects
++			// Keep current weapon in sync with the primary held gun (right hand shoots
 +			// its weapon in ProcessPlayerWeapon).
 +			if (resolvedType == m_currentWeapon) {
 +				desiredWeapon = resolvedType;
@@ -779,7 +744,7 @@ index ef877965..019ed3e8 100644
  #ifdef VC_PED_PORTS
  	if (padUsed->CycleWeaponRightJustDown() && !m_pPointGunAt && !bDontAllowWeaponChange) {
  #else
-@@ -681,10 +791,37 @@ CPlayerPed::PlayerControlM16(CPad *padUsed)
+@@ -681,10 +793,37 @@ CPlayerPed::PlayerControlM16(CPad *padUsed)
  		TheCamera.ClearPlayerWeaponMode();
  	}
  
@@ -819,7 +784,7 @@ index ef877965..019ed3e8 100644
  	}
  	GetWeapon()->Update(m_audioEntityId);
  }
-@@ -692,6 +829,38 @@ CPlayerPed::PlayerControlM16(CPad *padUsed)
+@@ -692,6 +831,38 @@ CPlayerPed::PlayerControlM16(CPad *padUsed)
  void
  CPlayerPed::PlayerControlFighter(CPad *padUsed)
  {
@@ -858,7 +823,7 @@ index ef877965..019ed3e8 100644
  	float leftRight = padUsed->GetPedWalkLeftRight();
  	float upDown = padUsed->GetPedWalkUpDown();
  	float padMove = CVector2D(leftRight, upDown).Magnitude();
-@@ -703,7 +872,7 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
+@@ -703,7 +874,7 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
  			bIsAttacking = false;
  	}
  
@@ -867,7 +832,7 @@ index ef877965..019ed3e8 100644
  		if (m_nEvadeAmount != 0 && m_pEvadingFrom) {
  			SetEvasiveDive((CPhysical*)m_pEvadingFrom, 1);
  			m_nEvadeAmount = 0;
-@@ -722,6 +891,26 @@ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
+@@ -722,6 +893,26 @@ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
  	float padMove = CVector2D(leftRight, upDown).Magnitude();
  	float padMoveInGameUnit = padMove / PAD_MOVE_TO_GAME_WORLD_MOVE;
  	if (padMoveInGameUnit > 0.0f) {
@@ -894,7 +859,7 @@ index ef877965..019ed3e8 100644
  		m_fRotationDest = CGeneral::LimitRadianAngle(TheCamera.Orientation);
  		m_fMoveSpeed = Min(padMoveInGameUnit, 0.07f * CTimer::GetTimeStep() + m_fMoveSpeed);
  	} else {
-@@ -741,13 +930,13 @@ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
+@@ -741,13 +932,13 @@ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
  			m_fMoveSpeed = 0.0f;
  		}
  	}
@@ -910,7 +875,7 @@ index ef877965..019ed3e8 100644
  		&& padUsed->JumpJustDown() && m_nPedState != PED_JUMP) {
  		ClearAttack();
  		ClearWeaponTarget();
-@@ -956,7 +1145,34 @@ CPlayerPed::FindWeaponLockOnTarget(void)
+@@ -956,7 +1147,37 @@ CPlayerPed::FindWeaponLockOnTarget(void)
  void
  CPlayerPed::ProcessAnimGroups(void)
  {
@@ -948,7 +913,7 @@ index ef877965..019ed3e8 100644
  
  #ifdef PC_PLAYER_CONTROLS
  	if ((m_fWalkAngle <= -DEGTORAD(50.0f) || m_fWalkAngle >= DEGTORAD(50.0f))
-@@ -965,18 +1181,18 @@ CPlayerPed::ProcessAnimGroups(void)
+@@ -965,18 +1186,18 @@ CPlayerPed::ProcessAnimGroups(void)
  
  		if (m_fWalkAngle >= -DEGTORAD(130.0f) && m_fWalkAngle <= DEGTORAD(130.0f)) {
  			if (m_fWalkAngle > 0.0f) {
@@ -970,7 +935,7 @@ index ef877965..019ed3e8 100644
  				groupToSet = ASSOCGRP_ROCKETBACK;
  			else
  				groupToSet = ASSOCGRP_PLAYERBACK;
-@@ -984,13 +1200,13 @@ CPlayerPed::ProcessAnimGroups(void)
+@@ -984,13 +1205,13 @@ CPlayerPed::ProcessAnimGroups(void)
  	} else
  #endif
  	{
@@ -988,7 +953,7 @@ index ef877965..019ed3e8 100644
  					groupToSet = ASSOCGRP_PLAYER;
  				} else {
  					groupToSet = ASSOCGRP_PLAYER2ARMED;
-@@ -1007,15 +1223,474 @@ CPlayerPed::ProcessAnimGroups(void)
+@@ -1007,15 +1228,490 @@ CPlayerPed::ProcessAnimGroups(void)
  	}
  }
  
@@ -1479,7 +1444,7 @@ index ef877965..019ed3e8 100644
  	if (!m_pFire) {
  		if (GetWeapon()->m_eWeaponType == WEAPONTYPE_ROCKETLAUNCHER ||
  			GetWeapon()->m_eWeaponType == WEAPONTYPE_SNIPERRIFLE || GetWeapon()->m_eWeaponType == WEAPONTYPE_M16) {
-@@ -1252,6 +1927,16 @@ CPlayerPed::PlayerControlZelda(CPad *padUsed)
+@@ -1252,6 +1948,16 @@ CPlayerPed::PlayerControlZelda(CPad *padUsed)
  
  		float maxAcc = 0.07f * CTimer::GetTimeStep();
  		m_fMoveSpeed = Min(padMoveInGameUnit, m_fMoveSpeed + maxAcc);
@@ -1496,7 +1461,7 @@ index ef877965..019ed3e8 100644
  
  	} else {
  		m_fMoveSpeed = 0.0f;
-@@ -1271,13 +1956,15 @@ CPlayerPed::PlayerControlZelda(CPad *padUsed)
+@@ -1271,13 +1977,15 @@ CPlayerPed::PlayerControlZelda(CPad *padUsed)
  		}
  	}
  
@@ -1515,7 +1480,7 @@ index ef877965..019ed3e8 100644
  		&& padUsed->JumpJustDown() && m_nPedState != PED_JUMP) {
  		ClearAttack();
  		ClearWeaponTarget();
-@@ -1487,7 +2174,31 @@ CPlayerPed::ProcessControl(void)
+@@ -1487,7 +2195,34 @@ CPlayerPed::ProcessControl(void)
  	}
  	if (padUsed && IsPedShootable()) {
  		ProcessWeaponSwitch(padUsed);
@@ -1542,8 +1507,8 @@ index ef877965..019ed3e8 100644
 +					const bool deferHeldVrReload = OculusVR::ShouldUseManualReload() &&
 +						OculusVR::IsManualReloadWeaponType(heldWeapon.m_eWeaponType) &&
 +						heldWeapon.m_nAmmoInClip <= 0 && heldWeapon.m_nAmmoTotal > 0;
-+					if(!deferHeldVrReload)
-+						heldWeapon.Update(m_audioEntityId);
++				if(!deferHeldVrReload)
++					heldWeapon.Update(m_audioEntityId);
 +				}
 +			}
 +		}
@@ -1552,7 +1517,7 @@ index ef877965..019ed3e8 100644
  	ProcessAnimGroups();
  	if (padUsed) {
 diff --git a/src/peds/Population.cpp b/src/peds/Population.cpp
-index 5c80702f..708c9d52 100644
+index 5c80702..708c9d5 100644
 --- a/src/peds/Population.cpp
 +++ b/src/peds/Population.cpp
 @@ -23,6 +23,9 @@
@@ -1959,7 +1924,7 @@ index 5c80702f..708c9d52 100644
  			if (!pedIsFarAway)
  				continue;
 diff --git a/src/peds/Population.h b/src/peds/Population.h
-index 9001933c..67323fef 100644
+index 9001933..67323fe 100644
 --- a/src/peds/Population.h
 +++ b/src/peds/Population.h
 @@ -38,6 +38,9 @@ public:
@@ -1973,7 +1938,7 @@ index 9001933c..67323fef 100644
  	static int32 MaxNumberOfPedsInUse;
  	static uint32 ms_nNumCivMale;
 diff --git a/src/save/GenericGameStorage.cpp b/src/save/GenericGameStorage.cpp
-index 2913b8d6..a61428c1 100644
+index 2913b8d..a61428c 100644
 --- a/src/save/GenericGameStorage.cpp
 +++ b/src/save/GenericGameStorage.cpp
 @@ -35,9 +35,21 @@
@@ -2100,7 +2065,7 @@ index 2913b8d6..a61428c1 100644
  				m_LevelToLoad = level;
  				return true;
 diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
-index 899398e8..65e56331 100644
+index 899398e..7974c20 100644
 --- a/src/vehicles/Automobile.cpp
 +++ b/src/vehicles/Automobile.cpp
 @@ -46,6 +46,14 @@
@@ -2402,7 +2367,7 @@ index 899398e8..65e56331 100644
  #ifdef GTA_PC_CONTROLS
  	if(CCamera::m_bUseMouse3rdPerson && !CVehicle::m_bDisableMouseSteering){
  		if(CPad::GetPad(pad)->GetMouseX() != 0.0f){
-@@ -3049,6 +3131,60 @@ void
+@@ -3049,6 +3131,61 @@ void
  CAutomobile::DoDriveByShootings(void)
  {
  	CAnimBlendAssociation *anim;
@@ -2464,7 +2429,7 @@ index 899398e8..65e56331 100644
  	CWeapon *weapon = pDriver->GetWeapon();
  	if(weapon->m_eWeaponType != WEAPONTYPE_UZI)
  		return;
-@@ -3057,6 +3193,7 @@ CAutomobile::DoDriveByShootings(void)
+@@ -3057,6 +3194,7 @@ CAutomobile::DoDriveByShootings(void)
  
  	bool lookingLeft = false;
  	bool lookingRight = false;
@@ -2472,7 +2437,7 @@ index 899398e8..65e56331 100644
  	if(TheCamera.Cams[TheCamera.ActiveCam].Mode == CCam::MODE_TOPDOWN){
  		if(CPad::GetPad(0)->GetLookLeft())
  			lookingLeft = true;
-@@ -3068,9 +3205,18 @@ CAutomobile::DoDriveByShootings(void)
+@@ -3068,9 +3206,18 @@ CAutomobile::DoDriveByShootings(void)
  		if(TheCamera.Cams[TheCamera.ActiveCam].LookingRight)
  			lookingRight = true;
  	}
@@ -2493,7 +2458,7 @@ index 899398e8..65e56331 100644
  			anim = RpAnimBlendClumpGetAssociation(pDriver->GetClump(), ANIM_STD_CAR_DRIVEBY_RIGHT);
  			if(anim)
  				anim->blendDelta = -1000.0f;
-@@ -3091,8 +3237,9 @@ CAutomobile::DoDriveByShootings(void)
+@@ -3091,8 +3238,9 @@ CAutomobile::DoDriveByShootings(void)
  		}
  
  		if(CPad::GetPad(0)->GetCarGunFired() && CTimer::GetTimeInMilliseconds() > weapon->m_nTimer){
@@ -2505,7 +2470,7 @@ index 899398e8..65e56331 100644
  		}
  	}else{
  		weapon->Reload();
-@@ -4364,6 +4511,10 @@ CAutomobile::Fix(void)
+@@ -4364,6 +4512,10 @@ CAutomobile::Fix(void)
  {
  	int component;
  
@@ -2516,7 +2481,7 @@ index 899398e8..65e56331 100644
  	Damage.ResetDamageStatus();
  
  	if(pHandling->Flags & HANDLING_NO_DOORS){
-@@ -4377,6 +4528,13 @@ CAutomobile::Fix(void)
+@@ -4377,6 +4529,13 @@ CAutomobile::Fix(void)
  	RpClumpForAllAtomics((RpClump*)m_rwObject, CVehicleModelInfo::HideAllComponentsAtomicCB, (void*)ATOMIC_FLAG_DAM);
  
  	for(component = CAR_BUMP_FRONT; component < NUM_CAR_NODES; component++){
@@ -2530,7 +2495,7 @@ index 899398e8..65e56331 100644
  		if(m_aCarNodes[component]){
  			CMatrix mat(RwFrameGetMatrix(m_aCarNodes[component]));
  			mat.SetTranslate(mat.GetPosition());
-@@ -4480,6 +4638,12 @@ CAutomobile::SpawnFlyingComponent(int32 component, uint32 type)
+@@ -4480,6 +4639,12 @@ CAutomobile::SpawnFlyingComponent(int32 component, uint32 type)
  	matrix = RwFrameGetLTM(m_aCarNodes[component]);
  	frame = RwFrameCreate();
  	atomic = RpAtomicClone(atomic);
@@ -2543,7 +2508,7 @@ index 899398e8..65e56331 100644
  	*RwFrameGetMatrix(frame) = *matrix;
  	RpAtomicSetFrame(atomic, frame);
  	CVisibilityPlugins::SetAtomicRenderCallback(atomic, nil);
-@@ -4679,6 +4843,38 @@ CAutomobile::SetupModelNodes(void)
+@@ -4679,6 +4844,38 @@ CAutomobile::SetupModelNodes(void)
  	for(i = 0; i < NUM_CAR_NODES; i++)
  		m_aCarNodes[i] = nil;
  	CClumpModelInfo::FillFrameArray(GetClump(), m_aCarNodes);
@@ -2583,7 +2548,7 @@ index 899398e8..65e56331 100644
  
  void
 diff --git a/src/vehicles/Automobile.h b/src/vehicles/Automobile.h
-index 47a8395d..273ee469 100644
+index 47a8395..273ee46 100644
 --- a/src/vehicles/Automobile.h
 +++ b/src/vehicles/Automobile.h
 @@ -28,6 +28,11 @@ enum eCarNodes
@@ -2620,7 +2585,7 @@ index 47a8395d..273ee469 100644
  inline uint8 GetCarDoorFlag(int32 carnode) {
  	switch (carnode) {
 diff --git a/src/vehicles/Boat.cpp b/src/vehicles/Boat.cpp
-index 65cdd8c6..c42260a4 100644
+index 65cdd8c..c42260a 100644
 --- a/src/vehicles/Boat.cpp
 +++ b/src/vehicles/Boat.cpp
 @@ -20,6 +20,10 @@
@@ -2676,7 +2641,7 @@ index 65cdd8c6..c42260a4 100644
  #ifdef NEW_RENDERER
  	if(!gbNewRenderer)
 diff --git a/src/vehicles/HandlingMgr.cpp b/src/vehicles/HandlingMgr.cpp
-index d4a6afad..3f79e33d 100644
+index d4a6afa..3f79e33 100644
 --- a/src/vehicles/HandlingMgr.cpp
 +++ b/src/vehicles/HandlingMgr.cpp
 @@ -94,6 +94,7 @@ cHandlingDataMgr::LoadHandlingData(void)
@@ -2704,7 +2669,7 @@ index d4a6afad..3f79e33d 100644
  					handling->nIdentifier = (tVehicleType)handlingId;
  					break;
 diff --git a/src/vehicles/Vehicle.cpp b/src/vehicles/Vehicle.cpp
-index 451f3a39..12aebb67 100644
+index 451f3a3..12aebb6 100644
 --- a/src/vehicles/Vehicle.cpp
 +++ b/src/vehicles/Vehicle.cpp
 @@ -1080,6 +1080,8 @@ CVehicle::SetUpDriver(void)
@@ -2726,7 +2691,7 @@ index 451f3a39..12aebb67 100644
  	pPassengers[n]->m_pMyVehicle->RegisterReference((CEntity**)&pPassengers[n]->m_pMyVehicle);
  	pPassengers[n]->bInVehicle = true;
 diff --git a/src/vehicles/Vehicle.h b/src/vehicles/Vehicle.h
-index ae7d6568..07fd7008 100644
+index ae7d656..07fd700 100644
 --- a/src/vehicles/Vehicle.h
 +++ b/src/vehicles/Vehicle.h
 @@ -235,6 +235,8 @@ public:
@@ -2739,7 +2704,7 @@ index ae7d6568..07fd7008 100644
  	void FlyingControl(eFlightModel flightModel);
  	void ProcessWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint,
 diff --git a/src/weapons/BulletInfo.cpp b/src/weapons/BulletInfo.cpp
-index bfe27e18..1954e985 100644
+index bfe27e1..1954e98 100644
 --- a/src/weapons/BulletInfo.cpp
 +++ b/src/weapons/BulletInfo.cpp
 @@ -21,6 +21,7 @@
@@ -2786,7 +2751,7 @@ index bfe27e18..1954e985 100644
  						if (RpAnimBlendClumpGetFirstAssociation(pPed->GetClump(), ASSOC_FRONTAL))
  							pAnim = CAnimManager::BlendAnimation(pPed->GetClump(), ASSOCGRP_STD, ANIM_STD_HIT_FLOOR_FRONT, 8.0f);
 diff --git a/src/weapons/ProjectileInfo.cpp b/src/weapons/ProjectileInfo.cpp
-index da00b87a..706f1135 100644
+index da00b87..706f113 100644
 --- a/src/weapons/ProjectileInfo.cpp
 +++ b/src/weapons/ProjectileInfo.cpp
 @@ -54,7 +54,8 @@ CProjectileInfo::GetProjectileInfo(int32 id)
@@ -2828,7 +2793,7 @@ index da00b87a..706f1135 100644
  #ifdef FIX_BUGS
  	while (i < ARRAY_SIZE(gaProjectileInfo) && gaProjectileInfo[i].m_bInUse) i++;
 diff --git a/src/weapons/ProjectileInfo.h b/src/weapons/ProjectileInfo.h
-index 13c158c7..877ad339 100644
+index 13c158c..877ad33 100644
 --- a/src/weapons/ProjectileInfo.h
 +++ b/src/weapons/ProjectileInfo.h
 @@ -22,7 +22,8 @@ public:
@@ -2842,7 +2807,7 @@ index 13c158c7..877ad339 100644
  	static void RemoveNotAdd(CEntity *entity, eWeaponType weaponType, CVector pos);
  	static bool RemoveIfThisIsAProjectile(CObject *pObject);
 diff --git a/src/weapons/Weapon.cpp b/src/weapons/Weapon.cpp
-index d6af8202..0f52a24a 100644
+index d6af820..0f52a24 100644
 --- a/src/weapons/Weapon.cpp
 +++ b/src/weapons/Weapon.cpp
 @@ -29,8 +29,14 @@
@@ -3676,7 +3641,7 @@ index d6af8202..0f52a24a 100644
  
  #ifdef COMPATIBLE_SAVES
 diff --git a/src/weapons/Weapon.h b/src/weapons/Weapon.h
-index 78048e02..1e81a48b 100644
+index 78048e0..1e81a48 100644
 --- a/src/weapons/Weapon.h
 +++ b/src/weapons/Weapon.h
 @@ -25,6 +25,11 @@ public:
@@ -3720,7 +3685,7 @@ index 78048e02..1e81a48b 100644
  	static void DoDoomAiming       (CEntity *shooter, CVector *source, CVector *target);
  	static void DoTankDoomAiming   (CEntity *shooter, CEntity *driver, CVector *source, CVector *target);
 diff --git a/src/weapons/WeaponEffects.cpp b/src/weapons/WeaponEffects.cpp
-index e8f046da..c6eb82cc 100644
+index e8f046d..c6eb82c 100644
 --- a/src/weapons/WeaponEffects.cpp
 +++ b/src/weapons/WeaponEffects.cpp
 @@ -4,6 +4,9 @@
@@ -3747,7 +3712,7 @@ index e8f046da..c6eb82cc 100644
  	{
  		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,      (void *)FALSE);
 diff --git a/src/weapons/WeaponInfo.cpp b/src/weapons/WeaponInfo.cpp
-index ba872454..4c6f79f7 100644
+index ba87245..4c6f79f 100644
 --- a/src/weapons/WeaponInfo.cpp
 +++ b/src/weapons/WeaponInfo.cpp
 @@ -26,6 +26,14 @@ static char ms_aWeaponNames[][32] = {
@@ -3766,7 +3731,7 @@ index ba872454..4c6f79f7 100644
  CWeaponInfo::GetWeaponInfo(eWeaponType weaponType) {
  	return &aWeaponInfo[weaponType];
 diff --git a/src/weapons/WeaponInfo.h b/src/weapons/WeaponInfo.h
-index db675308..b0aaf315 100644
+index db67530..b0aaf31 100644
 --- a/src/weapons/WeaponInfo.h
 +++ b/src/weapons/WeaponInfo.h
 @@ -44,6 +44,7 @@ public:
@@ -3777,6 +3742,3 @@ index db675308..b0aaf315 100644
  	static eWeaponFire FindWeaponFireType(char *name);
  	static eWeaponType FindWeaponType(char *name);
  	static void Shutdown(void);
--- 
-2.56.0.windows.1
-

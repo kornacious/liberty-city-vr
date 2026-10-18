@@ -1,5 +1,5 @@
 diff --git a/src/animation/CutsceneMgr.h b/src/animation/CutsceneMgr.h
-index 80bd2ce5..b52fa440 100644
+index 80bd2ce..b52fa44 100644
 --- a/src/animation/CutsceneMgr.h
 +++ b/src/animation/CutsceneMgr.h
 @@ -33,6 +33,7 @@ public:
@@ -11,7 +11,7 @@ index 80bd2ce5..b52fa440 100644
  	static char *GetCutsceneName(void) { return ms_cutsceneName; }
  	static void SetCutsceneOffset(const CVector& vec) { ms_cutsceneOffset = vec; }
 diff --git a/src/core/Camera.cpp b/src/core/Camera.cpp
-index 68bc3c49..f006feb7 100644
+index 68bc3c4..f006feb 100644
 --- a/src/core/Camera.cpp
 +++ b/src/core/Camera.cpp
 @@ -728,6 +728,13 @@ CCamera::Process(void)
@@ -71,7 +71,7 @@ index 68bc3c49..f006feb7 100644
  		if(box[i].x*m_vecFrustumNormals[1].x + box[i].y*m_vecFrustumNormals[1].y > 0.0f) frustumTests[3]++;
  //	Why not test z?
 diff --git a/src/core/CdStream.h b/src/core/CdStream.h
-index 7b665fda..f91093cb 100644
+index 7b665fd..f91093c 100644
 --- a/src/core/CdStream.h
 +++ b/src/core/CdStream.h
 @@ -55,6 +55,7 @@ void RemoveFirstInQueue(Queue *queue);
@@ -83,7 +83,7 @@ index 7b665fda..f91093cb 100644
  void CdStreamRemoveImages(void);
  int32 CdStreamGetNumImages(void);
 diff --git a/src/core/CdStream_posix.cpp b/src/core/CdStream_posix.cpp
-index d4fcf676..7bbacfbe 100644
+index d4fcf67..7bbacfb 100644
 --- a/src/core/CdStream_posix.cpp
 +++ b/src/core/CdStream_posix.cpp
 @@ -15,6 +15,7 @@
@@ -225,7 +225,7 @@ index d4fcf676..7bbacfbe 100644
  CdStreamGetImageName(int32 cd)
  {
 diff --git a/src/core/ControllerConfig.h b/src/core/ControllerConfig.h
-index 8823597b..b21ac27e 100644
+index 8823597..b21ac27 100644
 --- a/src/core/ControllerConfig.h
 +++ b/src/core/ControllerConfig.h
 @@ -106,7 +106,9 @@ class CControllerState;
@@ -249,7 +249,7 @@ index 8823597b..b21ac27e 100644
  	GlfwJoyState           m_NewState;
  #else
 diff --git a/src/core/FileLoader.cpp b/src/core/FileLoader.cpp
-index f6581e9e..9b81f1ea 100644
+index f6581e9..9b81f1e 100644
 --- a/src/core/FileLoader.cpp
 +++ b/src/core/FileLoader.cpp
 @@ -25,6 +25,41 @@
@@ -361,7 +361,7 @@ index f6581e9e..9b81f1ea 100644
  		clump = RpClumpStreamRead(stream);
  	if(clump)
 diff --git a/src/core/FileMgr.cpp b/src/core/FileMgr.cpp
-index e22cf889..8096440d 100644
+index e22cf88..8096440 100644
 --- a/src/core/FileMgr.cpp
 +++ b/src/core/FileMgr.cpp
 @@ -7,6 +7,7 @@
@@ -398,7 +398,7 @@ index e22cf889..8096440d 100644
  		return 0;
  	return fd;
 diff --git a/src/core/Frontend.cpp b/src/core/Frontend.cpp
-index 666774fe..763a203b 100644
+index 666774f..763a203 100644
 --- a/src/core/Frontend.cpp
 +++ b/src/core/Frontend.cpp
 @@ -34,6 +34,9 @@
@@ -477,7 +477,7 @@ index 666774fe..763a203b 100644
  							DIDEVCAPS devCaps;
  							devCaps.dwSize = sizeof(DIDEVCAPS);
 diff --git a/src/core/Game.cpp b/src/core/Game.cpp
-index 9e017903..4cfa8a92 100644
+index 9e01790..4cfa8a9 100644
 --- a/src/core/Game.cpp
 +++ b/src/core/Game.cpp
 @@ -245,16 +245,10 @@ CGame::InitialiseRenderWare(void)
@@ -509,7 +509,7 @@ index 9e017903..4cfa8a92 100644
  	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
  	CFileLoader::LoadLevel(datFile);
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
-index 2acb7991..57cd5b27 100644
+index 2acb799..1335ef9 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
 @@ -12,6 +12,15 @@
@@ -607,7 +607,7 @@ index 2acb7991..57cd5b27 100644
  void BlowUpCarsCheat()
  {
  	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-@@ -348,6 +365,520 @@ void AltDodoCheat(void)
+@@ -348,6 +365,552 @@ void AltDodoCheat(void)
  }
  #endif
  
@@ -1160,7 +1160,7 @@ index 2acb7991..57cd5b27 100644
  bool
  CControllerState::CheckForInput(void)
  {
-@@ -533,7 +1064,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -533,7 +1096,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  			state.WHEELUP = true;
  		}
  	}
@@ -1169,7 +1169,7 @@ index 2acb7991..57cd5b27 100644
  	// It seems there is no way to get number of buttons on mouse, so assign all buttons if we have mouse.
  	double xpos = 1.0f, ypos;
  	glfwGetCursorPos(PSGLOBAL(window), &xpos, &ypos);
-@@ -545,6 +1076,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -545,6 +1108,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  		state.WHEELDN = true;
  		state.WHEELUP = true;
  	}
@@ -1178,7 +1178,7 @@ index 2acb7991..57cd5b27 100644
  #endif
  
  	return state;
-@@ -592,7 +1125,7 @@ void CPad::UpdateMouse()
+@@ -592,7 +1157,7 @@ void CPad::UpdateMouse()
  			NewMouseControllerState = PCTempMouseControllerState;
  		}
  	}
@@ -1187,7 +1187,7 @@ index 2acb7991..57cd5b27 100644
  	if ( IsForegroundApp() && PSGLOBAL(cursorIsInWindow) )
  	{
  		double xpos = 1.0f, ypos;
-@@ -633,6 +1166,8 @@ void CPad::UpdateMouse()
+@@ -633,6 +1198,8 @@ void CPad::UpdateMouse()
  		OldMouseControllerState = NewMouseControllerState;
  		NewMouseControllerState = PCTempMouseControllerState;
  	}
@@ -1196,7 +1196,7 @@ index 2acb7991..57cd5b27 100644
  #endif
  }
  
-@@ -1125,6 +1660,9 @@ void CPad::UpdatePads(void)
+@@ -1125,6 +1692,9 @@ void CPad::UpdatePads(void)
  #else
  	CapturePad(0);
  #endif
@@ -1206,7 +1206,7 @@ index 2acb7991..57cd5b27 100644
  
  	// Improve keyboard input latency part 1
  #ifdef FIX_BUGS
-@@ -1166,6 +1704,9 @@ void CPad::UpdatePads(void)
+@@ -1166,6 +1736,9 @@ void CPad::UpdatePads(void)
  	NewKeyState = TempKeyState;
  #endif
  #endif
@@ -1216,7 +1216,7 @@ index 2acb7991..57cd5b27 100644
  }
  
  void CPad::ProcessPCSpecificStuff(void)
-@@ -1828,6 +2369,12 @@ bool CPad::GetLookBehindForPed(void)
+@@ -1828,6 +2401,12 @@ bool CPad::GetLookBehindForPed(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -1229,7 +1229,7 @@ index 2acb7991..57cd5b27 100644
  	return !!NewState.RightShock;
  }
  
-@@ -2246,6 +2793,11 @@ bool CPad::ChangeStationJustDown(void)
+@@ -2246,6 +2825,11 @@ bool CPad::ChangeStationJustDown(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -1241,7 +1241,7 @@ index 2acb7991..57cd5b27 100644
  	switch (CURMODE)
  	{
  		case 0:
-@@ -2635,6 +3187,11 @@ bool CPad::ForceCameraBehindPlayer(void)
+@@ -2635,6 +3219,11 @@ bool CPad::ForceCameraBehindPlayer(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -1254,7 +1254,7 @@ index 2acb7991..57cd5b27 100644
  	{
  		case 0:
 diff --git a/src/core/PlayerInfo.cpp b/src/core/PlayerInfo.cpp
-index 2507d8bb..1a8116f7 100644
+index 2507d8b..1a8116f 100644
 --- a/src/core/PlayerInfo.cpp
 +++ b/src/core/PlayerInfo.cpp
 @@ -412,6 +412,8 @@ FindPlayerCoors(void)
@@ -1267,7 +1267,7 @@ index 2507d8bb..1a8116f7 100644
  		return ped->m_pMyVehicle->GetPosition();
  	else
 diff --git a/src/core/Radar.cpp b/src/core/Radar.cpp
-index b29c19eb..38fd1e75 100644
+index b29c19e..38fd1e7 100644
 --- a/src/core/Radar.cpp
 +++ b/src/core/Radar.cpp
 @@ -19,6 +19,7 @@
@@ -1438,7 +1438,7 @@ index b29c19eb..38fd1e75 100644
  
  void CRadar::DrawRadarSprite(uint16 sprite, float x, float y, uint8 alpha)
 diff --git a/src/core/Streaming.cpp b/src/core/Streaming.cpp
-index fde6d9bf..fc7998ab 100644
+index fde6d9b..fc7998a 100644
 --- a/src/core/Streaming.cpp
 +++ b/src/core/Streaming.cpp
 @@ -33,6 +33,9 @@
@@ -1670,7 +1670,7 @@ index fde6d9bf..fc7998ab 100644
  	int x, y;
  	int r, i;
 diff --git a/src/core/Wanted.cpp b/src/core/Wanted.cpp
-index 909674d0..20f807ab 100644
+index 909674d..20f807a 100644
 --- a/src/core/Wanted.cpp
 +++ b/src/core/Wanted.cpp
 @@ -11,9 +11,20 @@
@@ -1744,7 +1744,7 @@ index 909674d0..20f807ab 100644
  		if (m_nWantedLevel > 1) {
  			m_nLastUpdateTime = CTimer::GetTimeInMilliseconds();
 diff --git a/src/core/Wanted.h b/src/core/Wanted.h
-index 99a161c6..70788e5c 100644
+index 99a161c..70788e5 100644
 --- a/src/core/Wanted.h
 +++ b/src/core/Wanted.h
 @@ -27,6 +27,9 @@ public:
@@ -1768,7 +1768,7 @@ index 99a161c6..70788e5c 100644
  	static int32 WorkOutPolicePresence(CVector posn, float radius);
  	static void SetMaximumWantedLevel(int32 level);
 diff --git a/src/core/World.cpp b/src/core/World.cpp
-index 2c6ee554..9b87a8e8 100644
+index 2c6ee55..9b87a8e 100644
 --- a/src/core/World.cpp
 +++ b/src/core/World.cpp
 @@ -22,6 +22,9 @@
@@ -1792,7 +1792,7 @@ index 2c6ee554..9b87a8e8 100644
  	CVector2D vecEndPos(position.x + fRadius, position.y + fRadius);
  	const int32 nStartX = Max(GetSectorIndexX(vecStartPos.x), 0);
 diff --git a/src/core/World.h b/src/core/World.h
-index 05482d57..e50cfdf0 100644
+index 05482d5..e50cfdf 100644
 --- a/src/core/World.h
 +++ b/src/core/World.h
 @@ -126,6 +126,14 @@ public:
@@ -1811,7 +1811,7 @@ index 05482d57..e50cfdf0 100644
  	static float GetWorldY(int y) { return y*SECTOR_SIZE_Y + WORLD_MIN_Y; }
  
 diff --git a/src/core/common.h b/src/core/common.h
-index 1c2aee00..ba76f886 100644
+index 1c2aee0..ba76f88 100644
 --- a/src/core/common.h
 +++ b/src/core/common.h
 @@ -25,7 +25,7 @@
@@ -1840,7 +1840,7 @@ index 1c2aee00..ba76f886 100644
  
  #define Clamp2(v, center, radius) ((v) > (center) ? Min(v, center + radius) : Max(v, center - radius))
 diff --git a/src/core/config.h b/src/core/config.h
-index 085490f1..f5e6b4ce 100644
+index 085490f..f5e6b4c 100644
 --- a/src/core/config.h
 +++ b/src/core/config.h
 @@ -14,7 +14,9 @@ enum Config {
@@ -1930,7 +1930,7 @@ index 085490f1..f5e6b4ce 100644
  #define FIX_SPRITES	// fix sprites aspect ratio(moon, coronas, particle etc)
  
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index d6c02b9d..0b997078 100644
+index d6c02b9..f04d522 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -8,6 +8,13 @@
@@ -2138,7 +2138,7 @@ index d6c02b9d..0b997078 100644
  void
  RenderScene(void)
  {
-@@ -1406,23 +1521,957 @@ RenderScene(void)
+@@ -1406,23 +1521,969 @@ RenderScene(void)
  	}
  #endif
  	PUSH_RENDERGROUP("RenderScene");
@@ -2796,8 +2796,8 @@ index d6c02b9d..0b997078 100644
 +		if(!inHolster && !dropped)
 +			continue;
 +		const int weaponType = OculusVR::GetVrWeaponTypeForSlot(slot);
-+		if(weaponType < 0 || !player->HasWeapon((uint8)weaponType))
-+			continue;
++	if(weaponType < 0 || !player->HasWeapon((uint8)weaponType))
++		continue;
 +		CWeapon *weapon = &player->GetWeapon((uint8)weaponType);
 +		CWeaponInfo *weaponInfo = CWeaponInfo::GetWeaponInfo(weapon->m_eWeaponType);
 +		if(!weaponInfo)
@@ -3108,7 +3108,7 @@ index d6c02b9d..0b997078 100644
  void
  RenderDebugShit(void)
  {
-@@ -1448,6 +2497,7 @@ RenderEffects(void)
+@@ -1448,6 +2509,7 @@ RenderEffects(void)
  	}
  #endif
  	PUSH_RENDERGROUP("RenderEffects");
@@ -3116,7 +3116,7 @@ index d6c02b9d..0b997078 100644
  	CGlass::Render();
  	CWaterCannons::Render();
  	CSpecialFX::Render();
-@@ -1457,12 +2507,28 @@ RenderEffects(void)
+@@ -1457,12 +2519,28 @@ RenderEffects(void)
  	CAntennas::Render();
  	CRubbish::Render();
  	CCoronas::Render();
@@ -3145,7 +3145,7 @@ index d6c02b9d..0b997078 100644
  	POP_RENDERGROUP();
  }
  
-@@ -1470,6 +2536,30 @@ void
+@@ -1470,6 +2548,30 @@ void
  Render2dStuff(void)
  {
  	PUSH_RENDERGROUP("Render2dStuff");
@@ -3176,7 +3176,7 @@ index d6c02b9d..0b997078 100644
  	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
  	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
  	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
-@@ -1483,6 +2573,9 @@ Render2dStuff(void)
+@@ -1483,6 +2585,9 @@ Render2dStuff(void)
  	if(TheCamera.m_WideScreenOn
  #ifdef CUTSCENE_BORDERS_SWITCH
  		&& CMenuManager::m_PrefsCutsceneBorders
@@ -3186,7 +3186,7 @@ index d6c02b9d..0b997078 100644
  #endif
  		)
  		TheCamera.DrawBordersForWideScreen();
-@@ -1534,6 +2627,10 @@ Render2dStuff(void)
+@@ -1534,6 +2639,10 @@ Render2dStuff(void)
  
  #ifdef DEBUGMENU
  	DebugMenuRender();
@@ -3197,7 +3197,7 @@ index d6c02b9d..0b997078 100644
  #endif
  	POP_RENDERGROUP();
  }
-@@ -1572,6 +2669,9 @@ Idle(void *arg)
+@@ -1572,6 +2681,9 @@ Idle(void *arg)
  #endif
  
  	CTimer::Update();
@@ -3207,7 +3207,7 @@ index d6c02b9d..0b997078 100644
  
  	tbInit();
  
-@@ -1591,12 +2691,40 @@ Idle(void *arg)
+@@ -1591,12 +2703,40 @@ Idle(void *arg)
  		PUSH_MEMID(MEMID_GAME_PROCESS);
  		CPointLights::InitPerFrame();
  		tbStartTimer(0, "CGame::Process");
@@ -3248,7 +3248,7 @@ index d6c02b9d..0b997078 100644
  		tbEndTimer("DMAudio.Service");
  	}
  
-@@ -1608,30 +2736,68 @@ Idle(void *arg)
+@@ -1608,30 +2748,68 @@ Idle(void *arg)
  	CPointLights::InitPerFrame();
  
  	tbStartTimer(0, "CGame::Process");
@@ -3318,7 +3318,7 @@ index d6c02b9d..0b997078 100644
  
  	PUSH_MEMID(MEMID_RENDER);
  
-@@ -1650,6 +2816,13 @@ Idle(void *arg)
+@@ -1650,6 +2828,13 @@ Idle(void *arg)
  
  		PUSH_MEMID(MEMID_RENDERLIST);
  		tbStartTimer(0, "CnstrRenderList");
@@ -3332,7 +3332,7 @@ index d6c02b9d..0b997078 100644
  #ifdef NEW_RENDERER
  		if(gbNewRenderer){
  			CWorld::AdvanceCurrentScanCode();	// don't think this is even necessary
-@@ -1657,13 +2830,51 @@ Idle(void *arg)
+@@ -1657,13 +2842,51 @@ Idle(void *arg)
  		}
  #endif
  		CRenderer::ConstructRenderList();
@@ -3384,7 +3384,7 @@ index d6c02b9d..0b997078 100644
  #ifdef FIX_BUGS
  		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void *)FALSE); // TODO: temp? this fixes OpenGL render but there should be a better place for this
  		// This has to be done BEFORE RwCameraBeginUpdate
-@@ -1682,6 +2893,13 @@ Idle(void *arg)
+@@ -1682,6 +2905,13 @@ Idle(void *arg)
  		}
  
  		DefinedState();
@@ -3398,7 +3398,7 @@ index d6c02b9d..0b997078 100644
  
  #ifndef FIX_BUGS
  		RwCameraSetFarClipPlane(Scene.camera, CTimeCycle::GetFarClip());
-@@ -1689,34 +2907,89 @@ Idle(void *arg)
+@@ -1689,34 +2919,89 @@ Idle(void *arg)
  #endif
  
  		tbStartTimer(0, "RenderScene");
@@ -3496,7 +3496,7 @@ index d6c02b9d..0b997078 100644
  #ifdef ASPECT_RATIO_SCALE
  		CameraSize(Scene.camera, nil, SCREEN_VIEWWINDOW, SCREEN_ASPECT_RATIO);
  #else
-@@ -1755,15 +3028,39 @@ Idle(void *arg)
+@@ -1755,15 +3040,39 @@ Idle(void *arg)
  	if (gbShowTimebars)
  		tbDisplay();
  
@@ -3537,7 +3537,7 @@ index d6c02b9d..0b997078 100644
  
  void
 diff --git a/src/core/re3.cpp b/src/core/re3.cpp
-index a721c238..7420e13e 100644
+index a721c23..75b4461 100644
 --- a/src/core/re3.cpp
 +++ b/src/core/re3.cpp
 @@ -565,12 +565,20 @@ bool LoadINISettings()
@@ -3574,7 +3574,7 @@ index a721c238..7420e13e 100644
  #ifdef EXTENDED_PIPELINES
  		static const char *vehpipenames[] = { "MatFX", "Neo" };
 diff --git a/src/core/templates.h b/src/core/templates.h
-index 0f7f91cd..85a13435 100644
+index 0f7f91c..85a1343 100644
 --- a/src/core/templates.h
 +++ b/src/core/templates.h
 @@ -187,6 +187,7 @@ public:
@@ -3586,7 +3586,7 @@ index 0f7f91cd..85a13435 100644
  
  template<typename T>
 diff --git a/src/entities/Entity.cpp b/src/entities/Entity.cpp
-index c38f12c7..708b39a9 100644
+index c38f12c..708b39a 100644
 --- a/src/entities/Entity.cpp
 +++ b/src/entities/Entity.cpp
 @@ -187,12 +187,75 @@ CEntity::DeleteRwObject(void)
@@ -3759,7 +3759,7 @@ index c38f12c7..708b39a9 100644
  
  void
 diff --git a/src/entities/Physical.h b/src/entities/Physical.h
-index ac4a81df..5d08de87 100644
+index ac4a81d..5d08de8 100644
 --- a/src/entities/Physical.h
 +++ b/src/entities/Physical.h
 @@ -157,6 +157,10 @@ public:
@@ -3774,7 +3774,7 @@ index ac4a81df..5d08de87 100644
  
  VALIDATE_SIZE(CPhysical, 0x128);
 diff --git a/src/math/Matrix.h b/src/math/Matrix.h
-index 645a715f..a2ad5f2a 100644
+index 645a715..a2ad5f2 100644
 --- a/src/math/Matrix.h
 +++ b/src/math/Matrix.h
 @@ -90,6 +90,13 @@ public:
@@ -3792,7 +3792,7 @@ index 645a715f..a2ad5f2a 100644
  		px = x;
  		py = y;
 diff --git a/src/modelinfo/ModelIndices.h b/src/modelinfo/ModelIndices.h
-index fcd152ca..54dbef96 100644
+index fcd152c..54dbef9 100644
 --- a/src/modelinfo/ModelIndices.h
 +++ b/src/modelinfo/ModelIndices.h
 @@ -320,6 +320,7 @@ enum
@@ -3804,7 +3804,7 @@ index fcd152ca..54dbef96 100644
  	// leftovers on PC
  	MI_MIAMI_RCBARON = 154,
 diff --git a/src/skel/crossplatform.cpp b/src/skel/crossplatform.cpp
-index e69c22e1..286d6155 100644
+index e69c22e..286d615 100644
 --- a/src/skel/crossplatform.cpp
 +++ b/src/skel/crossplatform.cpp
 @@ -225,6 +225,8 @@ char* casepath(char const* path, bool checkPathFirst)
@@ -3817,7 +3817,7 @@ index e69c22e1..286d6155 100644
  
      while (c = strsep(&p, "/\\"))
 diff --git a/src/skel/crossplatform.h b/src/skel/crossplatform.h
-index 54a62403..230a47bd 100644
+index 54a6240..230a47b 100644
 --- a/src/skel/crossplatform.h
 +++ b/src/skel/crossplatform.h
 @@ -26,7 +26,7 @@ enum eWinVersion
@@ -3854,7 +3854,7 @@ index 54a62403..230a47bd 100644
  typedef struct
  {
 diff --git a/src/weapons/WeaponType.h b/src/weapons/WeaponType.h
-index 4f88e290..6e2f5cc8 100644
+index 4f88e29..6e2f5cc 100644
 --- a/src/weapons/WeaponType.h
 +++ b/src/weapons/WeaponType.h
 @@ -31,6 +31,20 @@ enum eWeaponType
