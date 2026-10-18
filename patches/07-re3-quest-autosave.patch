@@ -1,0 +1,200 @@
+diff --git a/src/control/Script.cpp b/src/control/Script.cpp
+index 14f52ab..9f7c270 100644
+--- a/src/control/Script.cpp
++++ b/src/control/Script.cpp
+@@ -63,6 +63,7 @@ int32 CTheScripts::LastRandomPedId;
+ uint16 CTheScripts::NumberOfUsedObjects;
+ bool CTheScripts::bAlreadyRunningAMissionScript;
+ bool CTheScripts::bUsingAMultiScriptFile;
++bool CTheScripts::bMissionPassedForAutosave;
+ uint16 CTheScripts::NumberOfMissionScripts;
+ uint32 CTheScripts::LargestMissionScriptSize;
+ uint32 CTheScripts::MainScriptSize;
+@@ -524,6 +525,7 @@ void CTheScripts::Init()
+ 	MissionCleanUp.Init();
+ 	UpsideDownCars.Init();
+ 	StuckCars.Init();
++	bMissionPassedForAutosave = false;
+ #ifdef USE_DEBUG_SCRIPT_LOADER
+ 	// glfwGetKey doesn't work because of CGame::Initialise is blocking
+ 	CPad::UpdatePads();
+@@ -1297,6 +1299,14 @@ int8 CRunningScript::ProcessCommands0To99(int32 command)
+ 			CTheScripts::bAlreadyRunningAMissionScript = false;
+ 		RemoveScriptFromList(&CTheScripts::pActiveScripts);
+ 		AddScriptToList(&CTheScripts::pIdleScripts);
++		if (m_bMissionFlag) {
++			if (CTheScripts::bMissionPassedForAutosave) {
++				CTheScripts::bMissionPassedForAutosave = false;
++				if (!m_bDeatharrestExecuted) {
++					AutoSaveGame();
++				}
++			}
++		}
+ #ifdef MISSION_REPLAY
+ 		if (m_bMissionFlag) {
+ 			CPlayerInfo* pPlayerInfo = &CWorld::Players[CWorld::PlayerInFocus];
+diff --git a/src/control/Script.h b/src/control/Script.h
+index 1e2423d..0acb9c7 100644
+--- a/src/control/Script.h
++++ b/src/control/Script.h
+@@ -467,6 +467,7 @@ public:
+ 	static uint16 NumberOfUsedObjects;
+ 	static bool bAlreadyRunningAMissionScript;
+ 	static bool bUsingAMultiScriptFile;
++	static bool bMissionPassedForAutosave;
+ 	static uint16 NumberOfMissionScripts;
+ 	static uint32 LargestMissionScriptSize;
+ 	static uint32 MainScriptSize;
+diff --git a/src/control/Script3.cpp b/src/control/Script3.cpp
+index f2a71d4..385e679 100644
+--- a/src/control/Script3.cpp
++++ b/src/control/Script3.cpp
+@@ -2303,6 +2303,7 @@ int8 CRunningScript::ProcessCommands700To799(int32 command)
+ 		strncpy(CStats::LastMissionPassedName, name, KEY_LENGTH_IN_SCRIPT);
+ 		++CStats::MissionsPassed;
+ 		CStats::CheckPointReachedSuccessfully();
++		CTheScripts::bMissionPassedForAutosave = true;
+ 		return 0;
+ 	}
+ 	case COMMAND_SET_CHAR_RUNNING:
+diff --git a/src/control/Script5.cpp b/src/control/Script5.cpp
+index ce5fa4b..875a316 100644
+--- a/src/control/Script5.cpp
++++ b/src/control/Script5.cpp
+@@ -1248,6 +1248,7 @@ void CRunningScript::DoDeatharrestCheck()
+ 	if (CanAllowMissionReplay())
+ 		AllowMissionReplay = MISSION_RETRY_STAGE_WAIT_FOR_SCRIPT_TO_TERMINATE;
+ #endif
++	CTheScripts::bMissionPassedForAutosave = false;
+ 	script_assert(m_nStackPointer > 0);
+ 	while (m_nStackPointer > 1)
+ 		--m_nStackPointer;
+diff --git a/src/core/Frontend.cpp b/src/core/Frontend.cpp
+index 763a203..023834e 100644
+--- a/src/core/Frontend.cpp
++++ b/src/core/Frontend.cpp
+@@ -1371,8 +1371,21 @@ CMenuManager::Draw()
+ 					rightText = GetSavedGameDateAndTime(i - 1);
+ 
+ 				if (leftText[0] == '\0') {
+-					sprintf(gString, "FEM_SL%d", i);
+-					leftText = TheText.Get(gString);
++					if (aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot == SAVESLOT_1) {
++						static wchar autoSaveEmpty[32];
++						AsciiToUnicode("[AUTO SAVE] EMPTY", autoSaveEmpty);
++						leftText = autoSaveEmpty;
++					} else {
++						sprintf(gString, "FEM_SL%d", i);
++						leftText = TheText.Get(gString);
++					}
++				} else if (aScreens[m_nCurrScreen].m_aEntries[i].m_SaveSlot == SAVESLOT_1) {
++					static wchar autoSaveLabel[80];
++					static wchar autoPrefix[16];
++					AsciiToUnicode("[AUTO SAVE] ", autoPrefix);
++					UnicodeStrcpy(autoSaveLabel, autoPrefix);
++					UnicodeStrcat(autoSaveLabel, leftText);
++					leftText = autoSaveLabel;
+ 				}
+ 			} else {
+ 				leftText = TheText.Get(aScreens[m_nCurrScreen].m_aEntries[i].m_EntryName);
+diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
+index f949f38..be041bd 100644
+--- a/src/core/Pad.cpp
++++ b/src/core/Pad.cpp
+@@ -3565,6 +3565,7 @@ void LittleTest(void)
+ void CPad::ResetCheats(void)
+ {
+ 	bMissionCheatUsed = false;
++	CTheScripts::bMissionPassedForAutosave = false;
+ 	CWeather::ReleaseWeather();
+ 
+ 	CPopulation::ms_bGivePedsWeapons = false;
+diff --git a/src/save/GenericGameStorage.cpp b/src/save/GenericGameStorage.cpp
+index a61428c..91e7644 100644
+--- a/src/save/GenericGameStorage.cpp
++++ b/src/save/GenericGameStorage.cpp
+@@ -17,6 +17,7 @@
+ #include "Gangs.h"
+ #include "Garages.h"
+ #include "GenericGameStorage.h"
++#include "Hud.h"
+ #include "Pad.h"
+ #include "Particle.h"
+ #include "ParticleObject.h"
+@@ -1215,4 +1216,64 @@ bool SaveGameForPause(int type)
+ 	DisplaySaveResult(res, CStats::LastMissionPassedName);
+ 	return true;
+ }
++
++bool
++AutoSaveGame(void)
++{
++	if (CPad::bMissionCheatUsed) {
++		SAVELOG("AutoSaveGame skipped: VR mission cheat was used");
++		return false;
++	}
++	if (gGameState != GS_PLAYING_GAME) {
++		SAVELOG("AutoSaveGame skipped: gameState=%d", gGameState);
++		return false;
++	}
++	CPlayerInfo *pPlayerInfo = &CWorld::Players[CWorld::PlayerInFocus];
++	if (!pPlayerInfo || !pPlayerInfo->m_pPed) {
++		SAVELOG("AutoSaveGame skipped: no player ped");
++		return false;
++	}
++	if (pPlayerInfo->m_WBState != WBSTATE_PLAYING) {
++		SAVELOG("AutoSaveGame skipped: wbState=%d", pPlayerInfo->m_WBState);
++		return false;
++	}
++	if (pPlayerInfo->m_pPed->GetPedState() == PED_DEAD ||
++	    pPlayerInfo->m_pPed->GetPedState() == PED_ARRESTED) {
++		SAVELOG("AutoSaveGame skipped: pedState=%d", pPlayerInfo->m_pPed->GetPedState());
++		return false;
++	}
++	if (pPlayerInfo->IsRestartingAfterDeath() || pPlayerInfo->IsRestartingAfterArrest()) {
++		SAVELOG("AutoSaveGame skipped: restarting after death/arrest");
++		return false;
++	}
++	if (CTheScripts::FailCurrentMission != 0) {
++		SAVELOG("AutoSaveGame skipped: FailCurrentMission set");
++		return false;
++	}
++	if (CTheScripts::IsPlayerOnAMission()) {
++		SAVELOG("AutoSaveGame skipped: still on a mission");
++		return false;
++	}
++	if (CStats::LastMissionPassedName[0] == '\0') {
++		SAVELOG("AutoSaveGame skipped: LastMissionPassedName is empty");
++		return false;
++	}
++
++	IsQuickSave = SAVE_TYPE_QUICKSAVE;
++	const int AUTOSAVE_SLOT = 0; // Slot 1 (GTA3sf1.b)
++	bool res = PcSaveHelper.SaveSlot(AUTOSAVE_SLOT);
++	PcSaveHelper.PopulateSlotInfo();
++	IsQuickSave = SAVE_TYPE_NONE;
++
++	SAVELOG("AutoSaveGame result=%d slot=%d file=%s mission=%s",
++	        res, AUTOSAVE_SLOT + 1, ValidSaveName, CStats::LastMissionPassedName);
++
++	if (res) {
++		wchar msg[64];
++		AsciiToUnicode("~g~AUTOSAVE COMPLETED", msg);
++		CHud::SetHelpMessage(msg, true);
++		DMAudio.PlayFrontEndSound(SOUND_FRONTEND_MENU_SETTING_CHANGE, 0);
++	}
++	return res;
++}
+ #endif
+diff --git a/src/save/GenericGameStorage.h b/src/save/GenericGameStorage.h
+index 9ebf414..d242d11 100644
+--- a/src/save/GenericGameStorage.h
++++ b/src/save/GenericGameStorage.h
+@@ -53,6 +53,7 @@ const char TopLineEmptyFile[] = "THIS FILE IS NOT VALID YET";
+ extern int8 IsQuickSave; // originally int
+ 
+ bool SaveGameForPause(int);
++bool AutoSaveGame(void);
+ 
+ enum {
+ 	SAVE_TYPE_NORMAL,
