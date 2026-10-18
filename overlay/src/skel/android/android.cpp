@@ -1614,20 +1614,20 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}
 		}
 		CVector nudge = forward;
-		if(headModeOnFoot){
-			// In the head modes TheCamera follows the CHARACTER: a backward
-			// walk turns the ped to face the player, the chase logic swings
-			// after it, and for a moment this forward points somewhere the
-			// player is not looking. The 0.12m eye nudge rode that swing,
-			// felt as being pulled a small step forward after every
-			// backward walk. The headset's own view basis cannot be turned
-			// by gameplay, so the nudge follows it instead; the anchor
-			// heading stays on the camera value the movement code is
-			// calibrated against.
+		if(headModeOnFoot || (!gVrInVehicle && !vehicleTransition && androidgame::VrBodyIKEnabled())){
+			// In the head modes or when Body IK aligns the upper torso to the HMD,
+			// follow the headset's horizontal view direction for the 0.12m eye nudge
+			// so turning the ped or pitching the head down does not pull the eye into the neck.
 			float vrForward[3];
-			if(androidgame::VrGetViewBasis(nil, nil, nil, vrForward))
-				nudge = CVector(vrForward[0], vrForward[1],
-					vrForward[2]);
+			if(androidgame::VrGetViewBasis(nil, nil, nil, vrForward)){
+				CVector horizVrForward(vrForward[0], vrForward[1], 0.0f);
+				if(horizVrForward.MagnitudeSqr() > 0.0001f){
+					horizVrForward.Normalise();
+					nudge = horizVrForward;
+				}else{
+					nudge = CVector(vrForward[0], vrForward[1], vrForward[2]);
+				}
+			}
 		}
 		if(!gVrInVehicle){
 			head += nudge * 0.12f;

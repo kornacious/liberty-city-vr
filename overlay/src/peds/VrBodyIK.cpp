@@ -1500,8 +1500,31 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 {
 	(void)onFootIK;
+	// Capture arm solve anchors from the native animated hierarchy before modifying frames
+	for(int handIndex = 0; handIndex < 2; handIndex++){
+		RwFrame *upperFrame = (handIndex == 0) ?
+			(ped->m_pFrames[PED_UPPERARML] ? ped->m_pFrames[PED_UPPERARML]->frame : nil) :
+			(ped->m_pFrames[PED_UPPERARMR] ? ped->m_pFrames[PED_UPPERARMR]->frame : nil);
+		RwFrame *handFrame = (handIndex == 0) ?
+			(ped->m_pFrames[PED_HANDL] ? ped->m_pFrames[PED_HANDL]->frame : nil) :
+			(ped->m_pFrames[PED_HANDR] ? ped->m_pFrames[PED_HANDR]->frame : nil);
+		if(!upperFrame || !handFrame)
+			continue;
+		RwFrame *forearmFrame = RwFrameGetParent(handFrame);
+		if(!forearmFrame)
+			continue;
+
+		CaptureArmSolveAnchorExplicit(
+			ped->GetMatrix(),
+			*RwFrameGetLTM(upperFrame),
+			*RwFrameGetLTM(forearmFrame),
+			*RwFrameGetLTM(handFrame),
+			handIndex);
+	}
+
 	CMatrix visualBody = ped->GetMatrix();
 	const CVector nativeRoot = ped->GetPosition();
+	visualBody.GetPosition() = nativeRoot;
 
 	if(!vehicleIK){
 		CVector follow(0.0f, 0.0f, 0.0f);
@@ -1510,21 +1533,35 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		float rightRaw[3];
 		float upRaw[3];
 		if(androidgame::VrGetViewBasis(eyePosRaw, rightRaw, upRaw, forwardRaw)){
+			CVector up = visualBody.GetUp();
+			up = Unit(up, CVector(0.0f, 0.0f, 1.0f));
+
 			CVector forward(forwardRaw[0], forwardRaw[1], forwardRaw[2]);
-			CVector right(rightRaw[0], rightRaw[1], rightRaw[2]);
-			CVector up(upRaw[0], upRaw[1], upRaw[2]);
+			forward -= up * DotProduct(forward, up);
+			if(forward.MagnitudeSqr() > 1.0e-8f){
+				forward.Normalise();
 
-			CVector correctedForward = forward - up * DotProduct(forward, up);
-			if(correctedForward.MagnitudeSqr() > 1.0e-6f){
-				correctedForward.Normalise();
-				CVector correctedRight = CrossProduct(correctedForward, up);
-				correctedRight = Unit(correctedRight, right);
-				up = CrossProduct(correctedRight, correctedForward);
-				up.Normalise();
+				CVector right = CrossProduct(forward, up);
+				if(right.MagnitudeSqr() > 1.0e-8f){
+					right.Normalise();
 
-				visualBody.GetRight() = correctedRight;
-				visualBody.GetUp() = up;
-				visualBody.GetForward() = correctedForward;
+					const float yawCorrection = DEGTORAD(-6.0f);
+					const float cy = cosf(yawCorrection);
+					const float sy = sinf(yawCorrection);
+
+					CVector correctedForward = forward * cy + right * sy;
+					correctedForward -= up * DotProduct(correctedForward, up);
+					correctedForward = Unit(correctedForward, forward);
+
+					CVector correctedRight = CrossProduct(correctedForward, up);
+					correctedRight = Unit(correctedRight, right);
+					up = CrossProduct(correctedRight, correctedForward);
+					up.Normalise();
+
+					visualBody.GetRight() = correctedRight;
+					visualBody.GetUp() = up;
+					visualBody.GetForward() = correctedForward;
+				}
 			}
 
 			float anchorRaw[3];
@@ -1548,8 +1585,55 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		// Offset root clump frame in roomscale
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame){
-			RwFrameGetMatrix(clumpFrame)->pos = nativeRoot + follow;
+			RwFrameGetMatrix(clumpFrame)->pos = visualBody.GetPosition();
 			RwFrameUpdateObjects(clumpFrame);
+		}
+
+		// Stabilize upper body (Smid and Storso) upright to visualBody so running/walking
+		// animations do not lean the torso or neck forward into the player's view
+		if(!ped->bIsDucking){
+			const CVector visualRoot = visualBody.GetPosition();
+			RwFrame *midFrame = ped->m_pFrames[PED_MID] ? ped->m_pFrames[PED_MID]->frame : nil;
+			RwFrame *headFrame = ped->m_pFrames[PED_HEAD] ? ped->m_pFrames[PED_HEAD]->frame : nil;
+			RwFrame *torsoFrame = headFrame ? RwFrameGetParent(headFrame) : nil;
+
+			if(midFrame && midFrame != torsoFrame){
+				RwMatrix midWorld;
+				midWorld.pos = visualRoot + FromBasisLocal(CVector(0.0004f, 0.0348f, -0.068f), visualBody);
+				midWorld.right = FromBasisLocal(CVector(0.0f, 1.0f, 0.0f), visualBody);
+				midWorld.up = FromBasisLocal(CVector(0.0f, 0.0f, 1.0f), visualBody);
+				midWorld.at = FromBasisLocal(CVector(-1.0f, 0.0f, 0.0f), visualBody);
+				Orthonormalise(midWorld);
+
+				RwFrame *midParent = RwFrameGetParent(midFrame);
+				if(midParent){
+					RwMatrix invParent;
+					rw::Matrix::invert(&invParent, RwFrameGetLTM(midParent));
+					RwMatrix localMid;
+					rw::Matrix::mult(&localMid, &midWorld, &invParent);
+					*RwFrameGetMatrix(midFrame) = localMid;
+					RwFrameUpdateObjects(midFrame);
+				}
+			}
+
+			if(torsoFrame){
+				RwMatrix torsoWorld;
+				torsoWorld.pos = visualRoot + FromBasisLocal(CVector(0.0004f, 0.2182f, -0.068f), visualBody);
+				torsoWorld.right = FromBasisLocal(CVector(0.0f, 1.0f, 0.0f), visualBody);
+				torsoWorld.up = FromBasisLocal(CVector(0.0f, 0.0f, 1.0f), visualBody);
+				torsoWorld.at = FromBasisLocal(CVector(-1.0f, 0.0f, 0.0f), visualBody);
+				Orthonormalise(torsoWorld);
+
+				RwFrame *torsoParent = RwFrameGetParent(torsoFrame);
+				if(torsoParent){
+					RwMatrix invParent;
+					rw::Matrix::invert(&invParent, RwFrameGetLTM(torsoParent));
+					RwMatrix localTorso;
+					rw::Matrix::mult(&localTorso, &torsoWorld, &invParent);
+					*RwFrameGetMatrix(torsoFrame) = localTorso;
+					RwFrameUpdateObjects(torsoFrame);
+				}
+			}
 		}
 	}
 
@@ -1654,9 +1738,6 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		RwMatrix upperMat = *RwFrameGetLTM(upperFrame);
 		RwMatrix forearmMat = *RwFrameGetLTM(forearmFrame);
 		RwMatrix handMat = *RwFrameGetLTM(handFrame);
-
-		if(!CaptureArmSolveAnchorExplicit(ped->GetMatrix(), upperMat, forearmMat, handMat, handIndex))
-			continue;
 
 		if(weaponSupportLocked[handIndex] &&
 		   OculusVR::GetHeldWeaponSlot(handIndex) < 0){
