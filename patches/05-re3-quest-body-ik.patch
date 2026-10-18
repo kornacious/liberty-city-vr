@@ -1,5 +1,5 @@
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
-index 57cd5b2..2f61895 100644
+index 57cd5b27..2f618958 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
 @@ -19,6 +19,7 @@
@@ -33,7 +33,7 @@ index 57cd5b2..2f61895 100644
  {
  	if ( ArePlayerControlsDisabled() )
 diff --git a/src/core/Pad.h b/src/core/Pad.h
-index 5c7c7ce..c838876 100644
+index 5c7c7ce8..c8388760 100644
 --- a/src/core/Pad.h
 +++ b/src/core/Pad.h
 @@ -255,6 +255,7 @@ public:
@@ -45,7 +45,7 @@ index 5c7c7ce..c838876 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index 0b99707..c82f4e1 100644
+index 0b997078..fde5451f 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -56,7 +56,7 @@ index 0b99707..c82f4e1 100644
  #include "VRHandModel.h"
  #endif
  #ifdef USE_OUR_VERSIONING
-@@ -1724,7 +1725,26 @@ RenderVrTrackedHand(int hand)
+@@ -1723,7 +1724,28 @@ RenderVrTrackedHand(int hand)
  	if(!OculusVR::IsImmersiveSteeringHandleGrabbed(hand) &&
  	   DotProduct(right, matrix.GetForward()) < 0.0f)
  		right = right * -1.0f;
@@ -64,6 +64,8 @@ index 0b99707..c82f4e1 100644
 +	CVector position = matrix.GetPosition();
 +	if(VrBodyIK::WeaponOwnershipActive() &&
 +	   VrBodyIK::GetRigidWeaponHandBasis(hand, &position, &right, &up, &forward)){
++		if(hand == 0)
++			up *= -1.0f;
 +		if(hand == 0 && OculusVR::IsImmersiveSteeringHandleGrabbed(hand))
 +			right *= -1.0f;
 +	}
@@ -84,7 +86,7 @@ index 0b99707..c82f4e1 100644
  	if(VRHandModel::Render(hand, position, right, up, forward, grip, trigger))
  		return;
  	RwIm3DVertex vertices[600];
-@@ -1771,6 +1791,10 @@ RenderVrTrackedHand(int hand)
+@@ -1771,6 +1793,10 @@ RenderVrTrackedHand(int hand)
  static bool
  GetVrHandBasis(int hand, CVector &position, CVector &right, CVector &up, CVector &forward)
  {
@@ -95,7 +97,7 @@ index 0b99707..c82f4e1 100644
  	CMatrix matrix;
  	if(!OculusVR::GetTrackedHandMatrix(hand, &matrix))
  		return false;
-@@ -1896,7 +1920,12 @@ RenderVrTrackedWeapon(CPed *player, int hand)
+@@ -1896,7 +1922,12 @@ RenderVrTrackedWeapon(CPed *player, int hand)
  	trackedWeapon = trackedWeapon * weaponRotationXAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationYAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationZAdjustment;
@@ -110,7 +112,7 @@ index 0b99707..c82f4e1 100644
  			&trackedWeapon);
  	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 2927409..5cb91fe 100644
+index 29274093..bc9979ef 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,7 @@
@@ -318,7 +320,7 @@ index 2927409..5cb91fe 100644
  void
  CPed::Render(void)
  {
-@@ -5055,14 +5194,79 @@ CPed::Render(void)
+@@ -5055,23 +5194,89 @@ CPed::Render(void)
  	// Other vehicles and every legacy render path (desktop/cinema/cutscenes or
  	// disabled tracked hands) retain the original animated body.
  	hideVrPlayerBody = IsPlayer() && OculusVR::ShouldUseTrackedHands() &&
@@ -399,7 +401,8 @@ index 2927409..5cb91fe 100644
  		renderLimb(PED_HANDR);
 +#endif
  	}
-@@ -5071,7 +5275,8 @@ CPed::Render(void)
+ 	bool renderWeaponOnPed = true;
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
  	// During live VR gameplay the same atomic is drawn from the tracked right
  	// hand after the world pass. Keep every legacy path (desktop, cinema,
  	// cutscenes and vehicles) attached to the animated ped hand.
@@ -410,7 +413,7 @@ index 2927409..5cb91fe 100644
  	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
  		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
 diff --git a/src/peds/PedAI.cpp b/src/peds/PedAI.cpp
-index 25dd80c..821274e 100644
+index 25dd80ce..821274e4 100644
 --- a/src/peds/PedAI.cpp
 +++ b/src/peds/PedAI.cpp
 @@ -5083,12 +5083,14 @@ CPed::ClearDuck(void)
@@ -433,7 +436,7 @@ index 25dd80c..821274e 100644
  	if (!bCrouchWhenShooting)
  		return;
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
-index 019ed3e..326f041 100644
+index 019ed3e8..326f0410 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
 @@ -886,6 +886,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
