@@ -1,4 +1,4 @@
-﻿diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
+diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
 index 57cd5b2..2f61895 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
@@ -45,7 +45,7 @@ index 5c7c7ce..c838876 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index 0b99707..85f5836 100644
+index 0b99707..c82f4e1 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -56,7 +56,35 @@ index 0b99707..85f5836 100644
  #include "VRHandModel.h"
  #endif
  #ifdef USE_OUR_VERSIONING
-@@ -1771,6 +1772,10 @@ RenderVrTrackedHand(int hand)
+@@ -1724,7 +1725,26 @@ RenderVrTrackedHand(int hand)
+ 	if(!OculusVR::IsImmersiveSteeringHandleGrabbed(hand) &&
+ 	   DotProduct(right, matrix.GetForward()) < 0.0f)
+ 		right = right * -1.0f;
+-	const CVector &position = matrix.GetPosition();
++	CVector position = matrix.GetPosition();
++	if(VrBodyIK::WeaponOwnershipActive() &&
++	   VrBodyIK::GetRigidWeaponHandBasis(hand, &position, &right, &up, &forward)){
++		if(hand == 0 && OculusVR::IsImmersiveSteeringHandleGrabbed(hand))
++			right *= -1.0f;
++	}
++	const bool holdingDetonator = OculusVR::IsTrackedDetonatorActive(hand);
++	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
++	if(holdingDetonator ||
++	   (OculusVR::ShouldUseTrackedWeapon(hand) &&
++	    heldSlot >= 0 && heldSlot < TOTAL_WEAPON_SLOTS)){
++		grip = Max(grip, 0.88f);
++		CPed *player = FindPlayerPed();
++		const eWeaponType weaponType = holdingDetonator ? WEAPONTYPE_DETONATOR :
++			(player ? player->GetWeapon(heldSlot).m_eWeaponType : WEAPONTYPE_UNARMED);
++		if(!holdingDetonator && OculusVR::IsPhysicalGunType(weaponType))
++			trigger = 0.38f + 0.62f*trigger;
++		else
++			trigger = Max(trigger, 0.88f);
++	}
+ 	if(VRHandModel::Render(hand, position, right, up, forward, grip, trigger))
+ 		return;
+ 	RwIm3DVertex vertices[600];
+@@ -1771,6 +1791,10 @@ RenderVrTrackedHand(int hand)
  static bool
  GetVrHandBasis(int hand, CVector &position, CVector &right, CVector &up, CVector &forward)
  {
@@ -67,24 +95,11 @@ index 0b99707..85f5836 100644
  	CMatrix matrix;
  	if(!OculusVR::GetTrackedHandMatrix(hand, &matrix))
  		return false;
-@@ -1896,7 +1901,25 @@ RenderVrTrackedWeapon(CPed *player, int hand)
+@@ -1896,7 +1920,11 @@ RenderVrTrackedWeapon(CPed *player, int hand)
  	trackedWeapon = trackedWeapon * weaponRotationXAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationYAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationZAdjustment;
 -	if(!virtualDetonator)
-+	// Body IK symmetric forward offset: 6 cm. Orientation comes from
-+	// the pitched solved IK wrist; no model tilt or lateral shift here.
-+	if(VrBodyIK::WeaponOwnershipActive()){
-+		CVector ikBarrel = trackedWeapon.GetRight();
-+		if(ikBarrel.MagnitudeSqr() > 0.0001f){
-+			ikBarrel.Normalise();
-+			const float ikForwardOffset =
-+				(hand == 0) ? 0.000f : 0.060f;
-+			trackedWeapon.GetPosition() +=
-+				ikBarrel*ikForwardOffset;
-+		}
-+
-+	}
 +
 +	// Position-only baked LEFT-hand correction selected from the player's
 +	// final completed calibration. No runtime calibration mode remains.
@@ -94,24 +109,6 @@ index 0b99707..85f5836 100644
  		OculusVR::ApplyTrackedWeaponTwoHandTransform(hand, weaponType,
  			&trackedWeapon);
  	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
-@@ -2369,8 +2392,15 @@ RenderVrTrackedHands(void)
- 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
- 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
- 	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
--	RenderVrTrackedHand(0);
--	RenderVrTrackedHand(1);
-+	CPlayerPed *vrHandPlayer = FindPlayerPed();
-+	const bool vrSkinnedHandsOwnPresentation =
-+		(OculusVR::IsQuestFirstPersonOnFoot() && VrBodyIK::Enabled()) ||
-+		(VrBodyIK::VehicleEnabled() && vrHandPlayer != nil &&
-+		 vrHandPlayer->InVehicle());
-+	if(!vrSkinnedHandsOwnPresentation){
-+		RenderVrTrackedHand(0);
-+		RenderVrTrackedHand(1);
-+	}
- }
- 
- void RenderEffects(void);
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
 index 2927409..5cb91fe 100644
 --- a/src/peds/Ped.cpp
@@ -321,7 +318,7 @@ index 2927409..5cb91fe 100644
  void
  CPed::Render(void)
  {
-@@ -5055,14 +5194,55 @@ CPed::Render(void)
+@@ -5055,14 +5194,79 @@ CPed::Render(void)
  	// Other vehicles and every legacy render path (desktop/cinema/cutscenes or
  	// disabled tracked hands) retain the original animated body.
  	hideVrPlayerBody = IsPlayer() && OculusVR::ShouldUseTrackedHands() &&
@@ -337,12 +334,23 @@ index 2927409..5cb91fe 100644
 +		((gVrFirstPersonActive && !gVrHidePlayerBody && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 +		 androidgame::VrCutsceneCameraActor() == (void*)this);
 +
++	const bool hideNonSkinnedHands = !IsClumpSkinned(GetClump()) &&
++		IsPlayer() && gVrFirstPersonActive && !gVrHidePlayerBody &&
++		VrBodyIK::WeaponOwnershipActive();
++
 +	const bool hideNonSkinnedWeapon = !IsClumpSkinned(GetClump()) &&
 +		IsPlayer() && (gVrFirstPersonActive || OculusVR::ShouldUseTrackedHands() || VrBodyIK::Enabled());
 +
 +	if(hideNonSkinnedHead && m_pFrames[PED_HEAD] && m_pFrames[PED_HEAD]->frame){
 +		bool render = false;
 +		RwFrameForAllObjects(m_pFrames[PED_HEAD]->frame, SetHeadAtomicRenderFlagCB, &render);
++	}
++	if(hideNonSkinnedHands){
++		bool render = false;
++		if(m_pFrames[PED_HANDL] && m_pFrames[PED_HANDL]->frame)
++			RwFrameForAllObjects(m_pFrames[PED_HANDL]->frame, SetHeadAtomicRenderFlagCB, &render);
++		if(m_pFrames[PED_HANDR] && m_pFrames[PED_HANDR]->frame)
++			RwFrameForAllObjects(m_pFrames[PED_HANDR]->frame, SetHeadAtomicRenderFlagCB, &render);
 +	}
 +	if(hideNonSkinnedWeapon && m_pFrames[PED_HANDR] && m_pFrames[PED_HANDR]->frame){
 +		bool render = false;
@@ -355,6 +363,13 @@ index 2927409..5cb91fe 100644
 +	if(hideNonSkinnedHead && m_pFrames[PED_HEAD] && m_pFrames[PED_HEAD]->frame){
 +		bool render = true;
 +		RwFrameForAllObjects(m_pFrames[PED_HEAD]->frame, SetHeadAtomicRenderFlagCB, &render);
++	}
++	if(hideNonSkinnedHands){
++		bool render = true;
++		if(m_pFrames[PED_HANDL] && m_pFrames[PED_HANDL]->frame)
++			RwFrameForAllObjects(m_pFrames[PED_HANDL]->frame, SetHeadAtomicRenderFlagCB, &render);
++		if(m_pFrames[PED_HANDR] && m_pFrames[PED_HANDR]->frame)
++			RwFrameForAllObjects(m_pFrames[PED_HANDR]->frame, SetHeadAtomicRenderFlagCB, &render);
 +	}
 +	if(hideNonSkinnedWeapon && m_pFrames[PED_HANDR] && m_pFrames[PED_HANDR]->frame){
 +		bool render = true;
@@ -372,13 +387,19 @@ index 2927409..5cb91fe 100644
 +			androidgame::VrCutsceneCameraActor() == (void*)this;
 +		if(!suppressHeadLimb)
 +			renderLimb(PED_HEAD);
++		const bool suppressHandLimbs =
++			IsPlayer() && gVrFirstPersonActive && VrBodyIK::WeaponOwnershipActive();
++		if(!suppressHandLimbs){
++			renderLimb(PED_HANDL);
++			renderLimb(PED_HANDR);
++		}
 +#else
  		renderLimb(PED_HEAD);
-+#endif
  		renderLimb(PED_HANDL);
  		renderLimb(PED_HANDR);
++#endif
  	}
-@@ -5071,7 +5251,8 @@ CPed::Render(void)
+@@ -5071,7 +5275,8 @@ CPed::Render(void)
  	// During live VR gameplay the same atomic is drawn from the tracked right
  	// hand after the world pass. Keep every legacy path (desktop, cinema,
  	// cutscenes and vehicles) attached to the animated ped hand.

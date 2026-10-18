@@ -333,7 +333,7 @@ static bool BuildBikeCarrierBasis(CVehicle *bike, const CMatrix &nativeBody,
 static void CaptureRigidWeaponLink(int hand, const CMatrix &solvedHand,
 	const CMatrix &weaponHandBasis)
 {
-	if(hand < 0 || hand > 1 || gRigidWeaponLink[hand].valid)
+	if(hand < 0 || hand > 1)
 		return;
 
 	RigidWeaponHandLink &link = gRigidWeaponLink[hand];
@@ -371,21 +371,6 @@ static bool RebuildRigidWeaponBasis(int hand, CVector *position,
 
 	*position = wrist.GetPosition() +
 		FromBasisLocal(link.positionLocal, wrist);
-
-	if(hand == 0){
-		const float leftWeaponYawCorrection =
-			DEGTORAD(2.5f);
-		*right = RotateAroundAxis(
-			*right, *up, leftWeaponYawCorrection);
-		*forward = RotateAroundAxis(
-			*forward, *up, leftWeaponYawCorrection);
-
-		if(right->MagnitudeSqr() <= 1.0e-8f ||
-		   forward->MagnitudeSqr() <= 1.0e-8f)
-			return false;
-		right->Normalise();
-		forward->Normalise();
-	}
 
 	return true;
 }
@@ -1029,14 +1014,8 @@ static bool SolveArmMatrices(
 		 targetDistance <= maxReach+0.0001f) ?
 			tracked.GetPosition() : wrist;
 	Orthonormalise(hand);
-
-	if(pitchWeaponHand && physicalPitchAxis.MagnitudeSqr() > 1.0e-8f){
-		const float weaponHandPitchDeg =
-			(handIndex == 0) ? 35.0f : -35.0f;
-		RotateHandBasis(
-			hand, physicalPitchAxis,
-			DEGTORAD(weaponHandPitchDeg));
-	}
+	(void)pitchWeaponHand;
+	(void)physicalPitchAxis;
 	return true;
 }
 
@@ -1122,14 +1101,14 @@ static void EnsureBakedCalibration(void)
 {
 	if(!gWrist[0].valid){
 		gWrist[0].valid = true;
-		gWrist[0].positionLocal = CVector(-0.034706f, -0.005371f, -0.002082f);
+		gWrist[0].positionLocal = CVector(0.0f, 0.0f, -0.045f);
 		gWrist[0].rightLocal = CVector(0.255107f, -0.086611f, 0.963026f);
 		gWrist[0].upLocal = CVector(-0.047421f, -0.995902f, -0.077006f);
 		gWrist[0].atLocal = CVector(-0.965749f, 0.026023f, 0.258169f);
 	}
 	if(!gWrist[1].valid){
 		gWrist[1].valid = true;
-		gWrist[1].positionLocal = CVector(-0.016873f, -0.013284f, 0.000948f);
+		gWrist[1].positionLocal = CVector(0.0f, 0.0f, -0.045f);
 		gWrist[1].rightLocal = CVector(0.006246f, 0.394067f, 0.919061f);
 		gWrist[1].upLocal = CVector(-0.124347f, -0.911639f, 0.391730f);
 		gWrist[1].atLocal = CVector(0.992219f, -0.116729f, 0.043307f);
@@ -1396,8 +1375,6 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		else
 			desiredWorld[handIndex] =
 				BuildDefaultHandPose(handIndex, raw);
-		if(weaponSupportLocked[handIndex])
-			desiredWorld[handIndex].GetPosition() = raw.GetPosition();
 
 		CaptureRigidWeaponLink(
 			handIndex, desiredWorld[handIndex], raw);
@@ -1466,8 +1443,8 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 				else
 					desiredWorld[handIndex] =
 						BuildDefaultHandPose(handIndex, currentSupportPose);
-				desiredWorld[handIndex].GetPosition() =
-					currentSupportPose.GetPosition();
+				CaptureRigidWeaponLink(
+					handIndex, desiredWorld[handIndex], currentSupportPose);
 			}
 		}
 
@@ -1670,8 +1647,6 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		else
 			desiredWorld[handIndex] =
 				BuildDefaultHandPose(handIndex, raw);
-		if(weaponSupportLocked[handIndex])
-			desiredWorld[handIndex].GetPosition() = raw.GetPosition();
 
 		CaptureRigidWeaponLink(
 			handIndex, desiredWorld[handIndex], raw);
@@ -1752,8 +1727,8 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 				else
 					desiredWorld[handIndex] =
 						BuildDefaultHandPose(handIndex, currentSupportPose);
-				desiredWorld[handIndex].GetPosition() =
-					currentSupportPose.GetPosition();
+				CaptureRigidWeaponLink(
+					handIndex, desiredWorld[handIndex], currentSupportPose);
 			}
 		}
 

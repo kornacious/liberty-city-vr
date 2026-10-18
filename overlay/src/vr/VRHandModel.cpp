@@ -2,6 +2,7 @@
 
 #include "FileMgr.h"
 #include "GameRenderCommand.h"
+#include "Timecycle.h"
 #include "rtpng.h"
 #include "VRHandModel.h"
 
@@ -157,7 +158,9 @@ LoadAlbedo(void)
 	if(gAlbedoAttempted)
 		return gAlbedo != nil;
 	gAlbedoAttempted = true;
-	RwImage *image = RtPNGImageRead("models\\vrhands\\BigHandsAlbedo.png");
+	RwImage *image = RtPNGImageRead("models\\vrhands\\ClaudeHandsAlbedo.png");
+	if(image == nil)
+		image = RtPNGImageRead("models\\vrhands\\BigHandsAlbedo.png");
 	if(image == nil)
 		return false;
 
@@ -230,7 +233,22 @@ Render(int hand, const CVector &position, const CVector &right,
 	trigger = Clamp01(trigger);
 
 	CVector lightDirection(-0.35f, -0.25f, 0.90f);
+	const int32 sunIdx = CTimeCycle::m_CurrentStoredValue & 15;
+	const CVector &sunDir = CTimeCycle::m_VectorToSun[sunIdx];
+	if(sunDir.MagnitudeSqr() > 0.001f){
+		lightDirection = sunDir + CVector(0.0f, 0.0f, 0.65f);
+	}
 	lightDirection.Normalise();
+
+	// Blend world timecycle color with a readable floor so the hands match
+	// Claude's jacket and weapons across day, night, and rain without glowing.
+	const float tcAmbR = 0.56f + 0.44f*Clamp01(CTimeCycle::GetAmbientRed()*1.35f + 0.18f);
+	const float tcAmbG = 0.56f + 0.44f*Clamp01(CTimeCycle::GetAmbientGreen()*1.35f + 0.18f);
+	const float tcAmbB = 0.56f + 0.44f*Clamp01(CTimeCycle::GetAmbientBlue()*1.35f + 0.18f);
+	const float tcDirR = 0.50f + 0.50f*Clamp01(CTimeCycle::GetDirectionalRed()*1.25f + 0.20f);
+	const float tcDirG = 0.50f + 0.50f*Clamp01(CTimeCycle::GetDirectionalGreen()*1.25f + 0.20f);
+	const float tcDirB = 0.50f + 0.50f*Clamp01(CTimeCycle::GetDirectionalBlue()*1.25f + 0.20f);
+
 	for(size_t i = 0; i < mesh.vertices.size(); i++){
 		const HandVertex &source = mesh.vertices[i];
 		const CVector localPosition = InterpolatePose(source.position, grip, trigger);
@@ -241,11 +259,6 @@ Render(int hand, const CVector &position, const CVector &right,
 		// UltimateXR's baked model uses +X along the fingers, +Y along the
 		// palm normal and +Z across the palm. Position the wrist 5.5 cm behind
 		// the OpenXR controller origin to match the former procedural hand.
-		// The imported palm was previously mirrored on only one transverse
-		// axis.  That turned it over, but also changed its handedness and put
-		// both thumbs on the lower/wrong side.  A real 180-degree roll around
-		// the controller's forward axis flips both transverse axes together:
-		// the palm turns upright while left/right handedness is preserved.
 		const CVector worldPosition = position +
 			forward*(localPosition.x-0.055f) +
 			right*localPosition.z - up*localPosition.y;
@@ -254,14 +267,25 @@ Render(int hand, const CVector &position, const CVector &right,
 		if(worldNormal.MagnitudeSqr() > 0.000001f)
 			worldNormal.Normalise();
 		const float diffuse = DotProduct(worldNormal, lightDirection);
-		const float shade = 0.72f + 0.28f*(diffuse > 0.0f ? diffuse : 0.0f);
+		const float posDiffuse = diffuse > 0.0f ? diffuse : 0.0f;
+		const float backFill = diffuse < 0.0f ? (-diffuse * 0.12f) : 0.0f;
+		const float baseShade = 0.70f + 0.30f*posDiffuse + backFill;
+
+		// Soft shadow where the wrist tucks into Claude's black leather jacket cuff.
+		const float cuffT = Clamp01((localPosition.x - 0.002f) / 0.024f);
+		const float cuffSmooth = cuffT * cuffT * (3.0f - 2.0f * cuffT);
+		const float cuffShade = 0.22f + 0.78f * cuffSmooth;
+
+		const float shadeR = baseShade * cuffShade * (0.72f*tcAmbR + 0.28f*tcDirR);
+		const float shadeG = baseShade * cuffShade * (0.72f*tcAmbG + 0.28f*tcDirG);
+		const float shadeB = baseShade * cuffShade * (0.72f*tcAmbB + 0.28f*tcDirB);
 
 		RwIm3DVertex &destination = mesh.renderVertices[i];
 		RwIm3DVertexSetPos(&destination, worldPosition.x, worldPosition.y, worldPosition.z);
 		RwIm3DVertexSetU(&destination, source.u);
 		RwIm3DVertexSetV(&destination, source.v);
-		const uint8 colour = ShadeChannel(shade);
-		RwIm3DVertexSetRGBA(&destination, colour, colour, colour, 255);
+		RwIm3DVertexSetRGBA(&destination,
+			ShadeChannel(shadeR), ShadeChannel(shadeG), ShadeChannel(shadeB), 255);
 	}
 
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gAlbedo));
