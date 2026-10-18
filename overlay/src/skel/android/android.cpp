@@ -566,6 +566,7 @@ VrRestoreFov(void)
 // driving, but DEFAULT driving retains Vice City's animated in-car Tommy.
 // Set every frame below, next to the pad capture, which runs before rendering.
 bool gVrFirstPersonActive;
+bool gVrCameraInsidePlayerHead;
 CEntity *gVrPlayerEntity;
 // First-person in a vehicle, third-person chase excluded. CPed::PreRender
 // reads it to drop the occupant head the camera is sitting inside.
@@ -1461,6 +1462,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 // Dying is the one moment on foot when the camera leaves the head and
 // looks back at Claude. Hiding him then plays the shot over empty
 // pavement, so he is drawn from the blow that kills him.
+	gVrCameraInsidePlayerHead =
+		wantFirstPerson && !thirdPersonVehicle &&
+		player != nil && player->m_rwObject != nil &&
+		!player->DyingOrDead() && player->m_pFrames[PED_HEAD] != nil &&
+		(player->InVehicle() || player->m_pFrames[PED_TORSO] != nil);
 #ifdef GTA_VR_WEAPONS
 	// On foot the real Claude skeleton is now the VR body: keep it visible so
 	// VrBodyIK can drive the arms beneath the existing tracked hand meshes.
@@ -1469,13 +1475,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	// Vehicle ownership remains unchanged.
 	const bool vehicleBodyIK =
 		gVrInVehicle && androidgame::VrVehicleBodyIKEnabled();
-	gVrHidePlayerBody =
-		(!gVrInVehicle && !androidgame::VrBodyIKEnabled()) ||
-		(!thirdPersonVehicle && gVrInVehicle &&
-		 OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK &&
-		 !(player != nil && player->DyingOrDead()));
+	gVrHidePlayerBody = gVrCameraInsidePlayerHead &&
+		((!gVrInVehicle && !androidgame::VrBodyIKEnabled()) ||
+		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK));
 #else
-	gVrHidePlayerBody = true;
+	gVrHidePlayerBody = gVrCameraInsidePlayerHead;
 #endif
 
 	// Verbatim port of the desktop VR base camera (RenderVrStereoFrame in

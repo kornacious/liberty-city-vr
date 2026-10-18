@@ -122,7 +122,7 @@ index 0b997078..4466b2ba 100644
  	CPed *player = FindPlayerPed();
  	if(!player || !player->m_rwObject || player->DyingOrDead())
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 29274093..bc9979ef 100644
+index 29274093..720b083e 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,7 @@
@@ -133,7 +133,7 @@ index 29274093..bc9979ef 100644
  #include "VrRagdoll.h"
  #if defined(__ANDROID__) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
  #include "VrVehicleEntry.h"
-@@ -4925,31 +4926,137 @@ CPed::PreRender(void)
+@@ -4925,31 +4926,130 @@ CPed::PreRender(void)
  			RwV3d zero = { 0.0f, 0.0f, 0.0f };
  			RwMatrixScale(head, &zero, rwCOMBINEPRECONCAT);
  		}
@@ -166,13 +166,13 @@ index 29274093..bc9979ef 100644
 +	// immersive driving never get here: one views the body from outside, the
 +	// other replaces it with tracked hands.
 +	{
-+		extern bool gVrFirstPersonActive;
++		extern bool gVrCameraInsidePlayerHead;
 +		extern bool gVrInVehicle;
 +		extern bool gVrHidePlayerBody;
 +		extern CEntity *gVrPlayerEntity;
 +		// A cutscene camera parked on this ped is the same problem: the
 +		// eye is inside the head, so the head has to go for the draw.
-+		if ((gVrFirstPersonActive && !gVrHidePlayerBody &&
++		if ((gVrCameraInsidePlayerHead && !gVrHidePlayerBody &&
 +		     (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 +		    androidgame::VrCutsceneCameraActor() == (void*)this) {
 +#ifdef PED_SKIN
@@ -277,21 +277,14 @@ index 29274093..bc9979ef 100644
 +								rwCOMBINEPRECONCAT);
 +					}
 +				}
-+			} else
-+#endif
-+			{
-+				if (m_pFrames[PED_HEAD] && m_pFrames[PED_HEAD]->frame) {
-+					RwV3d zero = { 0.0f, 0.0f, 0.0f };
-+					RwMatrixScale(RwFrameGetMatrix(m_pFrames[PED_HEAD]->frame), &zero, rwCOMBINEPRECONCAT);
-+					RwFrameUpdateObjects(m_pFrames[PED_HEAD]->frame);
-+				}
  			}
- 		}
--#endif
+-		}
+ #endif
++		}
  	}
  #endif
  
-@@ -5022,6 +5129,38 @@ CPed::PreRender(void)
+@@ -5022,6 +5122,38 @@ CPed::PreRender(void)
  	}
  }
  
@@ -330,28 +323,44 @@ index 29274093..bc9979ef 100644
  void
  CPed::Render(void)
  {
-@@ -5055,23 +5194,89 @@ CPed::Render(void)
+@@ -5031,10 +5163,10 @@ CPed::Render(void)
+ 	// pre-physics position and visibly slides against the smoothly moving
+ 	// car it sits in.
+ 	{
+-		extern bool gVrFirstPersonActive;
++		extern bool gVrCameraInsidePlayerHead;
+ 		extern bool gVrHidePlayerBody;
+ 		extern CEntity *gVrPlayerEntity;
+-		if(gVrHidePlayerBody && gVrFirstPersonActive &&
++		if(gVrHidePlayerBody && gVrCameraInsidePlayerHead &&
+ 		   (CEntity*)this == gVrPlayerEntity)
+ 			return;
+ 	}
+@@ -5054,24 +5186,89 @@ CPed::Render(void)
+ 	// live on-foot VR gameplay and while physically steering a vehicle.
  	// Other vehicles and every legacy render path (desktop/cinema/cutscenes or
  	// disabled tracked hands) retain the original animated body.
- 	hideVrPlayerBody = IsPlayer() && OculusVR::ShouldUseTrackedHands() &&
+-	hideVrPlayerBody = IsPlayer() && OculusVR::ShouldUseTrackedHands() &&
 -		(!bInVehicle || OculusVR::IsImmersiveDrivingActive());
++	extern bool gVrCameraInsidePlayerHead;
++	extern bool gVrHidePlayerBody;
++	extern CEntity *gVrPlayerEntity;
++	hideVrPlayerBody = IsPlayer() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
 +		((!bInVehicle && !VrBodyIK::Enabled()) ||
 +		 (bInVehicle && OculusVR::IsImmersiveDrivingActive() &&
 +		  !VrBodyIK::VehicleEnabled()));
 +
-+	extern bool gVrFirstPersonActive;
-+	extern bool gVrHidePlayerBody;
-+	extern CEntity *gVrPlayerEntity;
 +	const bool hideNonSkinnedHead = !IsClumpSkinned(GetClump()) &&
-+		((gVrFirstPersonActive && !gVrHidePlayerBody && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
++		((gVrCameraInsidePlayerHead && !gVrHidePlayerBody && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 +		 androidgame::VrCutsceneCameraActor() == (void*)this);
 +
 +	const bool hideNonSkinnedHands = !IsClumpSkinned(GetClump()) &&
-+		IsPlayer() && gVrFirstPersonActive && !gVrHidePlayerBody &&
++		IsPlayer() && gVrCameraInsidePlayerHead && !gVrHidePlayerBody &&
 +		VrBodyIK::WeaponOwnershipActive();
 +
 +	const bool hideNonSkinnedWeapon = !IsClumpSkinned(GetClump()) &&
-+		IsPlayer() && (gVrFirstPersonActive || OculusVR::ShouldUseTrackedHands() || VrBodyIK::Enabled());
++		IsPlayer() && gVrCameraInsidePlayerHead &&
++		(OculusVR::ShouldUseTrackedHands() || VrBodyIK::WeaponOwnershipActive());
 +
 +	if(hideNonSkinnedHead && m_pFrames[PED_HEAD] && m_pFrames[PED_HEAD]->frame){
 +		bool render = false;
@@ -392,15 +401,13 @@ index 29274093..bc9979ef 100644
  #ifdef PED_SKIN
  	if(IsClumpSkinned(GetClump()) && !hideVrPlayerBody){
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
-+		extern bool gVrFirstPersonActive;
-+		extern CEntity *gVrPlayerEntity;
 +		const bool suppressHeadLimb =
-+			(gVrFirstPersonActive && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
++			(gVrCameraInsidePlayerHead && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 +			androidgame::VrCutsceneCameraActor() == (void*)this;
 +		if(!suppressHeadLimb)
 +			renderLimb(PED_HEAD);
 +		const bool suppressHandLimbs =
-+			IsPlayer() && gVrFirstPersonActive && VrBodyIK::WeaponOwnershipActive();
++			IsPlayer() && gVrCameraInsidePlayerHead && VrBodyIK::WeaponOwnershipActive();
 +		if(!suppressHandLimbs){
 +			renderLimb(PED_HANDL);
 +			renderLimb(PED_HANDR);
@@ -417,8 +424,8 @@ index 29274093..bc9979ef 100644
  	// hand after the world pass. Keep every legacy path (desktop, cinema,
  	// cutscenes and vehicles) attached to the animated ped hand.
 -	renderWeaponOnPed = !IsPlayer() || !OculusVR::ShouldUseTrackedHands();
-+	extern bool gVrFirstPersonActive;
-+	renderWeaponOnPed = !IsPlayer() || (!gVrFirstPersonActive && !OculusVR::ShouldUseTrackedHands() && !VrBodyIK::Enabled());
++	renderWeaponOnPed = !IsPlayer() || !gVrCameraInsidePlayerHead ||
++		(!OculusVR::ShouldUseTrackedHands() && !VrBodyIK::WeaponOwnershipActive());
  #endif
  	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
  		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
