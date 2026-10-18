@@ -45,7 +45,7 @@ index 5c7c7ce8..c8388760 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index 0b997078..fde5451f 100644
+index 0b997078..4466b2ba 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -111,6 +111,16 @@ index 0b997078..fde5451f 100644
  		OculusVR::ApplyTrackedWeaponTwoHandTransform(hand, weaponType,
  			&trackedWeapon);
  	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
+@@ -2348,7 +2379,8 @@ RenderVrTrackedHands(void)
+ 	   TheCamera.m_WideScreenOn ||
+ 	   CWorld::Players[CWorld::PlayerInFocus].m_bInRemoteMode ||
+ 	   (FindPlayerVehicle() &&
+-	    !OculusVR::IsImmersiveDrivingActive()))
++	    !OculusVR::IsImmersiveDrivingActive() &&
++	    !VrBodyIK::WeaponOwnershipActive()))
+ 		return;
+ 	CPed *player = FindPlayerPed();
+ 	if(!player || !player->m_rwObject || player->DyingOrDead())
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
 index 29274093..bc9979ef 100644
 --- a/src/peds/Ped.cpp
@@ -412,29 +422,6 @@ index 29274093..bc9979ef 100644
  #endif
  	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
  		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
-diff --git a/src/peds/PedAI.cpp b/src/peds/PedAI.cpp
-index 25dd80ce..821274e4 100644
---- a/src/peds/PedAI.cpp
-+++ b/src/peds/PedAI.cpp
-@@ -5083,12 +5083,14 @@ CPed::ClearDuck(void)
- 	CAnimBlendAssociation *animAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_DUCK_DOWN);
- 	if (!animAssoc) {
- 		animAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_DUCK_LOW);
-+	}
- 
--		if (!animAssoc) {
--			bIsDucking = false;
--			return;
--		}
-+	if (animAssoc) {
-+		animAssoc->flags |= ASSOC_DELETEFADEDOUT;
-+		animAssoc->blendDelta = -4.0f;
- 	}
-+	bIsDucking = false;
-+	m_duckTimer = 0;
- 
- 	if (!bCrouchWhenShooting)
- 		return;
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
 index 019ed3e8..326f0410 100644
 --- a/src/peds/PlayerPed.cpp

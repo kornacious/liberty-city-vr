@@ -1368,17 +1368,14 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	const PedState playerVehicleState =
 		player != nil ? player->GetPedState() : PED_NONE;
 	const bool vehicleTransition = player != nil &&
-		(player->m_objective == OBJECTIVE_ENTER_CAR_AS_DRIVER ||
-		 player->m_objective == OBJECTIVE_ENTER_CAR_AS_PASSENGER ||
-		 player->m_objective == OBJECTIVE_LEAVE_CAR ||
-		 playerVehicleState == PED_SEEK_CAR ||
-		 playerVehicleState == PED_SEEK_IN_BOAT ||
-		 playerVehicleState == PED_OPEN_DOOR ||
+		(playerVehicleState == PED_OPEN_DOOR ||
 		 playerVehicleState == PED_CARJACK ||
 		 playerVehicleState == PED_ENTER_CAR ||
 		 playerVehicleState == PED_STEAL_CAR ||
 		 playerVehicleState == PED_EXIT_CAR ||
-		 playerVehicleState == PED_DRAG_FROM_CAR);
+		 playerVehicleState == PED_DRAG_FROM_CAR ||
+		 playerVehicleState == PED_ENTER_TRAIN ||
+		 playerVehicleState == PED_EXIT_TRAIN);
 	VrBodyIK::SetVehicleTransition(vehicleTransition);
 
 	// Body IK owns cached model-space torso/shoulder/arm references. Entering a
@@ -1395,7 +1392,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		ikVehicleStateValid = false;
 	}
 	const bool vehicleOwnsIkState =
-		player != nil && (player->InVehicle() || vehicleTransition);
+		player != nil && player->InVehicle() && !vehicleTransition;
 	if(!ikVehicleStateValid){
 		ikVehicleOwned = vehicleOwnsIkState;
 		ikVehicleStateValid = true;
@@ -1447,6 +1444,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	gVrFirstPersonActive = wantFirstPerson || cinematicCutscene;
 	gVrPlayerEntity = (CEntity*)player;
 	gVrInVehicle = wantFirstPerson && player->InVehicle() &&
+		!vehicleTransition &&
 		player->m_pMyVehicle != nil &&
 		!thirdPersonVehicle;
 	UpdateQuestVehicleSeatRecenter(player,
@@ -1498,11 +1496,10 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		CVector forward = animatedTransitionPose ?
 			animatedTransitionForward : player->GetForward();
 		forward.Normalise();
-		// During a car-door/carjack task the native head animation owns the base
-		// heading. Keep the controller/head-relative movement modes out of this
-		// short sequence so the camera follows Claude's actual animated pose.
+		// Keep the controller/head-relative movement modes active even during
+		// vehicle entry/exit so the OpenXR play-space anchor yaw never snaps
+		// when Claude turns toward the car door.
 		const bool headModeOnFoot = !gVrInVehicle && !thirdPersonVehicle &&
-			!vehicleTransition &&
 			(androidgame::VrUsesHeadRelativeMovement() ||
 			 androidgame::VrUsesExperimentalHeadTurning());
 		if(headModeOnFoot){
@@ -1545,10 +1542,19 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}else{
 				CVector up = player->GetUp();
 				up.Normalise();
+				CVector baseRoot = player->GetPosition();
+				if(vehicleTransition && player->m_pFrames[PED_MID] != nil &&
+				   player->m_pFrames[PED_MID]->frame != nil && player->GetClump() != nil){
+					RwFrame *waistFrame = RwFrameGetParent(player->m_pFrames[PED_MID]->frame);
+					if(waistFrame != nil && waistFrame != RpClumpGetFrame(player->GetClump())){
+						const RwV3d &waistLocal = RwFrameGetMatrix(waistFrame)->pos;
+						baseRoot = player->GetMatrix() * CVector(waistLocal.x, waistLocal.y, waistLocal.z);
+					}
+				}
 				if(player->bIsDucking){
-					head = player->GetPosition() + up * 0.32f;
+					head = baseRoot + up * 0.32f;
 				}else{
-					head = player->GetPosition() + up * 0.68f;
+					head = baseRoot + up * 0.68f;
 				}
 			}
 		}else{
@@ -1614,7 +1620,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}
 		}
 		CVector nudge = forward;
-		if(headModeOnFoot || (!gVrInVehicle && !vehicleTransition && androidgame::VrBodyIKEnabled())){
+		if(headModeOnFoot || (!gVrInVehicle && androidgame::VrBodyIKEnabled())){
 			// In the head modes or when Body IK aligns the upper torso to the HMD,
 			// follow the headset's horizontal view direction for the 0.12m eye nudge
 			// so turning the ped or pitching the head down does not pull the eye into the neck.

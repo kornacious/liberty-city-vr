@@ -63,12 +63,11 @@ BodyIKGameplayContext(void)
 bool
 WeaponOwnershipActive(void)
 {
-	// Native vehicle interaction animations own the arms. Do not expose stale
-	// solved wrist/weapon links while the player opens a door or carjacks a driver.
-	if(gVehicleTransitionActive || !BodyIKGameplayContext())
+	if(!BodyIKGameplayContext())
 		return false;
 
-	if(Enabled() && OculusVR::IsQuestFirstPersonOnFoot())
+	if(Enabled() && (OculusVR::IsQuestFirstPersonOnFoot() ||
+	   (::gVrFirstPersonActive && gVehicleTransitionActive)))
 		return true;
 
 	CPlayerPed *player = FindPlayerPed();
@@ -1501,7 +1500,16 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 
 	CMatrix visualBody = ped->GetMatrix();
 	const CVector nativeRoot = ped->GetPosition();
-	visualBody.GetPosition() = nativeRoot;
+	CVector baseRoot = nativeRoot;
+	if(gVehicleTransitionActive && ped->m_pFrames[PED_MID] != nil &&
+	   ped->m_pFrames[PED_MID]->frame != nil && ped->GetClump() != nil){
+		RwFrame *waistFrame = RwFrameGetParent(ped->m_pFrames[PED_MID]->frame);
+		if(waistFrame != nil && waistFrame != RpClumpGetFrame(ped->GetClump())){
+			const RwV3d &waistLocal = RwFrameGetMatrix(waistFrame)->pos;
+			baseRoot = ped->GetMatrix() * CVector(waistLocal.x, waistLocal.y, waistLocal.z);
+		}
+	}
+	visualBody.GetPosition() = baseRoot;
 
 	if(!vehicleIK){
 		CVector follow(0.0f, 0.0f, 0.0f);
@@ -1557,12 +1565,12 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 			}
 		}
 
-		visualBody.GetPosition() = nativeRoot + follow;
+		visualBody.GetPosition() = baseRoot + follow;
 
 		// Offset root clump frame in roomscale
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame){
-			RwFrameGetMatrix(clumpFrame)->pos = visualBody.GetPosition();
+			RwFrameGetMatrix(clumpFrame)->pos = nativeRoot + follow;
 			RwFrameUpdateObjects(clumpFrame);
 		}
 
@@ -1788,7 +1796,16 @@ void Apply(CPed *ped)
 	if(ped == nil || !ped->IsPlayer() || VrRagdoll::Owns(ped))
 		return;
 
-	if(!BodyIKGameplayContext() || gVehicleTransitionActive){
+	const bool isSkinned = ped->GetClump() != nil && IsClumpSkinned(ped->GetClump());
+	if(ped->GetClump() != nil && !isSkinned){
+		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
+		if(clumpFrame != nil){
+			RwFrameGetMatrix(clumpFrame)->pos = ped->GetPosition();
+			RwFrameUpdateObjects(clumpFrame);
+		}
+	}
+
+	if(!BodyIKGameplayContext() || (gVehicleTransitionActive && isSkinned)){
 		gSolvedHandValid[0] = false;
 		gSolvedHandValid[1] = false;
 		gRigidWeaponLink[0] = RigidWeaponHandLink();
@@ -1799,9 +1816,10 @@ void Apply(CPed *ped)
 	}
 
 	const bool onFootIK =
-		Enabled() && OculusVR::IsQuestFirstPersonOnFoot();
+		Enabled() && (OculusVR::IsQuestFirstPersonOnFoot() ||
+		              (::gVrFirstPersonActive && gVehicleTransitionActive));
 	const bool vehicleIK =
-		VehicleEnabled() && ::gVrFirstPersonActive &&
+		!onFootIK && VehicleEnabled() && ::gVrFirstPersonActive &&
 		ped->InVehicle() && ped->m_pMyVehicle != nil;
 	if(!onFootIK && !vehicleIK)
 		return;
@@ -1816,7 +1834,7 @@ void Apply(CPed *ped)
 	gSolvedHandValid[0] = false;
 	gSolvedHandValid[1] = false;
 
-	if(IsClumpSkinned(ped->GetClump())){
+	if(isSkinned){
 		ApplySkinned(ped, onFootIK, vehicleIK);
 	}else{
 		ApplyNonSkinned(ped, onFootIK, vehicleIK);
