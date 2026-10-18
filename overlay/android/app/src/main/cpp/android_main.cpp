@@ -409,27 +409,45 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	if(theaterBefore && !theaterAfter)
 		rw::vulkan::setFirstPersonAnchor(nullptr, 0.0f, 0, 0);
 
-	// Match the desktop VR renderer: Vice City's colour filter is a final-image
+	// Match the desktop VR renderer: Liberty City's colour filter is a final-image
 	// operation, after the world and HUD have been assembled. The Vulkan
 	// backend applies it to both multiview layers in its resolve subpass.
 	// EXTENDED_COLOURFILTER intentionally remains disabled for the old
 	// camera-raster implementation on Vulkan. This final-image implementation
 	// is independent of it and reproduces the default POSTFX_NORMAL path
-	// directly, using the blur colour populated by Vice City's timecycle.
+	// directly, using the colour filter and alpha populated by Liberty City's timecycle.
 	const bool cutsceneFrame =
 		CGame::playingIntro ||
 		CCutsceneMgr::IsCutsceneProcessing() ||
 		CCutsceneMgr::IsRunning() ||
 		TheCamera.m_WideScreenOn;
 	const uint32 colourMode =
-		(androidgame::VrViceCityColorEnabled() &&
+		(androidgame::VrColorFilterEnabled() &&
 		 (!theaterFrame || cutsceneFrame) &&
 		 TheCamera.m_BlurType != MOTION_BLUR_NONE ? 1u : 0u);
-	rw::vulkan::setPostFx(colourMode,
-		(uint32)TheCamera.m_BlurRed,
-		(uint32)TheCamera.m_BlurGreen,
-		(uint32)TheCamera.m_BlurBlue,
-		1.0f);
+	uint32 r = (uint32)TheCamera.m_BlurRed;
+	uint32 g = (uint32)TheCamera.m_BlurGreen;
+	uint32 b = (uint32)TheCamera.m_BlurBlue;
+	uint32 a = (uint32)TheCamera.m_motionBlur;
+	switch(TheCamera.m_BlurType)
+	{
+	case MOTION_BLUR_SECURITY_CAM:
+		r = 0; g = 255; b = 0; a = 128;
+		break;
+	case MOTION_BLUR_INTRO:
+		r = 100; g = 220; b = 230; a = 158;
+		break;
+	case MOTION_BLUR_INTRO2:
+		r = 80; g = 255; b = 230; a = 138;
+		break;
+	case MOTION_BLUR_INTRO3:
+		r = 255; g = 60; b = 60; a = 200;
+		break;
+	case MOTION_BLUR_INTRO4:
+		r = 255; g = 180; b = 180; a = 128;
+		break;
+	}
+	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
 	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
 	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
 	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
@@ -439,12 +457,11 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	static uint32 lastColourMode = ~0u;
 	if(colourMode != lastColourMode){
 		__android_log_print(ANDROID_LOG_INFO, "LibertyVR",
-			"Liberty City postfx %s (type=%d rgb=%d,%d,%d)",
+			"Liberty City postfx %s (type=%d rgba=%u,%u,%u,%u)",
 			colourMode == 2u ? "STARTUP BLACK" :
 				(colourMode == 1u ? "COLOUR ON" : "COLOUR OFF"),
 			TheCamera.m_BlurType,
-			TheCamera.m_BlurRed, TheCamera.m_BlurGreen,
-			TheCamera.m_BlurBlue);
+			r, g, b, a);
 		lastColourMode = colourMode;
 	}
 	platform::setCheckpoint("vk/endFrame");

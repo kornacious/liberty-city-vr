@@ -22,17 +22,17 @@ static int GetQuestVehicleCalibrationItemForRow(int row) { return row; }
 static int GetQuestHolsterPointCount() { return 3; }
 static void SetQuestVehicleCalibrationPreview(bool) {}
 }
-static int nativeCount = 69;
+static int nativeCount = 29;
 static int activatedSource = -1, activationCount, cycledSource = -1, cycleDirection;
-static bool godMode, unlimitedRun, neverWanted;
+static bool godMode, unlimitedRun, neverWanted, carInvincibility;
 static int GetVrCheatCount() { return nativeCount; }
-static int GetVrMissionCategoryCount() { return 3; }
-static int GetVrMissionCount(int) { return 10; }
+static int GetVrMissionCategoryCount() { return 0; }
+static int GetVrMissionCount(int) { return 0; }
 static const char *GetVrCheatName(int source);
 static bool GetVrCheatToggleState(int source, bool *enabled)
 {
-	if(source != 5 && source != 6 && source != 9) return false;
-	*enabled = source == 5 ? godMode : source == 6 ? unlimitedRun : neverWanted;
+	if(source != 2 && source != 3 && source != 4 && source != 5) return false;
+	*enabled = source == 2 ? godMode : source == 3 ? unlimitedRun : source == 4 ? neverWanted : carInvincibility;
 	return true;
 }
 static bool ActivateVrCheat(int source)
@@ -40,15 +40,16 @@ static bool ActivateVrCheat(int source)
 	Check(source >= 0 && source < nativeCount, "activation uses a native source index");
 	activatedSource = source;
 	++activationCount;
-	if(source == 5) godMode = !godMode;
-	if(source == 6) unlimitedRun = !unlimitedRun;
-	if(source == 9) neverWanted = !neverWanted;
-	return source != 0; // Vehicle spawning can be unavailable without a player.
+	if(source == 2) godMode = !godMode;
+	if(source == 3) unlimitedRun = !unlimitedRun;
+	if(source == 4) neverWanted = !neverWanted;
+	if(source == 5) carInvincibility = !carInvincibility;
+	return source != 0 && source != 1; // Vehicle spawning can be unavailable without a player.
 }
 static bool CycleVrCheatSelection(int source, int direction)
 {
 	Check(source >= 0 && source < nativeCount, "model cycling uses a native source index");
-	if(source < 0 || source > 4 || direction == 0) return false;
+	if(source < 0 || source > 1 || direction == 0) return false;
 	cycledSource = source;
 	cycleDirection = direction;
 	return true;
@@ -67,7 +68,7 @@ static void DrawFullVrMenuRow(const char *text, int y, int, bool selected,
 
 static const char *GetVrCheatName(int source)
 {
-	Check(source >= 0 && source < 69, "draw uses a known native cheat");
+	Check(source >= 0 && source < nativeCount, "draw uses a known native cheat");
 	return nativeNames[source];
 }
 
@@ -84,14 +85,16 @@ static void CheckDrawSelection(int selected)
 int main()
 {
 	using namespace VrCheatMenu;
-	const int expectedCounts[] = {9, 4, 3, 13, 8, 5, 10, 11, 6};
-	int seen[69] = {};
-	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 69 retained cheats");
-	Check(VR_SPECIAL_SPAWN_NEXT_CAR == 0 && VR_SPECIAL_GOD_MODE == 5 &&
-		VR_SPECIAL_RUN_WITHOUT_LIMITS == 6 && VR_SPECIAL_NEVER_WANTED == 9 && VR_SPECIAL_CHEAT_COUNT == 10,
-		"actual special enum agrees with vehicle and toggle dispatch after removal");
+	const int expectedCounts[] = {6, 3, 1, 1, 7, 2, 1, 5, 3};
+	int seen[29] = {};
+	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 29 retained cheats");
+	Check(VR_SPECIAL_SPAWN_NEXT_CAR == 0 && VR_SPECIAL_SPAWN_NEXT_BOAT == 1 &&
+		VR_SPECIAL_GOD_MODE == 2 && VR_SPECIAL_RUN_WITHOUT_LIMITS == 3 &&
+		VR_SPECIAL_NEVER_WANTED == 4 && VR_SPECIAL_CAR_INVINCIBILITY == 5 &&
+		VR_SPECIAL_CHEAT_COUNT == 6,
+		"actual special enum agrees with vehicle and toggle dispatch");
 	Check(std::strcmp(nativeNames[SourceIndex(GENERAL, 0, nativeCount)], "GOD MODE") == 0,
-		"General begins with God Mode after removing the no-op mission cheat");
+		"General begins with God Mode");
 	Check((int)sizeof(kSourceCategories) == GetVrCheatCount(), "all backend cheats are categorised");
 	for(int category = 0; category < CATEGORY_COUNT; ++category){
 		Check(Count(category, nativeCount) == expectedCounts[category], "expected category size");
@@ -115,7 +118,7 @@ int main()
 		Check(!CurrentMenuValueRepeats(), "held trigger never repeats cheat activation");
 		for(int item = 0; item < expectedCounts[category]; ++item){
 			const int source = SourceIndex(category, item, nativeCount);
-			Check(source >= 0 && source < 69, "every submenu row resolves to source");
+			Check(source >= 0 && source < nativeCount, "every submenu row resolves to source");
 			++seen[source];
 			gVrCheatSelection = item;
 			DrawQuestCheatPage();
@@ -124,20 +127,20 @@ int main()
 			Check(rows[item].text == nativeNames[source], "display and action share the source mapping");
 			Check(rows[item].text != "PASS CURRENT MISSION", "removed mission-pass entry cannot be rendered or activated");
 			Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back is present in every category");
-			const bool isToggle = source == 5 || source == 6 || source == 9;
+			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5;
 			Check(rows[item].off == isToggle && !rows[item].on, "toggle state uses mapped source before activation");
 			activatedSource = -1;
 			ActivateQuestCheatMenuSelection();
 			Check(activatedSource == source, "A dispatches exact displayed cheat");
 			Check(gVrCheatCategory == category, "activation remains in current category");
-			Check(std::strcmp(gVrCheatStatus, source == 0 ? "UNAVAILABLE RIGHT NOW" : "CHEAT ACTIVATED") == 0,
+			Check(std::strcmp(gVrCheatStatus, (source == 0 || source == 1) ? "UNAVAILABLE RIGHT NOW" : "CHEAT ACTIVATED") == 0,
 				"activation feedback survives categorisation");
 			DrawQuestCheatPage();
 			Check(rows[item].on == isToggle && !rows[item].off, "toggle state updates after activation");
 			for(int direction : {-1, 1}){
 				cycledSource = -1;
 				const bool changed = CycleQuestCheatMenuSelection(direction);
-				const bool model = source >= 0 && source <= 4;
+				const bool model = source >= 0 && source <= 1;
 				Check(changed == model, "only vehicle selectors cycle");
 				Check(!model || (cycledSource == source && cycleDirection == direction), "model direction and exact source preserved");
 			}
@@ -157,17 +160,17 @@ int main()
 		ReturnFromCurrentMenuPage();
 		Check(gVrMenuPage == VR_MENU_PAGE_SETTINGS && gVrMenuSelection == VR_MAIN_CHEATS, "second B returns to settings cheat row");
 	}
-	for(int source = 0; source < 69; ++source) Check(seen[source] == 1, "each of 69 native cheats appears exactly once");
-	Check(activationCount == 69, "all 69 cheats dispatched exactly once");
+	for(int source = 0; source < nativeCount; ++source) Check(seen[source] == 1, "each of 29 native cheats appears exactly once");
+	Check(activationCount == nativeCount, "all 29 cheats dispatched exactly once");
 	OpenCheatMenu();
 	gVrCheatCategorySelection = CATEGORY_COUNT;
 	ActivateQuestCheatMenuSelection();
 	Check(gVrMenuPage == VR_MENU_PAGE_MISSIONS && gVrMissionCategory == -1, "mission selector opens its own categories");
-	gVrMissionCategory = 2;
-	gVrMissionCategorySelection = 2;
+	gVrMissionCategory = 0;
+	gVrMissionCategorySelection = 0;
 	ReturnFromCurrentMenuPage();
 	Check(gVrMenuPage == VR_MENU_PAGE_MISSIONS && gVrMissionCategory == -1 &&
-		gVrMissionCategorySelection == 2, "mission Back preserves mission category choice");
+		gVrMissionCategorySelection == 0, "mission Back preserves mission category choice");
 	ReturnFromCurrentMenuPage();
 	Check(gVrMenuPage == VR_MENU_PAGE_CHEATS && gVrCheatCategorySelection == CATEGORY_COUNT,
 		"mission root Back highlights Mission Selector");
@@ -179,8 +182,8 @@ int main()
 		Check(SourceIndex(category, 0, nativeCount) == -1, "invalid category cannot dispatch");
 	}
 	Check(SourceIndex(GENERAL, -1, nativeCount) == -1, "negative row cannot dispatch");
-	Check(SourceIndex(GENERAL, 9, nativeCount) == -1, "Back row has no native index");
-	Check(SourceIndex(GENERAL, 9, nativeCount+1) == 69, "future backend cheat remains reachable in General");
+	Check(SourceIndex(GENERAL, 6, nativeCount) == -1, "Back row has no native index");
+	Check(SourceIndex(GENERAL, 6, nativeCount+1) == nativeCount, "future backend cheat remains reachable in General");
 	Check(Count(GENERAL, 0) == 0, "empty backend still supports a Back-only menu");
 
 	ResetMenuNavigationRepeat();
@@ -197,5 +200,5 @@ int main()
 	Check(!MenuRepeatPulse(true, down, repeatAt, holdStart, 9000.0, false), "held trigger cannot repeatedly cycle models");
 	Check(!MenuRepeatPulse(false, down, repeatAt, holdStart, 9010.0, false), "trigger release resets latch");
 	Check(MenuRepeatPulse(true, down, repeatAt, holdStart, 9020.0, false), "fresh trigger tap works");
-	std::printf("PASS: %d checks; all 69 retained cheats, no mission-pass entry, nine submenus, rendering, toggle/model dispatch, Back and navigation.\n", checks);
+	std::printf("PASS: %d checks; all 29 retained cheats, no mission-pass entry, nine submenus, rendering, toggle/model dispatch, Back and navigation.\n", checks);
 }

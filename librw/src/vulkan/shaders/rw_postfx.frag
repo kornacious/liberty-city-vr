@@ -474,14 +474,11 @@ void main()
 			return;
 		}
 		float alpha = postFx.blurColour.a;
-		vec4 doubled = clamp(postFx.blurColour*2.0, 0.0, 1.0);
 		vec4 previous = source;
 		vec4 destination = source;
 		for(int i = 0; i < 5; i++){
-			vec4 filtered = destination*(1.0-alpha)+
-			                previous*doubled*alpha;
-			filtered += previous*postFx.blurColour;
-			filtered += previous*postFx.blurColour;
+			vec4 filtered = destination * (1.0 - alpha) +
+			                previous * postFx.blurColour * alpha;
 			previous = clamp(filtered, 0.0, 1.0);
 		}
 		outResolvedHistory = source;
@@ -501,19 +498,16 @@ void main()
 		return;
 	}
 
-	// Exact POSTFX_NORMAL colour filter used by the desktop Vice City path.
+	// Exact POSTFX_NORMAL colour filter used by re3 (GTA III colourfilterIII).
 	float alpha = postFx.blurColour.a;
-	vec4 doubled = clamp(postFx.blurColour * 2.0, 0.0, 1.0);
 	vec4 destination = source;
 	vec4 previous = destination;
 	for(int i = 0; i < 5; i++){
 		vec4 filtered = destination * (1.0 - alpha) +
-		                previous * doubled * alpha;
-		filtered += previous * postFx.blurColour;
-		filtered += previous * postFx.blurColour;
+		                previous * postFx.blurColour * alpha;
 		previous = clamp(filtered, 0.0, 1.0);
 	}
-	// History remains in linear game colour so the Vice City colour filter is
+	// History remains in linear game colour so the Liberty City colour filter is
 	// never applied twice when the result comes back on the next frame.
 	outResolvedHistory = vec4(source.rgb, 1.0);
 	outColour = vec4(previous.rgb, 1.0);

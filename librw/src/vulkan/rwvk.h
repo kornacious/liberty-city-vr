@@ -391,9 +391,11 @@ void setClearColour(uint8 red, uint8 green, uint8 blue);
 // comes from the FOGCOLOR render state the game already sets each frame.
 void setFogParams(float32 start, float32 end);
 
-// Final-image colour treatment. Mode 0 is a plain resolve and mode 1 is Vice
-// City's POSTFX_NORMAL filter. The filter runs once for both multiview layers
-// after all world and 2D rendering has completed.
+// Final-image colour treatment. Mode 0 is a plain resolve and mode 1 is
+// GTA III's POSTFX_NORMAL filter (reproducing re3 colourfilterIII). The filter
+// runs once for both multiview layers after all world and 2D rendering has completed.
+void setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue, uint32 alpha,
+               float32 intensity);
 void setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue,
                float32 intensity);
 void setFxaaEnabled(bool32 enabled);

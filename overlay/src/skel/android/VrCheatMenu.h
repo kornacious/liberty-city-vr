@@ -15,6 +15,7 @@ static const unsigned char kSourceCategories[] = {
 	GENERAL,          // GOD MODE
 	GENERAL,          // RUN WITHOUT LIMITS
 	WANTED,           // NEVER WANTED
+	VEHICLE_EFFECTS,  // CAR INVINCIBILITY
 	WEAPONS,          // WEAPONS
 	GENERAL,          // RESTORE HEALTH
 	GENERAL,          // RESTORE ARMOUR

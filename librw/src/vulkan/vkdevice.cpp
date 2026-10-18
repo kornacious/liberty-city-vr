@@ -3484,21 +3484,20 @@ setClearColour(uint8 red, uint8 green, uint8 blue)
 }
 
 void
-setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue,
+setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue, uint32 alpha,
           float32 intensity)
 {
 	if(red > 255) red = 255;
 	if(green > 255) green = 255;
 	if(blue > 255) blue = 255;
+	if(alpha > 255) alpha = 255;
 	if(intensity < 0.0f) intensity = 0.0f;
 
-	const float32 scale = intensity / 255.0f;
-	gvk.postFxConstants.blurColour[0] = red * scale;
-	gvk.postFxConstants.blurColour[1] = green * scale;
-	gvk.postFxConstants.blurColour[2] = blue * scale;
-	// POSTFX_NORMAL uses the same fixed blend alpha on the PC renderer.
-	gvk.postFxConstants.blurColour[3] = 30.0f / 255.0f;
-	// 0 = pass-through, 1 = Vice City colour treatment, 2 = an opaque
+	gvk.postFxConstants.blurColour[0] = red / 255.0f;
+	gvk.postFxConstants.blurColour[1] = green / 255.0f;
+	gvk.postFxConstants.blurColour[2] = blue / 255.0f;
+	gvk.postFxConstants.blurColour[3] = (alpha * intensity) / 255.0f;
+	// 0 = pass-through, 1 = GTA III colour treatment, 2 = an opaque
 	// transition mask used while the cutscene world/camera is being rebuilt.
 	gvk.postFxConstants.mode[0] = mode <= 2 ? mode : 0u;
 	gvk.postFxConstants.mode[2] = gvk.sceneWidth;
@@ -3508,6 +3507,13 @@ setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue,
 	gvk.postFxConstants.upscale[2] = gvk.sgsrMode;
 	gvk.postFxConstants.upscale[3] =
 		(uint32)(gvk.renderScaleEffectivePercent+0.5f);
+}
+
+void
+setPostFx(uint32 mode, uint32 red, uint32 green, uint32 blue,
+          float32 intensity)
+{
+	setPostFx(mode, red, green, blue, 255u, intensity);
 }
 
 void

@@ -2759,6 +2759,46 @@ GetImmersiveSteeringHandleMatrix(int hand, CMatrix *matrix)
 }
 
 bool
+GetQuestVehicleHandSteerRotation(int hand, CVector *axis, float *angle)
+{
+	if(!axis || !angle || hand < 0 || hand >= VR_HAND_COUNT ||
+	   !IsImmersiveSteeringHandleGrabbed(hand))
+		return false;
+
+	if(IsImmersiveCarActive()){
+		CMatrix handle;
+		if(!BuildCarWheelMatrix(hand, &handle, true))
+			return false;
+		*axis = handle.GetForward();
+		if(axis->MagnitudeSqr() < 0.0001f)
+			return false;
+		axis->Normalise();
+
+		// BuildCarWheelMatrix applies -gImmersiveCarPhysicalAngle around
+		// the wheel normal. Return exactly that rotation and nothing else.
+		*angle = -gImmersiveCarPhysicalAngle;
+		return isfinite(*angle);
+	}
+
+	if(IsImmersiveBikeActive()){
+		CBike *bike = GetActivePlayerBike();
+		BikeHandlePose pose;
+		if(!bike || !BuildBikeHandlePose(bike, &pose))
+			return false;
+		*axis = pose.up;
+		if(axis->MagnitudeSqr() < 0.0001f)
+			return false;
+		axis->Normalise();
+
+		// The bike handle solver applies the physical bar angle around pose.up.
+		*angle = gImmersiveBikePhysicalAngle;
+		return isfinite(*angle);
+	}
+
+	return false;
+}
+
+bool
 IsImmersiveSteeringHandleGrabbed(int hand)
 {
 	if(hand < 0 || hand >= VR_HAND_COUNT)

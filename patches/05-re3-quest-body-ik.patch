@@ -1,0 +1,348 @@
+diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
+index 57cd5b2..2f61895 100644
+--- a/src/core/Pad.cpp
++++ b/src/core/Pad.cpp
+@@ -19,6 +19,7 @@
+ namespace androidgame {
+ bool VrStickLookBehindEnabled(void);
+ bool VrStickCrouchEnabled(void);
++bool VrCrouchJustDown(void);
+ }
+ #endif
+ #include "ControllerConfig.h"
+@@ -2911,6 +2912,21 @@ bool CPad::JumpJustDown(void)
+ 	return !!(NewState.Square && !OldState.Square);
+ }
+ 
++bool CPad::DuckJustDown(void)
++{
++	if ( ArePlayerControlsDisabled() )
++		return false;
++
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++	// On Quest, use the physical L3 rising edge captured before remapping.
++	// Native PlayerPed code still performs SetDuck()/ClearDuck().
++	if ( OculusVR::IsQuestFirstPersonOnFoot() )
++		return androidgame::VrCrouchJustDown();
++#endif
++
++	return !!(NewState.LeftShock && !OldState.LeftShock);
++}
++
+ bool CPad::GetSprint(void)
+ {
+ 	if ( ArePlayerControlsDisabled() )
+diff --git a/src/core/Pad.h b/src/core/Pad.h
+index 5c7c7ce..c838876 100644
+--- a/src/core/Pad.h
++++ b/src/core/Pad.h
+@@ -255,6 +255,7 @@ public:
+ 	bool GetTarget(void);
+ 	bool TargetJustDown(void);
+ 	bool JumpJustDown(void);
++	bool DuckJustDown(void);
+ 	bool GetSprint(void);
+ 	bool ShiftTargetLeftJustDown(void);
+ 	bool ShiftTargetRightJustDown(void);
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+index 0b99707..85f5836 100644
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -86,6 +86,7 @@
+ #include "MemoryHeap.h"
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
++#include "VrBodyIK.h"
+ #include "VRHandModel.h"
+ #endif
+ #ifdef USE_OUR_VERSIONING
+@@ -1771,6 +1772,10 @@ RenderVrTrackedHand(int hand)
+ static bool
+ GetVrHandBasis(int hand, CVector &position, CVector &right, CVector &up, CVector &forward)
+ {
++	if(VrBodyIK::WeaponOwnershipActive() &&
++	   VrBodyIK::GetRigidWeaponHandBasis(
++		   hand, &position, &right, &up, &forward))
++		return true;
+ 	CMatrix matrix;
+ 	if(!OculusVR::GetTrackedHandMatrix(hand, &matrix))
+ 		return false;
+@@ -1896,7 +1901,25 @@ RenderVrTrackedWeapon(CPed *player, int hand)
+ 	trackedWeapon = trackedWeapon * weaponRotationXAdjustment;
+ 	trackedWeapon = trackedWeapon * weaponRotationYAdjustment;
+ 	trackedWeapon = trackedWeapon * weaponRotationZAdjustment;
+-	if(!virtualDetonator)
++	// Body IK symmetric forward offset: 6 cm. Orientation comes from
++	// the pitched solved IK wrist; no model tilt or lateral shift here.
++	if(VrBodyIK::WeaponOwnershipActive()){
++		CVector ikBarrel = trackedWeapon.GetRight();
++		if(ikBarrel.MagnitudeSqr() > 0.0001f){
++			ikBarrel.Normalise();
++			const float ikForwardOffset =
++				(hand == 0) ? 0.000f : 0.060f;
++			trackedWeapon.GetPosition() +=
++				ikBarrel*ikForwardOffset;
++		}
++
++	}
++
++	// Position-only baked LEFT-hand correction selected from the player's
++	// final completed calibration. No runtime calibration mode remains.
++	OculusVR::ApplyBakedLeftWeaponPositionToMatrix(hand, &trackedWeapon);
++
++	if(!virtualDetonator && !VrBodyIK::WeaponOwnershipActive())
+ 		OculusVR::ApplyTrackedWeaponTwoHandTransform(hand, weaponType,
+ 			&trackedWeapon);
+ 	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
+@@ -2369,8 +2392,15 @@ RenderVrTrackedHands(void)
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
+ 	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
+-	RenderVrTrackedHand(0);
+-	RenderVrTrackedHand(1);
++	CPlayerPed *vrHandPlayer = FindPlayerPed();
++	const bool vrSkinnedHandsOwnPresentation =
++		(OculusVR::IsQuestFirstPersonOnFoot() && VrBodyIK::Enabled()) ||
++		(VrBodyIK::VehicleEnabled() && vrHandPlayer != nil &&
++		 vrHandPlayer->InVehicle());
++	if(!vrSkinnedHandsOwnPresentation){
++		RenderVrTrackedHand(0);
++		RenderVrTrackedHand(1);
++	}
+ }
+ 
+ void RenderEffects(void);
+diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
+index 2927409..0ca3098 100644
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -33,6 +33,7 @@
+ #include "Range2D.h"
+ #include "Wanted.h"
+ #include "SaveBuf.h"
++#include "VrBodyIK.h"
+ #include "VrRagdoll.h"
+ #if defined(__ANDROID__) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
+ #include "VrVehicleEntry.h"
+@@ -4916,6 +4917,9 @@ CPed::PreRender(void)
+ 		// A ragdolled corpse rewrites its world-space bone matrices whole;
+ 		// the overrides below still compose on top.
+ 		VrRagdoll::Apply(this);
++		// Presentation-only player IK runs after native animation. It consumes
++		// tracked visual hand poses but never writes weapon transforms or aim state.
++		VrBodyIK::Apply(this);
+ 
+ 		if(bBodyPartJustCameOff && m_bodyPartBleeding == PED_HEAD){
+ 			// scale head to 0 if shot off
+@@ -4939,14 +4943,105 @@ CPed::PreRender(void)
+ 			extern CEntity *gVrPlayerEntity;
+ 			// A cutscene camera parked on this ped is the same problem: the
+ 			// eye is inside the head, so the head has to go for the draw.
+-			if ((gVrFirstPersonActive && gVrInVehicle && !gVrHidePlayerBody &&
++			if ((gVrFirstPersonActive && !gVrHidePlayerBody &&
+ 			     (CEntity*)this == gVrPlayerEntity) ||
+ 			    androidgame::VrCutsceneCameraActor() == (void*)this) {
+ 				RpHAnimHierarchy* hier = GetAnimHierarchyFromSkinClump(GetClump());
+-				int32 idx = RpHAnimIDGetIndex(hier, ConvertPedNode2BoneTag(PED_HEAD));
+-				RwMatrix* head = &RpHAnimHierarchyGetMatrixArray(hier)[idx];
+-				RwV3d zero = { 0.0f, 0.0f, 0.0f };
+-				RwMatrixScale(head, &zero, rwCOMBINEPRECONCAT);
++				RwMatrix* matrices = hier ? RpHAnimHierarchyGetMatrixArray(hier) : nil;
++				if (hier && matrices) {
++					RwV3d zero = { 0.0f, 0.0f, 0.0f };
++
++					if (androidgame::VrCutsceneCameraActor() == (void*)this) {
++						// Cutscene CPed: collapse the COMPLETE head subtree to the neck so animated
++						// eyes, jaw and lip-sync children cannot survive PED_HEAD.
++						enum { MAX_VR_PED_BONES = 128 };
++						if (hier->numNodes > 0 && hier->numNodes <= MAX_VR_PED_BONES) {
++							bool inHead[MAX_VR_PED_BONES];
++							int parentStack[32];
++							int sp = 0;
++							int parent = 0;
++
++							for (int node = 0; node < hier->numNodes; node++)
++								inHead[node] = false;
++
++							for (int node = 0; node < hier->numNodes; node++) {
++								const int flags = hier->nodeInfo[node].flags;
++
++								if (node > 0)
++									inHead[node] = inHead[parent];
++
++								if (hier->nodeInfo[node].id == BONE_head)
++									inHead[node] = true;
++
++								if (flags & rpHANIMPUSHPARENTMATRIX && sp < 32)
++									parentStack[sp++] = parent;
++
++								parent = node;
++
++								if (flags & rpHANIMPOPPARENTMATRIX && sp > 0)
++									parent = parentStack[--sp];
++							}
++
++							// Find the actual parent of BONE_head. All hidden head/facial
++							// descendants will collapse to this ONE neck-space point.
++							int neckParent = -1;
++							sp = 0;
++							parent = 0;
++							for (int node = 0; node < hier->numNodes; node++) {
++								const int flags = hier->nodeInfo[node].flags;
++
++								if (hier->nodeInfo[node].id == BONE_head) {
++									neckParent = parent;
++									break;
++								}
++
++								if (flags & rpHANIMPUSHPARENTMATRIX && sp < 32)
++									parentStack[sp++] = parent;
++
++								parent = node;
++
++								if (flags & rpHANIMPOPPARENTMATRIX && sp > 0)
++									parent = parentStack[--sp];
++							}
++
++							if (neckParent >= 0 && neckParent < hier->numNodes) {
++								const RwMatrix neckMatrix = matrices[neckParent];
++
++								for (int node = 0; node < hier->numNodes; node++) {
++									if (!inHead[node])
++										continue;
++
++									// Collapse this head/facial contribution completely.
++									// IMPORTANT: keep the basis ZERO. Restoring neck right/up/at
++									// here would undo the zero scale and make the hidden facial
++									// skin full-sized again at the neck.
++									RwMatrixScale(&matrices[node], &zero,
++										rwCOMBINEPRECONCAT);
++
++									// All hidden head descendants share one neck-space point,
++									// while remaining truly zero-sized.
++									matrices[node].pos = neckMatrix.pos;
++									matrices[node].right.x = 0.0f;
++									matrices[node].right.y = 0.0f;
++									matrices[node].right.z = 0.0f;
++									matrices[node].up.x = 0.0f;
++									matrices[node].up.y = 0.0f;
++									matrices[node].up.z = 0.0f;
++									matrices[node].at.x = 0.0f;
++									matrices[node].at.y = 0.0f;
++									matrices[node].at.z = 0.0f;
++								}
++							}
++						}
++					} else {
++						// Normal gameplay: preserve the established one-bone head hide.
++						const int32 idx =
++							RpHAnimIDGetIndex(hier, ConvertPedNode2BoneTag(PED_HEAD));
++						if (idx >= 0)
++							RwMatrixScale(&matrices[idx], &zero,
++								rwCOMBINEPRECONCAT);
++					}
++				}
+ 			}
+ 		}
+ #endif
+@@ -5055,14 +5150,26 @@ CPed::Render(void)
+ 	// Other vehicles and every legacy render path (desktop/cinema/cutscenes or
+ 	// disabled tracked hands) retain the original animated body.
+ 	hideVrPlayerBody = IsPlayer() && OculusVR::ShouldUseTrackedHands() &&
+-		(!bInVehicle || OculusVR::IsImmersiveDrivingActive());
++		((!bInVehicle && !VrBodyIK::Enabled()) ||
++		 (bInVehicle && OculusVR::IsImmersiveDrivingActive() &&
++		  !VrBodyIK::VehicleEnabled()));
+ #endif
+ 	if(!hideVrPlayerBody)
+ 		CEntity::Render();
+ 
+ #ifdef PED_SKIN
+ 	if(IsClumpSkinned(GetClump()) && !hideVrPlayerBody){
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		extern bool gVrFirstPersonActive;
++		extern CEntity *gVrPlayerEntity;
++		const bool suppressHeadLimb =
++			(gVrFirstPersonActive && (CEntity*)this == gVrPlayerEntity) ||
++			androidgame::VrCutsceneCameraActor() == (void*)this;
++		if(!suppressHeadLimb)
++			renderLimb(PED_HEAD);
++#else
+ 		renderLimb(PED_HEAD);
++#endif
+ 		renderLimb(PED_HANDL);
+ 		renderLimb(PED_HANDR);
+ 	}
+diff --git a/src/peds/PedAI.cpp b/src/peds/PedAI.cpp
+index 25dd80c..821274e 100644
+--- a/src/peds/PedAI.cpp
++++ b/src/peds/PedAI.cpp
+@@ -5083,12 +5083,14 @@ CPed::ClearDuck(void)
+ 	CAnimBlendAssociation *animAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_DUCK_DOWN);
+ 	if (!animAssoc) {
+ 		animAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_DUCK_LOW);
++	}
+ 
+-		if (!animAssoc) {
+-			bIsDucking = false;
+-			return;
+-		}
++	if (animAssoc) {
++		animAssoc->flags |= ASSOC_DELETEFADEDOUT;
++		animAssoc->blendDelta = -4.0f;
+ 	}
++	bIsDucking = false;
++	m_duckTimer = 0;
+ 
+ 	if (!bCrouchWhenShooting)
+ 		return;
+diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
+index 019ed3e..326f041 100644
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -886,6 +886,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
+ void
+ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
+ {
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++	// Quest adds general on-foot crouching.
++	if ( padUsed != nil && padUsed->DuckJustDown() ) {
++		if ( bIsDucking ) {
++			ClearDuck();
++			bCrouchWhenShooting = false;
++		} else if ( !bIsInTheAir &&
++		            m_nPedState != PED_JUMP &&
++		            m_nMoveState != PEDMOVE_SPRINT &&
++		            !InVehicle() ) {
++			// General locomotion crouch uses the normal full-body duck path.
++			bCrouchWhenShooting = false;
++			SetDuck(60000);
++		}
++	}
++#endif
+ 	float leftRight = padUsed->GetPedWalkLeftRight();
+ 	float upDown = padUsed->GetPedWalkUpDown();
+ 	float padMove = CVector2D(leftRight, upDown).Magnitude();
+@@ -1891,6 +1907,22 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
+ void
+ CPlayerPed::PlayerControlZelda(CPad *padUsed)
+ {
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++	// Quest adds general on-foot crouching.
++	if ( padUsed != nil && padUsed->DuckJustDown() ) {
++		if ( bIsDucking ) {
++			ClearDuck();
++			bCrouchWhenShooting = false;
++		} else if ( !bIsInTheAir &&
++		            m_nPedState != PED_JUMP &&
++		            m_nMoveState != PEDMOVE_SPRINT &&
++		            !InVehicle() ) {
++			// General locomotion crouch uses the normal full-body duck path.
++			bCrouchWhenShooting = false;
++			SetDuck(60000);
++		}
++	}
++#endif
+ 	bool doSmoothSpray = DoWeaponSmoothSpray();
+ 	float camOrientation = TheCamera.Orientation;
+ 	float leftRight = padUsed->GetPedWalkLeftRight();
