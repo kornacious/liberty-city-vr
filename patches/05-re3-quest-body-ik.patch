@@ -1,5 +1,5 @@
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
-index 57cd5b2..2f61895 100644
+index 57cd5b27..2f618958 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
 @@ -19,6 +19,7 @@
@@ -33,7 +33,7 @@ index 57cd5b2..2f61895 100644
  {
  	if ( ArePlayerControlsDisabled() )
 diff --git a/src/core/Pad.h b/src/core/Pad.h
-index 5c7c7ce..c838876 100644
+index 5c7c7ce8..c8388760 100644
 --- a/src/core/Pad.h
 +++ b/src/core/Pad.h
 @@ -255,6 +255,7 @@ public:
@@ -45,7 +45,7 @@ index 5c7c7ce..c838876 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index 0b99707..85f5836 100644
+index 0b997078..85f58362 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -113,7 +113,7 @@ index 0b99707..85f5836 100644
  
  void RenderEffects(void);
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 2927409..0ca3098 100644
+index 29274093..e2d95667 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,7 @@
@@ -139,8 +139,9 @@ index 2927409..0ca3098 100644
  			// A cutscene camera parked on this ped is the same problem: the
  			// eye is inside the head, so the head has to go for the draw.
 -			if ((gVrFirstPersonActive && gVrInVehicle && !gVrHidePlayerBody &&
+-			     (CEntity*)this == gVrPlayerEntity) ||
 +			if ((gVrFirstPersonActive && !gVrHidePlayerBody &&
- 			     (CEntity*)this == gVrPlayerEntity) ||
++			     (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
  			    androidgame::VrCutsceneCameraActor() == (void*)this) {
  				RpHAnimHierarchy* hier = GetAnimHierarchyFromSkinClump(GetClump());
 -				int32 idx = RpHAnimIDGetIndex(hier, ConvertPedNode2BoneTag(PED_HEAD));
@@ -263,7 +264,7 @@ index 2927409..0ca3098 100644
 +		extern bool gVrFirstPersonActive;
 +		extern CEntity *gVrPlayerEntity;
 +		const bool suppressHeadLimb =
-+			(gVrFirstPersonActive && (CEntity*)this == gVrPlayerEntity) ||
++			(gVrFirstPersonActive && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 +			androidgame::VrCutsceneCameraActor() == (void*)this;
 +		if(!suppressHeadLimb)
 +			renderLimb(PED_HEAD);
@@ -273,8 +274,18 @@ index 2927409..0ca3098 100644
  		renderLimb(PED_HANDL);
  		renderLimb(PED_HANDR);
  	}
+@@ -5071,7 +5178,8 @@ CPed::Render(void)
+ 	// During live VR gameplay the same atomic is drawn from the tracked right
+ 	// hand after the world pass. Keep every legacy path (desktop, cinema,
+ 	// cutscenes and vehicles) attached to the animated ped hand.
+-	renderWeaponOnPed = !IsPlayer() || !OculusVR::ShouldUseTrackedHands();
++	extern bool gVrFirstPersonActive;
++	renderWeaponOnPed = !IsPlayer() || (!gVrFirstPersonActive && !OculusVR::ShouldUseTrackedHands() && !VrBodyIK::Enabled());
+ #endif
+ 	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
+ 		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
 diff --git a/src/peds/PedAI.cpp b/src/peds/PedAI.cpp
-index 25dd80c..821274e 100644
+index 25dd80ce..821274e4 100644
 --- a/src/peds/PedAI.cpp
 +++ b/src/peds/PedAI.cpp
 @@ -5083,12 +5083,14 @@ CPed::ClearDuck(void)
@@ -297,7 +308,7 @@ index 25dd80c..821274e 100644
  	if (!bCrouchWhenShooting)
  		return;
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
-index 019ed3e..326f041 100644
+index 019ed3e8..326f0410 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
 @@ -886,6 +886,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)

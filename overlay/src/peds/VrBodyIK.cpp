@@ -471,19 +471,13 @@ static bool BuildGroundedVisualBody(CPed *ped,
 			CVector delta = eye-anchor;
 			delta.z = 0.0f;
 
-			const float kRoomscaleRadius = 0.12f;
 			const float horizontal =
 				sqrtf(delta.x*delta.x + delta.y*delta.y);
 
-			if(horizontal > kRoomscaleRadius &&
-			   horizontal > 0.000001f){
-				const float excess =
-					horizontal-kRoomscaleRadius;
-				const float inv = 1.0f/horizontal;
-				const CVector follow(
-					delta.x*inv*excess,
-					delta.y*inv*excess,
-					0.0f);
+			if(horizontal > 0.0001f){
+				const float maxFollow = 2.0f;
+				const float scale = (horizontal > maxFollow) ? (maxFollow / horizontal) : 1.0f;
+				const CVector follow(delta.x * scale, delta.y * scale, 0.0f);
 
 				visualBody.GetPosition() = nativeRoot+follow;
 
@@ -504,11 +498,21 @@ static bool ResolveUpperBody(RpHAnimHierarchy *hier, UpperBodyBones &out)
 	out.mid = RpHAnimIDGetIndex(hier, BONE_mid);
 	out.torso = RpHAnimIDGetIndex(hier, BONE_torso);
 	out.head = RpHAnimIDGetIndex(hier, BONE_head);
-	if(out.mid < 0)
+	if(out.waist < 0)
+		out.waist = 0;
+	if(out.mid < 0 && out.torso >= 0)
+		out.mid = out.torso;
+	else if(out.mid < 0)
 		out.mid = out.waist;
-	return out.mid >= 0 && out.torso >= 0 && out.head >= 0 &&
-		out.mid < hier->numNodes && out.torso < hier->numNodes &&
-		out.head < hier->numNodes;
+	if(out.torso < 0 && out.mid >= 0)
+		out.torso = out.mid;
+	else if(out.torso < 0)
+		out.torso = out.waist;
+	if(out.head < 0)
+		out.head = RpHAnimIDGetIndex(hier, ConvertPedNode2BoneTag(PED_HEAD));
+	return out.head >= 0 && out.head < hier->numNodes &&
+		out.torso >= 0 && out.torso < hier->numNodes &&
+		out.mid >= 0 && out.mid < hier->numNodes;
 }
 
 static bool StabilizeUpperBody(CPed *ped, RwMatrix *mats,
@@ -562,18 +566,18 @@ static bool StabilizeUpperBody(CPed *ped, RwMatrix *mats,
 	midLocal.y += crouchOffset;
 	torsoLocal.y += crouchOffset;
 
-	mid.pos = visualRoot + FromBasisLocal(midLocal, visualBody);
-	mid.right = FromBasisLocal(gUpperBody.midRightLocal, visualBody);
-	mid.up = FromBasisLocal(gUpperBody.midUpLocal, visualBody);
-	mid.at = FromBasisLocal(gUpperBody.midAtLocal, visualBody);
-	Orthonormalise(mid);
+	if(b.mid != b.torso){
+		mid.pos = visualRoot + FromBasisLocal(midLocal, visualBody);
+		mid.right = FromBasisLocal(gUpperBody.midRightLocal, visualBody);
+		mid.up = FromBasisLocal(gUpperBody.midUpLocal, visualBody);
+		mid.at = FromBasisLocal(gUpperBody.midAtLocal, visualBody);
+		Orthonormalise(mid);
+	}
 
-	const CMatrix &nativeBodyForTorso = ped->GetMatrix();
-	const CVector nativeRootForTorso = ped->GetPosition();
-	torso.pos = nativeRootForTorso +
-		FromBasisLocal(torsoLocal, nativeBodyForTorso);
+	torso.pos = visualRoot +
+		FromBasisLocal(torsoLocal, visualBody);
 
-	CVector torsoRetractUp = nativeBodyForTorso.GetUp();
+	CVector torsoRetractUp = visualBody.GetUp();
 	torsoRetractUp = Unit(torsoRetractUp, CVector(0.0f, 0.0f, 1.0f));
 	torso.pos = CVector(torso.pos) - torsoRetractUp*0.025f;
 
@@ -583,7 +587,7 @@ static bool StabilizeUpperBody(CPed *ped, RwMatrix *mats,
 	Orthonormalise(torso);
 
 	head.pos = CVector(torso.pos) +
-		FromBasisLocal(gUpperBody.headFromTorsoLocal, nativeBodyForTorso);
+		FromBasisLocal(gUpperBody.headFromTorsoLocal, visualBody);
 	head.right = FromBasisLocal(gUpperBody.headRightLocal, visualBody);
 	head.up = FromBasisLocal(gUpperBody.headUpLocal, visualBody);
 	head.at = FromBasisLocal(gUpperBody.headAtLocal, visualBody);

@@ -1543,53 +1543,12 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				// standing neck latch, which intentionally suppresses animation bob.
 				head = animatedTransitionHead + CVector(0.0f, 0.0f, 0.040f);
 			}else{
-				// Stable ordinary on-foot camera: latch the real neck relative to
-				// Claude's root to keep locomotion bob out of the HMD. Native vehicle
-				// interaction animations above deliberately bypass this stabilization.
-				static CPlayerPed *neckAnchorPlayer;
-				static CVector neckLocal;
-				static bool neckLatched;
-				if(neckAnchorPlayer != player){
-					neckAnchorPlayer = player;
-					neckLatched = false;
-				}
-
-				CVector right = player->GetRight();
 				CVector up = player->GetUp();
-				CVector bodyForward = player->GetForward();
-				right.Normalise();
 				up.Normalise();
-				bodyForward.Normalise();
-
-				const CVector neckNow = (player->GetNodePosition(PED_TORSO) + player->GetNodePosition(PED_HEAD)) * 0.5f;
-				const CVector delta = neckNow-player->GetPosition();
-				const CVector candidate(
-					DotProduct(delta, right),
-					DotProduct(delta, bodyForward),
-					DotProduct(delta, up));
-
-				if(!neckLatched &&
-				   Abs(candidate.x) < 0.60f &&
-				   Abs(candidate.y) < 0.60f &&
-				   candidate.z > 0.20f && candidate.z < 1.50f){
-					neckLocal = candidate;
-					neckLatched = true;
-				}
-
 				if(player->bIsDucking){
-					// Crouching also follows the live native animated neck.
-					head = neckNow+
-						bodyForward*0.060f+
-						up*0.220f;
-				}else if(neckLatched){
-					head = player->GetPosition()+
-						right*neckLocal.x+
-						bodyForward*(neckLocal.y+0.060f)+
-						up*(neckLocal.z+0.220f);
+					head = player->GetPosition() + up * 0.24f;
 				}else{
-					head = neckNow+
-						bodyForward*0.060f+
-						up*0.220f;
+					head = player->GetPosition() + up * 0.59f;
 				}
 			}
 		}else{
@@ -1670,7 +1629,9 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				nudge = CVector(vrForward[0], vrForward[1],
 					vrForward[2]);
 		}
-		if(gVrInVehicle){
+		if(!gVrInVehicle){
+			head += nudge * 0.12f;
+		}else{
 #ifdef GTA_VR_WEAPONS
 			const bool exactBikeNeckCamera =
 				player->m_pMyVehicle != nil &&
