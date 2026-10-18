@@ -95,7 +95,7 @@ index 0b99707..c82f4e1 100644
  	CMatrix matrix;
  	if(!OculusVR::GetTrackedHandMatrix(hand, &matrix))
  		return false;
-@@ -1896,7 +1920,11 @@ RenderVrTrackedWeapon(CPed *player, int hand)
+@@ -1896,7 +1920,12 @@ RenderVrTrackedWeapon(CPed *player, int hand)
  	trackedWeapon = trackedWeapon * weaponRotationXAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationYAdjustment;
  	trackedWeapon = trackedWeapon * weaponRotationZAdjustment;
