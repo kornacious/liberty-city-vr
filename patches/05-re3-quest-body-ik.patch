@@ -1,5 +1,5 @@
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
-index 1335ef9..1d4c5b1 100644
+index 1335ef9b..1d4c5b1c 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
 @@ -19,6 +19,7 @@
@@ -33,7 +33,7 @@ index 1335ef9..1d4c5b1 100644
  {
  	if ( ArePlayerControlsDisabled() )
 diff --git a/src/core/Pad.h b/src/core/Pad.h
-index 5c7c7ce..c838876 100644
+index 5c7c7ce8..c8388760 100644
 --- a/src/core/Pad.h
 +++ b/src/core/Pad.h
 @@ -255,6 +255,7 @@ public:
@@ -45,7 +45,7 @@ index 5c7c7ce..c838876 100644
  	bool ShiftTargetLeftJustDown(void);
  	bool ShiftTargetRightJustDown(void);
 diff --git a/src/core/main.cpp b/src/core/main.cpp
-index f04d522..f69b955 100644
+index 37e05119..713e9464 100644
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
 @@ -86,6 +86,7 @@
@@ -113,7 +113,7 @@ index f04d522..f69b955 100644
  		OculusVR::ApplyTrackedWeaponTwoHandTransform(hand, weaponType,
  			&trackedWeapon);
  	CMatrix droppedWeaponPlacement = trackedWeapon*Invert(weaponBaseAdjustment);
-@@ -2360,7 +2393,8 @@ RenderVrTrackedHands(void)
+@@ -2398,7 +2431,8 @@ RenderVrTrackedHands(void)
  	   TheCamera.m_WideScreenOn ||
  	   CWorld::Players[CWorld::PlayerInFocus].m_bInRemoteMode ||
  	   (FindPlayerVehicle() &&
@@ -124,7 +124,7 @@ index f04d522..f69b955 100644
  	CPed *player = FindPlayerPed();
  	if(!player || !player->m_rwObject || player->DyingOrDead())
 diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
-index 2927409..720b083 100644
+index 29274093..25dd0057 100644
 --- a/src/peds/Ped.cpp
 +++ b/src/peds/Ped.cpp
 @@ -33,6 +33,7 @@
@@ -338,7 +338,7 @@ index 2927409..720b083 100644
  		   (CEntity*)this == gVrPlayerEntity)
  			return;
  	}
-@@ -5054,24 +5186,89 @@ CPed::Render(void)
+@@ -5054,24 +5186,90 @@ CPed::Render(void)
  	// live on-foot VR gameplay and while physically steering a vehicle.
  	// Other vehicles and every legacy render path (desktop/cinema/cutscenes or
  	// disabled tracked hands) retain the original animated body.
@@ -347,10 +347,11 @@ index 2927409..720b083 100644
 +	extern bool gVrCameraInsidePlayerHead;
 +	extern bool gVrHidePlayerBody;
 +	extern CEntity *gVrPlayerEntity;
-+	hideVrPlayerBody = IsPlayer() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
++	hideVrPlayerBody = (IsPlayer() && OculusVR::IsTrackedScopeOverlayActive()) ||
++		(IsPlayer() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
 +		((!bInVehicle && !VrBodyIK::Enabled()) ||
 +		 (bInVehicle && OculusVR::IsImmersiveDrivingActive() &&
-+		  !VrBodyIK::VehicleEnabled()));
++		  !VrBodyIK::VehicleEnabled())));
 +
 +	const bool hideNonSkinnedHead = !IsClumpSkinned(GetClump()) &&
 +		((gVrCameraInsidePlayerHead && !gVrHidePlayerBody && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
@@ -432,7 +433,7 @@ index 2927409..720b083 100644
  	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
  		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
 diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
-index 2c040e5..92c088f 100644
+index 2c040e55..92c088f8 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
 @@ -888,6 +888,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)

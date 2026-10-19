@@ -210,7 +210,8 @@ if(NOT LIBERTYVR_BRINGUP)
 	list(REMOVE_ITEM GAME_SOURCES
 		"${RE3_ROOT}/src/audio/sampman_oal.cpp"
 		"${RE3_ROOT}/src/audio/sampman_miles.cpp"
-		"${RE3_ROOT}/src/audio/sampman_null.cpp")
+		"${RE3_ROOT}/src/audio/sampman_null.cpp"
+		"${RE3_ROOT}/src/extras/GitSHA1.cpp")
 
 	# GitSHA1.cpp is generated, not committed; the desktop build makes it with
 	# printHash.bat as a prebuild step.

@@ -2886,16 +2886,20 @@ VrDebugUpdate(const PadInput &in)
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_WEAPONS &&
 		         (positivePulse || decreasePulse)){
-			const int weaponSetting =
-				QuestWeaponSettingForWeaponItem(gVrWeaponsSelection);
-			if(weaponSetting >= 0 && weaponSetting <
-			   OculusVR::GetQuestWeaponSettingCount())
-				OculusVR::ToggleQuestWeaponSetting(weaponSetting);
-			else if(gVrWeaponsSelection == VR_WEAPONS_CALIBRATION){
-				gVrMenuPage = VR_MENU_PAGE_CALIBRATION;
-				gVrCalibrationSelection = 0;
-			}else if(gVrWeaponsSelection == VR_WEAPONS_BACK){
-				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+			if(gVrWeaponsSelection == VR_WEAPONS_SCOPE_AIM){
+				OculusVR::CycleQuestScopeAimMode(decreasePulse ? -1 : 1);
+			}else{
+				const int weaponSetting =
+					QuestWeaponSettingForWeaponItem(gVrWeaponsSelection);
+				if(weaponSetting >= 0 && weaponSetting <
+				   OculusVR::GetQuestWeaponSettingCount())
+					OculusVR::ToggleQuestWeaponSetting(weaponSetting);
+				else if(gVrWeaponsSelection == VR_WEAPONS_CALIBRATION){
+					gVrMenuPage = VR_MENU_PAGE_CALIBRATION;
+					gVrCalibrationSelection = 0;
+				}else if(gVrWeaponsSelection == VR_WEAPONS_BACK){
+					gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+				}
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_MODEL_ASSETS &&
 		         (positivePulse || decreasePulse)){
@@ -3946,9 +3950,15 @@ DrawQuestWeaponsPage(void)
 	char rows[VR_WEAPONS_ITEM_COUNT][112];
 	for(int item = VR_WEAPONS_HANDS; item <= VR_WEAPONS_GRIP_LOCK; item++){
 		const int setting = QuestWeaponSettingForWeaponItem(item);
-		snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
-			OculusVR::GetQuestWeaponSettingName(setting),
-			OculusVR::GetQuestWeaponSetting(setting) ? "ON" : "OFF");
+		if(item == VR_WEAPONS_SCOPE_AIM){
+			snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
+				OculusVR::GetQuestWeaponSettingName(setting),
+				OculusVR::GetQuestScopeAimModeName());
+		}else{
+			snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
+				OculusVR::GetQuestWeaponSettingName(setting),
+				OculusVR::GetQuestWeaponSetting(setting) ? "ON" : "OFF");
+		}
 	}
 	strcpy(rows[VR_WEAPONS_CALIBRATION], "WEAPON CALIBRATION  < OPEN >");
 	strcpy(rows[VR_WEAPONS_BACK], "BACK TO SETTINGS");
@@ -5750,13 +5760,11 @@ VrPadBindingDefault(int source)
 float
 VrScopeZoomFactor(void)
 {
-	if(!OculusVR::IsTrackedScopeActive())
+	if(!OculusVR::IsTrackedScopeOverlayActive())
 		return 1.0f;
-	switch(OculusVR::GetTrackedScopeWeaponType()){
-	case WEAPONTYPE_SNIPERRIFLE: return 2.5f;
-	case WEAPONTYPE_ROCKETLAUNCHER: return 1.8f;
-	default: return 1.0f;
-	}
+	if(OculusVR::GetTrackedScopeWeaponType() == WEAPONTYPE_SNIPERRIFLE)
+		return 2.5f;
+	return 1.0f;
 }
 
 }

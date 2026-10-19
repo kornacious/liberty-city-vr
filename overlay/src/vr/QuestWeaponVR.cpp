@@ -21,6 +21,7 @@
 #include "WeaponType.h"
 #include "World.h"
 #include "ModelSets.h"
+#include "Sprite.h"
 #include "vulkan/rwvk.h"
 
 #include <android/log.h>
@@ -348,7 +349,13 @@ struct WeaponLaserOverride {
 };
 static WeaponLaserOverride gWeaponLaserOverrides[2][WEAPONTYPE_TOTALWEAPONS];
 static bool gManualReload;
-static bool gScopeAim = true;
+enum eScopeAimMode {
+	SCOPE_AIM_OFF = 0,
+	SCOPE_AIM_2D_OVERLAY = 1,
+	SCOPE_AIM_3D_PHYSICAL = 2,
+	SCOPE_AIM_MODE_COUNT = 3
+};
+static int gScopeAimMode = SCOPE_AIM_2D_OVERLAY;
 static bool gGripLock;
 static bool gRunWithoutLimits;
 static CVector gBodyForward(0.0f, 1.0f, 0.0f);
@@ -454,8 +461,12 @@ LoadSettings()
 		kSettingsPath) != 0;
 	gManualReload = GetPrivateProfileIntA("VR", "ManualReloading", 0,
 		kSettingsPath) != 0;
-	gScopeAim = GetPrivateProfileIntA("VR", "PhysicalScopeAim", 1,
-		kSettingsPath) != 0;
+	const int storedScope = (int)(int32)GetPrivateProfileIntA("VR", "PhysicalScopeAim", 1,
+		kSettingsPath);
+	if(storedScope >= 0 && storedScope < SCOPE_AIM_MODE_COUNT)
+		gScopeAimMode = storedScope;
+	else
+		gScopeAimMode = SCOPE_AIM_2D_OVERLAY;
 	gGripLock = GetPrivateProfileIntA("VR", "WeaponGripLock", 0,
 		kSettingsPath) != 0;
 	gRunWithoutLimits = GetPrivateProfileIntA("VR", "RunWithoutLimits", 0,
@@ -921,9 +932,7 @@ GetOneHandAimSwayDegrees(int weaponType)
 static bool
 IsScopeWeapon(int weaponType)
 {
-	return weaponType == WEAPONTYPE_SNIPERRIFLE ||
-		weaponType == WEAPONTYPE_ROCKETLAUNCHER ||
-		weaponType == WEAPONTYPE_M16;
+	return weaponType == WEAPONTYPE_SNIPERRIFLE;
 }
 
 static bool
@@ -2360,7 +2369,7 @@ UpdateScope()
 		const int slot = gHeldSlot[hand];
 		const int weaponType =
 			slot >= 0 ? GetVrWeaponTypeForSlot(slot) : -1;
-		if(!IsScopeWeapon(weaponType) || !gPoseValid[hand] || !gScopeAim)
+		if(!IsScopeWeapon(weaponType) || !gPoseValid[hand] || gScopeAimMode == SCOPE_AIM_OFF)
 			continue;
 		if(IsTwoHanded(weaponType) && gSupportHand[hand] < 0)
 			continue;
@@ -2614,9 +2623,68 @@ CycleQuestWeaponLaserOverride(int weaponType, int direction)
 	stored = (stored+3+(direction < 0 ? -1 : 1)) % 3;
 	WriteWeaponLaserOverride(weaponType, stored-1);
 }
-bool IsTrackedScopeActive() { return gScopeHand >= 0; }
-bool IsTrackedScopeActiveForHand(int hand) { return gScopeHand == hand; }
+bool IsTrackedScopeActive() { return gScopeHand >= 0 && gScopeAimMode != SCOPE_AIM_OFF; }
+bool IsTrackedScopeActiveForHand(int hand) { return gScopeHand == hand && gScopeAimMode != SCOPE_AIM_OFF; }
+bool IsTrackedScopeOverlayActive() { return IsTrackedScopeActive() && gScopeAimMode == SCOPE_AIM_2D_OVERLAY; }
+bool IsTrackedScopeOverlayActiveForHand(int hand) { return IsTrackedScopeActiveForHand(hand) && gScopeAimMode == SCOPE_AIM_2D_OVERLAY; }
 int GetTrackedScopeWeaponType() { return gScopeWeaponType; }
+
+int GetQuestScopeAimMode() { LoadSettings(); return gScopeAimMode; }
+
+const char *
+GetQuestScopeAimModeName()
+{
+	LoadSettings();
+	switch(gScopeAimMode){
+	case SCOPE_AIM_2D_OVERLAY: return "2D OVERLAY";
+	case SCOPE_AIM_3D_PHYSICAL: return "3D PHYSICAL";
+	case SCOPE_AIM_OFF: return "OFF";
+	default: return "UNKNOWN";
+	}
+}
+
+void
+CycleQuestScopeAimMode(int direction)
+{
+	LoadSettings();
+	gScopeAimMode = (gScopeAimMode + (direction < 0 ? (SCOPE_AIM_MODE_COUNT - 1) : 1)) % SCOPE_AIM_MODE_COUNT;
+	char buf[16];
+	snprintf(buf, sizeof(buf), "%d", gScopeAimMode);
+	WritePrivateProfileStringA("VR", "PhysicalScopeAim", buf, kSettingsPath);
+	if(gScopeAimMode == SCOPE_AIM_OFF){
+		gScopeHand = -1;
+		gScopeWeaponType = -1;
+	}
+}
+
+bool
+GetTrackedScopeReticlePos(float *screenX, float *screenY)
+{
+	if(!screenX || !screenY)
+		return false;
+	*screenX = (float)RsGlobal.width * 0.5f;
+	*screenY = (float)RsGlobal.height * 0.5f;
+	if(gScopeHand < 0 || gScopeWeaponType < 0)
+		return false;
+	CVector source, direction;
+	if(!BuildAim(gScopeHand, gScopeWeaponType, &source, &direction))
+		return false;
+	direction.Normalise();
+	const CVector targetPoint = source + direction * 100.0f;
+	RwV3d targetRw = { targetPoint.x, targetPoint.y, targetPoint.z };
+	RwV3d screenPos;
+	float szx, szy;
+	if(CSprite::CalcScreenCoors(targetRw, &screenPos, &szx, &szy, false) && screenPos.z > 0.0f){
+		const float maxOffsetX = (float)RsGlobal.width * 0.28f;
+		const float maxOffsetY = (float)RsGlobal.height * 0.28f;
+		const float midX = (float)RsGlobal.width * 0.5f;
+		const float midY = (float)RsGlobal.height * 0.5f;
+		*screenX = Clamp(screenPos.x, midX - maxOffsetX, midX + maxOffsetX);
+		*screenY = Clamp(screenPos.y, midY - maxOffsetY, midY + maxOffsetY);
+		return true;
+	}
+	return false;
+}
 
 bool
 ShouldUseTrackedWeapon(int hand)
@@ -3049,17 +3117,9 @@ GetTrackedWeaponAim(int hand, int weaponType, CVector *source,
 	if(gScopeHand != hand || gScopeWeaponType != weaponType)
 		return true;
 
-	CVector target;
-	// Never silently fall back to the controller/barrel direction while the
-	// scope is visible. If a transient frame has no valid centre ray, suppress
-	// that shot instead of firing somewhere outside the reticle.
-	if(!BuildScopeCentreTarget(&target))
-		return false;
-	CVector converged = target-*source;
-	if(converged.MagnitudeSqr() <= 0.0001f)
-		return false;
-	converged.Normalise();
-	*direction = converged;
+	// In both 2D dynamic-reticle overlay mode and 3D physical scope mode, shots
+	// travel authoritatively along the rifle barrel bore direction (*direction)
+	// rather than forcibly snapping to the center gaze of the HMD.
 	return true;
 }
 
@@ -3590,7 +3650,7 @@ GetQuestWeaponSettingName(int setting)
 {
 	static const char *names[] = {
 		"VR HANDS", "WEAPON LASER", "HOLSTER HIGHLIGHTS",
-		"MANUAL RELOADING", "PHYSICAL SCOPE AIM",
+		"MANUAL RELOADING", "SCOPE AIM",
 		"WEAPON GRIP LOCK"
 	};
 	return setting >= 0 && setting < (int)ARRAY_SIZE(names) ?
@@ -3606,7 +3666,7 @@ GetQuestWeaponSetting(int setting)
 	case 1: return gWeaponLaser;
 	case 2: return gHolsterHighlights;
 	case 3: return gManualReload;
-	case 4: return gScopeAim;
+	case 4: return gScopeAimMode != SCOPE_AIM_OFF;
 	case 5: return gGripLock;
 	default: return false;
 	}
@@ -3616,6 +3676,10 @@ void
 ToggleQuestWeaponSetting(int setting)
 {
 	LoadSettings();
+	if(setting == 4){
+		CycleQuestScopeAimMode(1);
+		return;
+	}
 	bool *value = nil;
 	const char *key = nil;
 	switch(setting){
@@ -3623,7 +3687,6 @@ ToggleQuestWeaponSetting(int setting)
 	case 1: value = &gWeaponLaser; key = "WeaponLaser"; break;
 	case 2: value = &gHolsterHighlights; key = "HolsterHighlights"; break;
 	case 3: value = &gManualReload; key = "ManualReloading"; break;
-	case 4: value = &gScopeAim; key = "PhysicalScopeAim"; break;
 	case 5: value = &gGripLock; key = "WeaponGripLock"; break;
 	default: return;
 	}
@@ -3633,10 +3696,6 @@ ToggleQuestWeaponSetting(int setting)
 	if(setting == 3 && !gManualReload)
 		for(int hand = 0; hand < VR_HAND_COUNT; hand++)
 			ResetManualReloadState(gManualReloadState[hand]);
-	if(setting == 4 && !gScopeAim){
-		gScopeHand = -1;
-		gScopeWeaponType = -1;
-	}
 }
 
 int
