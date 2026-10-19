@@ -102,7 +102,7 @@ index d4fcf676..7bbacfbe 100644
  
  #define CDDEBUG(f, ...)   debug ("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
  #define CDTRACE(f, ...)   printf("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
-@@ -30,6 +32,10 @@
+@@ -30,16 +32,20 @@
  bool flushStream[MAX_CDCHANNELS];
  #endif
  
@@ -113,6 +113,17 @@ index d4fcf676..7bbacfbe 100644
  #ifdef USE_UNNAMED_SEM
  
  #define RE3_SEM_OPEN(name, ...) re3_sem_open()
+ sem_t*
+ re3_sem_open(void)
+ {
+ 	sem_t* sem = (sem_t*)malloc(sizeof(sem_t));
+-	if (sem_init(sem, 0, 1) == -1) {
++	if (sem_init(sem, 0, 0) == -1) {
+ 		sem = SEM_FAILED;
+ 	}
+ 
+ 	return sem;
+ }
 @@ -99,7 +105,7 @@ struct CdReadInfo
  	int32 hFile;
  };
@@ -477,10 +488,20 @@ index 666774fe..763a203b 100644
  							DIDEVCAPS devCaps;
  							devCaps.dwSize = sizeof(DIDEVCAPS);
 diff --git a/src/core/Game.cpp b/src/core/Game.cpp
-index 9e017903..4cfa8a92 100644
+index 9e017903..7db7306f 100644
 --- a/src/core/Game.cpp
 +++ b/src/core/Game.cpp
-@@ -245,16 +245,10 @@ CGame::InitialiseRenderWare(void)
+@@ -41,6 +41,9 @@
+ #include "MBlur.h"
+ #include "Messages.h"
+ #include "MemoryCard.h"
+ #include "Pad.h"
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++#include "OculusVR.h"
++#endif
+ #include "Particle.h"
+ #include "ParticleObject.h"
+@@ -245,16 +248,10 @@ CGame::InitialiseRenderWare(void)
  
  #ifdef LIBRW
  #ifdef PS2_MATFX
@@ -499,7 +520,7 @@ index 9e017903..4cfa8a92 100644
  #else
  #ifdef PS2_MATFX
  	ReplaceMatFxCallback();
-@@ -503,7 +497,7 @@ bool CGame::Initialise(const char* datFile)
+@@ -503,7 +500,7 @@ bool CGame::Initialise(const char* datFile)
  	CPickups::Init();
  	CTheCarGenerators::Init();
  
@@ -508,6 +529,30 @@ index 9e017903..4cfa8a92 100644
  
  	CFileLoader::LoadLevel("DATA\\DEFAULT.DAT");
  	CFileLoader::LoadLevel(datFile);
+@@ -665,8 +662,11 @@ bool CGame::Initialise(const char* datFile)
+ 	return true;
+ }
+ 
+ bool CGame::ShutDown(void)
+ {
++#ifdef GTA_VR_WEAPONS
++	OculusVR::PrepareForGameShutdown();
++#endif
+ 	CReplay::FinishPlayback();
+ 	CPlane::Shutdown();
+ 	CTrain::Shutdown();
+@@ -833,8 +833,11 @@ void CGame::ReloadIPLs(void)
+ 	CTimer::Update();
+ }
+ 
+ void CGame::ShutDownForRestart(void)
+ {
++#ifdef GTA_VR_WEAPONS
++	OculusVR::PrepareForGameShutdown();
++#endif
+ 	CReplay::FinishPlayback();
+ 	CReplay::EmptyReplayBuffer();
+ 	DMAudio.DestroyAllGameCreatedEntities();
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
 index 2acb7991..1335ef9b 100644
 --- a/src/core/Pad.cpp
@@ -2138,7 +2183,7 @@ index d6c02b9d..37e05119 100644
  void
  RenderScene(void)
  {
-@@ -1406,23 +1521,1011 @@ RenderScene(void)
+@@ -1406,23 +1521,1021 @@ RenderScene(void)
  	}
  #endif
  	PUSH_RENDERGROUP("RenderScene");
@@ -2429,6 +2474,8 @@ index d6c02b9d..37e05119 100644
 +	VrHolsterWeaponCache() : modelId(-1), atomic(nil) {}
 +};
 +
++static VrHolsterWeaponCache gVrHolsterWeaponCache[TOTAL_WEAPON_SLOTS];
++
 +static void
 +ReleaseVrHolsterWeapon(VrHolsterWeaponCache &cache)
 +{
@@ -2445,27 +2492,35 @@ index d6c02b9d..37e05119 100644
 +	cache.modelId = -1;
 +}
 +
++namespace OculusVR {
++void
++ReleaseAllVrHolsterWeapons(void)
++{
++	for(int i = 0; i < TOTAL_WEAPON_SLOTS; i++)
++		ReleaseVrHolsterWeapon(gVrHolsterWeaponCache[i]);
++}
++}
++
 +static RpAtomic*
 +GetVrHolsterWeaponAtomic(int slot, int modelId)
 +{
-+	static VrHolsterWeaponCache cache[TOTAL_WEAPON_SLOTS];
 +	if(slot < 0 || slot >= TOTAL_WEAPON_SLOTS || modelId < 0)
 +		return nil;
-+	if(cache[slot].modelId != modelId)
-+		ReleaseVrHolsterWeapon(cache[slot]);
-+	if(!cache[slot].atomic){
++	if(gVrHolsterWeaponCache[slot].modelId != modelId)
++		ReleaseVrHolsterWeapon(gVrHolsterWeaponCache[slot]);
++	if(!gVrHolsterWeaponCache[slot].atomic){
 +		if(!CStreaming::HasModelLoaded(modelId))
 +			return nil;
 +		CBaseModelInfo *modelInfo = CModelInfo::GetModelInfo(modelId);
 +		if(!modelInfo)
 +			return nil;
-+		cache[slot].atomic = (RpAtomic*)modelInfo->CreateInstance();
-+		if(!cache[slot].atomic)
++		gVrHolsterWeaponCache[slot].atomic = (RpAtomic*)modelInfo->CreateInstance();
++		if(!gVrHolsterWeaponCache[slot].atomic)
 +			return nil;
 +		modelInfo->AddRef();
-+		cache[slot].modelId = modelId;
++		gVrHolsterWeaponCache[slot].modelId = modelId;
 +	}
-+	return cache[slot].atomic;
++	return gVrHolsterWeaponCache[slot].atomic;
 +}
 +
 +static void

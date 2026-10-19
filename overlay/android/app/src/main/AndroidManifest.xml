@@ -21,7 +21,8 @@
 		android:icon="@mipmap/ic_launcher"
 		android:banner="@drawable/banner"
 		android:allowBackup="false"
-		android:extractNativeLibs="true">
+		android:extractNativeLibs="true"
+		android:allowNativeHeapPointerTagging="false">
 		<!-- Enables the assets/vr_splash.png splash image -->
 		<meta-data android:name="com.oculus.ossplash" android:value="true" />
 

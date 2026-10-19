@@ -56,6 +56,7 @@ bool SubmitStartupFrame(void *nativeWindow);
 void CancelStereoFrame(RwCamera *camera);
 void SetInactive();
 void PrepareForGameShutdown();
+void ReleaseAllVrHolsterWeapons();
 int GetStereoScalePercent();
 bool IsStereoReversed();
 bool IsFirstPersonEnabled();

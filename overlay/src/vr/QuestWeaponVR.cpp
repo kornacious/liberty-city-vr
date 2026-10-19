@@ -3946,6 +3946,7 @@ void ToggleCheatMenu() {}
 void
 PrepareForGameShutdown()
 {
+	ReleaseAllVrHolsterWeapons();
 	InvalidateQuestWeaponLaserOverrides();
 	for(int hand = 0; hand < VR_HAND_COUNT; hand++){
 		gPoseValid[hand] = false;
