@@ -2558,8 +2558,8 @@ index d6c02b9d..37e05119 100644
 +		const CVector crossRight = trackedWeapon.GetForward() * -1.0f;
 +		const CVector crossUp = trackedWeapon.GetUp();
 +		const CVector crossNorm = trackedWeapon.GetRight();
-+		RwIm3DVertex opticVerts[16];
-+		RwImVertexIndex opticIndices[72];
++		RwIm3DVertex opticVerts[32];
++		RwImVertexIndex opticIndices[128];
 +		int opticVCount = 0, opticICount = 0;
 +		// Horizontal bar (green)
 +		AppendVrHandBox(opticVerts, opticVCount, opticIndices, opticICount,
