@@ -2138,7 +2138,7 @@ index d6c02b9d..37e05119 100644
  void
  RenderScene(void)
  {
-@@ -1406,23 +1521,1007 @@ RenderScene(void)
+@@ -1406,23 +1521,1011 @@ RenderScene(void)
  	}
  #endif
  	PUSH_RENDERGROUP("RenderScene");
@@ -2550,29 +2550,33 @@ index d6c02b9d..37e05119 100644
 +
 +	if(!virtualDetonator && weaponType == WEAPONTYPE_SNIPERRIFLE &&
 +	   OculusVR::GetQuestScopeAimMode() == 2){ // SCOPE_AIM_3D_PHYSICAL
-+		const CVector opticLocal(0.18f, -0.0902f, 0.138f);
++		const CVector opticLocal(-0.0250f, -0.1360f, -0.0221f);
 +		const CVector opticWorld = trackedWeapon.GetPosition() +
 +			trackedWeapon.GetRight()*opticLocal.x +
 +			trackedWeapon.GetForward()*opticLocal.y +
 +			trackedWeapon.GetUp()*opticLocal.z;
-+		const CVector crossRight = trackedWeapon.GetForward() * -1.0f;
++		const CVector crossRight = trackedWeapon.GetRight();
 +		const CVector crossUp = trackedWeapon.GetUp();
-+		const CVector crossNorm = trackedWeapon.GetRight();
-+		RwIm3DVertex opticVerts[32];
-+		RwImVertexIndex opticIndices[128];
++		const CVector crossNorm = trackedWeapon.GetForward() * -1.0f;
++		RwIm3DVertex opticVerts[48];
++		RwImVertexIndex opticIndices[180];
 +		int opticVCount = 0, opticICount = 0;
-+		// Horizontal bar (green)
++		// Dark optical lens backdrop covering the flat mesh cap
++		AppendVrHandBox(opticVerts, opticVCount, opticIndices, opticICount,
++			opticWorld - crossNorm * 0.0004f, crossRight, crossUp, crossNorm,
++			0.0068f, 0.0060f, 0.0002f, 12, 22, 28);
++		// Horizontal duplex bar (green)
 +		AppendVrHandBox(opticVerts, opticVCount, opticIndices, opticICount,
 +			opticWorld, crossRight, crossUp, crossNorm,
-+			0.009f, 0.0007f, 0.0007f, 40, 255, 60);
-+		// Vertical bar (green)
++			0.0065f, 0.00045f, 0.0004f, 40, 255, 60);
++		// Vertical duplex bar (green)
 +		AppendVrHandBox(opticVerts, opticVCount, opticIndices, opticICount,
 +			opticWorld, crossRight, crossUp, crossNorm,
-+			0.0007f, 0.009f, 0.0007f, 40, 255, 60);
-+		// Center red dot
++			0.00045f, 0.0060f, 0.0004f, 40, 255, 60);
++		// Center illuminated red dot
 +		AppendVrHandBox(opticVerts, opticVCount, opticIndices, opticICount,
-+			opticWorld, crossRight, crossUp, crossNorm,
-+			0.0014f, 0.0014f, 0.0010f, 255, 40, 40);
++			opticWorld + crossNorm * 0.0002f, crossRight, crossUp, crossNorm,
++			0.0009f, 0.0009f, 0.0006f, 255, 40, 40);
 +		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
 +		RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
 +		RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);

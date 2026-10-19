@@ -5760,7 +5760,7 @@ VrPadBindingDefault(int source)
 float
 VrScopeZoomFactor(void)
 {
-	if(!OculusVR::IsTrackedScopeOverlayActive())
+	if(!OculusVR::IsTrackedScopeActive())
 		return 1.0f;
 	if(OculusVR::GetTrackedScopeWeaponType() == WEAPONTYPE_SNIPERRIFLE)
 		return 2.5f;
