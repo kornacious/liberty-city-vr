@@ -28,8 +28,6 @@
 #include <string.h>
 
 extern bool gVrFirstPersonActive;
-extern int GetVrWeaponTypeForSlot(int slot);
-extern bool IsVrWeaponSlotOwned(int slot);
 extern const char *GetVrWeaponName(int weaponType);
 
 template<typename T, typename U, typename V>
@@ -997,9 +995,9 @@ FindHolsterPoint(int slot)
 		if(gHolsterPointSlot[point] == slot)
 			return point;
 	if(slot == WEAPONSLOT_SNIPER){
-		if(!IsVrWeaponSlotOwned(WEAPONSLOT_RIFLE))
+		if(!OculusVR::IsVrWeaponSlotOwned(WEAPONSLOT_RIFLE))
 			return HOLSTER_BACK_LEFT;
-		if(!IsVrWeaponSlotOwned(WEAPONSLOT_HEAVY))
+		if(!OculusVR::IsVrWeaponSlotOwned(WEAPONSLOT_HEAVY))
 			return HOLSTER_BACK_RIGHT;
 		return HOLSTER_BACK_LEFT;
 	}
@@ -3903,9 +3901,6 @@ PrepareForGameShutdown()
 	gBodyForwardValid = false;
 	VRHandModel::Shutdown();
 }
-
-int GetVrWeaponTypeForSlot(int slot) { return ::GetVrWeaponTypeForSlot(slot); }
-bool IsVrWeaponSlotOwned(int slot) { return ::IsVrWeaponSlotOwned(slot); }
 
 } // namespace OculusVR
 
