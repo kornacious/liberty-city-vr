@@ -9,6 +9,13 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+`test-android-audio.ps1 -KitRoot .` extracts the production Android channel
+state, spatial/volume setters, channel initialization and AAudio mixer callback.
+Synthetic PCM checks near/mid/far gain, all three position axes, moving sources,
+range updates and setter ordering, volume/fade/cutscene scaling, channel reuse,
+2D audio and invalid ranges/coordinates. It needs no game files or Android
+audio device. Listening tests on the headset are still needed to judge balance.
+
 `test-autosave.ps1 -StageRoot <assembled-tree>` tests the production autosave
 transaction and extracts the engine filename/checksum/recovery functions. It
 injects failures at each transaction boundary, checks that manual slots remain

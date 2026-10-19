@@ -40,7 +40,10 @@ struct AndroidChannel {
 	uint32 frequency = DIGITALRATE;
 	uint32 volume = MAX_VOLUME;
 	uint32 pan = 63;
+	float x = 0.0f, y = 0.0f, z = 0.0f;
+	float minDistance = 25.0f;
 	float maxDistance = 100.0f;
+	float distanceGain = 1.0f;
 	double cursor = 0.0;
 	uint32 revision = 0;
 	bool valid = false;
@@ -67,6 +70,33 @@ clampSample(int value)
 	return value < -32768 ? -32768 : value > 32767 ? 32767 : value;
 }
 
+static void
+updateSpatialization(AndroidChannel &channel)
+{
+	// EXTERNAL_3D_SOUND supplies emitting volume, not distance-scaled volume.
+	// Keep that gain separate so movement/range changes never compound a fade.
+	channel.distanceGain = 0.0f;
+	channel.pan = 63;
+	if(!std::isfinite(channel.x) || !std::isfinite(channel.y) ||
+	   !std::isfinite(channel.z) || !std::isfinite(channel.minDistance) ||
+	   !std::isfinite(channel.maxDistance) || channel.maxDistance <= 0.0f)
+		return;
+	const double distance = std::sqrt(double(channel.x) * channel.x +
+		double(channel.y) * channel.y + double(channel.z) * channel.z);
+	const double maximum = channel.maxDistance;
+	const double minimum = std::max(0.0, std::min(maximum, double(channel.minDistance)));
+	// Use the game's quadratic falloff, with the backend's supplied near range.
+	// Equal/reversed ranges become a hard cutoff without dividing by zero.
+	if(distance < maximum){
+		const double gain = distance <= minimum ? 1.0 :
+			(maximum - distance) / (maximum - minimum);
+		channel.distanceGain = float(gain * gain);
+	}
+	const float normal = channel.maxDistance > 0.01f ?
+		std::max(-1.0f, std::min(1.0f, -channel.x / channel.maxDistance)) : 0.0f;
+	channel.pan = uint32(std::max(0.0f, std::min(127.0f, 63.0f + normal * 64.0f)));
+}
+
 static aaudio_data_callback_result_t
 audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 {
@@ -91,7 +121,7 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 		const int16_t *samples = reinterpret_cast<const int16_t *>(
 			gRawSamples + gAndroidSampleTable[channel.sample].nOffset);
 
-		const float volume = float(channel.volume) / float(MAX_VOLUME);
+		const float volume = float(channel.volume) / float(MAX_VOLUME) * channel.distanceGain;
 		const float leftPan = channel.pan <= 63 ? 1.0f :
 			float(127 - channel.pan) / 64.0f;
 		const float rightPan = channel.pan >= 63 ? 1.0f :
@@ -436,20 +466,24 @@ cSampleManager::SetChannelEmittingVolume(uint32 channel, uint32 volume)
 }
 
 void
-cSampleManager::SetChannel3DPosition(uint32 channel, float x, float, float)
+cSampleManager::SetChannel3DPosition(uint32 channel, float x, float y, float z)
 {
 	if(channel >= MAXCHANNELS) return;
 	std::lock_guard<std::mutex> lock(gMixerMutex);
 	AndroidChannel &out = gChannels[channel];
-	const float normal = out.maxDistance > 0.01f ?
-		std::max(-1.0f, std::min(1.0f, -x / out.maxDistance)) : 0.0f;
-	out.pan = uint32(std::max(0.0f, std::min(127.0f, 63.0f + normal * 64.0f)));
+	out.x = x;
+	out.y = y;
+	out.z = z;
+	updateSpatialization(out);
 }
-void cSampleManager::SetChannel3DDistances(uint32 channel, float maxDist, float)
+void cSampleManager::SetChannel3DDistances(uint32 channel, float maxDist, float minDist)
 {
 	if(channel >= MAXCHANNELS) return;
 	std::lock_guard<std::mutex> lock(gMixerMutex);
-	gChannels[channel].maxDistance = std::max(0.01f, maxDist);
+	AndroidChannel &out = gChannels[channel];
+	out.maxDistance = maxDist;
+	out.minDistance = minDist;
+	updateSpatialization(out);
 }
 void cSampleManager::SetChannelVolume(uint32 channel, uint32 volume)
 {

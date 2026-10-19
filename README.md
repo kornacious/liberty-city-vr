@@ -35,6 +35,11 @@ This repository contains the original Quest/OpenXR port layer, Vulkan backend
 changes, build scripts and re3 patch files needed to build Liberty City VR for a
 Meta Quest headset.
 
+Android positional sound effects use the full listener-relative 3D position
+for distance attenuation. Gain stays full inside the supplied minimum range,
+falls quadratically to silence at the maximum range, and updates as sources
+move. The existing effects/fade controls and 2D audio paths remain in effect.
+
 Current source-kit version: **v0.5.6**.
 
 This release adds articulated ragdolls with car and wall contact, optional
