@@ -1808,7 +1808,7 @@ UpdateWeaponTriggerEdges(bool blocked, uint32 blockedHands,
 		gTriggerJustPressed[hand] =
 			pressed && !gTriggerPressed[hand];
 		gTriggerJustReleased[hand] =
-			!pressed && gTriggerPressed[hand];
+			!pressed && gTriggerPressed[hand] && gPoseValid[hand];
 		gTriggerPressed[hand] = pressed;
 	}
 }
@@ -1951,7 +1951,8 @@ UpdateHolsterInput(uint32 blockedHands)
 				gGripLatched[hand] = false;
 			continue;
 		}
-		if(gHeldSlot[hand] >= 0 && gGrip[hand] <= 0.30f){
+		// Neutral input after focus/tracking loss is not a physical release.
+		if(gPoseValid[hand] && gHeldSlot[hand] >= 0 && gGrip[hand] <= 0.30f){
 			const int slot = gHeldSlot[hand];
 			CMatrix holster;
 			const bool returnToHolster = gPoseValid[hand] &&

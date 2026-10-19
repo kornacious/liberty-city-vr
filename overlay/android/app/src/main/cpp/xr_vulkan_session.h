@@ -130,7 +130,8 @@ const char *getRenderScaleFallbackReasonName(int reason);
 void confirmRenderScaleRendererReady(void);
 
 // Snapshot of the tracked controllers, refreshed once per frame while the
-// session holds focus. Axes are -1..1, triggers and grips 0..1.
+// session holds focus. Without a fresh focused sync, getInput returns neutral
+// controls and invalid poses. Axes are -1..1, triggers and grips 0..1.
 struct TrackedPose
 {
 	float position[3];

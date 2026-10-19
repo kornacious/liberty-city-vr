@@ -48,3 +48,11 @@ rewrites and premature frees, and exercise sampler switching, mip-view changes,
 two frame slots, streaming eviction, pool failure and shutdown. Run the existing
 `test-mip-worker.ps1` alongside it to check the actual mip-completion invalidation
 hook. These host checks do not replace Vulkan validation on a headset.
+
+`test-xr-focus-input.ps1 -KitRoot .` exercises production OpenXR input reads,
+session transition invalidation, controller-pose gating and logic-only pad
+publication with a mocked runtime. It checks held controls across focus loss and
+regain, failed synchronization (including positive `XR_SESSION_NOT_FOCUSED`),
+inactive actions, frame-start failures and raw crouch-edge clearing.
+It also checks that unavailable hand poses cannot turn neutralized input into
+a physical weapon drop or synthetic trigger-release action.

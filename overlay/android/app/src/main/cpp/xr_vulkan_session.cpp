@@ -403,6 +403,7 @@ struct State
 	XrAction yAction = XR_NULL_HANDLE;
 	XrAction menuAction = XR_NULL_HANDLE;
 	ControllerInput input = {};
+	bool inputSynced = false;
 };
 
 State g;
@@ -1054,8 +1055,18 @@ readStick(int hand, float *outX, float *outY)
 }
 
 void
+clearInput(void)
+{
+	g.input = {};
+	g.inputSynced = false;
+}
+
+void
 syncInput(void)
 {
+	// Focus-aware system overlays can leave the session VISIBLE and rendering.
+	// Never carry a held throttle, trigger or stick through a skipped/failed sync.
+	clearInput();
 	if(g.actionSet == XR_NULL_HANDLE || g.sessionState != XR_SESSION_STATE_FOCUSED)
 		return;
 
@@ -1063,7 +1074,9 @@ syncInput(void)
 	XrActionsSyncInfo syncInfo = { XR_TYPE_ACTIONS_SYNC_INFO };
 	syncInfo.countActiveActionSets = 1;
 	syncInfo.activeActionSets = &active;
-	if(XR_FAILED(xrSyncActions(g.session, &syncInfo)))
+	// XR_SESSION_NOT_FOCUSED is a positive result, not XR_FAILED. It can arrive
+	// before the corresponding state-change event and must also neutralize input.
+	if(xrSyncActions(g.session, &syncInfo) != XR_SUCCESS)
 		return;
 
 	readStick(0, &g.input.leftStickX, &g.input.leftStickY);
@@ -1079,6 +1092,7 @@ syncInput(void)
 	g.input.x = readBool(g.xAction, -1);
 	g.input.y = readBool(g.yAction, -1);
 	g.input.menu = readBool(g.menuAction, -1);
+	g.inputSynced = true;
 }
 
 void
@@ -1125,6 +1139,10 @@ isPoseActionActive(XrAction action, int hand)
 void
 locateControllerPoses(XrSpace baseSpace, XrTime time)
 {
+	if(!g.inputSynced || g.sessionState != XR_SESSION_STATE_FOCUSED){
+		clearInput();
+		return;
+	}
 	for(int hand = 0; hand < 2; hand++){
 		if(isPoseActionActive(g.gripPoseAction, hand))
 			locateTrackedPose(g.gripSpace[hand], baseSpace, time,
@@ -2675,7 +2693,8 @@ void
 getInput(ControllerInput *out)
 {
 	if(out != nullptr)
-		*out = g.input;
+		*out = g.inputSynced && g.sessionState == XR_SESSION_STATE_FOCUSED ?
+			g.input : ControllerInput{};
 }
 
 void
@@ -2828,6 +2847,9 @@ pollEvents(void)
 			const XrEventDataSessionStateChanged &changed =
 				*(const XrEventDataSessionStateChanged *)&event;
 			g.sessionState = changed.state;
+			// Regaining focus alone must not resurrect the last focused sample.
+			// Wait for a new successful sync, including STOPPING/READY restarts.
+			clearInput();
 			LOGI("session state -> %d", (int)g.sessionState);
 
 			if(g.sessionState == XR_SESSION_STATE_READY){
@@ -2933,6 +2955,8 @@ hasTrackedGameplayHeadPose(void)
 void
 renderFrame(void)
 {
+	// Also invalidate samples if waiting/beginning this frame fails.
+	clearInput();
 	g.headPoseTrackedForFrame = false;
 	if(!g.running)
 		return;

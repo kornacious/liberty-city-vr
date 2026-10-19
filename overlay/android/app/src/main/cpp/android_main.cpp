@@ -613,8 +613,12 @@ gameThreadMain(android_app *app, AppState *state)
 			// takes tens of seconds and there is no reason to stall it until
 			// the headset is picked up. Every draw path checks for an open
 			// frame and does nothing, so this is logic only.
-			if(resumed && gameStarted)
+			if(resumed && gameStarted){
+				// No XR frame means no fresh focused controller sample. Loading
+				// and other logic-only updates must not reuse the last rendered pad.
+				androidgame::SetPadInput(androidgame::PadInput{});
 				androidgame::Step();
+			}
 #endif
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
