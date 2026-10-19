@@ -220,6 +220,25 @@ The guided installer performs these steps automatically.
 - **re3 and reVC teams** — Huge thanks for their amazing effort and groundbreaking reverse-engineering work.
 - **Gemini 4 Argon and Gemini 3.8 Flash** — Huge thanks for porting GeT_RiCh and whachuvr's work from reVC / Vice City to re3 / GTA 3.
 - Their collective work offered a huge contribution for a solid starting point for the GTA III VR for standalone Quest porting efforts.
+- **OpenAI Codex** — Assisted with ongoing Liberty City VR Quest development,
+  including implementation, debugging, regression testing and documentation.
+
+## Planned development with Codex
+
+Codex is planned to take over the ongoing coding-assistance role for Liberty
+City VR Quest, with priorities and changes directed and reviewed by the project
+maintainer. Planned work includes:
+
+- Fixing reported gameplay, audio, save-system and VR interaction issues.
+- Refining tracked controls, vehicle interactions and cutscene comfort.
+- Improving Quest rendering performance and stability, including Vulkan resource
+  handling and visual correctness.
+- Maintaining regression coverage, source assembly, build/update tooling and
+  contributor documentation as features evolve.
+
+These are future work areas, not completed features or a release schedule.
+Implementation and validation will happen through maintainer-directed development
+sessions; headset behavior and performance still require local device testing.
 
 ## Distribution boundary
 

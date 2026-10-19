@@ -18,6 +18,11 @@
   - **re3 and reVC teams** — For their amazing effort and reverse-engineering work.
   - **Gemini 4 Argon and Gemini 3.8 Flash** — For porting GeT_RiCh and whachuvr's work from reVC / Vice City to re3 / GTA 3.
   - Their collective work offered a huge contribution for a solid starting point for the GTA III VR for standalone Quest porting efforts.
+  - **OpenAI Codex** — Assisted with ongoing Liberty City VR Quest development,
+    including implementation, debugging, regression testing and documentation.
+    Codex is planned to take over the ongoing coding-assistance role under the
+    project maintainer's direction and review; see the
+    [planned development areas](README.md#planned-development-with-codex).
 - **This repository contains no complete re3 source tree and no assets from
   the original game or its publishers.** The patch files contain only the
   modifications and context required to transform a user-supplied re3 tree.
