@@ -41,3 +41,10 @@ Useful groups include ragdoll anatomy/contact/support, tracked aim and melee,
 vehicle entry/seat transitions, wanted behavior, menu layout and vehicle
 deformation geometry/lifetime. Benchmarks report host time only. Exact pass
 counts are local release evidence rather than a substitute for player testing.
+
+`test-vulkan-descriptors.ps1 -KitRoot .` extracts the production texture cache,
+raster destructor and retirement queues. Its Vulkan mocks reject descriptor
+rewrites and premature frees, and exercise sampler switching, mip-view changes,
+two frame slots, streaming eviction, pool failure and shutdown. Run the existing
+`test-mip-worker.ps1` alongside it to check the actual mip-completion invalidation
+hook. These host checks do not replace Vulkan validation on a headset.

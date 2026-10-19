@@ -36,7 +36,6 @@ enum {
 struct VulkanRaster {
 	uint64 image = 1, view = 1;
 	uint32 layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	uint32 samplerKey[NUM_FRAME_CONTEXTS] = {};
 };
 struct {
 	bool32 generateMipmaps = 0, inFrame = 0;
@@ -63,7 +62,9 @@ static std::mutex buildMutex;
 static std::condition_variable buildSignal;
 static bool blockBuild = false, buildSuccess = true;
 static uint32 maps, copies, submits, retired;
+static uint32 descriptorRetireCalls;
 static bool mapSuccess = true;
+static bool viewSuccess = true;
 static std::vector<uint8> uploadStorage;
 
 static void *rwMalloc(size_t bytes, int) {
@@ -117,8 +118,12 @@ static void transitionImageLayout(VkCommandBuffer, uint64, uint32, uint32,
 static void vkCmdCopyBufferToImage(VkCommandBuffer, VkBuffer, uint64,
 	uint32, uint32, const VkBufferImageCopy *) { ++copies; }
 static void retireImage(uint64, uint64, uint64) {}
+static void retireRasterTextureDescriptors(VulkanRaster *) { ++descriptorRetireCalls; }
 static int vkCreateImageView(uint64, const VkImageViewCreateInfo *,
-	const void *, VkImageView *view) { *view = 2; return VK_SUCCESS; }
+	const void *, VkImageView *view) {
+	if(!viewSuccess) return -1;
+	*view = 2; return VK_SUCCESS;
+}
 
 #include "mip-worker-extracted.inc"
 
@@ -157,7 +162,9 @@ static void reset(bool blocked = false, bool successful = true) {
 	gvk.generateMipmaps = 1;
 	gvk.inFrame = 1;
 	maps = copies = submits = retired = 0;
+	descriptorRetireCalls = 0;
 	mapSuccess = true;
+	viewSuccess = true;
 }
 static void addFinished(VulkanRaster &native, VkDeviceSize bytes) {
 	auto *job = (GeneratedMipJob *)rwMalloc(sizeof(GeneratedMipJob), 0);
@@ -240,6 +247,20 @@ int main() {
 	check(maps == 1 && copies == 0 && submits == 0 && allocations == 0 && retired == 1,
 		"failed map retires staging without copy or submit");
 	std::puts("PASS: frame and map-failure upload guards");
+
+	reset();
+	first.view = 1;
+	viewSuccess = false;
+	addFinished(first, 32);
+	uploadFinishedMips();
+	check(first.view == 1 && descriptorRetireCalls == 0,
+		"failed view replacement preserves cached descriptors");
+	viewSuccess = true;
+	addFinished(first, 32);
+	uploadFinishedMips();
+	check(first.view == 2 && descriptorRetireCalls == 1,
+		"successful mip view replacement retires old immutable descriptors");
+	std::puts("PASS: mip view descriptor invalidation and failure recovery");
 
 	reset();
 	addFinished(first, 1500000);

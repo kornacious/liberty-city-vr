@@ -44,11 +44,8 @@ struct VulkanRaster
 	// natively and had to be decompressed on upload.
 	bool32 wasTranscoded;
 
-	// Descriptor state is per frame slot. Updating a descriptor while an
-	// earlier submission still reads it is invalid Vulkan even when the image
-	// itself is immutable.
-	VkDescriptorSet descriptorSet[NUM_FRAME_CONTEXTS];
-	uint32 samplerKey[NUM_FRAME_CONTEXTS];
+	// Immutable texture descriptors are owned by vkstate's raster/view/sampler
+	// cache. Keep them outside this memset-initialised plugin record.
 };
 
 // Mirrors the state the fixed-function RenderWare pipeline expects. Vulkan has
@@ -599,6 +596,7 @@ void retireImage(VkImageView view, VkImage image, VkDeviceMemory memory);
 // raster must hand its sets back or the fixed-size pool exhausts and all
 // later textures draw white.
 void retireTextureDescriptorSets(VkDescriptorSet *sets, uint32 count);
+void retireRasterTextureDescriptors(VulkanRaster *native);
 // Implemented in vkstate.cpp, which owns the descriptor pool.
 void freeTextureDescriptorSets(VkDescriptorSet *sets, uint32 count);
 

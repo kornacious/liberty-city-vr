@@ -398,8 +398,7 @@ destroyNativeRaster(void *object, int32 offset, int32)
 			gTextureMemoryUsed -= gTextureMemoryUsed < native->memoryBytes ?
 				gTextureMemoryUsed : (size_t)native->memoryBytes;
 		}
-		retireTextureDescriptorSets(native->descriptorSet,
-			NUM_FRAME_CONTEXTS);
+		retireRasterTextureDescriptors(native);
 	}
 	memset(native, 0, sizeof(VulkanRaster));
 	native->lockedLevel = -1;
@@ -1326,9 +1325,8 @@ uploadFinishedMips(void)
 		native->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		retireBuffer(staging, stagingMemory);
 
-		// Only now may anything sample past level 0. The old view is retired
-		// with the frame; the cached descriptors are forced to be rewritten
-		// against the new one.
+		// Only now may anything sample past level 0. Retire the old immutable
+		// descriptors along with their view; later draws allocate fresh sets.
 		VkImageViewCreateInfo viewInfo = {};
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = native->image;
@@ -1339,10 +1337,9 @@ uploadFinishedMips(void)
 		viewInfo.subresourceRange.layerCount = 1;
 		VkImageView view = VK_NULL_HANDLE;
 		if(vkCreateImageView(gvk.device, &viewInfo, nil, &view) == VK_SUCCESS){
+			retireRasterTextureDescriptors(native);
 			retireImage(native->view, VK_NULL_HANDLE, VK_NULL_HANDLE);
 			native->view = view;
-			for(int frame = 0; frame < NUM_FRAME_CONTEXTS; frame++)
-				native->samplerKey[frame] = 0xFFFFFFFFu;
 			gMipLanded++;
 		}
 		freeMipJob(job);

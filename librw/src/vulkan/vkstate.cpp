@@ -21,6 +21,7 @@
 #define VKERR(...) __android_log_print(ANDROID_LOG_ERROR, "librw-vk", __VA_ARGS__)
 
 #include <vector>
+#include <unordered_map>
 
 static const uint32_t kWorldVertSpv[] =
 #include "rw_world_vert.h"
@@ -46,6 +47,26 @@ static const uint32_t kSkinVertSpv[] =
 
 namespace rw {
 namespace vulkan {
+
+// A descriptor can be shared across frame slots only while it is immutable.
+// A raster may use several samplers in one recording (world, masks and HUD).
+// Rewriting one per-frame set would invalidate the draws already binding it.
+struct TextureDescriptorEntry
+{
+	VkImageView view;
+	uint32 samplerKey;
+	VkDescriptorSet set;
+};
+static std::unordered_map<VulkanRaster*, std::vector<TextureDescriptorEntry>>
+	textureDescriptors;
+
+static void
+clearTextureDescriptorCache(void)
+{
+	// DEVICECLOSE waits for the GPU before stateShutdown. The descriptor pool
+	// owns the Vulkan sets and releases them together during that shutdown.
+	textureDescriptors.clear();
+}
 
 namespace {
 
@@ -950,6 +971,7 @@ stateInit(void)
 void
 stateShutdown(void)
 {
+	clearTextureDescriptorCache();
 	if(!gs.initialised)
 		return;
 	vkDeviceWaitIdle(gvk.device);
@@ -1412,6 +1434,20 @@ freeTextureDescriptorSets(VkDescriptorSet *sets, uint32 count)
 		vkFreeDescriptorSets(gvk.device, gs.descriptorPool, n, live);
 }
 
+void
+retireRasterTextureDescriptors(VulkanRaster *native)
+{
+	auto found = textureDescriptors.find(native);
+	if(found == textureDescriptors.end())
+		return;
+	// Retire against the current recording, or the last submission when
+	// outside a frame. The same queue executes both frame slots in order, so
+	// that fence also covers earlier users of these immutable sets.
+	for(TextureDescriptorEntry &entry : found->second)
+		retireTextureDescriptorSets(&entry.set, 1);
+	textureDescriptors.erase(found);
+}
+
 VkDescriptorSet
 getTextureDescriptor(Raster *raster)
 {
@@ -1435,25 +1471,21 @@ getTextureDescriptor(Raster *raster)
 	                                  gstate.textureAddressU,
 	                                  gstate.textureAddressV,
 	                                  gstate.mipLodBias);
-	const uint32 frame = gs.activeFrame;
-	if(native->descriptorSet[frame] != VK_NULL_HANDLE &&
-	   native->samplerKey[frame] == key)
-		return native->descriptorSet[frame];
+	auto &entries = textureDescriptors[native];
+	for(const TextureDescriptorEntry &entry : entries)
+		if(entry.view == native->view && entry.samplerKey == key)
+			return entry.set;
 
-	if(native->descriptorSet[frame] == VK_NULL_HANDLE){
-		VkDescriptorSetAllocateInfo setInfo = {};
-		setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		setInfo.descriptorPool = gs.descriptorPool;
-		setInfo.descriptorSetCount = 1;
-		setInfo.pSetLayouts = &gs.textureLayout;
-		if(vkAllocateDescriptorSets(gvk.device, &setInfo,
-		                            &native->descriptorSet[frame]) != VK_SUCCESS){
-			// The pool is sized for the whole streamed texture set; running out
-			// means the budget was wrong, so say so instead of drawing white.
-			VKERR("descriptor pool exhausted (%u sets)", MAX_TEXTURE_DESCRIPTORS);
-			native->descriptorSet[frame] = VK_NULL_HANDLE;
-			return gs.whiteDescriptor;
-		}
+	VkDescriptorSet set = VK_NULL_HANDLE;
+	VkDescriptorSetAllocateInfo setInfo = {};
+	setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	setInfo.descriptorPool = gs.descriptorPool;
+	setInfo.descriptorSetCount = 1;
+	setInfo.pSetLayouts = &gs.textureLayout;
+	if(vkAllocateDescriptorSets(gvk.device, &setInfo, &set) != VK_SUCCESS){
+		VKERR("descriptor pool exhausted (%u texture sets)",
+		      MAX_TEXTURE_DESCRIPTORS*NUM_FRAME_CONTEXTS);
+		return gs.whiteDescriptor;
 	}
 
 	VkDescriptorImageInfo imageDescriptor = {};
@@ -1465,15 +1497,17 @@ getTextureDescriptor(Raster *raster)
 
 	VkWriteDescriptorSet write = {};
 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	write.dstSet = native->descriptorSet[frame];
+	write.dstSet = set;
 	write.dstBinding = 0;
 	write.descriptorCount = 1;
 	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	write.pImageInfo = &imageDescriptor;
 	vkUpdateDescriptorSets(gvk.device, 1, &write, 0, nil);
 
-	native->samplerKey[frame] = key;
-	return native->descriptorSet[frame];
+	// Publish only after the sole write. Never update a cached set, even if
+	// another draw or frame requests a different sampler for this raster.
+	entries.push_back({ native->view, key, set });
+	return set;
 }
 
 // Set 3 for the frame: the vehicle env streak texture (white until a vehicle
