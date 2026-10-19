@@ -40,8 +40,8 @@ Current source-kit version: **v0.5.6**.
 This release adds articulated ragdolls with car and wall contact, optional
 vehicle body deformation, clearer menus and fixes for tracked weapon aiming,
 melee, vehicle entry and seat centering. Existing graphics and calibration
-preferences are preserved. See [the changelog](CHANGELOG.md) for the complete
-0.5.6 changes and [performance notes](PERFORMANCE.md) for the retained rendering
+preferences are preserved. See [the changelog](CHANGELOG.md) for the
+0.5.6 feature summary and [performance notes](PERFORMANCE.md) for the retained rendering
 optimizations.
 
 It intentionally contains **no APK, complete re3 source tree, original game
@@ -106,8 +106,9 @@ The exact patch base comes from the public upstream re3 project:
 
 The tested public `master` commit is
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly scripts never modify
-that checkout: they copy it to a new directory, apply the 4 consolidated
-clean patches, and add Quest-only files. No private repository is required or referenced.
+that checkout: they copy it to a new directory, apply all seven patches in
+`patches/` in filename order, and add the port overlay and bundled librw fork.
+No private repository is required or referenced.
 
 Complete prerequisites and copy-paste commands are in
 [BUILDING.md](BUILDING.md).
@@ -122,7 +123,9 @@ instead of labels, the installation predates the wizard copying the port's
 replacement text and frontend files.
 [`REPAIR_GAME_FILES.bat`](REPAIR_GAME_FILES.bat) (Windows) or
 [`REPAIR_GAME_FILES.sh`](REPAIR_GAME_FILES.sh) (Linux) installs just those onto an
-existing headset; saves, settings and models are left alone.
+existing headset. It replaces selected GXT and frontend/shared TXD files,
+including files under `models/`; saves, settings, model archives and optional
+model overlays are left alone.
 
 The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 
@@ -135,7 +138,7 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   per-weapon and per-seat calibration.
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
   graphics and model-set menus.
-- Articulated ragdolls respond to bullets, cars and nearby world geometry.
+- Optional articulated ragdolls respond to bullets, explosions, cars and nearby world geometry.
   Body weight, car braking, grip and bullet response can be tuned in the menu.
 - Optional vehicle deformation affects opaque body panels, bumpers and grilles.
   It is a bounded visual effect; severe repeated impacts can open component seams.
@@ -149,10 +152,12 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 - Physics Director V2 with an ORIGINAL/OFF fallback; separate pedestrian and
   vehicle density controls from OFF to 300%. OFF prevents new spawns rather
   than deleting existing traffic.
-- Classic/Modern asset categories. Classic vehicles remain the default;
-  generated Modern overlays are optional and are not distributed here.
+- Classic/Modern/Xbox asset categories. The Quest baseline keeps vehicles,
+  pedestrians and vegetation Classic and requests Modern world/weapons when
+  available. Optional asset overlays are built separately and are not distributed here.
 
 Defaults retain 100% render scale and sustained CPU/GPU performance hints.
+Ragdolls and vehicle deformation default to OFF; saved preferences take precedence.
 Normal frontend and save loading are used on startup. Experimental temporal AA,
 SGSR and runtime-only foveation remain disabled.
 
@@ -163,6 +168,8 @@ Runtime/data layout is documented in
 [QUEST_VEHICLE_DEFORMATION.md](overlay/docs/QUEST_VEHICLE_DEFORMATION.md) for
 body deformation, and [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md)
 for optional model mixing.
+The [asset guide](overlay/docs/QUEST_MODELSETS.md) also describes the current
+Xbox-first installer and limitations of the Modern preparation branches.
 
 ## Troubleshooting and Game Data
 
@@ -170,16 +177,25 @@ The final Quest path must be exactly
 `/sdcard/Android/data/com.libertyvr.quest/files/gamedata`.
 Fully restart the game after copying assets.
 
-To manually inspect or transfer files via ADB:
+For a fresh installation, install the APK first and bootstrap its app-owned
+storage through the save provider before copying data. Do not create the
+`files` root with ADB before this bootstrap. For example, in PowerShell:
 
 ```powershell
 $adb = "C:\LCVRBuild\.android-sdk\platform-tools\adb.exe"
 
 & $adb devices
 & $adb shell am force-stop com.libertyvr.quest
-& $adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata
-& $adb push "C:\Games\GTA3\*" /sdcard/Android/data/com.libertyvr.quest/files/gamedata/
+& $adb shell content query --uri content://com.libertyvr.quest.saves/slot/1 --projection _display_name:_size
+$gameData = "/sdcard/Android/data/com.libertyvr.quest/files/gamedata"
+foreach ($folder in @("Audio", "TEXT", "anim", "data", "models", "movies", "mp3", "skins", "txd")) {
+    & $adb push "C:\Games\GTA3\$folder" $gameData
+}
 ```
+
+Then copy the assembled tree's replacement text/frontend files and VR hand
+assets as described in [BUILDING.md](BUILDING.md#6-supply-your-own-game-data).
+The guided installer performs these steps automatically.
 
 ## Credits and Acknowledgments
 

@@ -1,6 +1,7 @@
 # Vehicle deformation
 
 Vehicle deformation is optional visual damage applied after a native collision.
+It defaults to OFF; an existing saved preference takes precedence.
 Its submenu controls strength (25–400%), affected radius (50–200%), maximum dent
 depth (10–60 cm) and impact threshold (25–200%). Defaults are 100% strength,
 radius and threshold with a 32 cm limit. Changes apply without rebuilding.

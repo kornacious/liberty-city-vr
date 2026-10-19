@@ -2,7 +2,7 @@
 
 The local `liberty-city-vr-build` directory is a private development/build tree containing a
 complete re3 checkout. **Never publish or archive that directory.** The public
-release root is this `libertyvr-quest` repository only.
+release root is this `liberty-city-vr-quest` repository only.
 
 Before a tag or GitHub release:
 

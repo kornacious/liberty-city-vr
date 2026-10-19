@@ -1,5 +1,9 @@
 # 0.5.5.1 performance maintenance
 
+This is the historical 0.5.5.1 maintenance record. Its optimizations are retained
+in 0.5.6; current player defaults are documented in
+[QUEST_PORT.md](overlay/docs/QUEST_PORT.md).
+
 This release addresses costs introduced after 0.5.2 that could remain even with
 new visual effects disabled. It does not include the separate ragdoll or culling
 visualizer work, lower the player's saved quality settings, or promise a fixed
@@ -78,5 +82,6 @@ a Quest. Keep that distinction when reporting results.
 The patch is based on source-kit commit `2b94d67` (0.5.5); the comparison baseline
 is `89936c9` (0.5.2). Isolated host regressions live under `tools/tests`.
 Build the staged source kit independently of unfinished work before release.
-Android `versionCode` is **506** for 0.5.5.1; the next release must use a greater
-code even if its displayed version is 0.5.6.
+Android `versionCode` was **506** for 0.5.5.1. For a new release, use a code
+greater than the current value in `overlay/android/app/build.gradle.kts`,
+even when the displayed version name is unchanged.

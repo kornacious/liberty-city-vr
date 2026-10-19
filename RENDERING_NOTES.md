@@ -3,7 +3,12 @@
 Things about this port's renderer that cost real time to work out, kept so the
 next person does not spend that time again.
 
-## The PS2 alpha rule is not optional
+## The PS2 alpha rule fixes depth fringes
+
+The Quest Graphics menu exposes this as an optional effect, OFF by default
+because it adds a second pass for eligible masked meshes. The notes below
+explain the artefact it addresses and why changing the global alpha threshold
+is not an equivalent fix.
 
 Liberty City draws masked geometry -- railings, fences, chain link, foliage,
 shop-front glass -- with an alpha test reference of **3 out of 255**, set in
@@ -12,8 +17,9 @@ discarded, and the shape is meant to come out of blending rather than
 cutting.
 
 Every masked element carries an invisible border in its texture -- a margin of
-texels with zero alpha, and RGB left at black. Those texels pass a reference of
-3, so they are drawn: they contribute no colour, and **they write depth**.
+texels with low alpha and dark RGB. Fully transparent texels below the reference
+of 3 are discarded, but faint texels above it can contribute almost no colour
+while still **writing depth**.
 Anything drawn afterwards that stands behind them fails the depth test. A
 railing therefore carves its own outline out of the wall behind it, and through
 that outline the player sees whatever is further away -- the sky, the skyline,
@@ -29,9 +35,10 @@ twice:
 | 1 | `>= GSALPHATESTREF` | on | the solid half |
 | 2 | `< GSALPHATESTREF` | off | the faint half |
 
-Nothing is discarded -- both halves reach the screen -- but the faint half no
-longer claims the depth buffer. re3 asks for this every frame from
-`gPS2alphaTest`, and the shipped `re3.ini` has `PS2AlphaTest = 1`.
+The two passes split the alpha range so the faint half no longer claims the
+depth buffer. On Quest, the saved `Ps2AlphaTest` key in `vr_settings.ini`
+controls this effect; its missing-key default is OFF. The upstream `re3.ini`
+setting alone does not describe the Quest default.
 
 `librw`'s `d3d`, `d3d9` and `gl3` backends all implement it
 (`drawInst_GSemu` in `src/d3d/d3d9render.cpp` is the clearest reference). **The

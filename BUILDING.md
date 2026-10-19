@@ -38,7 +38,7 @@ The Linux entry points mirror the Windows ones:
 | `INSTALL_MODERN_MODELS.bat` | `INSTALL_MODERN_MODELS.sh` |
 | `REPAIR_GAME_FILES.bat` | `REPAIR_GAME_FILES.sh` |
 
-The Modern-model builder needs one extra step on Linux: the texture compressor
+The model builders need one extra step on Linux: the texture compressor
 is built from source once, next to the other model-set tools:
 
 ```sh
@@ -47,6 +47,11 @@ g++ -O2 -o txdcompress txdcompress.cpp
 ```
 
 (`txdcompress` is gitignored; `txdcompress.exe` is the committed Windows build.)
+
+The asset wizard currently defaults to Xbox. Linux needs a local Xbox archive
+or extracted folder; the Modern preparation branches are incomplete. See
+[QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md) for current commands and
+limitations before preparing optional assets.
 
 Do not launch `tools\build-and-install.ps1` directly. The `.bat` wrapper keeps
 the window open and always prints the location of the persistent diagnostic
@@ -238,8 +243,9 @@ adb push C:\LCVRBuild\liberty-city-vr-build\gamefiles\models $data
 
 An installation made before the wizard did this can be repaired without
 rebuilding: double-click `REPAIR_GAME_FILES.bat` (Windows) or run
-`./REPAIR_GAME_FILES.sh` (Linux). It copies only those files and
-leaves saves, settings and models alone.
+`./REPAIR_GAME_FILES.sh` (Linux). It replaces selected GXT files and
+frontend/shared TXDs under `models/`. Saves, settings, model archives and
+optional model overlays are left alone.
 
 The VR hand meshes are original MIT-licensed port assets, not GTA data and not
 part of the APK. Copy them once from the assembled tree:

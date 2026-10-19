@@ -1,6 +1,12 @@
 librw
 =====
 
+This fork includes the Quest Vulkan backend under `src/vulkan/`, including
+OpenXR multiview support. The Quest build uses the parent source kit's
+assembly scripts and Android Gradle/CMake configuration; see
+[BUILDING.md](../BUILDING.md). The upstream overview and premake instructions
+below describe the other backends.
+
 This library is supposed to be a re-implementation of RenderWare graphics,
 or a good part of it anyway.
 

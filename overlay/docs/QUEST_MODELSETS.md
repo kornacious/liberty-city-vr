@@ -1,164 +1,123 @@
 # Classic, Modern and Xbox model assets on Quest
 
-The Quest port supports the same category-based model overlay shell as PC:
+The runtime exposes World, Vegetation, Vehicles, Peds and Weapons categories
+under `VR MENU > SETTINGS > MODEL ASSETS`. Select a non-Classic preset before
+mixing overlay categories; the Classic preset forces every category to the base
+installation. Changes require a full process restart.
 
-- World
-- Vegetation
-- Vehicles
-- Peds
-- Weapons
+The Quest baseline requests Modern world and weapons, with Classic vegetation,
+vehicles and pedestrians. Missing overlays fall back to the base installation.
+Existing saved choices take precedence after the one-time baseline migration.
+Keep vegetation Classic: HD trees can be expensive on the mobile GPU. The Xbox
+preset keeps vegetation Classic and requests Xbox for the other categories.
 
-Classic vegetation is mandatory in the tested Quest build. HD tree models
-can be dramatically more expensive on a mobile GPU even when draw-call counts
-look modest, so the one-button builder does not download or use the separate
-vegetation pack.
+No third-party pack is included in the source kit. Players supply their own
+legally obtained assets; generated overlays must not be redistributed.
 
-## One-button download, build and installation
+## Xbox preparation and installation
 
-The player needs only:
+Despite its name, `INSTALL_MODERN_MODELS.bat` / `INSTALL_MODERN_MODELS.sh`
+currently defaults to the Xbox profile. It requires an original GTA III PC
+installation and, unless building only, an installed Quest APK and an authorized
+USB connection.
 
-- a legal original GTA III PC installation;
-- the Quest connected by USB with the computer authorized;
-- the APK already installed by `BUILD_AND_INSTALL.bat`;
-- about 4 GB of download bandwidth and at least 24 GB of temporary free space.
-
-Double-click `INSTALL_MODERN_MODELS.bat` and choose the original GTA III
-folder. The wizard downloads and pins the exact tested
-[GTA VC HD + Weapons](https://drive.google.com/file/d/1Swe1dVWDnKz8ad51y8L0ihPWVCxmFRYj/view)
-and [Mods / Atmosphere](https://drive.google.com/file/d/1y9KpKjLSna76bjz1Lf2DzP0G4AnkN_2d/view)
-archives. It then extracts, builds, validates and installs the overlay without
-requiring 7-Zip, Git, Android Studio or any manual ADB command. Downloads are
-cached under `C:\LCVRBuild\modern-assets` and resume after interruption. A
-second run reuses verified downloads and extractions. If a complete overlay was
-already built, it skips downloading, extracting and rebuilding and retries only
-the Quest installation. When the bundled builder is updated, an older overlay
-is rebuilt automatically; the old Quest folder is replaced only after the new
-copy and the wheel asset hashes have been verified.
-
-No third-party assets are stored in this source kit. The generated directory
-contains original game and external mod data and must not be redistributed.
-The completed overlay contains at least:
-
-```text
-modelsets/modern/models/gta3.img
-modelsets/modern/models/gta3.dir
-modelsets/modern/models/generic/wheels.dff
-modelsets/modern/models/generic/wheels.txd
-modelsets/modern/vegetation_models.txt
-```
-
-The LibertyCity/HD vegetation archive is not part of this workflow. The small
-`vegetation_models.txt` file contains only names used by the runtime to select
-the original Classic tree entries. Matching Modern vegetation DFF entries
-are physically removed from the generated archive as an additional fallback.
-
-The wizard installs the complete folder at:
-
-```text
-/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern
-```
-
-The installer stages and verifies the complete folder before replacing any
-previous Modern overlay. Wait for `DOWNLOAD, BUILD AND QUEST INSTALL COMPLETED`,
-then fully restart the game.
-
-## Advanced manual transfer
-
-If an overlay was already generated, it can be uploaded without rebuilding:
+On Windows, the wizard tries an automatic pack download and can ask for a local
+archive or extracted folder if it is unavailable. On Linux, supply a local
+archive or extracted folder; the current Python preparation path does not
+download a pack automatically. Explicit local-source examples:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\install-modern-models.ps1 -ModernDir "C:\path\to\modern"
+.\INSTALL_MODERN_MODELS.bat -GameDir "C:\Games\GTA3" -XboxSource "C:\Packs\Xbox"
 ```
 
-The commands below are a lower-level fallback.
-
-The Windows wizard normally installs ADB under
-`C:\LCVRBuild\.android-sdk\platform-tools\adb.exe`. For example, in PowerShell:
-
-```powershell
-$adb = "C:\LCVRBuild\.android-sdk\platform-tools\adb.exe"
-$modern = "C:\Games\Liberty City VR\modelsets\modern"
-& $adb shell am force-stop com.libertyvr.quest
-& $adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets
-& $adb push $modern /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets
+```sh
+./INSTALL_MODERN_MODELS.sh --game-dir "$HOME/Games/GTA3" --xbox-source "$HOME/Packs/Xbox"
 ```
 
-The final device path must not contain `modern/modern`. Verify it with:
+Use `-XboxArchive` / `--xbox-archive` for an archive instead of a folder.
+`-XboxOnly` / `--xbox-only` explicitly selects the default profile.
+`-BuildOnly` / `--build-only` builds without device access. `-OutputDir` /
+`--output-dir` selects the generated profile folder; its leaf name must be
+`xbox`. The default output is the selected PC game's `modelsets/xbox` folder.
+Work files are stored in `C:\LCVRBuild\modern-assets` on Windows or
+`$HOME/LCVRBuild/modern-assets` on Linux unless overridden.
 
-```powershell
-& $adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern/models
-& $adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern/vegetation_models.txt
+Windows uses the bundled texture compressor. Linux needs Python 3, a C++
+compiler, and an extractor suitable for the supplied archive. Build the
+compressor once:
+
+```sh
+cd tools/modelsets
+g++ -O2 -o txdcompress txdcompress.cpp
 ```
 
-In the headset open `VR MENU > SETTINGS > MODEL ASSETS`. Category changes are startup
-choices: select the desired categories and fully restart the game. Keep
-Vegetation on Classic.
-
-If the manifest is absent, the menu reports Vegetation as unavailable and the
-loader forces that category to Classic instead of guessing model names.
-
-## Xbox assets profile
-
-The normal preparation wizard also prepares the **Xbox Assets** profile
-(vehicles, characters and pedestrians, weapons, and world/environment) as a
-separate profile. The kit includes only download metadata and tools, not these
-model assets. The user-supplied archive contains no separate license/readme; it is not repackaged
-or redistributed by this project.
-
-The profile contains Xbox DFF/TXD pairs, their collision data and shared assets.
-The main models use PC-compatible RenderWare data. The builder preserves
-geometry and COLL bytes and uses the existing compressor on staged texture
-copies. No handling, IDE, scripts or base game archives are replaced.
+The generated profile includes:
 
 ```text
 modelsets/xbox/models/gta3.img
 modelsets/xbox/models/gta3.dir
-modelsets/xbox/models/coll/vehicles.col
-modelsets/xbox/models/generic/wheels.dff
-modelsets/xbox/models/generic/wheels.txd
 modelsets/xbox/vehicle_models.txt
 modelsets/xbox/BUILD_INFO.txt
 ```
 
-The archive and all 217 selected input files are checked against pinned SHA256
-hashes. Complete outputs are checked before cache reuse and before upload;
-the small Xbox profile is also hashed on the headset before activation. A
-failed transfer leaves the previous profile active. The separate Modern folder,
-game data, saved games and profile settings are preserved.
+Pedestrian and weapon manifests and loose wheel assets depend on the input
+pack. A collision file may be retained by the builder, but the runtime keeps
+base `models/coll/` files rather than redirecting them to an overlay.
 
-For Xbox only, without downloading the larger Modern packs:
+The current workflow accepts user-selected sources and does not enforce a
+pinned source archive hash or a fixed count of source files. Xbox validation
+checks the generated archive pair and directory structure. The device installer
+checks copied file sizes and SHA256 hashes for `gta3.img` and `gta3.dir` before
+replacing the previous profile. Those transfer checks do not establish the
+source pack's provenance or visual compatibility.
 
-```powershell
-.\INSTALL_MODERN_MODELS.bat -XboxOnly
-```
+After installation, select the Xbox preset or the desired category mix in
+`VR MENU > SETTINGS > MODEL ASSETS`, then fully restart. The installer preserves
+saved profile choices; installing files does not select the profile.
 
-```sh
-./INSTALL_MODERN_MODELS.sh --xbox-only
-```
+## Modern preparation limitations
 
-Add `-BuildOnly` / `--build-only` to build without device access. A previously
-downloaded archive can be supplied with `-XboxArchive` / `--xbox-archive`;
-it must match the pinned version. Use `-SkipXbox` / `--skip-xbox` for the older
-two-pack Modern workflow. The existing `-OutputDir` / `--output-dir` selects
-the Xbox output when used with XboxOnly; its leaf directory must be `xbox`.
-Both preparation paths reuse the same `modern-assets` work directory.
+The old two-pack automatic Modern workflow is no longer implemented by the
+current wrapper. On Windows, the Modern branch passes a `modern` output folder
+to a builder that requires an `xbox` folder and fails. On Linux, the Modern/Both
+branches do not build or install a Modern overlay, even if the wrapper prints
+a completion message. Do not use `-ModernOnly`, `-SkipXbox`, or their Unix
+counterparts as a working Modern preparation route in this revision.
 
-Linux requires Python 3, a C++ compiler and a RAR-capable extractor (`bsdtar`,
-7-Zip or `unrar`). The bundled compressor is used on Windows. No executable
-from the downloaded model archive is run.
+The older `tools/modelsets/build-modern-modelset.ps1` and `.sh` remain in the
+repository, but contain Vice City-specific input assumptions. They are not a
+verified GTA III replacement for the current wrapper. An already generated,
+compatible Modern overlay can still be installed using the commands below.
 
-For a profile that is already built:
+A Modern overlay requires `models/gta3.img`, `models/gta3.dir`,
+`vegetation_models.txt` and `BUILD_INFO.txt`. Preserve any generated loose wheel
+assets under `models/generic/`. If the vegetation manifest is missing, the
+runtime makes that category unavailable rather than guessing model names.
+
+## Installing an existing overlay
+
+Use the installer for the matching profile:
 
 ```powershell
 .\tools\install-modern-models.ps1 -Profile Xbox -ModernDir "C:\path\to\xbox"
+.\tools\install-modern-models.ps1 -Profile Modern -ModernDir "C:\path\to\modern"
 ```
 
 ```sh
 ./tools/install-modern-models.sh --profile xbox --modern-dir /path/to/xbox
+./tools/install-modern-models.sh --profile modern --modern-dir /path/to/modern
 ```
 
-After installation, choose **VR MENU > SETTINGS > MODEL ASSETS > VEHICLES > XBOX** and
-restart the process. Xbox can be combined with Modern world textures/weapons,
-or used alone with the Classic base. Missing archive entries fall back to the
-base game; non-vehicle models are never selected from the Xbox archive. The
-installer does not select profiles automatically.
+These installers stage the copy and verify it before replacing the profile
+folder. They preserve saves, settings, the base game and the other overlay.
+Final device paths are:
+
+```text
+/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/xbox
+/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern
+```
+
+Each profile must directly contain its `models` directory; avoid nesting
+`xbox/xbox` or `modern/modern`. Fully restart after copying or changing categories.
+See [QUEST_PORT.md](QUEST_PORT.md) for the base game's storage bootstrap and
+[BUILDING.md](../../BUILDING.md) for the APK installation workflow.

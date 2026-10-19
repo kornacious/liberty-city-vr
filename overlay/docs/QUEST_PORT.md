@@ -80,31 +80,37 @@ The final directory must directly contain `BigHandLeft.uxrh`,
 Fresh installations request:
 
 - 72 Hz
-- 125% render scale relative to the OpenXR-recommended eye size
+- 100% render scale relative to the OpenXR-recommended eye size
 - sustained CPU and GPU performance hints
 - Spatial AA enabled
-- stereo-safe culling enabled
-- adaptive Physics Director with an ORIGINAL/OFF fallback
+- AUTHORED culling enabled; select STEREO SAFE or OFF if geometry disappears
+- adaptive Physics Director V2, QUALITY preset, with an ORIGINAL/OFF fallback
 - stock vehicle visual LOD behavior
+- generated mipmaps enabled and stereo MSAA OFF (1x)
+- ragdolls and vehicle deformation OFF
+
+Saved preferences normally take precedence. The one-time Quest baseline
+migration initializes older settings, and its version 2 migration resets render
+scale to 100%. Later player changes remain editable and are retained.
 
 The Graphics menu shows both requested and actually active render scale. If a
 high-resolution allocation fails, the next launch recovers to 100% and records
 the fallback instead of continuing to claim the unavailable scale.
 
-Temporal AA/SGSR, experimental MSAA and runtime-only foveation are disabled in
-the release profile. They remain research code only and are not presented as
-working player features.
+Stereo MSAA is a player setting with OFF/2X/4X choices; restart after changing
+it. Temporal AA/SGSR and runtime-only foveation remain disabled research paths.
 
 ## Model assets
 
-The standard setup uses original Classic assets. An optional user-built Modern
-overlay can be placed under:
+Without optional overlays, the runtime uses the base GTA III assets. Optional
+user-built overlays can be placed under:
 
 ```text
 gamedata/modelsets/modern/
+gamedata/modelsets/xbox/
 ```
 
-No Modern pack is distributed here. Category changes require a full process
+No third-party pack is distributed here. Category changes require a full process
 restart. The recommended Quest mix keeps vegetation, vehicles and pedestrians
 Classic while allowing Modern world textures and weapons. See
 [QUEST_MODELSETS.md](QUEST_MODELSETS.md).

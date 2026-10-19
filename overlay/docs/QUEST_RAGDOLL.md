@@ -5,13 +5,16 @@ car grip and bullet reaction. Changes apply immediately and retain their saved
 preferences. Braking supports 0–2000%; zero disables the added braking response.
 Grip acts through contact friction and does not attach a body to the vehicle.
 
-New settings start with ragdolls ON, vehicle braking 200%, grip 150%, bullet
+New settings start with ragdolls OFF, vehicle braking 200%, grip 150%, bullet
 reaction 100% and body weight 200%. Existing saved preferences take precedence.
 
 The solver uses 19 points, fixed bone lengths, anatomical knee/hip/spine limits
 and selected limb/trunk self-contact pairs. A shared knee plane keeps the thigh,
 calf and foot oriented consistently, including near a straight knee. Captured
 model axes and unsimulated child bones remain compatible with the skin.
+
+Explosions reactivate nearby eligible corpses within a bounded activation
+budget and apply impulses to existing ragdolls.
 
 Car contacts use bounded collision shapes and triangles, swept movement and
 surface velocity. Nearby static triangles, boxes and spheres are gathered from
