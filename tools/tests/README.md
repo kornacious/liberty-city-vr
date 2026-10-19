@@ -9,6 +9,14 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+`test-autosave.ps1 -StageRoot <assembled-tree>` tests the production autosave
+transaction and extracts the engine filename/checksum/recovery functions. It
+injects failures at each transaction boundary, checks that manual slots remain
+unchanged, tests first save and backup recovery, rejects truncated/checksum-bad
+files and invalid block lengths, and checks both load-menu layouts. All save
+bytes are synthetic; no game assets or player saves are accessed. These checks
+do not replace mission-completion and load testing on a headset.
+
 The header-only ragdoll suite works directly against the kit:
 
 ```powershell

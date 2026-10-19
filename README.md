@@ -64,6 +64,17 @@ overlays stay in place. An incompatible signing key stops the update instead
 of uninstalling the game. If a future release requires new game assets, the
 updater asks you to use the ordinary installer for that separate step.
 
+Mission autosaves use a separate `autosave.b` file and **Load Game → Load
+Autosave** entry. All eight manual slots remain available. Autosave writes a
+temporary file, flushes and validates it, keeps the previous valid autosave in
+`autosave.b.bak`, then atomically replaces the primary file. Loading autosave
+automatically tries the backup if the primary is missing or corrupt. These
+files use the existing save directory/prefix. Older releases wrote autosaves
+into manual slot 1; that file remains in slot 1 and is not moved or overwritten
+by the new autosave system. A new autosave is created after the next eligible
+mission completion. Storage providers without directory flush support retain
+atomic replacement, but cannot guarantee rename durability after power loss.
+
 The default builds a personal debug APK using the same Android debug key as
 the original wizard. To update an app signed with your release key, use
 `-Release` / `--release` and set `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` to your
