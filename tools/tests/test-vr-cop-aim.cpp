@@ -41,6 +41,7 @@ struct Stats { int m_flags=0; };
 struct CWanted {
  int level=0,calls=0; bool m_bIgnoredByEveryone=false,m_bIgnoredByCops=false;
  int GetWantedLevel()const{return level;}
+ bool IsIgnoredByCops()const{return m_bIgnoredByCops;}
  void SetWantedLevelNoDrop(int n){++calls;if(n>level)level=n;}
 };
 struct CVehicle:CEntity { bool alarm=false,car=true,bIsLawEnforcer=false; bool IsCar()const{return car;} bool IsAlarmOn()const{return alarm;} };
@@ -50,7 +51,7 @@ struct CPed:CEntity {
  CVector forward=CVector(0,-1,0); CPed*m_leader=nil; CEntity*m_pLookTarget=nil,*m_fleeFrom=nil; Stats stats,*m_pedStats=&stats; CWeapon weapon;
  bool IsPlayer()const{return playerFlag;} bool IsPedInControl()const{return control;} bool DyingOrDead()const{return dead;}
  CVector GetForward()const{return forward;} CWeapon*GetWeapon(){return &weapon;}
- bool OurPedCanSeeThisOne(CPed*,bool objects){++losCalls;return visible&&objects;}
+ bool OurPedCanSeeThisOne(CPed*,bool objects=true){++losCalls;return visible&&objects;}
  void ClearLeader(){m_leader=nil;} bool IsGangMember()const{return m_nPedType==PEDTYPE_GANG7;}
  void RegisterThreatWithGangPeds(CPed*){} void SetWaitState(int state,int*){m_nWaitState=state;}
  void Say(int){} void SetMoveState(int){} void SetDuck(int){++duckCalls;}
@@ -59,7 +60,7 @@ struct CPed:CEntity {
 struct CPlayerPed:CPed {
  CWanted wanted,*m_pWanted=&wanted; CVehicle*m_pMyVehicle=nil; CWeapon inventory[TOTAL_WEAPON_SLOTS];
  CPlayerPed(){playerFlag=true;m_nPedType=PEDTYPE_PLAYER;pos=CVector(0,0,1);}
- CWeapon&GetWeapon(int slot){return inventory[slot];}
+ CWeapon&GetWeapon(int type){for(auto &w:inventory)if(w.m_eWeaponType==type)return w;return inventory[0];}
  void SetWantedLevelNoDrop(int n){m_pWanted->SetWantedLevelNoDrop(n);}
 };
 struct CCopPed:CPed {
@@ -78,7 +79,8 @@ namespace OculusVR {
  static CVector mockSource(0,0,1),mockDirection(0,3,0);
  static bool IsTrackedWeaponHeld(int hand){return heldSlots[hand]>=0;}
  static int GetHeldWeaponSlot(int hand){return heldSlots[hand];}
- static bool IsPhysicalGunType(int type){return type==WEAPONTYPE_GUN||type==WEAPONTYPE_CAMERA;}
+ static int GetVrWeaponTypeForSlot(int slot){return gPlayer->inventory[slot].m_eWeaponType;}
+ static bool IsPhysicalGunType(int type){return type==WEAPONTYPE_GUN;}
  static bool GetTrackedWeaponAim(int,int,CVector*s,CVector*d){++aimCalls;*s=mockSource;*d=mockDirection;return tracking;}
  bool GetHeldTrackedWeaponAim(CVector*,CVector*);
 }
@@ -125,7 +127,7 @@ int main(){
   if(guard==6)cop.CharCreatedBy=MISSION_CHAR;
   cop.ScanForCrimes();Check(player.wanted.level==0&&OculusVR::aimCalls==0,"ignored, disabled, driving/fallen or scripted cop retains native protection");
  }
- Reset(player,cop);cop.CharCreatedBy=MISSION_CHAR;cop.bCrouchWhenScared=true;cop.ScanForCrimes();Check(player.wanted.level==2,"native scripted-ped opt-in to threat response remains allowed");
+ Reset(player,cop);cop.CharCreatedBy=MISSION_CHAR;cop.bCrouchWhenScared=true;cop.ScanForCrimes();Check(player.wanted.level==0,"Liberty City mission cops remain protected even with crouch flags");
  Reset(player,cop);cop.m_leader=&player;cop.ScanForCrimes();Check(player.wanted.level==0,"native player follower does not become hostile");
  Reset(player,cop);player.wanted.level=5;cop.ScanForCrimes();Check(player.wanted.level==5&&player.wanted.calls==0,"aim never reduces existing wanted level or resets its timer");
  Reset(player,cop);OculusVR::heldSlots[0]=-1;OculusVR::heldSlots[1]=1;cop.ScanForCrimes();Check(player.wanted.level==2,"left-hand tracked gun is detected");

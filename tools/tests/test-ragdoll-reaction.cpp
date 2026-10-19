@@ -76,6 +76,7 @@ static void NoPhantomBraking()
 }
 static void ActualContactCallback()
 {
+	VrRagdollSettings::SetWeight(100); // This analytical fixture uses a 70 kg body.
 	P::State state={};
 	for(int i=0;i<P::SIM_BONES;++i) state.pos[i]=state.prev[i]=CVector(0,0,.4f);
 	V::Batch batch; batch.count=1;

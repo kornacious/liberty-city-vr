@@ -30,7 +30,7 @@ foreach ($name in @('SaveVrInteger','LoadVehicleDeformationSettings','MenuRepeat
  $pieces.Add((Definition $source ('(?m)^static (?:void|bool)\s+'+$name+'\([^)]*\)\s*\{')))
 }
 $loader=Definition $source '(?m)^static void\s+LoadVrSettings\(void\)\s*\{'
-if (-not [regex]::IsMatch($loader,'(?s)if\(gVrSettingsLoaded\)\s*return;.*LoadVehicleDeformationSettings\(\);.*gVrSettingsLoaded = true;')) {
+if (-not [regex]::IsMatch($loader,'(?s)if\(gVrSettingsLoaded\)\{.*?return;\s*\}.*LoadVehicleDeformationSettings\(\);.*gVrSettingsLoaded = true;')) {
  throw 'Deformation setting must load through the existing once-only settings path.'
 }
 if ([regex]::Matches($source,'LoadVehicleDeformationSettings\(\);').Count -ne 1) {throw 'Settings loader must have exactly one call site.'}

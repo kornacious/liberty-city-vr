@@ -44,9 +44,9 @@ $code += 'namespace OculusVR {' + "`n" + (Method $driving 'ApplyQuestVehicleView
 # Verify actual pipeline placement and frame lifetime, not only an isolated latch.
 if ($android.IndexOf('UpdateQuestVehicleSeatRecenter(player,') -gt $android.IndexOf('OculusVR::ApplyQuestVehicleViewOffset(&vehicleView)')) { throw 'Seat recenter occurs after calibrated anchor.' }
 if ($android -notmatch '(?s)if\(FrontEndMenuManager\.m_bWantToRestart\)\{\s*gVehicleSeatRecenter\.Reset\(\);') { throw 'World restart does not reset seat identity.' }
-if ($session -notmatch '(?s)renderFrame\(void\)\s*\{\s*g\.headPoseTrackedForFrame = false;' -or $session -notmatch '(?s)g\.headPoseTrackedForFrame = false;\s*// An empty frame') { throw 'Tracking predicate survives its current render frame.' }
+if ($session -notmatch '(?s)renderFrame\(void\)\s*\{.*?g\.headPoseTrackedForFrame = false;' -or $session -notmatch '(?s)g\.headPoseTrackedForFrame = false;\s*// An empty frame') { throw 'Tracking predicate survives its current render frame.' }
 $header = [IO.Path]::GetFullPath((Join-Path $src 'skel/android/VrVehicleSeatRecenter.h')).Replace('\','/')
-$enums = @([regex]::Matches($prologue,'\b(?:PED_\w+|OBJECTIVE_\w+)\b') | ForEach-Object {$_.Value}) + @('PED_IDLE','OBJECTIVE_NONE') | Sort-Object -Unique
+$enums = @([regex]::Matches($prologue,'\b(?:PED_\w+|OBJECTIVE_\w+)\b') | ForEach-Object {$_.Value}) + @('PED_IDLE','OBJECTIVE_ENTER_CAR_AS_DRIVER','OBJECTIVE_NONE') | Sort-Object -Unique
 $code = 'enum { ' + ($enums -join ',') + " };`n" + $code
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vehicle-seat-recenter-helper.inc'), '#include "' + $header + '"', [Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vehicle-seat-recenter-backend.inc'), $backendCode, [Text.UTF8Encoding]::new($false))

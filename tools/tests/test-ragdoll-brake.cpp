@@ -316,6 +316,9 @@ static float SeededUprightContact(bool confirmedHit)
 
 int main()
 {
+	// Calibration comparisons below model the original 70 kg body, independently
+	// of the player's current/default weight setting (tested by the weight suite).
+	VrRagdollSettings::SetWeight(100);
 	ConfirmedHitCalibration(); InvalidAndHeadingInputs(); CrowdBudget();
 	AdjustableStrength(); ExtendedCapsAndPhysicalContacts(); CapacityIndependentHitCache();
 	const float before=SeededUprightContact(false), after=SeededUprightContact(true);

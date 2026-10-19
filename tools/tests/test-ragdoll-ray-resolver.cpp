@@ -20,7 +20,7 @@ static void Require(bool value, const char *label)
 }
 
 struct Reply { bool hit = false; CEntity *entity = nullptr; float x = 0; };
-struct Trace { bool trace = false; bool flags[8] = {}; };
+struct Trace { bool trace = false; bool flags[7] = {}; };
 static Reply replies[2];
 static Trace traces[2];
 static int worldCalls, beginCalls, bulletCalls;
@@ -61,14 +61,14 @@ struct CWorld {
 static bool ProcessLineOfSight(const CVector &, const CVector &,
     CColPoint &point, CEntity *&entity, bool buildings, bool vehicles,
     bool peds, bool objects, bool dummies, bool seeThrough,
-    bool someObjects, bool shootThrough)
+    bool someObjects)
 {
     Require(worldCalls < 2, "bounded world traces");
     Trace &trace = traces[worldCalls];
     trace.trace = scopedTrace;
     const bool flags[] = {buildings, vehicles, peds, objects, dummies,
-        seeThrough, someObjects, shootThrough};
-    for(int i = 0; i < 8; ++i) trace.flags[i] = flags[i];
+        seeThrough, someObjects};
+    for(int i = 0; i < 7; ++i) trace.flags[i] = flags[i];
     const Reply &reply = replies[worldCalls++];
     point.point.x = reply.x;
     entity = reply.entity;
@@ -119,8 +119,8 @@ int main()
         "shot context forwarded");
     Require(traces[0].trace && !scopedTrace && !bulletTraceState,
         "trace state scoped to world query");
-    const bool expected[] = {true, false, true, true, false, true, false, true};
-    for(int i = 0; i < 8; ++i)
+    const bool expected[] = {true, false, true, true, false, true, false};
+    for(int i = 0; i < 7; ++i)
         Require(traces[0].flags[i] == expected[i], "caller flags forwarded");
 
     Reset();

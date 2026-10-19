@@ -123,6 +123,7 @@ int main(){
 #endif
     Reset();Fill(peds[0],0);Check(Begin(&p),"fresh corpse admission");Slot *s=FindSlot(&p);s->asleep=true;s->poseCached=true;
     // Native root is distant, the actual visible joints are beside the explosion.
+    CVector originalPose[SIM_BONES];for(int n=0;n<SIM_BONES;++n)originalPose[n]=s->pos[n];
     p.matrix.pos={100,0,0};CVector before=s->prev[RD_PELVIS];
     CWorld::TriggerExplosion({-2,0,0},10,300,nil,false);
 #if OLD_BASELINE
@@ -132,7 +133,7 @@ int main(){
     Check(!s->asleep&&!s->poseCached,"blast wakes visible saved corpse");Check(!Near(s->prev[RD_PELVIS],before),"blast reaches joints despite remote native root");
     const CVector v1=Velocity(s,RD_PELVIS);CWorld::TriggerExplosion({-2,0,0},10,300,nil,false);
     Check(Near(Velocity(s,RD_PELVIS),v1*2,.0005f),"repeat explosion adds momentum without reset");
-    for(int n=0;n<SIM_BONES;++n)Check(Near(s->pos[n],p.clump.hierarchy.matrices[n].pos),"impulse preserves body pose");
+    for(int n=0;n<SIM_BONES;++n)Check(Near(s->pos[n],originalPose[n]),"impulse preserves body pose");
     Reset();Fill(peds[0],0);p.m_nPedState=PED_IDLE;
     CWorld::TriggerExplosion({-2,0,0},10,300,nil,false);s=FindSlot(&p);Check(s!=nil,"RPG native death gate admits fresh corpse");
     const CVector expected=p.m_vecMoveSpeed*50;

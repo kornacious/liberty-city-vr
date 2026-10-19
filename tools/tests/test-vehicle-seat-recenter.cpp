@@ -8,6 +8,7 @@
 #define GTA_VR_WEAPONS 1
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define ALOG(...) ((void)0)
+namespace VrBodyIK {static void SetVehicleTransition(bool){} static void ResetVehicleTransition(){}}
 using float32 = float;
 using bool32 = int;
 using int32 = int32_t;
@@ -183,11 +184,8 @@ static void SuppressionAndLifecycle() {
   androidgame::menu=false;p.m_rwObject=&p;p.m_pFrames[PED_HEAD]=&p;p.dead=false;gGameState=GS_PLAYING_GAME;xrvk::g.theaterMode=false;
   Tick();Tick();Check(recenters==1,"postponed entry captures exactly once when safe");
  }
- for(int state:{PED_SEEK_CAR,PED_SEEK_IN_BOAT,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_EXIT_CAR,PED_DRAG_FROM_CAR}){
+ for(int state:{PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_EXIT_CAR,PED_DRAG_FROM_CAR,PED_ENTER_TRAIN,PED_EXIT_TRAIN}){
   Reset(p,car);p.state=state;Tick();Check(recenters==0,"all native transition states defer recenter");
- }
- for(int objective:{OBJECTIVE_ENTER_CAR_AS_DRIVER,OBJECTIVE_ENTER_CAR_AS_PASSENGER,OBJECTIVE_LEAVE_CAR,OBJECTIVE_LEAVE_CAR_AND_DIE}){
-  Reset(p,car);p.m_objective=objective;Tick();Check(recenters==0,"all entry/exit objectives defer recenter");
  }
  Reset(p,car);car.pDriver=nullptr;Tick();Check(recenters==0,"InVehicle without registered seat is not enough");
  car.pPassengers[7]=&p;Tick();Check(recenters==1&&gVehicleSeatRecenter.seat==8,"passenger seat is recognized");

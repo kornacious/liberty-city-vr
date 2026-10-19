@@ -10,7 +10,7 @@
 #define FIX_SIGNIFICANT_BUGS
 using int32=int32_t;using uint32=uint32_t;using int16=int16_t;using uint8=uint8_t;
 struct CVector{float x=0,y=0,z=0;};
-#include "../../src/core/Wanted.h"
+#include "Wanted.h"
 static int checks=0;
 static void Check(bool value,const char*label){++checks;if(!value){std::fprintf(stderr,"FAIL: %s\n",label);std::exit(1);}}
 template<class T>static T Min(T a,T b){return a<b?a:b;}
@@ -41,18 +41,17 @@ int32 CWanted::WorkOutPolicePresence(CVector,float){return 0;}
 #pragma warning(pop)
 static int Queued(const CWanted&w){int n=0;for(const auto&c:w.m_aCrimes)if(c.m_nType!=CRIME_NONE)++n;return n;}
 static void Fresh(CWanted&w){CWanted::bNoWantedCheat=false;CWanted::SetMaximumWantedLevel(6);w.Initialise();timeMs=1000;DMAudio.reports=0;}
-static void Zero(const CWanted&w,const char*label){Check(w.m_nWantedLevel==0&&w.m_nChaos==0&&w.m_nMinChaos==0&&w.m_nMinWantedLevel==0,label);}
+static void Zero(const CWanted&w,const char*label){Check(w.m_nWantedLevel==0&&w.m_nChaos==0,label);}
 int main(){
     CWanted w;Fresh(w);
     Check(!CWanted::bNoWantedCheat&&!w.IsIgnoredByCops()&&!w.IsIgnored(),"default leaves normal police behavior");
     w.SetWantedLevel(3);Check(w.GetWantedLevel()==3,"OFF native scripted wanted applies");
     w.RegisterCrime(CRIME_SHOOT_COP,{},100,false);Check(Queued(w)==1,"OFF native deferred crime queues");
-    w.Suspend();Check(w.m_nMinWantedLevel==3&&w.m_nMinChaos>0,"native suspension creates restorable minimum");
     CCopPed cops[10];cops[9].dead=true;
     for(int i=0;i<10;++i)w.m_pCops[i]=&cops[i];w.m_CurrentCops=10;
     const int levelCap=CWanted::MaximumWantedLevel,chaosCap=CWanted::nMaximumWantedLevel;
     w.SetNoWantedCheat(true);
-    Zero(w,"enable clears current and suspended wanted");
+    Zero(w,"enable clears current wanted");
     Check(Queued(w)==0&&w.m_CurrentCops==0,"enable clears pending crimes and pursuit count");
     Check(w.IsIgnoredByCops()&&w.IsIgnored(),"cheat uses effective ignore without changing mission state");
     Check(!w.m_bIgnoredByCops&&!w.m_bIgnoredByEveryone,"enable does not mutate mission-owned flags");
@@ -65,7 +64,6 @@ int main(){
     for(int level=0;level<=6;++level){
         w.SetWantedLevel(level);Zero(w,"ON blocks direct scripted wanted");
         w.SetWantedLevelNoDrop(level);Zero(w,"ON blocks no-drop script/cop path");
-        w.CheatWantedLevel(level);Zero(w,"ON blocks raise-wanted cheat path");
     }
     for(int crime=CRIME_HIT_PED;crime<NUM_CRIME_TYPES;++crime){
         const auto type=static_cast<eCrimeType>(crime);
@@ -76,8 +74,8 @@ int main(){
         Zero(w,"ON crime reporter cannot increase chaos or wanted");
     }
     Check(DMAudio.reports==0,"ON suppresses new police radio crime reports");
-    w.m_nChaos=9000;w.m_nMinChaos=1200;w.m_nMinWantedLevel=4;w.UpdateWantedLevel();
-    Zero(w,"central update closes direct chaos and suspension bypass");
+    w.m_nChaos=9000;w.UpdateWantedLevel();
+    Zero(w,"central update closes direct chaos bypass");
     w.m_pCops[0]=&cops[0];w.m_CurrentCops=1;cops[0].m_bIsInPursuit=true;
     w.m_nChaos=5000;w.m_nWantedLevel=6;w.Update();
     Zero(w,"per-frame enforcement clears restored transient wanted state");
@@ -92,10 +90,10 @@ int main(){
         Check(w.IsIgnoredByCops()&&w.IsIgnored(),"ON overrides either mission ignore value without writing it");
     }
     w.m_bIgnoredByCops=false;w.m_bIgnoredByEveryone=false;
-    w.SetNoWantedCheat(false);Zero(w,"disabling does not resurrect suspended old stars");
+    w.SetNoWantedCheat(false);Zero(w,"disabling does not resurrect old stars");
     timeMs+=30000;w.Update();Check(Queued(w)==0&&w.GetWantedLevel()==0,"disabling has no delayed crime debt");
     w.ReportCrimeNow(CRIME_SHOOT_COP,{},false);Check(w.GetWantedLevel()==1&&DMAudio.reports==1,"OFF normal crime and police radio resume");
-    w.SetWantedLevel(5);Check(w.GetWantedLevel()==5&&w.NumOfHelisRequired()==1,"OFF native scripted pursuit and helicopter requirement resume");
+    w.SetWantedLevel(5);Check(w.GetWantedLevel()==5&&w.NumOfHelisRequired()==2,"OFF native scripted pursuit and helicopter requirement resume");
     for(int cap=0;cap<=6;++cap){
         Fresh(w);CWanted::SetMaximumWantedLevel(cap);
         const int originalChaosCap=CWanted::nMaximumWantedLevel;

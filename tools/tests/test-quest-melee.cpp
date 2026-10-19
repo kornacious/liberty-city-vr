@@ -64,6 +64,11 @@ static bool getFirstPersonViewFrame(float *r,float *u,float *f,float *p){
 #include "quest-melee-types.inc"
 static MeleeStrike gMeleeStrike[2];
 static MeleeMotion gMeleeMotion[2];
+namespace VrBodyIK {
+static bool WeaponOwnershipActive(){return false;}
+static bool GetRigidWeaponHandBasis(int,CVector*,CVector*,CVector*,CVector*){return false;}
+}
+static void ApplyBakedLeftWeaponPosition(int,CMatrix*);
 #include "quest-melee-production.inc"
 
 static void Pose(int hand,float x,float angle=0.0f){
@@ -71,7 +76,7 @@ static void Pose(int hand,float x,float angle=0.0f){
     gGripMatrix[hand]=camera*local; gAimMatrix[hand]=camera*local;
 }
 static void Tick(){++testFrame;testTime+=static_cast<uint32>(testDt*1000.0f+0.5f);UpdateMelee();}
-static void Reset(int hand,int weapon=WEAPONTYPE_KATANA){
+static void Reset(int hand,int weapon=WEAPONTYPE_BASEBALLBAT){
     camera=CMatrix();gameplay=true;inVehicle=false;testTime=1000;testFrame=100;
     type[0]=WEAPONTYPE_UNARMED;type[1]=weapon;
     for(int i=0;i<2;++i){gMeleeMotion[i]=MeleeMotion();gMeleeStrike[i]=MeleeStrike();
@@ -86,8 +91,8 @@ static bool Consume(int hand,CVector *tipOut=nullptr){
         Require(weapon==type[1],"held weapon type preserved");
         Require(speed>=0.08f,"sweep carries deliberate speed");
         if(tipOut)*tipOut=b;
-        if(weapon==WEAPONTYPE_KATANA)
-            Require((b-r1).Magnitude()>0.93f,"katana retains full 94 cm blade without render cache");}
+        if(weapon==WEAPONTYPE_BASEBALLBAT)
+            Require((b-r1).Magnitude()>0.67f,"bat retains full 68 cm reach without render cache");}
     return hit;
 }
 int main(){
@@ -95,9 +100,9 @@ int main(){
         testDt=1.0f/hz;Reset(hand);
         // Draw directly into a swing: no calm sample or prior successful hit.
         Pose(hand,2.0f*testDt);Tick();CVector tip;
-        Require(Consume(hand,&tip),"first katana swing works without preliminary pause");
+        Require(Consume(hand,&tip),"first bat swing works without preliminary pause");
         CMatrix expected;Require(BuildWeaponModelMatrix(hand,profiles[hand],&expected),"calibrated model valid");
-        Require((tip-expected*MeleeModelTip(WEAPONTYPE_KATANA)).Magnitude()<1e-5f,"sweep uses current input pose");
+        Require((tip-expected*MeleeModelTip(WEAPONTYPE_BASEBALLBAT)).Magnitude()<1e-5f,"sweep uses current input pose");
         Pose(hand,2.0f*testDt+0.1f*testDt);Tick();
         Require(Consume(hand),"slow tail after fast swing stays active");
         ResolvePhysicalMeleeStrike(hand,true);
@@ -111,7 +116,7 @@ int main(){
         for(int i=0;i<20;++i){camera.SetRotateZ(0.1f*static_cast<float>(i));camera.p={0.4f*i,0,0};Pose(hand,0);Tick();
             Require(!Consume(hand),"walking and snap turning a stationary held blade cannot attack");}
     }
-    for(int weapon:{WEAPONTYPE_BASEBALLBAT,WEAPONTYPE_KNIFE,WEAPONTYPE_MACHETE}){
+    for(int weapon:{WEAPONTYPE_BASEBALLBAT}){
         testDt=1.0f/90.0f;Reset(1,weapon);Pose(1,0.04f);Tick();Require(Consume(1),"other tracked melee weapons still emit sweeps");
     }
     std::printf("Quest production melee detector: %d checks passed\n",checks);

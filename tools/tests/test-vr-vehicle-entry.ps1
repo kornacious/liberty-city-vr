@@ -35,7 +35,7 @@ foreach($name in @('PedAnimAlignCB','PedAnimDoorOpenCB','PedAnimGetInCB','PedAni
  $production+=$method+"`n"
 }
 $enumNames=[regex]::Matches($production,'\b(?:ANIM_\w+|ASSOCGRP_\w+|PEDTYPE_\w+|PED_\w+|OBJECTIVE_\w+|VEHICLE_APPEARANCE_\w+|DOOR_STATUS_\w+|CARLOCK_\w+|CAR_DOOR_\w+|CAR_WINDSCREEN|STATUS_\w+|MISSION_\w+|SOUND_\w+)\b') | ForEach-Object {$_.Value}
-$enumNames=@($enumNames)+@('PEDTYPE_PLAYER1','PED_IDLE','PED_ENTER_CAR','CARLOCK_LOCKED','STATUS_WRECKED','ANIM_STD_CAR_ALIGN_DOOR_LHS') | Sort-Object -Unique
+$enumNames=@($enumNames)+@('STATUS_ABANDONED','CARLOCK_UNLOCKED','PEDTYPE_PLAYER1','PED_IDLE','PED_ENTER_CAR','CARLOCK_LOCKED','STATUS_WRECKED','ANIM_STD_CAR_ALIGN_DOOR_LHS') | Sort-Object -Unique
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vr-vehicle-entry-enums.inc'),('enum { '+($enumNames -join ',')+' };'),[Text.UTF8Encoding]::new($false))
 $header=[IO.Path]::GetFullPath((Join-Path $src 'peds/VrVehicleEntry.h')).Replace('\','/')
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vr-vehicle-entry-production.inc'),$production,[Text.UTF8Encoding]::new($false))

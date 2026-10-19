@@ -9,6 +9,29 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+Run the supported Liberty City suites together from a normal PowerShell session:
+
+```powershell
+.\tools\tests\test-current-sources.ps1 -Re3Root C:\LCVRBuild\re3-public-b050e1c
+```
+
+Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
+reVC input, assembles the current kit and all patches in a new directory, and
+runs 31 suites against that tree or the kit's production helpers. Each suite
+runs in a separate process. `results.json` records exit codes, log paths, totals
+and exclusions; any failed suite makes the command fail after writing the
+report. Excluded scripts never count as passes. No game assets, headset or
+private historical checkout is needed. Use `-OutDir` with a new directory to
+choose where the assembled sources, binaries and logs are kept.
+
+The repaired adapters use Liberty City's actual weapon inventory, animation
+names, wanted header and crime definitions. They do not add Vice City weapon
+aliases or substitute passing implementations for missing game methods. The
+reaction/braking calibration fixtures explicitly select a 70 kg body; the
+separate weight suite covers current tunable/default weight behavior. The
+explosion pose check compares captured solver coordinates before and after
+the impulse rather than assuming solver indices equal skeleton bone indices.
+
 `test-android-audio.ps1 -KitRoot .` extracts the production Android channel
 state, spatial/volume setters, channel initialization and AAudio mixer callback.
 Synthetic PCM checks near/mid/far gain, all three position axes, moving sources,
@@ -32,11 +55,30 @@ The header-only ragdoll suite works directly against the kit:
 
 Tests that extract patched engine functions require a freshly assembled re3
 tree via `-StageRoot`, `-KitRoot` or `-EngineRoot`, as declared by that runner.
-Some historical comparison fixtures additionally require a local
-`baseline-qbuild` subdirectory containing the comparison revision; that tree is
-not distributed. `test-heli-bullets.ps1 -OriginalRoot` needs a clean git checkout
-of the documented upstream commit. Read each runner's parameter block before
+Optional `-UseBaseline` modes require a private historical snapshot and are
+outside the current-source run. Read each runner's parameter block before
 invoking it.
+
+The following retained reference fixtures are **not supported Liberty City
+regressions** and are excluded explicitly. Their presence is not validation
+evidence for this port:
+
+| Runner | Incompatible assumption |
+| --- | --- |
+| `test-devtools-culling.ps1` | `render/VrCullViz` module absent from this port |
+| `test-heli-bullets.ps1` | Private `baseline-qbuild`, reVC revision `026cd10`, sniper and M60 paths |
+| `test-modelset-profiles.ps1` | reVC streaming region and `CdStreamPosix.cpp` registration |
+| `test-modelset-wheels.ps1` | Wheel texture-transfer behavior differs from Liberty City's MODELFILE loader |
+| `test-ragdoll-vehicle-hook.ps1` | Movable-pair hook and `KillPedWithCar` signature differ |
+| `test-ragdoll-visibility.ps1` | Expects two population-cleanup integration sites absent in current sources |
+| `test-vehicle-deformation-collision.ps1` | Snapshot-context/manifold hooks differ from current Physical.cpp |
+| `test-vehicle-driveby.ps1` | Requires `Bike.cpp`, `CBike`, and bike driving paths |
+
+These integration gaps need separate porting/audit work before those fixtures
+can be promoted into the current-source suite. The suite does not claim
+coverage of those behaviors. Installer/updater fixtures, shader-tool checks
+and actual-mesh diagnostics below are also separate from the 31 synthetic
+host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:
 
@@ -52,8 +94,8 @@ overlay. No asset is embedded in these tests or exported for redistribution.
 `-UseBaseline`, where available, intentionally runs the old implementation and
 can fail the fixed-behavior assertion.
 
-Useful groups include ragdoll anatomy/contact/support, tracked aim and melee,
-vehicle entry/seat transitions, wanted behavior, menu layout and vehicle
+The supported groups include ragdoll anatomy/contact/support, tracked aim and
+melee, vehicle entry/seat transitions, wanted behavior, menu layout and vehicle
 deformation geometry/lifetime. Benchmarks report host time only. Exact pass
 counts are local release evidence rather than a substitute for player testing.
 

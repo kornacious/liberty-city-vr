@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Compiler = 'cl.exe',
+    [string]$Compiler = '',
     [string]$OutDir = (Join-Path $env:TEMP ('vcvr-mip-tests-' + [Guid]::NewGuid().ToString('N')))
 )
 
@@ -10,6 +10,11 @@ $source = Get-Content -LiteralPath (Join-Path $kitRoot 'librw/src/vulkan/vkraste
 $start = $source.IndexOf('struct GeneratedMipJob')
 $end = $source.IndexOf('// Creates a texture directly from DXT blocks', $start)
 if ($start -lt 0 -or $end -le $start) { throw 'Mip worker extraction markers changed.' }
+if (-not $Compiler) {
+    [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'mip-worker-extracted.inc'), $source.Substring($start, $end - $start))
+    & (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $kitRoot -OutDir $OutDir -Sources @('mip-worker-test.cpp')
+    return
+}
 if (Test-Path -LiteralPath $OutDir) { throw "Test output already exists: $OutDir" }
 New-Item -ItemType Directory -Path $OutDir | Out-Null
 $worker = $source.Substring($start, $end - $start)

@@ -12,6 +12,7 @@
 #define CANCELLABLE_CAR_ENTER 1
 #define nil nullptr
 using int16=int16_t;
+using AnimationId=int;
 static unsigned checks;
 static void Check(bool value,const char *message){++checks;if(!value)throw std::runtime_error(message);}
 template<class T> static T Abs(T value){return value<0?-value:value;}
@@ -59,6 +60,7 @@ struct CPed {
  bool IsNotInWreckedVehicle(){return m_pMyVehicle&&m_pMyVehicle->status!=STATUS_WRECKED;}bool DyingOrDead(){return m_fHealth<=0;}
  void *GetClump(){return this;}void QuitEnteringCar(){++quit;m_nPedState=PED_IDLE;m_pVehicleAnim=nullptr;}
  void RestorePreviousObjective(){++restored;}void SetFall(int,int,bool){++fallen;}
+ void SetLookFlag(CPed*,bool){} void SetLookTimer(int){}
  void SetWantedLevelNoDrop(int){++wanted;}bool IsGangMember(){return false;}
  void SetObjective(int objective,void*){m_objective=objective;}void ClearObjective(){}void SetWanderPath(float){}
  void SetBeingDraggedFromCar(CVehicle*,int,bool){}void RegisterThreatWithGangPeds(CPed*){}

@@ -1,11 +1,11 @@
 param(
-    [string]$StageRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$StageRoot = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
     [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) ('vc-ray-resolver-' + [Guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference = 'Stop'
 $sourcePath = Join-Path $StageRoot 'src\weapons\Weapon.cpp'
 $source = [IO.File]::ReadAllText($sourcePath)
-$match = [regex]::Match($source, '(?ms)^bool\r?\nCWeapon::ProcessLineOfSight\(.*?(?=^void\r?\nCWeapon::CheckForShootingVehicleOccupant\()')
+$match = [regex]::Match($source, '(?ms)^bool\r?\nCWeapon::ProcessLineOfSight\(.*?^\}')
 if (-not $match.Success) { throw 'Cannot extract the production weapon ray resolver.' }
 $generated = Join-Path $PSScriptRoot 'ragdoll-ray-resolver-production.inc'
 [IO.File]::WriteAllText($generated, $match.Value, [Text.UTF8Encoding]::new($false))

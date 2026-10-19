@@ -55,6 +55,8 @@ static bool inVehicle;
 static int shortcutOpens;
 static void*FindPlayerVehicle(){return inVehicle?&inVehicle:nullptr;}
 static void OpenCheatMenu(){++shortcutOpens;gVrMenuPage=VR_MENU_PAGE_CHEATS;}
+static bool gCutsceneAnchorConsumeUntilRelease=false;
+namespace androidgame {static bool VrCutsceneCameraAnchorCalibrationActive(){return false;}}
 namespace OculusVR{static void SetQuestVehicleCalibrationPreview(bool){} inline void InvalidateQuestWeaponLaserOverrides(){}}
 struct PadInput{bool b=false,leftStickClick=false;};
 static int gTrafficPedPercent=135,gTrafficCarPercent=100;

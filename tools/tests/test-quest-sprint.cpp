@@ -3,6 +3,8 @@
 #include <cstring>
 #include <initializer_list>
 #include "quest-sprint-weapon-types.inc"
+#include <cstdint>
+using uint8=uint8_t;
 #define GTA_VR_WEAPONS
 #define PC_PLAYER_CONTROLS
 #define DEGTORAD(a) ((a)*0.017453292519943295f)
@@ -30,28 +32,28 @@ struct CPad {
     bool GetSprint()const{return sprint;}
 };
 static bool cheat=false,physical=true;
-static int held[2]={-1,-1};
+static int held[2]={-1,-1}, fixtureWeaponType=WEAPONTYPE_UNARMED;
 namespace OculusVR {
 static bool IsRunWithoutLimitsEnabled(){return cheat;}
 static bool IsPhysicalWeaponInteractionActive(){return physical;}
 static int GetHeldWeaponSlot(int h){return held[h];}
+static int GetVrWeaponTypeForSlot(int){return fixtureWeaponType;}
 }
 struct CameraMode{bool mouse=true;bool Using3rdPersonMouseCam()const{return mouse;}};
 static struct Camera{CameraMode Cams[1];int ActiveCam=0;} TheCamera;
-static void *RpAnimBlendClumpGetAssociation(void*,int){return nullptr;}
 struct CPlayerPed {
-    CWeapon weapons[TOTAL_WEAPON_SLOTS];int current=WEAPONSLOT_MELEE,rebuilt=0;
+    CWeapon weapons[WEAPONTYPE_TOTALWEAPONS];int current=WEAPONSLOT_MELEE,rebuilt=0;
     int m_nPedState=PED_IDLE;void *m_pPointGunAt=nullptr;bool bIsDucking=false;
     float m_fWalkAngle=0;bool canStrafe=true;AssocGroupId m_animGroup=ASSOCGRP_PLAYER;
     CWeapon *GetWeapon(){return &weapons[current];}
-    CWeapon &GetWeapon(int slot){return weapons[slot];}
-    bool HasWeaponSlot(int slot)const{return slot>=0&&slot<TOTAL_WEAPON_SLOTS;}
+    CWeapon &GetWeapon(int type){return weapons[type];}
+    bool HasWeapon(uint8 type)const{return type<WEAPONTYPE_TOTALWEAPONS;}
     void ReApplyMoveAnims(){++rebuilt;}
     bool CanStrafeOrMouseControl()const{return canStrafe;}
     void *GetClump(){return nullptr;}
     int GetFireAnimGround(CWeaponInfo*,bool){return 0;}
     int GetMeleeStartAnim(CWeaponInfo*){return 0;}
-    void ProcessAnimGroups();float DoWeaponSmoothSpray();bool MovementDisabledBecauseOfTargeting();
+    void ProcessAnimGroups();
 };
 #include "quest-sprint-production.inc"
 static const char *SprintName(AssocGroupId group){
@@ -61,7 +63,6 @@ static const char *SprintName(AssocGroupId group){
     case ASSOCGRP_PLAYER1ARMED:return aPlayer1ArmedAnimations[2];
     case ASSOCGRP_PLAYER2ARMED:return aPlayer2ArmedAnimations[2];
     case ASSOCGRP_PLAYERBBBAT:return aPlayerBBBatAnimations[2];
-    case ASSOCGRP_PLAYERCHAINSAW:return aPlayerChainsawAnimations[2];
     case ASSOCGRP_PLAYERBACK:return aPlayerStrafeBackAnimations[2];
     case ASSOCGRP_PLAYERLEFT:return aPlayerStrafeLeftAnimations[2];
     case ASSOCGRP_PLAYERRIGHT:return aPlayerStrafeRightAnimations[2];
@@ -70,12 +71,13 @@ static const char *SprintName(AssocGroupId group){
 }
 int main(){
     CPlayerPed player;CPad pad;pad.vertical=128;
-    for(eWeaponType weapon:{WEAPONTYPE_SHOTGUN,WEAPONTYPE_ROCKETLAUNCHER,WEAPONTYPE_CHAINSAW,
-        WEAPONTYPE_MINIGUN,WEAPONTYPE_BASEBALLBAT,WEAPONTYPE_KATANA,WEAPONTYPE_COLT45}){
-        const bool restricted=weapon==WEAPONTYPE_ROCKETLAUNCHER||weapon==WEAPONTYPE_CHAINSAW||weapon==WEAPONTYPE_MINIGUN;
+    for(eWeaponType weapon:{WEAPONTYPE_SHOTGUN,WEAPONTYPE_ROCKETLAUNCHER,
+        WEAPONTYPE_FLAMETHROWER,WEAPONTYPE_BASEBALLBAT,WEAPONTYPE_M16,WEAPONTYPE_COLT45}){
+        const bool restricted=weapon==WEAPONTYPE_ROCKETLAUNCHER||weapon==WEAPONTYPE_FLAMETHROWER;
         infos[weapon].flags=restricted?WEAPONFLAG_HEAVY:0;
+        player.current=int(weapon); fixtureWeaponType=weapon;
         player.GetWeapon()->m_eWeaponType=weapon;
-        player.GetWeapon()->twoHanded=weapon==WEAPONTYPE_SHOTGUN;
+        player.GetWeapon()->twoHanded=weapon>=WEAPONTYPE_SHOTGUN && weapon<=WEAPONTYPE_FLAMETHROWER && weapon!=WEAPONTYPE_ROCKETLAUNCHER;
         for(bool tracked:{false,true})
         for(int hand=0;hand<2;++hand){
             physical=tracked;
@@ -92,21 +94,20 @@ int main(){
                 Require(player.m_animGroup==expected,"cheat preserves unarmed forward/left/right/back movement group");
                 const char *motion=expected==ASSOCGRP_PLAYER?"SPRINT_civi":
                     expected==ASSOCGRP_PLAYERLEFT?"run_left":
-                    expected==ASSOCGRP_PLAYERRIGHT?"run_right":"run_back";
+                    expected==ASSOCGRP_PLAYERRIGHT?"run_right":"run_player_back";
                 Require(std::strcmp(SprintName(player.m_animGroup),motion)==0,"actual root-motion mapping retains requested direction");
                 Require(ShouldPlayerSprint(&player,&pad),"cheat requests sprint on movement without button");
                 Require(!IsHeavyWeaponMobilityRestricted(&player),"cheat bypasses held heavy flag");
-                Require(!player.MovementDisabledBecauseOfTargeting(),"cheat bypasses weapon aim movement clamp");
-                Require(player.DoWeaponSmoothSpray()==0.0f,"cheat bypasses weapon attack steering and reverse clamp");
+                Require(!MovementDisabledBecauseOfTargeting(&player),"cheat bypasses weapon aim movement clamp");
             }
             TheCamera.Cams[0].mouse=true;player.canStrafe=true;
             cheat=false;player.m_fWalkAngle=0;player.ProcessAnimGroups();
             Require(IsHeavyWeaponMobilityRestricted(&player)==restricted,"OFF restores held heavy restriction");
             pad.sprint=false;Require(!ShouldPlayerSprint(&player,&pad),"OFF requires sprint input");
             pad.sprint=true;Require(ShouldPlayerSprint(&player,&pad)==!restricted,"OFF preserves normal sprint gate");pad.sprint=false;
-            Require(player.MovementDisabledBecauseOfTargeting(),"OFF restores two-arm targeting stop");
-            if(weapon==WEAPONTYPE_SHOTGUN||weapon==WEAPONTYPE_ROCKETLAUNCHER||weapon==WEAPONTYPE_CHAINSAW||
-               weapon==WEAPONTYPE_MINIGUN||weapon==WEAPONTYPE_BASEBALLBAT)
+            Require(MovementDisabledBecauseOfTargeting(&player),"OFF restores two-arm targeting stop");
+            if(weapon==WEAPONTYPE_SHOTGUN||weapon==WEAPONTYPE_ROCKETLAUNCHER||weapon==WEAPONTYPE_FLAMETHROWER||
+               weapon==WEAPONTYPE_BASEBALLBAT)
                 Require(std::strcmp(SprintName(player.m_animGroup),"SPRINT_civi")!=0,"OFF restores weapon animation mapping");
         }
     }

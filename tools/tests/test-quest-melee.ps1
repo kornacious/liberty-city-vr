@@ -10,17 +10,19 @@ $parts = @(
     '(?ms)^struct MeleeStrike\r?\n.*?(?=^struct ManualReloadState)',
     '(?ms)^static bool\r?\nIsPhysicalMelee\(.*?(?=^static bool\r?\nIsPhysicalThrowable)',
     '(?ms)^static bool\r?\nBuildTrackedWeaponHandBasis\(.*?(?=^static bool\r?\nBuildCanonicalSupportFrame)',
-    '(?ms)^static CVector\r?\nMeleeModelTip\(.*?(?=^static bool\r?\nBuildAim)',
+    '(?ms)^static CVector\r?\nMeleeModelTip\(.*?(?=^static CVector\r?\nGetWeaponLocalBarrelDirection)',
     '(?ms)^bool ConsumePhysicalMeleeStrike\(.*?(?=^int\r?\nGetQuestWeaponSettingCount)'
 )
 $definitions = @()
+$constant = [regex]::Match($source, '(?ms)^static const CVector kBakedLeftWeaponDeltaLocal\(.*?;').Value
+if (-not $constant) { throw 'Missing baked left-hand correction.' }
 foreach ($pattern in $parts) {
     $match = [regex]::Match($source, $pattern)
     if (-not $match.Success) { throw "Cannot extract melee production code: $pattern" }
     $definitions += $match.Value
 }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'quest-melee-types.inc'), $definitions[0], [Text.UTF8Encoding]::new($false))
-[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'quest-melee-production.inc'), ($definitions[1..4] -join "`n"), [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'quest-melee-production.inc'), ($constant + "`n" + ($definitions[1..4] -join "`n")), [Text.UTF8Encoding]::new($false))
 $weapons = Join-Path $StageRoot 'src\weapons\WeaponType.h'
 if (-not (Test-Path -LiteralPath $weapons)) { throw 'Use an assembled source tree for this production test.' }
 Copy-Item -LiteralPath $weapons -Destination (Join-Path $PSScriptRoot 'quest-melee-weapon-types.inc')

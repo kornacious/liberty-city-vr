@@ -1,11 +1,10 @@
 param(
     [string]$StageRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
-    [string]$OutDir=(Join-Path $StageRoot 'checks-never-wanted'),
-    [Parameter(Mandatory=$true)][string]$EngineRoot
+    [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-wanted-' + [guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference='Stop'
 if(-not(Test-Path -LiteralPath (Join-Path $StageRoot 'src/core/Wanted.cpp'))){throw 'StageRoot must be an assembled engine tree containing Wanted.cpp; the source kit distributes that file as patches.'}
-if(-not(Test-Path -LiteralPath (Join-Path $EngineRoot 'src/core/Crime.h'))){throw 'EngineRoot must be an assembled engine tree containing src/core/Crime.h.'}
+if(-not(Test-Path -LiteralPath (Join-Path $StageRoot 'src/core/Crime.h'))){throw 'StageRoot must contain src/core/Crime.h.'}
 function Get-Method([string]$Text,[string]$Name){
     $match=[regex]::Match($Text,'(?m)^(?:void|bool|int32)\s*\r?\n'+[regex]::Escape($Name)+'\(')
     if(-not $match.Success){throw "Production method not found: $Name"}
@@ -21,16 +20,15 @@ $wanted=[IO.File]::ReadAllText($wantedPath)
 $globals=@([regex]::Matches($wanted,'(?m)^(?:bool|int32) CWanted::(?:bNoWantedCheat|MaximumWantedLevel|nMaximumWantedLevel)\s*=.*?;')|ForEach-Object{$_.Value})
 if($globals.Count -ne 3){throw 'Expected the three production wanted globals.'}
 $definitions=($globals -join "`n")+"`n"
-foreach($name in @('Initialise','NumOfHelisRequired','SetNoWantedCheat','SetWantedLevel','SetWantedLevelNoDrop','CheatWantedLevel','SetMaximumWantedLevel','RegisterCrime','RegisterCrime_Immediately','ClearQdCrimes','AddCrimeToQ','ReportCrimeNow','UpdateWantedLevel','Update','ResetPolicePursuit','Reset','UpdateCrimesQ','Suspend')){
+foreach($name in @('Initialise','NumOfHelisRequired','SetNoWantedCheat','SetWantedLevel','SetWantedLevelNoDrop','SetMaximumWantedLevel','RegisterCrime','RegisterCrime_Immediately','ClearQdCrimes','AddCrimeToQ','ReportCrimeNow','UpdateWantedLevel','Update','ResetPolicePursuit','Reset','UpdateCrimesQ')){
     $definitions+=(Get-Method $wanted ('CWanted::'+$name))+"`n"
 }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'never-wanted-production.inc'),$definitions,[Text.UTF8Encoding]::new($false))
 $OutDir=[IO.Path]::GetFullPath($OutDir)
 if(Test-Path -LiteralPath $OutDir){throw 'Choose a new output directory.'}
 [void][IO.Directory]::CreateDirectory($OutDir)
-if(-not (Test-Path -LiteralPath (Join-Path $StageRoot 'src/core/Crime.h'))){
-    Copy-Item -LiteralPath (Join-Path $EngineRoot 'src/core/Crime.h') -Destination (Join-Path $OutDir 'Crime.h')
-}
+Copy-Item -LiteralPath (Join-Path $StageRoot 'src/core/Crime.h') -Destination (Join-Path $OutDir 'Crime.h')
+Copy-Item -LiteralPath (Join-Path $StageRoot 'src/core/Wanted.h') -Destination (Join-Path $OutDir 'Wanted.h')
 $pf=[Environment]::GetFolderPath('ProgramFilesX86')
 $vswhere=Join-Path $pf 'Microsoft Visual Studio/Installer/vswhere.exe'
 $install=@(& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
