@@ -2187,25 +2187,50 @@ UpdateMelee()
 }
 
 static CVector
+GetWeaponLocalBarrelDirection(int weaponType)
+{
+	switch(weaponType){
+	case WEAPONTYPE_COLT45:
+		return CVector(0.9973f, -0.0734f, 0.0f);
+	case WEAPONTYPE_UZI:
+		return CVector(0.9974f, -0.0726f, 0.0f);
+	case WEAPONTYPE_SHOTGUN:
+		return CVector(0.9921f, -0.1255f, 0.0f);
+	case WEAPONTYPE_AK47:
+		return CVector(0.9934f, -0.1147f, 0.0f);
+	case WEAPONTYPE_M16:
+		return CVector(0.9925f, -0.1218f, 0.0068f);
+	case WEAPONTYPE_SNIPERRIFLE:
+		return CVector(0.9891f, -0.1477f, 0.0f);
+	case WEAPONTYPE_ROCKETLAUNCHER:
+		return CVector(1.0f, 0.0f, 0.0f);
+	case WEAPONTYPE_FLAMETHROWER:
+		return CVector(1.0f, 0.0f, 0.0f);
+	default:
+		return CVector(1.0f, 0.0f, 0.0f);
+	}
+}
+
+static CVector
 GetWeaponLocalMuzzle(int weaponType)
 {
 	switch(weaponType){
 	case WEAPONTYPE_COLT45:
-		return CVector(0.276f, 0.005f, 0.078f);
+		return CVector(0.275f, 0.0004f, 0.0812f);
 	case WEAPONTYPE_UZI:
-		return CVector(0.242f, 0.001f, 0.083f);
+		return CVector(0.241f, -0.0015f, 0.0817f);
 	case WEAPONTYPE_SHOTGUN:
 		return CVector(0.812f, -0.086f, 0.103f);
 	case WEAPONTYPE_AK47:
-		return CVector(0.640f, -0.046f, 0.094f);
+		return CVector(0.638f, -0.047f, 0.083f);
 	case WEAPONTYPE_M16:
-		return CVector(0.742f, -0.065f, 0.134f);
+		return CVector(0.741f, -0.066f, 0.137f);
 	case WEAPONTYPE_SNIPERRIFLE:
-		return CVector(0.772f, -0.090f, 0.090f);
+		return CVector(0.770f, -0.0902f, 0.0902f);
 	case WEAPONTYPE_ROCKETLAUNCHER:
 		return CVector(0.553f, 0.000f, 0.000f);
 	case WEAPONTYPE_FLAMETHROWER:
-		return CVector(0.782f, -0.058f, 0.095f);
+		return CVector(0.780f, -0.058f, 0.095f);
 	default:
 		return CVector(0.250f, 0.0f, 0.080f);
 	}
@@ -2255,7 +2280,10 @@ BuildAim(int hand, int weaponType, CVector *source, CVector *direction)
 	if(!haveMatrix)
 		return false;
 
-	*direction = weaponMatrix.GetRight();
+	const CVector localDir = GetWeaponLocalBarrelDirection(weaponType);
+	*direction = weaponMatrix.GetRight() * localDir.x +
+		weaponMatrix.GetForward() * localDir.y +
+		weaponMatrix.GetUp() * localDir.z;
 	if(direction->MagnitudeSqr() <= 0.0001f)
 		return false;
 	direction->Normalise();
