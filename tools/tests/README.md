@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 37 suites against that tree or the kit's production helpers. Each suite
+runs 38 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -91,6 +91,14 @@ covered. Source checks verify every displacement producer/reset updates the
 sleep cache in existing storage. See
 [repair notes and limits](../../PHYSICS_SLEEP_TIMING_REPORT.md).
 
+`test-heli-control-timing.ps1 -StageRoot <assembled-tree>` extracts helicopter
+avoidance/recovery and Catalina landing blending. It checks 15–144 FPS,
+uneven pacing, slow motion, pause, crossed 30 Hz decision windows, blocked-side
+responses, held lateral decisions and shot-down contact timers against an
+independent 30 FPS reference. Landing convergence is checked against an analytic
+elapsed-time response. Catch-up and separate helicopter state are included.
+See [repair notes and limits](../../HELI_CONTROL_TIMING_REPORT.md).
+
 `test-gameplay-timing.ps1 -StageRoot <assembled-tree>` compiles the production
 timer, gameplay schedule helper, swinging-door simulation and aircraft
 destruction sequences. It checks 15–144 FPS, door axes/directions, 30 FPS
@@ -130,7 +138,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 37 synthetic
+and actual-mesh diagnostics below are also separate from the 38 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:
