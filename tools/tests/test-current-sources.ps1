@@ -19,7 +19,7 @@ $stage = Join-Path $OutDir 'source'
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'src/peds/PlayerPed.cpp'))) { throw 'Assembly failed.' }
 $kitTests = @('android-audio','laser-cache','mip-worker','ragdoll','vulkan-descriptors','xr-focus-input')
 $engineTests = @(
-    'autosave','frame-timers','angular-drag-boat-lift','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
+    'autosave','frame-timers','angular-drag-boat-lift','wheel-suspension-fps','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
     'quest-melee','quest-sprint','ragdoll-brake-hook','ragdoll-explosion',
     'ragdoll-lifecycle','ragdoll-menu','ragdoll-off-cost','ragdoll-platform',
     'ragdoll-presentation','ragdoll-ray-resolver','ragdoll-schedule','ragdoll-weight',

@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 33 suites against that tree or the kit's production helpers. Each suite
+runs 34 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -60,6 +60,15 @@ uncapped/capped lift and pitch torque at 20–144 FPS, including uneven pacing,
 slow motion, zero timestep and lift eligibility gates. These isolate forces at
 fixed speed/immersion; they do not establish full boat handling on a headset.
 
+`test-wheel-suspension-fps.ps1 -StageRoot <assembled-tree>` characterizes the
+unchanged production wheel and suspension functions in constrained synthetic
+rigs. It runs 297 fresh-process combinations of nine scenarios, 15–144 FPS and
+steady/uneven/stalled pacing, writing `measurements.csv` and source hashes to
+its output directory. Passing means smoke checks and finite bounded states;
+it does not mean handling is FPS-independent. See
+[the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
+measured differences and limits. No original game data is used.
+
 The header-only ragdoll suite works directly against the kit:
 
 ```powershell
@@ -90,7 +99,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 33 synthetic
+and actual-mesh diagnostics below are also separate from the 34 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:
