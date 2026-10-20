@@ -16,6 +16,7 @@
 #include "CutsceneMgr.h"
 
 extern bool gVrFirstPersonActive;
+extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 
 #include <android/log.h>
 #include <math.h>
@@ -1389,7 +1390,9 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		gHandCarrierPed == ped &&
 		gHandCarrierWasVehicle == carrierModeVehicle;
 
-	if(sameCarrierContext &&
+	// On-foot tracking already uses this frame's anchor. Applying the body
+	// delta here would move the target twice (and only for unlocked hands).
+	if(vehicleIK && sameCarrierContext &&
 	   CarrierDeltaIsReasonable(gHandCarrierPrev, visualBody)){
 		for(int handIndex = 0; handIndex < 2; handIndex++){
 			if(!desiredValid[handIndex])
@@ -1670,7 +1673,8 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		gHandCarrierPed == ped &&
 		gHandCarrierWasVehicle == carrierModeVehicle;
 
-	if(sameCarrierContext &&
+	// Match the skinned path: freshly anchored on-foot poses need no carry.
+	if(vehicleIK && sameCarrierContext &&
 	   CarrierDeltaIsReasonable(gHandCarrierPrev, visualBody)){
 		for(int handIndex = 0; handIndex < 2; handIndex++){
 			if(!desiredValid[handIndex])
@@ -1830,6 +1834,14 @@ void Apply(CPed *ped)
 	}
 
 	EnsureBakedCalibration();
+
+	// PreRender runs before the final camera setup. On foot, publish the
+	// current player anchor before solving either wrist: otherwise the gun
+	// inherits the previous camera position while the eyes use this frame.
+	// Do not advance refreshed targets by the body delta again. Vehicle neck
+	// anchors can depend on the body solve, so retain their existing path.
+	if(onFootIK)
+		::VrUpdateFirstPersonAnchor(false);
 
 	gSolvedHandValid[0] = false;
 	gSolvedHandValid[1] = false;

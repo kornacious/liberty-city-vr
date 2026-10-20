@@ -17,12 +17,21 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 41 suites against that tree or the kit's production helpers. Each suite
+runs 42 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
 private historical checkout is needed. Use `-OutDir` with a new directory to
 choose where the assembled sources, binaries and logs are kept.
+
+`test-held-weapon-frame.ps1 -StageRoot <assembled-tree>` extracts the body IK
+entry point, floating-hand pose conversion, both skeleton carrier blocks and
+rigid weapon reconstruction. Synthetic moving anchors cover 15/30/45/60/72/80/
+90/120/144 FPS with alternating frame durations, running, stopping, turning,
+teleports and tracking loss. Both grip modes and skeleton paths must preserve
+camera-relative gun position without applying locomotion twice. Skeleton bone
+storage is an adapter boundary; this test does not evaluate rendered appearance
+or the full two-hand constraint. The previous source fails the anchor-order test.
 
 The repaired adapters use Liberty City's actual weapon inventory, animation
 names, wanted header and crime definitions. They do not add Vice City weapon
