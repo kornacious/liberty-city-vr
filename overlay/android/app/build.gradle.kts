@@ -31,6 +31,7 @@ plugins {
 }
 
 val questNdkVersion = "27.2.12479018"
+val questVehicleCapture = providers.gradleProperty("libertyvrVehicleCapture").orNull == "true"
 
 // Developer tools require an explicit invocation: -PlibertyvrDevTools=true.
 // Debug APK packaging and native debug symbols are independent of this flag.
@@ -102,6 +103,7 @@ android {
 					// editing the default in CMakeLists.txt does not change an
 					// already-configured build tree.
 					"-DLIBERTYVR_BRINGUP=OFF",
+					"-DLIBERTYVR_VEHICLE_CAPTURE=${if (questVehicleCapture) "ON" else "OFF"}",
 					"-DLIBERTYVR_DEV_TOOLS=${if (questDeveloperTools) "ON" else "OFF"}",
 					"-DMIAMIVR_DEV_TOOLS=${if (questDeveloperTools) "ON" else "OFF"}",
 					// Native optimization is independent of APK debuggability.

@@ -20,6 +20,7 @@ endif()
 # Keep C++ and every shader on the same definition because the debug scene
 # uniform and draw tint do not exist in player builds.
 option(LIBERTYVR_DEV_TOOLS "Include developer-only diagnostics and test tools" OFF)
+option(LIBERTYVR_VEHICLE_CAPTURE "Include opt-in vehicle capture/replay diagnostics" OFF)
 option(MIAMIVR_DEV_TOOLS "Alias for LIBERTYVR_DEV_TOOLS" OFF)
 if(MIAMIVR_DEV_TOOLS)
 	set(LIBERTYVR_DEV_TOOLS ON)
@@ -188,6 +189,11 @@ if(NOT LIBERTYVR_BRINGUP)
 		"${RE3_ROOT}/src/vehicles/PhysicsDirector.cpp")
 	list(REMOVE_ITEM GAME_SOURCES "${PHYSICS_DIRECTOR_SOURCE}")
 	list(APPEND GAME_SOURCES "${PHYSICS_DIRECTOR_SOURCE}")
+	set(VEHICLE_CAPTURE_SOURCE "${RE3_ROOT}/src/vehicles/VehicleCapture.cpp")
+	list(REMOVE_ITEM GAME_SOURCES "${VEHICLE_CAPTURE_SOURCE}")
+	if(LIBERTYVR_VEHICLE_CAPTURE)
+		list(APPEND GAME_SOURCES "${VEHICLE_CAPTURE_SOURCE}")
+	endif()
 	set(VEHICLE_VISUAL_DIRECTOR_SOURCE
 		"${RE3_ROOT}/src/vehicles/VehicleVisualDirector.cpp")
 	list(REMOVE_ITEM GAME_SOURCES "${VEHICLE_VISUAL_DIRECTOR_SOURCE}")
@@ -262,6 +268,7 @@ target_include_directories(libertyvr PRIVATE
 	${GAME_INCLUDES})
 
 target_compile_definitions(libertyvr PRIVATE
+	LIBERTYVR_VEHICLE_CAPTURE=$<BOOL:${LIBERTYVR_VEHICLE_CAPTURE}>
 	LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
 	MIAMIVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
 	XR_USE_PLATFORM_ANDROID
