@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 42 suites against that tree or the kit's production helpers. Each suite
+runs 43 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -32,6 +32,16 @@ teleports and tracking loss. Both grip modes and skeleton paths must preserve
 camera-relative gun position without applying locomotion twice. Skeleton bone
 storage is an adapter boundary; this test does not evaluate rendered appearance
 or the full two-hand constraint. The previous source fails the anchor-order test.
+
+`test-weapon-cadence.ps1 -StageRoot <assembled-tree>` extracts the tracked
+on-foot and vehicle firing blocks plus the native ammo transaction, reload and
+weapon-state update. It compiles those with the production cadence clock. Checks
+cover ten rates from 15 to 180 FPS, alternating frame durations, fractional loop
+intervals, magazine depletion, semi-auto trigger edges, independent guns, hand
+transfers, tracking loss, long stalls, timer wrap, automatic/manual reloads and
+the native 70 ms vehicle Uzi interval. Synthetic loop widths avoid distributing
+original game data. Ballistics, sound and effects are adapter boundaries; live
+headset cadence and desktop comparison still require playing the game.
 
 The repaired adapters use Liberty City's actual weapon inventory, animation
 names, wanted header and crime definitions. They do not add Vice City weapon

@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $stage 'src/peds/PlayerPed.cpp'))) {
 $kitTests = @('android-audio','laser-cache','mip-worker','physical-scope','ragdoll','vulkan-descriptors','xr-focus-input')
 $engineTests = @(
     'autosave','frame-timers','angular-drag-boat-lift','wheel-suspension-fps','vehicle-coupled-fps','vehicle-capture','boat-input-timing','physics-sleep-timing','heli-control-timing','gameplay-timing','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
-    'quest-melee','quest-sprint','held-weapon-frame','ragdoll-brake-hook','ragdoll-explosion',
+    'quest-melee','quest-sprint','held-weapon-frame','weapon-cadence','ragdoll-brake-hook','ragdoll-explosion',
     'ragdoll-lifecycle','ragdoll-menu','ragdoll-off-cost','ragdoll-platform',
     'ragdoll-presentation','ragdoll-ray-resolver','ragdoll-schedule','ragdoll-weight',
     'vehicle-deformation-hitframe','vehicle-deformation-menu','vehicle-deformation-mesh',
