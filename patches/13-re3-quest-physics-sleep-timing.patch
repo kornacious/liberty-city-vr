@@ -1,0 +1,284 @@
+diff --git a/src/entities/Physical.cpp b/src/entities/Physical.cpp
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -11,16 +11,17 @@
+ #include "ParticleObject.h"
+ #include "Particle.h"
+ #include "SurfaceTable.h"
+ #include "PathFind.h"
+ #include "CarCtrl.h"
+ #include "DMAudio.h"
+ #include "Automobile.h"
+ #include "Physical.h"
++#include "QuestPhysicsSleep.h"
+ #include "Bike.h"
+-
++
+ CPhysical::CPhysical(void)
+ {
+ 	int i;
+-
++
+ #ifdef FIX_BUGS
+ 	m_nLastTimeCollided = 0;
+@@ -46,27 +47,34 @@
+ 	m_nDamagePieceType = 0;
+ 	m_fDamageImpulse = 0.0f;
+ 	m_pDamageEntity = nil;
+ 	m_vecDamageNormal = CVector(0.0f, 0.0f, 0.0f);
+-
++
+ 	bUsesCollision = true;
+ 	m_audioEntityId = -5;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	m_fSleepDistance = 0.0f;
++#else
+ 	m_phys_unused1 = 100.0f;
++#endif
+ 	m_vecCentreOfMass = CVector(0.0f, 0.0f, 0.0f);
+ 	m_phys_unused2 = 0;
+-
++
+ 	bIsHeavy = false;
+ 	bAffectedByGravity = true;
+ 	bInfiniteMass = false;
+ 	bIsInWater = false;
+ 	bHitByTrain = false;
+ 	bSkipLineCol = false;
+-
++
+ 	m_fDistanceTravelled = 0.0f;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 	m_treadable[PATH_CAR] = nil;
+ 	m_treadable[PATH_PED] = nil;
+-
++
+ 	m_phy_flagA10 = false;
+ 	m_phy_flagA20 = false;
+-
++
+ #ifdef FIX_BUGS
+ 	m_nSurfaceTouched = SURFACE_DEFAULT;
+@@ -366,23 +374,24 @@
+ 	bHasCollided = false;
+ 	m_nDamagePieceType = 0;
+ 	m_fDamageImpulse = 0.0f;
+ 	m_pDamageEntity = nil;
+-
++
+ 	if(!bIsStuck){
+ 		if(IsObject() ||
+ 		   IsPed() && !bPedPhysics){
+-			m_vecMoveSpeedAvg = (m_vecMoveSpeedAvg + m_vecMoveSpeed)/2.0f;
+-			m_vecTurnSpeedAvg = (m_vecTurnSpeedAvg + m_vecTurnSpeed)/2.0f;
+-			float step = CTimer::GetTimeStep() * 0.003f;
++			const float sleepBlend = QuestPhysicsSleep::Blend();
++			m_vecMoveSpeedAvg += (m_vecMoveSpeed - m_vecMoveSpeedAvg)*sleepBlend;
++			m_vecTurnSpeedAvg += (m_vecTurnSpeed - m_vecTurnSpeedAvg)*sleepBlend;
++			float step = QuestPhysicsSleep::SpeedLimit(0.003f);
+ 			if(m_vecMoveSpeedAvg.MagnitudeSqr() < step*step &&
+ 			   m_vecTurnSpeedAvg.MagnitudeSqr() < step*step){
+-				m_nStaticFrames++;
++				QuestPhysicsSleep::Advance(m_nStaticFrames);
+ 				if(m_nStaticFrames > 10){
+-					m_nStaticFrames = 10;
++					m_nStaticFrames = QuestPhysicsSleep::RestingCount();
+ 					SetIsStatic(true);
+ 					m_vecMoveSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 					m_vecTurnSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 					m_vecMoveFriction = m_vecMoveSpeed;
+ 					m_vecTurnFriction = m_vecTurnSpeed;
+ 					return;
+ 				}
+@@ -1814,16 +1823,19 @@
+ 			return true;
+ 	return false;
+ }
+-
++
+ void
+ CPhysical::ProcessShift(void)
+ {
+ 	m_fDistanceTravelled = 0.0f;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 	if(GetStatus() == STATUS_SIMPLE){
+ 		bIsStuck = false;
+ 		bIsInSafePosition = true;
+ 		RemoveAndAdd();
+ 	}else{
+ 		CMatrix matrix(GetMatrix());
+ 		ApplyMoveSpeed();
+ 		ApplyTurnSpeed();
+@@ -1845,30 +1857,36 @@
+ 				if(ProcessCollisionSectorList(node->sector->m_lists)){
+ 					GetMatrix() = matrix;
+ 					return;
+ 				}
+ 		}
+ 		bIsStuck = false;
+ 		bIsInSafePosition = true;
+ 		m_fDistanceTravelled = (GetPosition() - matrix.GetPosition()).Magnitude();
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++		m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 		RemoveAndAdd();
+ 	}
+ }
+-
++
+ // x is the number of units (m) we would like to step
+ #define NUMSTEPS(x) Ceil(Sqrt(distSq) * (1.0f/(x)))
+-
++
+ void
+ CPhysical::ProcessCollision(void)
+ {
+ 	int i;
+ 	CPed *ped = (CPed*)this;
+-
++
+ 	m_fDistanceTravelled = 0.0f;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 	m_bIsVehicleBeingShifted = false;
+ 	bSkipLineCol = false;
+-
++
+ 	if(!bUsesCollision){
+ 		bIsStuck = false;
+ 		bIsInSafePosition = true;
+ 		RemoveAndAdd();
+ 		return;
+@@ -1994,14 +2012,17 @@
+ 			((CVehicle*)this)->bVehicleColProcessed = true;
+ 		if(CheckCollision()){
+ 			GetMatrix() = savedMatrix;
+ 			return;
+ 		}
+ 	}
+ 	bHitByTrain = false;
+ 	m_fDistanceTravelled = (GetPosition() - savedMatrix.GetPosition()).Magnitude();
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 	bSkipLineCol = false;
+-
++
+ 	bIsStuck = false;
+ 	bIsInSafePosition = true;
+ 	RemoveAndAdd();
+ }
+diff --git a/src/entities/Physical.h b/src/entities/Physical.h
+--- a/src/entities/Physical.h
++++ b/src/entities/Physical.h
+@@ -12,17 +12,21 @@
+ #define GRAVITY (0.008f)
+-
++
+ class CTreadable;
+-
++
+ class CPhysical : public CEntity
+ {
+ public:
+ 	int32 m_audioEntityId;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++	union { float m_phys_unused1; float m_fSleepDistance; }; // Same storage/layout.
++#else
+ 	float m_phys_unused1;
++#endif
+ 	CTreadable *m_treadable[2];	// car and ped
+ 	uint32 m_nLastTimeCollided;
+ 	CVector m_vecMoveSpeed;		// velocity
+ 	CVector m_vecTurnSpeed;		// angular velocity
+ 	CVector m_vecMoveFriction;
+ 	CVector m_vecTurnFriction;
+ 	CVector m_vecMoveSpeedAvg;
+ 	CVector m_vecTurnSpeedAvg;
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1,10 +1,11 @@
+ #include "common.h"
+ #include "QuestGameTime.h"
++#include "QuestPhysicsSleep.h"
+ #include "main.h"
+-
++
+ #include "General.h"
+ #include "RwHelper.h"
+ #include "Pad.h"
+ #include "ModelIndices.h"
+ #include "VisibilityPlugins.h"
+ #include "DMAudio.h"
+@@ -483,29 +484,34 @@
+ 			turnSpeedLimit = 0.0015f;
+ 			distanceLimit = 0.015f;
+ 		}else{
+ 			moveSpeedLimit = 0.003f;
+ 			turnSpeedLimit = 0.0009f;
+ 			distanceLimit = 0.005f;
+ 		}
+-
++
+-		m_vecMoveSpeedAvg = (m_vecMoveSpeedAvg + m_vecMoveSpeed)/2.0f;
+-		m_vecTurnSpeedAvg = (m_vecTurnSpeedAvg + m_vecTurnSpeed)/2.0f;
++		const float sleepBlend = QuestPhysicsSleep::Blend();
++		m_vecMoveSpeedAvg += (m_vecMoveSpeed - m_vecMoveSpeedAvg)*sleepBlend;
++		m_vecTurnSpeedAvg += (m_vecTurnSpeed - m_vecTurnSpeedAvg)*sleepBlend;
+-
++
+-		if(m_vecMoveSpeedAvg.MagnitudeSqr() <= sq(moveSpeedLimit*CTimer::GetTimeStep()) &&
+-		   m_vecTurnSpeedAvg.MagnitudeSqr() <= sq(turnSpeedLimit*CTimer::GetTimeStep()) &&
++		if(m_vecMoveSpeedAvg.MagnitudeSqr() <= sq(QuestPhysicsSleep::SpeedLimit(moveSpeedLimit)) &&
++		   m_vecTurnSpeedAvg.MagnitudeSqr() <= sq(QuestPhysicsSleep::SpeedLimit(turnSpeedLimit)) &&
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++		   m_fSleepDistance < distanceLimit ||
++#else
+ 		   m_fDistanceTravelled < distanceLimit ||
++#endif
+ 		   makeStatic){
+-			m_nStaticFrames++;
++			QuestPhysicsSleep::Advance(m_nStaticFrames);
+-
++
+ 			if(m_nStaticFrames > 10 || makeStatic)
+ 				if(!CCarCtrl::MapCouldMoveInThisArea(GetPosition().x, GetPosition().y)){
+ 					if(!makeStatic || m_nStaticFrames > 10)
+-						m_nStaticFrames = 10;
++						m_nStaticFrames = QuestPhysicsSleep::RestingCount();
+-
++
+ 					skipPhysics = true;
+-
++
+ 					m_vecMoveSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 					m_vecTurnSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 				}
+ 		}else
+ 			m_nStaticFrames = 0;
+@@ -601,16 +607,19 @@
+ 			bool vrCollisionFlatScope = false;
+ #endif
+ 			bIsStuck = false;
+ 			bHasContacted = false;
+ 			bIsInSafePosition = false;
+ 			bWasPostponed = false;
+ 			bHasHitWall = false;
+ 			m_fDistanceTravelled = 0.0f;
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++			m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
++#endif
+ 			m_bIsVehicleBeingShifted = false;
+ 			bSkipLineCol = false;
+ 			ApplyMoveSpeed();
+ 			ApplyTurnSpeed();
+ 			for(i = 0; CheckCollision() && i < 5; i++){
+ #if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+ 				androidgame::QuestPhysicsDirectorRecordRetry(this);
+ #endif
