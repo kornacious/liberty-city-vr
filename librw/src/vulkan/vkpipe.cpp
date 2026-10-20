@@ -736,6 +736,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 		                   0, sizeof(push), &push);
 
+		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
+			header->ibo, 0, inst->numIndex, inst->offset / 2, boneOffset, atomic);
 		vkCmdDrawIndexed(commandBuffer, inst->numIndex, 1,
 		                 inst->offset / 2, 0, 0);
 		}

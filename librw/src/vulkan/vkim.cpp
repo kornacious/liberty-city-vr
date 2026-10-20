@@ -24,6 +24,10 @@ namespace vulkan {
 
 namespace {
 
+static VkPipeline gScopeImmediatePipeline;
+static VkDescriptorSet gScopeImmediateTexture;
+static PushConstants gScopeImmediatePush;
+
 // im3DTransform hands over a vertex array and a world matrix; the following
 // RenderPrimitive / RenderIndexedPrimitive calls consume them, and im3DEnd
 // drops them. The state has to survive between those calls.
@@ -155,6 +159,11 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 	vkCmdPushConstants(commandBuffer, getPipelineLayout(),
 	                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 	                   0, sizeof(push), &push);
+	if(shader == SHADER_IM3D){
+		gScopeImmediatePipeline = pipeline;
+		gScopeImmediateTexture = textureSet;
+		gScopeImmediatePush = push;
+	}
 	return 1;
 }
 
@@ -358,6 +367,11 @@ drawIm3D(PrimitiveType primType, void *indices, int32 numIndices)
 	VkCommandBuffer commandBuffer = gvk.frameCommands;
 	if(!setupCommonState(commandBuffer, SHADER_IM3D,
 	                     topologyFromPrimitiveType(primType), gim3d.model))
+		return;
+	if(capturePhysicalScopeDraw(gScopeImmediatePipeline, gScopeImmediateTexture,
+	       gScopeImmediatePush, vertexBuffer, vertexOffset, indexBuffer,
+	       indexOffset, indexCount > 0 ? (uint32)indexCount :
+	       (uint32)gim3d.numVertices, 0))
 		return;
 
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);

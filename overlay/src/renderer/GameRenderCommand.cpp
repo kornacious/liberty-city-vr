@@ -12,6 +12,7 @@ void setImmediate2DStrictDepth(bool32 enabled);
 namespace rw { namespace vulkan {
 void setImmediate2DStrictDepth(bool32 enabled);
 void setIm3DWater(bool32 water);
+int32 setPhysicalScopeDrawRole(int32 role);
 } }
 #endif
 
@@ -33,6 +34,9 @@ public:
 	{
 		if(command.atomic){
 #ifdef RW_VULKAN
+			const int32 savedScopeRole = rw::vulkan::setPhysicalScopeDrawRole(
+				command.role == OBJECT_DRAW_VR_WEAPON ||
+				command.role == OBJECT_DRAW_PLAYER_PREVIEW ? 1 : 0);
 			// The near water is not immediate-mode at all: the wavy and
 			// mask patches are atomics. Without this hint the modern-water
 			// path only ever touched the far flat sectors.
@@ -42,14 +46,23 @@ public:
 			RpAtomicRender(command.atomic);
 #ifdef RW_VULKAN
 			rw::vulkan::setIm3DWater(0);
+			rw::vulkan::setPhysicalScopeDrawRole(savedScopeRole);
 #endif
 		}
 	}
 
 	void DrawClump(const ClumpDrawCommand &command)
 	{
+#ifdef RW_VULKAN
+		const int32 savedScopeRole = rw::vulkan::setPhysicalScopeDrawRole(
+			command.role == OBJECT_DRAW_VR_WEAPON ||
+			command.role == OBJECT_DRAW_PLAYER_PREVIEW ? 1 : 0);
+#endif
 		if(command.clump)
 			RpClumpRender(command.clump);
+#ifdef RW_VULKAN
+		rw::vulkan::setPhysicalScopeDrawRole(savedScopeRole);
+#endif
 	}
 
 	bool BeginImmediate3D(const Immediate3DBeginCommand &command)
@@ -59,6 +72,10 @@ public:
 		// draws ARE the water; the role already says so.
 		rw::vulkan::setIm3DWater(
 			command.role == IMMEDIATE3D_DRAW_WATER);
+		rw::vulkan::setPhysicalScopeDrawRole(
+			command.role == IMMEDIATE3D_DRAW_VR_SCOPE ? 2 :
+			(command.role == IMMEDIATE3D_DRAW_VR_HAND ||
+			 command.role == IMMEDIATE3D_DRAW_VR_LASER ? 1 : 0));
 #endif
 		const bool began = RwIm3DTransform(command.vertices,
 			command.vertexCount, command.transform,
@@ -66,8 +83,10 @@ public:
 #ifdef RW_VULKAN
 		// A refused transform means EndImmediate3D never runs, so the
 		// hint would stay set and colour whatever drew next as water.
-		if(!began)
+		if(!began){
 			rw::vulkan::setIm3DWater(0);
+			rw::vulkan::setPhysicalScopeDrawRole(0);
+		}
 #endif
 		return began;
 	}
@@ -88,6 +107,7 @@ public:
 		RwIm3DEnd();
 #ifdef RW_VULKAN
 		rw::vulkan::setIm3DWater(0);
+		rw::vulkan::setPhysicalScopeDrawRole(0);
 #endif
 	}
 

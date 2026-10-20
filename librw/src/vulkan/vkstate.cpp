@@ -92,6 +92,10 @@ struct StateFrame
 	VkBuffer sceneBuffer;
 	VkDeviceMemory sceneMemory;
 	void *sceneMapped;
+	VkDescriptorSet scopeDescriptor;
+	VkBuffer scopeBuffer;
+	VkDeviceMemory scopeMemory;
+	void *scopeMapped;
 	// Interface coverage: the Im2D fragment shader marks the coarse screen
 	// cells it touched with atomics, and two frames later -- when this slot's
 	// fence has been waited and its image is the one the reflections sample
@@ -744,7 +748,7 @@ stateInit(void)
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[0].descriptorCount = 4;
 	poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	poolSizes[3].descriptorCount = NUM_FRAME_CONTEXTS;
+	poolSizes[3].descriptorCount = 2*NUM_FRAME_CONTEXTS;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	// +1 white, +3 per frame context for the env/reflection/water set.
 	poolSizes[1].descriptorCount =
@@ -815,6 +819,21 @@ stateInit(void)
 		sceneWrites[1].dstBinding = 1;
 		sceneWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		sceneWrites[1].pBufferInfo = &coverageBufferInfo;
+		vkUpdateDescriptorSets(gvk.device, 2, sceneWrites, 0, nil);
+		// A distinct UBO is essential: editing the main mapped scene would
+		// change every draw already recorded in this frame at submit time.
+		if(!createBuffer(sizeof(SceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+		                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		                 &sf.scopeBuffer, &sf.scopeMemory) ||
+		   vkMapMemory(gvk.device, sf.scopeMemory, 0, sizeof(SceneData), 0,
+		               &sf.scopeMapped) != VK_SUCCESS ||
+		   vkAllocateDescriptorSets(gvk.device, &sceneSetInfo,
+		                            &sf.scopeDescriptor) != VK_SUCCESS)
+			return 0;
+		VkDescriptorBufferInfo scopeInfo = { sf.scopeBuffer, 0, sizeof(SceneData) };
+		sceneWrites[0].dstSet = sceneWrites[1].dstSet = sf.scopeDescriptor;
+		sceneWrites[0].pBufferInfo = &scopeInfo;
 		vkUpdateDescriptorSets(gvk.device, 2, sceneWrites, 0, nil);
 	}
 
@@ -1034,6 +1053,9 @@ stateShutdown(void)
 			vkDestroyBuffer(gvk.device, sf.sceneBuffer, nil);
 		if(sf.sceneMemory)
 			vkFreeMemory(gvk.device, sf.sceneMemory, nil);
+		if(sf.scopeMapped) vkUnmapMemory(gvk.device, sf.scopeMemory);
+		if(sf.scopeBuffer) vkDestroyBuffer(gvk.device, sf.scopeBuffer, nil);
+		if(sf.scopeMemory) vkFreeMemory(gvk.device, sf.scopeMemory, nil);
 		if(sf.coverageMapped)
 			vkUnmapMemory(gvk.device, sf.coverageMemory);
 		if(sf.coverageBuffer)
@@ -1061,6 +1083,14 @@ VkDescriptorSet
 getSceneDescriptor(void)
 {
 	return gs.frames[gs.activeFrame].sceneDescriptor;
+}
+
+VkDescriptorSet
+uploadPhysicalScopeScene(const SceneData &scene)
+{
+	StateFrame &sf = gs.frames[gs.activeFrame];
+	memcpy(sf.scopeMapped, &scene, sizeof(scene));
+	return sf.scopeDescriptor;
 }
 
 VkDescriptorSet
@@ -1571,6 +1601,18 @@ bindEnvironmentDescriptor(VkCommandBuffer commandBuffer,
 	vkUpdateDescriptorSets(gvk.device, 3, writes, 0, nil);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	                        gs.pipelineLayout, 3, 1, &set, 0, nil);
+}
+
+void
+rebindEnvironmentDescriptor(VkCommandBuffer commandBuffer)
+{
+	// Multiview subpasses invalidate graphics bindings. Rebind the existing
+	// set, without rewriting descriptors referenced by the main scene.
+	if(worldEffectsActive()){
+		const VkDescriptorSet set = gs.envDescriptors[gs.activeFrame];
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			gs.pipelineLayout, 3, 1, &set, 0, nil);
+	}
 }
 
 bool32

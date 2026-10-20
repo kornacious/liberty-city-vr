@@ -46,6 +46,15 @@ struct EngineOpenParams
 #endif
 
 namespace vulkan {
+// Physical optic: one current-frame magnified scene, shared by both eyes.
+// The game supplies world-space lens position and bore-aligned axes.
+void setPhysicalScopeWanted(bool32 wanted);
+void setPhysicalScopeFrame(const float32 position[3], const float32 right[3],
+                           const float32 up[3], const float32 forward[3],
+                           float32 verticalFov, float32 aspect);
+Raster *getPhysicalScopeRaster(void);
+// 0 world, 1 excluded (hands/weapons), 2 deferred lens/reticle.
+int32 setPhysicalScopeDrawRole(int32 role);
 
 void registerPlatformPlugins(void);
 void registerNativeRaster(void);

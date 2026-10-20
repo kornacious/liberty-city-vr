@@ -13,6 +13,7 @@
 #include "../rwengine.h"
 #include "rwvk.h"
 #include "rwvkimpl.h"
+#include "PhysicalScopeMath.h"
 
 #define PLUGIN_ID ID_DRIVER
 
@@ -44,6 +45,69 @@ static bool32 gLastDeviceOpenRenderTargetFailure;
 
 Globals gvk;
 RenderState gstate;
+
+static VkRenderPass gScopeStorePass, gScopeLoadPass;
+static bool32 gScopeWanted, gScopeCapture, gScopeFrameValid;
+static int32 gScopeDrawRole;
+static float32 gScopePosition[3], gScopeRight[3], gScopeUp[3], gScopeForward[3];
+static float32 gScopeFov, gScopeAspect;
+struct ScopeDraw {
+	VkPipeline pipeline;
+	VkDescriptorSet texture;
+	PushConstants push;
+	VkBuffer vertices, indices;
+	VkDeviceSize vertexOffset, indexOffset;
+	uint32 count, first, boneOffset;
+	bool32 skinned;
+	float32 bounds[4]; // play-space sphere; negative radius = immediate geometry
+};
+static std::vector<ScopeDraw> gScopeWorldDraws, gScopeLensDraws;
+
+void setPhysicalScopeWanted(bool32 wanted) { gScopeWanted = wanted; }
+int32 setPhysicalScopeDrawRole(int32 role)
+{
+	const int32 previous = gScopeDrawRole;
+	gScopeDrawRole = role;
+	return previous;
+}
+void setPhysicalScopeFrame(const float32 position[3], const float32 right[3],
+    const float32 up[3], const float32 forward[3], float32 verticalFov, float32 aspect)
+{
+	if(!gScopeCapture) return;
+	memcpy(gScopePosition, position, sizeof(gScopePosition));
+	memcpy(gScopeRight, right, sizeof(gScopeRight));
+	memcpy(gScopeUp, up, sizeof(gScopeUp));
+	memcpy(gScopeForward, forward, sizeof(gScopeForward));
+	gScopeFov = verticalFov;
+	gScopeAspect = aspect;
+	float32 test[16];
+	gScopeFrameValid = PhysicalScopeMath::projection(test, gvk.worldToPlay,
+		position, right, up, forward, verticalFov, aspect);
+}
+bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
+    const PushConstants &push, VkBuffer vertices, VkDeviceSize vertexOffset,
+    VkBuffer indices, VkDeviceSize indexOffset, uint32 count, uint32 first,
+    const uint32 *boneOffset, Atomic *atomic)
+{
+	if(!gScopeCapture || gvk.wristPanelOffscreen || gScopeDrawRole == 1)
+		return 0;
+	if(gScopeDrawRole == 2 && !gScopeFrameValid)
+		return 0;
+	const bool32 lens = gScopeDrawRole == 2 && gScopeFrameValid;
+	ScopeDraw draw = { pipeline, texture, push, vertices, indices,
+		vertexOffset, indexOffset, count, first, boneOffset ? *boneOffset : 0,
+		boneOffset != nil, {0.0f,0.0f,0.0f,-1.0f} };
+	if(atomic){
+		const Sphere *sphere = atomic->getWorldBoundingSphere();
+		for(int i = 0; i < 3; i++)
+			draw.bounds[i] = gvk.worldToPlay[i]*sphere->center.x+
+				gvk.worldToPlay[4+i]*sphere->center.y+
+				gvk.worldToPlay[8+i]*sphere->center.z+gvk.worldToPlay[12+i];
+		draw.bounds[3] = sphere->radius;
+	}
+	(lens ? gScopeLensDraws : gScopeWorldDraws).push_back(draw);
+	return lens;
+}
 
 struct RetiredBuffer
 {
@@ -943,6 +1007,17 @@ createRenderPass(void)
 	info.pSubpasses = &subpass;
 	if(vkCreateRenderPass(gvk.device, &info, nil, &gvk.renderPass) != VK_SUCCESS)
 		return 0;
+	// Compatible passes keep the existing scene pipelines. Only scope frames
+	// store tile depth/MSAA colour, then load them to draw the completed lens.
+	attachments[0].storeOp = attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	if(vkCreateRenderPass(gvk.device, &info, nil, &gScopeStorePass) != VK_SUCCESS)
+		return 0;
+	for(uint32 i = 0; i < info.attachmentCount; i++){
+		attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		attachments[i].initialLayout = attachments[i].finalLayout;
+	}
+	if(vkCreateRenderPass(gvk.device, &info, nil, &gScopeLoadPass) != VK_SUCCESS)
+		return 0;
 
 	// V3 writes the same resolve pass to the OpenXR target and to a private
 	// unfiltered temporal-history attachment. Older modes keep the exact
@@ -1762,11 +1837,12 @@ prepareMotionUniform(FrameContext &frame)
 // ---------------------------------------------------------------------------
 static const struct {
 	int32 width, height;
-} gWristPanelSize[WRIST_PANEL_COUNT] = {
+} gWristPanelSize[WRIST_PANEL_COUNT+1] = {
 	{ 256, 256 },	// the map is square
 	{ 512, 192 },	// the status readout is a wide strip of small text
 	{ 256, 128 },	// the clock is four digits and a colon
-	{ 256, 128 }	// the ammo counter is reserve, a dash and a clip
+	{ 256, 128 },	// the ammo counter is reserve, a dash and a clip
+	{ 512, 512 }	// physical scope, same offscreen attachment machinery
 };
 
 static struct WristPanelTarget {
@@ -1789,7 +1865,7 @@ static struct WristPanelTarget {
 	bool32 rasterFilled;
 	bool32 sourceLayoutValid;
 	bool32 failed;
-} gWristPanels[WRIST_PANEL_COUNT];
+} gWristPanels[WRIST_PANEL_COUNT+1];
 
 static bool32
 createWristPanelImage(const WristPanelTarget &panel, int32 width, int32 height,
@@ -2012,7 +2088,42 @@ copyWristPanelToRaster(WristPanelTarget &panel, VkImage source,
 }
 
 static void
-renderWristPanelTarget(int32 index)
+replayScopeDraws(const std::vector<ScopeDraw> &draws, const float32 *projection = nil)
+{
+	const VkCommandBuffer cmd = gvk.frameCommands;
+	const VkPipelineLayout layout = getPipelineLayout();
+	for(const ScopeDraw &draw : draws){
+		if(projection && draw.bounds[3] >= 0.0f &&
+		   !PhysicalScopeMath::sphereVisible(projection, draw.bounds)) continue;
+		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.pipeline);
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
+			1, 1, &draw.texture, 0, nil);
+		if(draw.skinned){
+			VkDescriptorSet bones = getBoneDescriptor();
+			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
+				2, 1, &bones, 1, &draw.boneOffset);
+		}
+		vkCmdPushConstants(cmd, layout,
+			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+			0, sizeof(draw.push), &draw.push);
+		vkCmdBindVertexBuffers(cmd, 0, 1, &draw.vertices, &draw.vertexOffset);
+		if(draw.indices){
+			vkCmdBindIndexBuffer(cmd, draw.indices, draw.indexOffset, VK_INDEX_TYPE_UINT16);
+			vkCmdDrawIndexed(cmd, draw.count, 1, draw.first, 0, 0);
+		}else
+			vkCmdDraw(cmd, draw.count, 1, draw.first, 0);
+	}
+}
+
+Raster *getPhysicalScopeRaster(void)
+{
+	return gScopeCapture && gScopeFrameValid ?
+		gWristPanels[WRIST_PANEL_COUNT].raster : nil;
+}
+
+static void
+renderWristPanelTarget(int32 index, VkDescriptorSet scopeScene = VK_NULL_HANDLE,
+                      const float32 *scopeProjection = nil)
 {
 	WristPanelTarget &panel = gWristPanels[index];
 	if(!ensureWristPanelTarget(index))
@@ -2047,6 +2158,11 @@ renderWristPanelTarget(int32 index)
 	// where it draws, so what it does not cover stays transparent.
 	VkClearValue clears[3];
 	memset(clears, 0, sizeof(clears));
+	if(scopeScene){
+		for(int i = 0; i < 3; i++)
+			clears[0].color.float32[i] = gvk.clearColour[i];
+		clears[0].color.float32[3] = 1.0f;
+	}
 	clears[1].depthStencil.depth = 1.0f;
 	VkRenderPassBeginInfo passInfo = {};
 	passInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -2060,7 +2176,7 @@ renderWristPanelTarget(int32 index)
 	vkCmdBeginRenderPass(gvk.frameCommands, &passInfo,
 	                     VK_SUBPASS_CONTENTS_INLINE);
 
-	VkDescriptorSet sceneSet = getSceneDescriptor();
+	VkDescriptorSet sceneSet = scopeScene ? scopeScene : getSceneDescriptor();
 	vkCmdBindDescriptorSets(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
 	                        getPipelineLayout(), 0, 1, &sceneSet, 0, nil);
 	VkViewport viewport = {};
@@ -2074,10 +2190,73 @@ renderWristPanelTarget(int32 index)
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 
 	gvk.wristPanelOffscreen = 1;
-	gvk.wristPanelRenderer[index]();
+	if(scopeScene){
+		rebindEnvironmentDescriptor(gvk.frameCommands);
+		replayScopeDraws(gScopeWorldDraws, scopeProjection);
+	}else
+		gvk.wristPanelRenderer[index]();
 	gvk.wristPanelOffscreen = 0;
 	vkCmdEndRenderPass(gvk.frameCommands);
 	copyWristPanelToRaster(panel, source, width, height);
+}
+
+// The world has finished, but the final post pass has not run. Render the
+// magnified scene, then load the original colour/depth to composite the lens
+// at its real world position in both eyes. No previous-frame optic latency.
+static void
+renderPhysicalScope(void)
+{
+	if(!gScopeCapture || !gScopeFrameValid || gScopeLensDraws.empty()) return;
+	SceneData scene = *getSceneData();
+	if(!PhysicalScopeMath::projection(scene.viewProj[0], gvk.worldToPlay,
+	       gScopePosition, gScopeRight, gScopeUp, gScopeForward,
+	       gScopeFov, gScopeAspect)) return;
+	memcpy(scene.viewProj[1], scene.viewProj[0], sizeof(scene.viewProj[0]));
+	memcpy(scene.previousViewProj, scene.viewProj, sizeof(scene.viewProj));
+	// Screen-space reflections belong to the eye cameras, not this optic.
+	scene.reflectionParams[0] = scene.reflectionParams[1] = 0.0f;
+	scene.waterParams1[3] = 0.0f;
+	scene.lightCount[2] = scene.lightCount[3] = 512.0f;
+	for(int i = 0; i < 3; i++)
+		scene.im2dParams[i+1] = gvk.worldToPlay[i]*gScopePosition[0]+
+			gvk.worldToPlay[4+i]*gScopePosition[1]+
+			gvk.worldToPlay[8+i]*gScopePosition[2]+gvk.worldToPlay[12+i];
+	renderWristPanelTarget(WRIST_PANEL_COUNT, uploadPhysicalScopeScene(scene), scene.viewProj[0]);
+
+	// Order the original scene's stored colour/depth/motion writes before
+	// attachment loads. The lens texture has its own transfer->sample barrier.
+	VkMemoryBarrier memory = {};
+	memory.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	memory.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	memory.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+		VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	vkCmdPipelineBarrier(gvk.frameCommands, stages, stages, 0, 1, &memory,
+		0, nil, 0, nil);
+	VkRenderPassBeginInfo pass = {};
+	pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	pass.renderPass = gScopeLoadPass;
+	pass.framebuffer = gvk.frames[gvk.activeFrame].sceneFramebuffer;
+	pass.renderArea.extent = { gvk.sceneWidth, gvk.sceneHeight };
+	vkCmdBeginRenderPass(gvk.frameCommands, &pass, VK_SUBPASS_CONTENTS_INLINE);
+	VkViewport viewport = {};
+	viewport.width = (float32)gvk.sceneWidth;
+	viewport.height = (float32)gvk.sceneHeight;
+	viewport.maxDepth = 1.0f;
+	VkRect2D scissor = {};
+	scissor.extent = pass.renderArea.extent;
+	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
+	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
+	VkDescriptorSet mainScene = getSceneDescriptor();
+	vkCmdBindDescriptorSets(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
+		getPipelineLayout(), 0, 1, &mainScene, 0, nil);
+	rebindEnvironmentDescriptor(gvk.frameCommands);
+	replayScopeDraws(gScopeLensDraws);
+	vkCmdEndRenderPass(gvk.frameCommands);
 }
 
 // Called from beginFrame with the command buffer recording and no render pass
@@ -2337,6 +2516,11 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	// The wrist panels render into their own targets here, while the frame is
 	// recording but no pass is open yet. It cannot be done later: the frame
 	// opens exactly one pass and runs every game draw inside it.
+	gScopeCapture = gScopeWanted && ensureWristPanelTarget(WRIST_PANEL_COUNT);
+	gScopeFrameValid = 0;
+	gScopeDrawRole = 0;
+	gScopeWorldDraws.clear();
+	gScopeLensDraws.clear();
 	renderWristPanels();
 
 	// Open the multiview pass for the whole frame. Every draw the game issues
@@ -2360,6 +2544,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	passInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	passInfo.renderPass = gvk.renderPass;
 	passInfo.framebuffer = frame.sceneFramebuffer;
+	if(gScopeCapture) passInfo.renderPass = gScopeStorePass;
 	passInfo.renderArea.extent.width = gvk.sceneWidth;
 	passInfo.renderArea.extent.height = gvk.sceneHeight;
 	passInfo.clearValueCount =
@@ -2430,6 +2615,7 @@ endFrame(void)
 	// full-image dependency rather than BY_REGION because FXAA reads adjacent
 	// pixels.
 	vkCmdEndRenderPass(gvk.frameCommands);
+	renderPhysicalScope();
 	if(gvk.sgsrMode != SGSR_OFF){
 		prepareMotionUniform(frame);
 		VkImageMemoryBarrier depthBarrier = {};
@@ -4041,7 +4227,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			if(gvk.postFxDescriptorPool) vkDestroyDescriptorPool(gvk.device, gvk.postFxDescriptorPool, nil);
 			if(gvk.postFxDescriptorLayout) vkDestroyDescriptorSetLayout(gvk.device, gvk.postFxDescriptorLayout, nil);
 			if(gvk.postFxSampler) vkDestroySampler(gvk.device, gvk.postFxSampler, nil);
-			for(int32 panel = 0; panel < WRIST_PANEL_COUNT; panel++){
+			for(int32 panel = 0; panel <= WRIST_PANEL_COUNT; panel++){
 				destroyWristPanelTarget(gWristPanels[panel]);
 				if(gWristPanels[panel].raster){
 					gWristPanels[panel].raster->destroy();
@@ -4053,6 +4239,12 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			if(gvk.sgsrConvertRenderPass)
 				vkDestroyRenderPass(gvk.device, gvk.sgsrConvertRenderPass, nil);
 			if(gvk.renderPass) vkDestroyRenderPass(gvk.device, gvk.renderPass, nil);
+			if(gScopeStorePass) vkDestroyRenderPass(gvk.device, gScopeStorePass, nil);
+			if(gScopeLoadPass) vkDestroyRenderPass(gvk.device, gScopeLoadPass, nil);
+			gScopeStorePass = gScopeLoadPass = VK_NULL_HANDLE;
+			gScopeCapture = gScopeWanted = gScopeFrameValid = 0;
+			gScopeWorldDraws.clear();
+			gScopeLensDraws.clear();
 			for(uint32 i = 0; i < NUM_FRAME_CONTEXTS; i++){
 				FrameContext &frame = gvk.frames[i];
 				if(frame.sceneColourView)

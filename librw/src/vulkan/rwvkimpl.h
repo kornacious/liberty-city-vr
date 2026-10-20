@@ -501,6 +501,14 @@ struct PushConstants
 	float32 lightDirColour[4];
 };
 
+// Copies draw state and buffer ranges, never pointers into transient game data.
+// Returns true only when a lens draw must wait for the offscreen scene.
+bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
+    const PushConstants &push, VkBuffer vertices, VkDeviceSize vertexOffset,
+    VkBuffer indices, VkDeviceSize indexOffset, uint32 count, uint32 first,
+    const uint32 *boneOffset = nil, Atomic *atomic = nil);
+VkDescriptorSet uploadPhysicalScopeScene(const SceneData &scene);
+
 // Stall checkpoints, provided by the application layer. Same binary, so this
 // is just a forward declaration rather than a dependency.
 } // namespace vulkan
@@ -569,6 +577,7 @@ void uploadSceneData(void);
 // first frame exists.
 void bindEnvironmentDescriptor(VkCommandBuffer commandBuffer,
                                VkImageView previousScene);
+void rebindEnvironmentDescriptor(VkCommandBuffer commandBuffer);
 // Rebuilds the play-space dynamic lights in the scene block from the
 // world-space list the game pushed; call before uploadSceneData whenever
 // worldToPlay may have changed.

@@ -5760,7 +5760,13 @@ VrPadBindingDefault(int source)
 float
 VrScopeZoomFactor(void)
 {
-	if(!OculusVR::IsTrackedScopeActive())
+	// A physical optic magnifies only its lens. The 2D mode retains the
+	// legacy main-view zoom; the physical mode requests an offscreen pass.
+	rw::vulkan::setPhysicalScopeWanted(
+		OculusVR::IsTrackedScopeActive() &&
+		OculusVR::GetQuestScopeAimMode() == 2 &&
+		OculusVR::GetTrackedScopeWeaponType() == WEAPONTYPE_SNIPERRIFLE);
+	if(!OculusVR::IsTrackedScopeOverlayActive())
 		return 1.0f;
 	if(OculusVR::GetTrackedScopeWeaponType() == WEAPONTYPE_SNIPERRIFLE)
 		return 2.5f;
