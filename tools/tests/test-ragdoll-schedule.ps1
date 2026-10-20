@@ -3,6 +3,15 @@ param(
  [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('vc-ragdoll-schedule-'+[Guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference='Stop'
+# The solver fixture calls Update directly. Also check its production caller:
+# bodies may relink sectors here, so this must precede native world traversal.
+$world=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/core/World.cpp'))
+if([regex]::Matches($world,'VrRagdoll::Update\s*\(').Count -ne 1){
+ throw 'World processing must call the ragdoll update exactly once.'
+}
+if(-not[regex]::IsMatch($world,'(?s)CRecordDataForChase::SaveOrRetrieveCarPositions\(\);\s*\} else \{\s*#if defined\(__ANDROID__\) && defined\(GTA_VR_WEAPONS\)\s*(?://[^\r\n]*\r?\n\s*)*VrRagdoll::Update\(\);\s*#endif\s*for\(CPtrNode \*node = ms_listMovingEntityPtrs.first;')){
+ throw 'Ragdolls must update in normal Android VR world processing before animation/control/sector traversal, outside cutscene-only processing.'
+}
 $path=Join-Path $StageRoot 'src\peds\VrRagdoll.cpp'
 $text=[IO.File]::ReadAllText($path)
 $parts=[Collections.Generic.List[string]]::new()
