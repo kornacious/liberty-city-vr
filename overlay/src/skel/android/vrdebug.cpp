@@ -691,6 +691,7 @@ enum eVrWeaponsMenuItem {
 	VR_WEAPONS_LASER,
 	VR_WEAPONS_HOLSTER_HIGHLIGHTS,
 	VR_WEAPONS_MANUAL_RELOAD,
+	VR_WEAPONS_PISTOL_FIRE,
 	VR_WEAPONS_SCOPE_AIM,
 	VR_WEAPONS_GRIP_LOCK,
 	VR_WEAPONS_CALIBRATION,
@@ -2088,6 +2089,7 @@ QuestWeaponSettingForWeaponItem(int item)
 	case VR_WEAPONS_LASER: return 1;
 	case VR_WEAPONS_HOLSTER_HIGHLIGHTS: return 2;
 	case VR_WEAPONS_MANUAL_RELOAD: return 3;
+	case VR_WEAPONS_PISTOL_FIRE: return 6;
 	case VR_WEAPONS_SCOPE_AIM: return 4;
 	case VR_WEAPONS_GRIP_LOCK: return 5;
 	default: return -1;
@@ -3954,6 +3956,11 @@ DrawQuestWeaponsPage(void)
 			snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
 				OculusVR::GetQuestWeaponSettingName(setting),
 				OculusVR::GetQuestScopeAimModeName());
+		}else if(item == VR_WEAPONS_PISTOL_FIRE){
+			snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
+				OculusVR::GetQuestWeaponSettingName(setting),
+				OculusVR::IsQuestPistolHoldToRepeatEnabled() ?
+					"HOLD TO REPEAT" : "SINGLE SHOT");
 		}else{
 			snprintf(rows[item], sizeof(rows[item]), "%s  < %s >",
 				OculusVR::GetQuestWeaponSettingName(setting),

@@ -325,6 +325,7 @@ int GetQuestWeaponSettingCount();
 const char *GetQuestWeaponSettingName(int setting);
 bool GetQuestWeaponSetting(int setting);
 void ToggleQuestWeaponSetting(int setting);
+bool IsQuestPistolHoldToRepeatEnabled();
 int GetQuestCalibrationWeaponType(int hand);
 // Per-weapon laser: -1 follows the global switch, 0 off, 1 on.
 bool IsTrackedWeaponLaserEnabledForType(int weaponType);

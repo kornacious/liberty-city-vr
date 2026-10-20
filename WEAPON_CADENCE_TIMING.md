@@ -92,3 +92,26 @@ from a direct VR trigger. Confirm in-headset by emptying magazines at steady
 and varying refresh rates, checking pistol/shotgun taps and both reload modes,
 then comparing with the user's Windows reference. At low FPS, catch-up rounds
 use the current tracked aim, not reconstructed historical controller poses.
+
+## Optional pistol trigger mode
+
+The VR Weapons page now has `PISTOL FIRE` after `MANUAL RELOADING`:
+
+- `SINGLE SHOT` requires one trigger pull per round and remains the default.
+- `HOLD TO REPEAT` continues firing at the corrected pistol cadence while held.
+
+The choice is saved as `[VR] PistolHoldToRepeat=0/1` in `vr_settings.ini`.
+It applies to tracked pistols in either hand, including immersive vehicle
+sidearms. It does not change the native Windows control path or the trigger
+behavior of other weapons. Native/manual reload gates and inventory-owned
+cooldowns remain in effect in both modes.
+
+The cadence suite additionally exercises both choices across five frame rates,
+both hands and both firing contexts, release/repress and switching back to
+single shot. A second native test extracts the settings functions and Weapons
+page renderer to check defaults, persistence, menu mapping and all nine rows.
+All 43 supported suites passed, including 61,696 firing checks and 70 settings/
+menu checks. The APK built and installed successfully on Quest 3
+`personal Quest 3 device`. An unrelated unfinished Vulkan workspace edit failed to compile;
+the disposable APK assembly used the committed `vkdevice.cpp` instead, leaving
+that workspace edit untouched. In-headset menu appearance remains a manual check.

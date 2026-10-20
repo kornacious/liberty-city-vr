@@ -349,6 +349,7 @@ struct WeaponLaserOverride {
 };
 static WeaponLaserOverride gWeaponLaserOverrides[2][WEAPONTYPE_TOTALWEAPONS];
 static bool gManualReload;
+static bool gPistolHoldToRepeat;
 enum eScopeAimMode {
 	SCOPE_AIM_OFF = 0,
 	SCOPE_AIM_2D_OVERLAY = 1,
@@ -460,6 +461,8 @@ LoadSettings()
 	gHolsterHighlights = GetPrivateProfileIntA("VR", "HolsterHighlights", 0,
 		kSettingsPath) != 0;
 	gManualReload = GetPrivateProfileIntA("VR", "ManualReloading", 0,
+		kSettingsPath) != 0;
+	gPistolHoldToRepeat = GetPrivateProfileIntA("VR", "PistolHoldToRepeat", 0,
 		kSettingsPath) != 0;
 	const int storedScope = (int)(int32)GetPrivateProfileIntA("VR", "PhysicalScopeAim", 1,
 		kSettingsPath);
@@ -3643,7 +3646,7 @@ ResolvePhysicalMeleeStrike(int hand, bool contact)
 int
 GetQuestWeaponSettingCount()
 {
-	return 6;
+	return 7;
 }
 
 const char *
@@ -3652,7 +3655,7 @@ GetQuestWeaponSettingName(int setting)
 	static const char *names[] = {
 		"VR HANDS", "WEAPON LASER", "HOLSTER HIGHLIGHTS",
 		"MANUAL RELOADING", "SCOPE AIM",
-		"WEAPON GRIP LOCK"
+		"WEAPON GRIP LOCK", "PISTOL FIRE"
 	};
 	return setting >= 0 && setting < (int)ARRAY_SIZE(names) ?
 		names[setting] : "UNKNOWN";
@@ -3669,6 +3672,7 @@ GetQuestWeaponSetting(int setting)
 	case 3: return gManualReload;
 	case 4: return gScopeAimMode != SCOPE_AIM_OFF;
 	case 5: return gGripLock;
+	case 6: return gPistolHoldToRepeat;
 	default: return false;
 	}
 }
@@ -3689,6 +3693,7 @@ ToggleQuestWeaponSetting(int setting)
 	case 2: value = &gHolsterHighlights; key = "HolsterHighlights"; break;
 	case 3: value = &gManualReload; key = "ManualReloading"; break;
 	case 5: value = &gGripLock; key = "WeaponGripLock"; break;
+	case 6: value = &gPistolHoldToRepeat; key = "PistolHoldToRepeat"; break;
 	default: return;
 	}
 	*value = !*value;
@@ -3697,6 +3702,13 @@ ToggleQuestWeaponSetting(int setting)
 	if(setting == 3 && !gManualReload)
 		for(int hand = 0; hand < VR_HAND_COUNT; hand++)
 			ResetManualReloadState(gManualReloadState[hand]);
+}
+
+bool
+IsQuestPistolHoldToRepeatEnabled()
+{
+	LoadSettings();
+	return gPistolHoldToRepeat;
 }
 
 int

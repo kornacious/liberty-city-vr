@@ -59,10 +59,12 @@ bool CWeapon::Fire(CEntity *shooter,CVector *){
 }
 #include "weapon-cadence-update.inc"
 static bool pressed[2],edge[2],aimValid[2],manual=false,reloadRequest=false,manualAvailable=false;
+static bool pistolHoldToRepeat=false;
 static int held[2];
 static bool vrWaitForTriggerRelease[2];
 
 namespace OculusVR {
+static bool IsQuestPistolHoldToRepeatEnabled(){return pistolHoldToRepeat;}
 static int GetHeldWeaponSlot(int h){return held[h];}
 static int GetVrWeaponTypeForSlot(int s){return s;}
 static bool IsImmersiveVehicleSidearm(int t){return t==WEAPONTYPE_UZI||t==WEAPONTYPE_COLT45;}
@@ -90,7 +92,7 @@ void CPlayerPed::InCar(){
 #include "weapon-cadence-car.inc"
 }
 static void Reset(eWeaponType type,int span=3,int capacity=10000){
-    testNow=previous=1000;manual=reloadRequest=manualAvailable=fireFailure=false;
+    testNow=previous=1000;manual=reloadRequest=manualAvailable=fireFailure=pistolHoldToRepeat=false;
     for(int i=0;i<WEAPONTYPE_TOTALWEAPONS;i++){
         QuestWeaponTiming::ForWeapon<WEAPONTYPE_TOTALWEAPONS>(i)={};infos[i]={};shots[i].clear();
         fixturePlayer.weapons[i]={};fixturePlayer.weapons[i].m_eWeaponType=static_cast<eWeaponType>(i);
@@ -164,6 +166,18 @@ int main(){
         Require(fixturePlayer.weapons[WEAPONTYPE_UZI].m_nTimer==1870,"vehicle firing cannot replace native reload deadline");
         Tick(1800,true);Require(shots[WEAPONTYPE_UZI].size()==2,"vehicle reload blocks early shots");
         Tick(1871,true);Require(shots[WEAPONTYPE_UZI].size()==3,"vehicle reload completes normally");
+    }
+    for(bool car:{false,true})for(bool repeat:{false,true})for(int hand:{0,1})for(double hz:{15.,30.,72.,90.,180.}){
+        Reset(WEAPONTYPE_COLT45,7);pistolHoldToRepeat=repeat;
+        held[0]=held[1]=-1;held[hand]=WEAPONTYPE_COLT45;
+        pressed[0]=edge[0]=pressed[1]=edge[1]=false;pressed[hand]=edge[hand]=true;
+        for(double t=0;t<=2000;t+=1000./hz)Tick(1000+static_cast<uint32>(t+0.5),car);
+        const auto n=shots[WEAPONTYPE_COLT45].size();
+        Require(repeat?(n>=8&&n<=9):n==1,"pistol mode controls held-trigger repeats in either hand and context");
+        pressed[hand]=false;Tick(3100,car);pressed[hand]=edge[hand]=true;Tick(3200,car);
+        Require(shots[WEAPONTYPE_COLT45].size()==n+1,"pistol mode allows next individual trigger pull");
+        pistolHoldToRepeat=false;Tick(3500,car);
+        Require(shots[WEAPONTYPE_COLT45].size()==n+1,"switching to single shot stops held-trigger repeats");
     }
     QuestWeaponTiming::Cadence wrap;wrap.Update(UINT32_MAX-10,true);wrap.Fired(100);wrap.Update(9,true);
     Require(!wrap.Due()&&std::abs(wrap.remainingMs-80)<0.001,"timer wrap preserves cooldown");

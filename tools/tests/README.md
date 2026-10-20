@@ -42,6 +42,9 @@ transfers, tracking loss, long stalls, timer wrap, automatic/manual reloads and
 the native 70 ms vehicle Uzi interval. Synthetic loop widths avoid distributing
 original game data. Ballistics, sound and effects are adapter boundaries; live
 headset cadence and desktop comparison still require playing the game.
+The same suite tests both pistol trigger modes on foot/in vehicles, in either
+hand, plus the production Weapons page rows, setting mapping, default, toggle
+and save/reload behavior. Both mode labels and all nine rows must fit the panel.
 
 The repaired adapters use Liberty City's actual weapon inventory, animation
 names, wanted header and crime definitions. They do not add Vice City weapon
