@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 32 suites against that tree or the kit's production helpers. Each suite
+runs 33 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -53,6 +53,13 @@ drain and script timer consumer. It checks 20–144 FPS, uneven pacing, slow
 motion, pauses, stall clipping, rollover, clock replacement and agreement
 between timer consumers. No game data or headset is needed.
 
+`test-angular-drag-boat-lift.ps1 -StageRoot <assembled-tree>` extracts the
+production air-resistance function, buoyancy impulse calculation and extra
+boat-lift block. It checks the 30 FPS reference and equal-time angular decay,
+uncapped/capped lift and pitch torque at 20–144 FPS, including uneven pacing,
+slow motion, zero timestep and lift eligibility gates. These isolate forces at
+fixed speed/immersion; they do not establish full boat handling on a headset.
+
 The header-only ragdoll suite works directly against the kit:
 
 ```powershell
@@ -83,7 +90,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 32 synthetic
+and actual-mesh diagnostics below are also separate from the 33 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:

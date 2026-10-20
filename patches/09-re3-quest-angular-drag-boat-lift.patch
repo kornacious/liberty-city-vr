@@ -1,0 +1,33 @@
+diff --git a/src/entities/Physical.cpp b/src/entities/Physical.cpp
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -525,6 +525,11 @@ CPhysical::ApplyAirResistance(void)
+ 	}else{
+ 		float f = Pow(1.0f/Abs(m_fAirResistance*0.5f*m_vecMoveSpeed.MagnitudeSqr() + 1.0f), CTimer::GetTimeStep());
+ 		m_vecMoveSpeed *= f;
++#ifdef __ANDROID__
++		// The original loses one percent of spin per frame at 30 FPS.
++		m_vecTurnSpeed *= Pow(0.99f, CTimer::GetTimeStepInSeconds()*30.0f);
++#else
+ 		m_vecTurnSpeed *= 0.99f;
++#endif
+ 	}
+ }
+diff --git a/src/vehicles/Boat.cpp b/src/vehicles/Boat.cpp
+--- a/src/vehicles/Boat.cpp
++++ b/src/vehicles/Boat.cpp
+@@ -287,7 +287,14 @@ CBoat::ProcessControl(void)
+ 		if(!onLand && bBoatInWater && GetUp().z > 0.0f){
+ 			float impulse;
+ 			if(m_fGasPedal > 0.05f)
++#ifdef __ANDROID__
++				// Buoyancy already contains the timestep. Preserve the extra
++				// lift at the original 30 FPS without multiplying elapsed time
++				// twice. The cap below remains an impulse scaled by this frame.
++				impulse = m_vecMoveSpeed.MagnitudeSqr()*pHandling->fSuspensionForceLevel*buoyanceImpulse.z*(50.0f/30.0f)*0.5f*m_fGasPedal;
++#else
+ 				impulse = m_vecMoveSpeed.MagnitudeSqr()*pHandling->fSuspensionForceLevel*buoyanceImpulse.z*CTimer::GetTimeStep()*0.5f*m_fGasPedal;
++#endif
+ 			else
+ 				impulse = 0.0f;
+ 			impulse = Min(impulse, GRAVITY*pHandling->fSuspensionDampingLevel*m_fMass*CTimer::GetTimeStep());
