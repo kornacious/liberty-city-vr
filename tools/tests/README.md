@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 38 suites against that tree or the kit's production helpers. Each suite
+runs 39 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -71,6 +71,19 @@ normal grip, and that incoming non-normal wheels retain their traction loss at
 15–144 FPS. See
 [the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
 measured differences and limits. No original game data is used.
+
+`test-vehicle-coupled-fps.ps1 -StageRoot <assembled-tree>` characterizes a free
+six-degree chassis with rotating suspension rays, unequal spring loads, native
+wheel/spring/damper forces, native box narrow-phase contacts and static contact
+response. Generated geometry and an explicit fixture depenetration replace
+retail vehicle models, world sectors and the engine collision retry/shift loop.
+It runs 1,320 cases: eight scenarios, 15–144 render FPS, three pacing patterns,
+and native/experimental 30/60/120/240 Hz stepping, each over six game seconds.
+It checks geometry/response wiring, numerical bounds, native matrix repair,
+and render-pacing independence of fixed-step outcomes. It writes measurements
+and source hashes; fixed stepping is experimental and changes no runtime code.
+See [the coupled-vehicle report](../../VEHICLE_COUPLED_FPS_REPORT.md) for results,
+assumptions, exclusions and the required full-game validation follow-up.
 
 `test-boat-input-timing.ps1 -StageRoot <assembled-tree>` extracts the production
 boat input function and gameplay clock helper. It checks the original 30 FPS
@@ -138,7 +151,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 38 synthetic
+and actual-mesh diagnostics below are also separate from the 39 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:

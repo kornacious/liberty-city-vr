@@ -213,3 +213,13 @@ Validation artifacts are local under `.cache/skid-state-verified/`, including
 `wheel-suspension-fps/measurements.csv`, source hashes, suite logs and
 `results.json`. All 35 supported current-source suites passed. The arm64 debug
 APK compiled successfully; no original game data was needed for these checks.
+
+## Coupled chassis follow-up (2026-10-20)
+
+The subsequent [coupled-vehicle characterization](VEHICLE_COUPLED_FPS_REPORT.md)
+adds unrestricted chassis rotation, suspension load redistribution and native
+line/box and sphere/box contacts on generated geometry. It compares 1,320
+controlled-rate/pacing/stepping cases. Its native contact primitives and static
+response are exercised, but its depenetration and world orchestration are a
+fixture rather than the full game collision pipeline. Retail-car/headset tests
+remain necessary before selecting runtime force or substep changes.
