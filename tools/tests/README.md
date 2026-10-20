@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 35 suites against that tree or the kit's production helpers. Each suite
+runs 36 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -72,6 +72,15 @@ normal grip, and that incoming non-normal wheels retain their traction loss at
 [the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
 measured differences and limits. No original game data is used.
 
+`test-boat-input-timing.ps1 -StageRoot <assembled-tree>` extracts the production
+boat input function and gameplay clock helper. It checks the original 30 FPS
+response, throttle/brake deadzone and reverse transitions on crossed 30 Hz
+ticks, and smooth exponential steering at 15–144 FPS. Coverage includes pad
+and immersive helm input, uneven pacing, slow motion, pause, clipping/catch-up,
+steering reversals, output bounds and the signed squared steering lock. These
+are control-filter tests, not full hull dynamics or headset handling tests.
+See [repair notes and timing limits](../../BOAT_INPUT_TIMING_REPORT.md).
+
 `test-gameplay-timing.ps1 -StageRoot <assembled-tree>` compiles the production
 timer, gameplay schedule helper, swinging-door simulation and aircraft
 destruction sequences. It checks 15–144 FPS, door axes/directions, 30 FPS
@@ -111,7 +120,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 35 synthetic
+and actual-mesh diagnostics below are also separate from the 36 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:
