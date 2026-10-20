@@ -2,6 +2,8 @@
 
 ## 0.5.6
 
+- Made the wasted transition fade to pure white across both complete eye views,
+  preserving its fade-out and respawn fade-in timing.
 - Kept the initial loading artwork, then used a full-view black fade to reveal
   the scene when starting a game or loading a save in VR.
 - Added the optional Xbox assets profile to the model downloader and asset menu.

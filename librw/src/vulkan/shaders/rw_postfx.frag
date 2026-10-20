@@ -25,7 +25,7 @@ layout(push_constant) uniform PostFxConstants
 	vec4 blurColour;
 	uvec4 mode;
 	uvec4 upscale;
-	vec4 loadingFade;
+	vec4 screenFade;
 } postFx;
 
 layout(location = 0) out vec4 outColour;
@@ -33,9 +33,15 @@ layout(location = 0) out vec4 outColour;
 // pipelines discard this output and therefore retain their exact behaviour.
 layout(location = 1) out vec4 outResolvedHistory;
 
+vec4 DisplayColour(vec4 colour)
+{
+	return vec4(mix(colour.rgb, postFx.screenFade.rgb,
+	                postFx.screenFade.a), colour.a);
+}
+
 void StoreBoth(vec4 colour)
 {
-	outColour = vec4(colour.rgb * (1.0-postFx.loadingFade.x), colour.a);
+	outColour = DisplayColour(colour);
 	outResolvedHistory = colour;
 }
 
@@ -483,7 +489,7 @@ void main()
 			previous = clamp(filtered, 0.0, 1.0);
 		}
 		outResolvedHistory = source;
-		outColour = vec4(previous.rgb * (1.0-postFx.loadingFade.x), 1.0);
+		outColour = DisplayColour(vec4(previous.rgb, 1.0));
 		return;
 	}
 	const bool temporalEnabled =
@@ -511,5 +517,5 @@ void main()
 	// History remains in linear game colour so the Liberty City colour filter is
 	// never applied twice when the result comes back on the next frame.
 	outResolvedHistory = vec4(source.rgb, 1.0);
-	outColour = vec4(previous.rgb * (1.0-postFx.loadingFade.x), 1.0);
+	outColour = DisplayColour(vec4(previous.rgb, 1.0));
 }

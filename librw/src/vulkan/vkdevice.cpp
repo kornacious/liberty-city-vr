@@ -2318,7 +2318,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 		return 0;
 	// DoFade supplies this frame's opacity. Menus/early returns must not
 	// inherit an opaque loading mask from a previous frame.
-	gvk.postFxConstants.loadingFade[0] = 0.0f;
+	gvk.postFxConstants.screenFade[3] = 0.0f;
 	(void)colourImage;
 
 	// Anything a previous frame had to defer is built here, before a render
@@ -3675,7 +3675,16 @@ setClearColour(uint8 red, uint8 green, uint8 blue)
 void
 setLoadingFade(uint8 alpha)
 {
-	gvk.postFxConstants.loadingFade[0] = alpha / 255.0f;
+	setScreenFade(0, 0, 0, alpha);
+}
+
+void
+setScreenFade(uint8 red, uint8 green, uint8 blue, uint8 alpha)
+{
+	gvk.postFxConstants.screenFade[0] = red / 255.0f;
+	gvk.postFxConstants.screenFade[1] = green / 255.0f;
+	gvk.postFxConstants.screenFade[2] = blue / 255.0f;
+	gvk.postFxConstants.screenFade[3] = alpha / 255.0f;
 }
 
 void

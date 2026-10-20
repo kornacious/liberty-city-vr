@@ -1,0 +1,22 @@
+diff --git a/src/control/GameLogic.cpp b/src/control/GameLogic.cpp
+--- a/src/control/GameLogic.cpp
++++ b/src/control/GameLogic.cpp
+@@ -89,5 +89,9 @@ CGameLogic::Update()
+ 		if ((CTimer::GetTimeInMilliseconds() - pPlayerInfo.m_nWBTime > 0x800) && (CTimer::GetPreviousTimeInMilliseconds() - pPlayerInfo.m_nWBTime <= 0x800)) {
+ #endif
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			TheCamera.SetFadeColour(255, 255, 255);
++#else
+ 			TheCamera.SetFadeColour(200, 200, 200);
++#endif
+ 			TheCamera.Fade(2.0f, FADE_OUT);
+ 		}
+@@ -140,4 +144,8 @@ CGameLogic::Update()
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++				TheCamera.SetFadeColour(255, 255, 255);
++#else
+ 				TheCamera.SetFadeColour(200, 200, 200);
++#endif
+ 				TheCamera.Fade(4.0f, FADE_IN);
+ 			} else CRestart::bFadeInAfterNextDeath = true;
+ 		}

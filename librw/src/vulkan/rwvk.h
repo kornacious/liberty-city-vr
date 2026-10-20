@@ -396,6 +396,8 @@ bool32 getFirstPersonLocalHeadYaw(float32 *yawOut);
 void setClearColour(uint8 red, uint8 green, uint8 blue);
 // Full-eye black loading transition, independent of the floating HUD plane.
 void setLoadingFade(uint8 alpha);
+// Camera fade applied after colour grading, across both complete eye images.
+void setScreenFade(uint8 red, uint8 green, uint8 blue, uint8 alpha);
 
 // Distance fog for world, skinned and im3d geometry. start is where it
 // begins and end is the far clip it reaches full strength at; the colour

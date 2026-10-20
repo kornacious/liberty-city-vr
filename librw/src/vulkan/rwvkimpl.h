@@ -87,8 +87,8 @@ struct PostFxPushConstants
 	uint32 mode[4];
 	// x/y = native OpenXR output extent, z = active SGSR mode.
 	uint32 upscale[4];
-	// x = loading fade opacity; remaining components reserved.
-	float32 loadingFade[4];
+	// RGB = fade target, A = opacity; applied after colour grading.
+	float32 screenFade[4];
 };
 
 struct MotionUniformData
