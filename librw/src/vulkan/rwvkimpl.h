@@ -80,14 +80,15 @@ struct RenderState
 	uint32 textureAddressV;
 };
 
-// Kept at 32 bytes so the CPU layout exactly matches the fragment shader's
-// vec4 + uvec4 push-constant block.
+// CPU layout must match the fragment shader's push-constant block.
 struct PostFxPushConstants
 {
 	float32 blurColour[4];
 	uint32 mode[4];
 	// x/y = native OpenXR output extent, z = active SGSR mode.
 	uint32 upscale[4];
+	// x = loading fade opacity; remaining components reserved.
+	float32 loadingFade[4];
 };
 
 struct MotionUniformData

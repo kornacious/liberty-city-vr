@@ -394,6 +394,8 @@ bool32 getFirstPersonLocalHeadYaw(float32 *yawOut);
 // Sky colour for the frame; used as the render pass clear colour so the sky
 // covers the full view rather than the 2D panel.
 void setClearColour(uint8 red, uint8 green, uint8 blue);
+// Full-eye black loading transition, independent of the floating HUD plane.
+void setLoadingFade(uint8 alpha);
 
 // Distance fog for world, skinned and im3d geometry. start is where it
 // begins and end is the far clip it reaches full strength at; the colour

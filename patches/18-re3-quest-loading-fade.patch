@@ -1,0 +1,21 @@
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -351,6 +351,17 @@ DoFade(void)
+ 	}
+ 
+ 	if(CDraw::FadeValue != 0 || CMenuManager::m_PrefsBrightness < 256){
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		// Keep the initial theatre loading artwork, but replace the splash
++		// fade in the rendered world with black across both complete eyes.
++		// A screen-sized sprite here sits on the floating HUD plane and
++		// changes apparent size as the camera switches into immersive VR.
++		if(TheCamera.m_FadeTargetIsSplashScreen && CDraw::FadeValue != 0){
++			rw::vulkan::setLoadingFade(CDraw::FadeValue);
++			return;
++		}
++#endif
++
+ 		CSprite2d *splash = LoadSplash(nil);
+ 
+ 		CRGBA fadeColor;

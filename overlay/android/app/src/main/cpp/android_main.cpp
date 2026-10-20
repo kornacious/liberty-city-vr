@@ -389,6 +389,10 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	androidgame::QuestProfilerEndVkBegin();
 	platform::setCheckpoint("game/Step");
 	androidgame::QuestProfilerBeginStep();
+	// Initialisation may draw a loading splash and become PLAYING_GAME
+	// inside Step, before any world frame has been rendered.
+	const bool loadingFrame = gGameState == GS_INIT_PLAYING_GAME ||
+		FrontEndMenuManager.m_bWantToRestart;
 	androidgame::Step();
 	const int64_t stepEndNs = monotonicNowNs();
 	androidgame::QuestProfilerEndStep();
@@ -448,6 +452,8 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		break;
 	}
 	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
+	if(loadingFrame)
+		rw::vulkan::setLoadingFade(255);
 	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
 	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
 	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
