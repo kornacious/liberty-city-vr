@@ -4,6 +4,9 @@ Date: 2026-10-20. Runtime baseline: `0e81e2c`, including the previous timer,
 ragdoll-update, angular-drag and boat-lift repairs. No production force
 corrections, handling parameters or runtime patches were changed for this task.
 
+The tables below retain that historical baseline. The shared skid-state repair
+and its current-source rerun are documented at the end of this report.
+
 ## Findings
 
 The controlled tests support keeping the current tire corrections intact
@@ -176,3 +179,37 @@ Recommended next steps before altering tire corrections:
 Passing this characterization means the smoke checks succeeded and all sampled
 states remained finite/bounded. It does not assert FPS-independent handling.
 No gameplay force correction was changed.
+
+## Shared skid-state repair and validation (2026-10-20)
+
+Patch `11-re3-quest-wheel-skid-state.patch` makes the three `ProcessWheel`
+working flags local to each invocation. `bAlreadySkidding` starts false and is
+set only from that call's incoming wheel state. Existing per-wheel state,
+traction-loss logic, force corrections, handling parameters and suspension
+integration remain intact. Normal wheels and recovered wheels no longer inherit
+another wheel's or vehicle's skid history.
+
+The new production-function regression failed against the pre-repair source
+with `another vehicle does not inherit skid history`. With the patch, all 366
+suspension/skid-history checks pass. Coverage includes all three incoming
+non-normal wheel states, all four wheel indices, same-wheel recovery,
+cross-wheel/cross-vehicle calls and interleaved braking/driving at 15–144 FPS.
+Incoming non-normal wheels still receive the existing traction loss.
+
+All 297 controlled-rate scenarios were rerun against a freshly assembled tree.
+Every clean/primed history pair now matches across all 11 rates and three pacing
+labels. At 72 FPS the previously primed correction changes from 0.055555563 to
+0.062500007 m/s, matching the clean case. The history probes are individual
+calls; their pacing labels do not simulate a time sequence.
+
+Compared with the saved baseline CSV, 270 of 297 rows are identical. The 27
+changed rows are six primed-history probes and 21 steering cases. The steady
+72 FPS steering rig now travels 89.640900 m instead of 89.798857 m, with final
+forward speed 14.535110 instead of 14.606508 m/s. Its 30 FPS row is unchanged.
+The remaining steering and suspension timestep sensitivity still needs the
+full-vehicle/collision validation described above.
+
+Validation artifacts are local under `.cache/skid-state-verified/`, including
+`wheel-suspension-fps/measurements.csv`, source hashes, suite logs and
+`results.json`. All 35 supported current-source suites passed. The arm64 debug
+APK compiled successfully; no original game data was needed for these checks.

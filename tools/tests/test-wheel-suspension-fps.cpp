@@ -61,6 +61,42 @@ struct CVehicle : CPhysical {
 static unsigned checks;
 static void Check(bool value,const char *message){++checks;if(!value){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);}}
 static bool Finite(const CVector &v){return std::isfinite(v.x)&&std::isfinite(v.y)&&std::isfinite(v.z)&&v.MagnitudeSqr()<1.0e8f;}
+static float WheelCorrection(CVehicle &car,tWheelState initial,int wheelId=0,float brake=0,float thrust=0){
+    car.m_vecMoveSpeed=CVector();car.m_vecTurnSpeed=CVector();
+    // Between clean and already-skidding adhesion limits at every timestep.
+    CVector fwd(0,1,0),right(1,0,0),contact(0.9f*0.002f*CTimer::step*4,0,0),point;
+    float wheelSpeed=0;
+    car.ProcessWheel(fwd,right,contact,point,4,thrust,brake,0.002f,
+        static_cast<int8>(wheelId),&wheelSpeed,&initial,WHEEL_STATUS_OK);
+    return -car.m_vecMoveSpeed.x;
+}
+static void SkidHistoryRegression(){
+    for(int fps : {15,18,20,30,36,60,72,80,90,120,144}){
+        CTimer::step=50.0f/float(fps);
+        const float normal=0.9f*0.002f*CTimer::step;
+        for(tWheelState state : {WHEEL_STATE_SPINNING,WHEEL_STATE_SKIDDING,WHEEL_STATE_FIXED}){
+            CVehicle car,other;
+            const float reduced=0.002f*CTimer::step*car.handling.fTractionLoss;
+            Check(std::fabs(WheelCorrection(car,state)-reduced)<1.0e-7f,
+                "incoming non-normal wheel retains its own traction loss");
+            Check(std::fabs(WheelCorrection(other,WHEEL_STATE_NORMAL)-normal)<1.0e-7f,
+                "another vehicle does not inherit skid history");
+            for(int wheel=0;wheel<4;++wheel){
+                WheelCorrection(car,state,(wheel+3)%4);
+                Check(std::fabs(WheelCorrection(car,WHEEL_STATE_NORMAL,wheel)-normal)<1.0e-7f,
+                    "another wheel does not inherit skid history");
+                WheelCorrection(car,state,wheel);
+                Check(std::fabs(WheelCorrection(car,WHEEL_STATE_NORMAL,wheel)-normal)<1.0e-7f,
+                    "a recovered wheel does not retain stale skid history");
+            }
+            // Braking/driving flags must also reflect only the current call.
+            WheelCorrection(other,state,0,0.001f);
+            WheelCorrection(other,state,1,0,0.001f);
+            Check(std::fabs(WheelCorrection(car,WHEEL_STATE_NORMAL)-normal)<1.0e-7f,
+                "interleaved braking and driving do not contaminate normal grip");
+        }
+    }
+}
 static void Smoke(){
     CPhysical p; CVector dir(0,0,-1),point,velocity;
     CTimer::step=1;
@@ -70,7 +106,8 @@ static void Smoke(){
     Check(p.m_vecMoveSpeed.MagnitudeSqr()==0,"fully extended spring adds no impulse");
     CTimer::step=0; p.ApplySpringCollision(1.5f,dir,point,0.5f,0.5f);
     Check(p.m_vecMoveSpeed.MagnitudeSqr()==0,"zero timestep spring adds no impulse");
-    std::printf("PASS: %u production suspension smoke checks\n",checks);
+    SkidHistoryRegression();
+    std::printf("PASS: %u production suspension and skid-history checks\n",checks);
 }
 int main(int argc,char **argv){
     if(argc==1){Smoke();return 0;}

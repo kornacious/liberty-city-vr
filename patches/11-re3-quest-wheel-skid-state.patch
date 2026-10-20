@@ -1,0 +1,22 @@
+diff --git a/src/vehicles/Vehicle.cpp b/src/vehicles/Vehicle.cpp
+--- a/src/vehicles/Vehicle.cpp
++++ b/src/vehicles/Vehicle.cpp
+@@ -464,13 +464,9 @@ CVehicle::ProcessWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSp
+ 	int32 wheelsOnGround, float thrust, float brake, float adhesion, int8 wheelId, float *wheelSpeed, tWheelState *wheelState, uint16 wheelStatus)
+ {
+-	// BUG: using statics here is probably a bad idea
+-	static bool bAlreadySkidding = false;	// this is never reset
+-	static bool bBraking;
+-	static bool bDriving;
+-
+-#ifdef FIX_SIGNIFICANT_BUGS
+-	bAlreadySkidding = false;
+-#endif
++	// Skid history belongs to the incoming wheel state, never another call.
++	bool bAlreadySkidding = false;
++	bool bBraking;
++	bool bDriving;
+-
++
+ 	// how much force we want to apply in these axes
+ 	float fwd = 0.0f;

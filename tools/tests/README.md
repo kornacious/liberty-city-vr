@@ -61,11 +61,14 @@ slow motion, zero timestep and lift eligibility gates. These isolate forces at
 fixed speed/immersion; they do not establish full boat handling on a headset.
 
 `test-wheel-suspension-fps.ps1 -StageRoot <assembled-tree>` characterizes the
-unchanged production wheel and suspension functions in constrained synthetic
+production wheel and suspension functions in constrained synthetic
 rigs. It runs 297 fresh-process combinations of nine scenarios, 15–144 FPS and
 steady/uneven/stalled pacing, writing `measurements.csv` and source hashes to
 its output directory. Passing means smoke checks and finite bounded states;
-it does not mean handling is FPS-independent. See
+it does not mean handling is FPS-independent. Its regression checks also verify
+that skid history stays within each wheel call, that a recovered wheel regains
+normal grip, and that incoming non-normal wheels retain their traction loss at
+15–144 FPS. See
 [the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
 measured differences and limits. No original game data is used.
 
