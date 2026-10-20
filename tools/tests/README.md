@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 31 suites against that tree or the kit's production helpers. Each suite
+runs 32 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -46,6 +46,12 @@ unchanged, tests first save and backup recovery, rejects truncated/checksum-bad
 files and invalid block lengths, and checks both load-menu layouts. All save
 bytes are synthetic; no game assets or player saves are accessed. These checks
 do not replace mission-completion and load testing on a headset.
+
+`test-frame-timers.ps1 -StageRoot <assembled-tree>` compiles the production
+timer against synthetic display timestamps and extracts the damaged-engine
+drain and script timer consumer. It checks 20–144 FPS, uneven pacing, slow
+motion, pauses, stall clipping, rollover, clock replacement and agreement
+between timer consumers. No game data or headset is needed.
 
 The header-only ragdoll suite works directly against the kit:
 
@@ -77,7 +83,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 31 synthetic
+and actual-mesh diagnostics below are also separate from the 32 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:

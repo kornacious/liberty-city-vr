@@ -122,7 +122,7 @@ The exact patch base comes from the public upstream re3 project:
 
 The tested public `master` commit is
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly scripts never modify
-that checkout: they copy it to a new directory, apply all seven patches in
+that checkout: they copy it to a new directory, apply all eight patches in
 `patches/` in filename order, and add the port overlay and bundled librw fork.
 No private repository is required or referenced.
 

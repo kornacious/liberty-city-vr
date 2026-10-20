@@ -1,0 +1,41 @@
+diff --git a/src/core/Timer.h b/src/core/Timer.h
+--- a/src/core/Timer.h
++++ b/src/core/Timer.h
+@@ -30,7 +30,21 @@ public:
+ 	static const float &GetTimeStep(void) { return ms_fTimeStep; }
+ 	static void SetTimeStep(float ts) { ms_fTimeStep = ts; }
+ 	static float GetTimeStepInSeconds() { return ms_fTimeStep / 50.0f; }
+-	static uint32 GetTimeStepInMilliseconds() { return ms_fTimeStep / 50.0f * 1000.0f; }
++	static uint32 GetTimeStepInMilliseconds() {
++#if defined(__ANDROID__) && defined(FIX_BUGS)
++		// Update already carries fractional milliseconds into the game clock.
++		// Share its whole-frame delta across integer timer consumers instead
++		// of truncating each frame's floating timestep independently. Unsigned
++		// subtraction also preserves the delta across clock rollover.
++		if(GetIsPaused()) return 0;
++		const uint32 elapsed = m_snTimeInMilliseconds - m_snPreviousTimeInMilliseconds;
++		// Loading/replay can replace the clock between Update calls. Keep
++		// those discontinuities from becoming an enormous timer increment.
++		return elapsed <= 60 ? elapsed : uint32(ms_fTimeStep / 50.0f * 1000.0f);
++#else
++		return ms_fTimeStep / 50.0f * 1000.0f;
++#endif
++	}
+ 	static const float &GetTimeStepNonClipped(void) { return ms_fTimeStepNonClipped; }
+ 	static float GetTimeStepNonClippedInSeconds(void) { return ms_fTimeStepNonClipped / 50.0f; }
+ 	static float GetTimeStepNonClippedInMilliseconds(void) { return ms_fTimeStepNonClipped / 50.0f * 1000.0f; }
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1157,6 +1157,11 @@ CAutomobile::ProcessControl(void)
+ 
+ 	// Decrease car health if engine is damaged badly
+ 	if(engineStatus > ENGINE_STATUS_ON_FIRE && m_fHealth > 250.0f)
++#ifdef __ANDROID__
++		// Preserve the original two health per frame at 30 FPS.
++		m_fHealth -= 60.0f * CTimer::GetTimeStepInSeconds();
++#else
+ 		m_fHealth -= 2.0f;
++#endif
+ 
+ 	ProcessDelayedExplosion();
