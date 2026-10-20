@@ -3654,71 +3654,21 @@ VrDebugUpdate(const PadInput &in)
 	gDebugPreviousFrameMs = now;
 }
 
-static void
-QuestMainCategoryColour(int item, uint8 *red, uint8 *green, uint8 *blue)
-{
-	static const uint8 colours[VR_MAIN_ITEM_COUNT][3] = {
-		{100,225,255}, {125,255,145}, {255,205,90},
-		{190,145,255}, {255,155,90}, {90,220,210},
-		{145,200,255}, {255,120,205}, {240,180,105},
-		{255,105,105}, {170,190,210}
-	};
-	*red = colours[item][0]; *green = colours[item][1];
-	*blue = colours[item][2];
-}
-
-// A submenu wears the colour its category has on the settings page, and the
-// pages opened from a submenu keep their parent's, so the palette says where
-// the player is without reading the heading.
-static void
-QuestMenuPageColour(uint8 *red, uint8 *green, uint8 *blue)
-{
-	int category = -1;
-	switch(gVrMenuPage){
-	case VR_MENU_PAGE_GRAPHICS:
-	case VR_MENU_PAGE_LIGHTING:
-	case VR_MENU_PAGE_WATER: category = VR_MAIN_GRAPHICS; break;
-	case VR_MENU_PAGE_TRAFFIC:
-	case VR_MENU_PAGE_DEFORMATION:
-	case VR_MENU_PAGE_RAGDOLL: category = VR_MAIN_TRAFFIC_SETTINGS; break;
-	case VR_MENU_PAGE_HUD:
-	case VR_MENU_PAGE_WRIST_RADAR: category = VR_MAIN_HUD; break;
-	case VR_MENU_PAGE_MODEL_ASSETS: category = VR_MAIN_MODEL_ASSETS; break;
-	case VR_MENU_PAGE_VEHICLE:
-	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
-		category = VR_MAIN_VEHICLE_SETTINGS; break;
-	case VR_MENU_PAGE_LOCOMOTION:
-		category = VR_MAIN_LOCOMOTION_SETTINGS; break;
-	case VR_MENU_PAGE_CONTROLS: category = VR_MAIN_CONTROLS; break;
-	case VR_MENU_PAGE_WEAPONS:
-	case VR_MENU_PAGE_CALIBRATION: category = VR_MAIN_WEAPONS; break;
-	case VR_MENU_PAGE_HOLSTERS: category = VR_MAIN_HOLSTERS; break;
-	case VR_MENU_PAGE_CHEATS:
-	case VR_MENU_PAGE_MISSIONS: category = VR_MAIN_CHEATS; break;
-	case VR_MENU_PAGE_ABOUT: category = VR_MAIN_ABOUT; break;
-	}
-	if(category < 0){
-		*red = 100; *green = 225; *blue = 255;
-		return;
-	}
-	QuestMainCategoryColour(category, red, green, blue);
-}
-
+// GTA III frontend palette: muted purple panels, amber lettering and a
+// desaturated green selection bar. All categories and nested pages share it.
 static void
 BeginFullVrMenuPage(const char *heading, const char *subtitle = nil)
 {
 	FillVrMenuRect(0, 0, VR_MENU_WIDTH, VR_MENU_HEIGHT,
-		5, 10, 20, 238);
+		50, 49, 65, 238);
 	FillVrMenuRect(28, 28, VR_MENU_WIDTH-28, VR_MENU_HEIGHT-28,
-		10, 22, 38, 245);
+		79, 77, 99, 245);
 	DrawVrMenuText("LIBERTY CITY VR", VR_MENU_WIDTH/2, 55, 7,
-		255, 120, 205);
-	uint8 red, green, blue;
-	QuestMenuPageColour(&red, &green, &blue);
-	DrawVrMenuText(heading, VR_MENU_WIDTH/2, 112, 4, red, green, blue);
+		240, 178, 48);
+	DrawVrMenuText(heading, VR_MENU_WIDTH/2, 112, 4, 240, 178, 48);
 	if(subtitle && subtitle[0] != '\0')
 		DrawVrMenuText(subtitle, VR_MENU_WIDTH/2, 146, 2,
-			170, 190, 210);
+			210, 190, 145);
 }
 
 static void
@@ -3726,37 +3676,21 @@ DrawFullVrMenuRow(const char *text, int y, int scale, bool selected,
                   bool available = true, bool warning = false,
                   bool positive = false, bool highlight = false)
 {
-	// A row worth finding on a page where every line reads alike, in
-	// the title pink because nothing else on a page uses it.
-	if(highlight){
-		if(selected)
-			FillVrMenuRect(85, y-5, VR_MENU_WIDTH-85,
-				y+scale*7+4, 95, 32, 78, 245);
-		DrawVrMenuText(text, VR_MENU_WIDTH/2, y, scale,
-			255, selected ? 165 : 120, selected ? 228 : 205);
-		return;
-	}
 	if(selected)
 		FillVrMenuRect(85, y-5, VR_MENU_WIDTH-85,
 			y+scale*7+4,
-			warning ? 125 : (positive ? 20 : (available ? 25 : 55)),
-			warning ? 35 : (positive ? 105 : (available ? 95 : 62)),
-			warning ? 30 : (positive ? 60 : (available ? 135 : 72)), 245);
-	if(!warning && !positive && !selected && available){
-		uint8 red, green, blue;
-		QuestMenuPageColour(&red, &green, &blue);
-		DrawVrMenuText(text, VR_MENU_WIDTH/2, y, scale, red, green, blue);
-		return;
-	}
+			warning ? 112 : (positive ? 58 : (available ? 81 : 66)),
+			warning ? 55 : (positive ? 101 : (available ? 105 : 65)),
+			warning ? 43 : (positive ? 66 : (available ? 84 : 78)), 245);
+	// Pale amber marks selection and featured settings; semantic warning and
+	// enabled colours remain distinct, and unavailable settings stay subdued.
 	DrawVrMenuText(text, VR_MENU_WIDTH/2, y, scale,
-		warning ? 255 : (positive ? (selected ? 210 : 105) :
-			(selected ? 255 : (available ? 205 : 120))),
-		warning ? (selected ? 225 : 105) :
-			(positive ? 245 : (selected ? (available ? 245 : 180) :
-			 (available ? 215 : 135))),
-		warning ? (selected ? 120 : 95) :
-			(positive ? 145 : (selected ? (available ? 110 : 130) :
-			 (available ? 225 : 145))));
+		warning ? 255 : (positive ? (selected ? 210 : 145) :
+			(available ? (selected || highlight ? 255 : 240) : 160)),
+		warning ? (selected ? 210 : 135) : (positive ? 225 :
+			(available ? (selected || highlight ? 222 : 178) : 146)),
+		warning ? (selected ? 125 : 90) : (positive ? 145 :
+			(available ? (selected || highlight ? 145 : 48) : 114)));
 }
 
 static void
@@ -3786,15 +3720,11 @@ DrawQuestSettingsPage(void)
 	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
 		DrawFullVrMenuRow(rows[item], 160+item*50, 3,
 			item == gVrMenuSelection, true);
-		uint8 red, green, blue;
-		QuestMainCategoryColour(item, &red, &green, &blue);
-		if(item != gVrMenuSelection)
-			DrawVrMenuText(rows[item], VR_MENU_WIDTH/2,
-				160+item*50, 3, red, green, blue);
+
 	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -3908,10 +3838,10 @@ DrawQuestGraphicsPage(void)
 		const bool fallback = scaleStatus.fallbackReason !=
 			xrvk::RENDER_SCALE_FALLBACK_NONE;
 		DrawVrMenuText(activeScale, VR_MENU_WIDTH/2, 674, 2,
-			fallback ? 255 : 120, fallback ? 95 : 220,
-			fallback ? 85 : 255);
+			fallback ? 255 : 240, fallback ? 95 : 178,
+			fallback ? 85 : 48);
 		DrawVrMenuText("NATIVE SCENE  SPATIAL AA SINGLE-FRAME",
-			VR_MENU_WIDTH/2, 692, 2, 170, 190, 210);
+			VR_MENU_WIDTH/2, 692, 2, 210, 190, 145);
 		if(scaleStatus.previousFallbackReason !=
 		   xrvk::RENDER_SCALE_FALLBACK_NONE){
 			char recoveredScale[192];
@@ -3928,9 +3858,9 @@ DrawQuestGraphicsPage(void)
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	if(VrCullViz::IsActive()){
 		DrawVrMenuText(VrCullViz::StatusLine(),
-			VR_MENU_WIDTH/2, 728, 2, 210, 220, 235);
+			VR_MENU_WIDTH/2, 728, 2, 210, 190, 145);
 		DrawVrMenuText("BLUE DRAWN   RED OFF-FRUSTUM   ORANGE OCCLUDED   YELLOW DISTANCE",
-			VR_MENU_WIDTH/2, 746, 2, 200, 210, 225);
+			VR_MENU_WIDTH/2, 746, 2, 210, 190, 145);
 	}
 	else
 #endif
@@ -4015,9 +3945,9 @@ DrawQuestLightingPage(void)
 		DrawFullVrMenuRow(rows[item], 166+item*40, 2,
 			item == gVrLightingSelection, true, false);
 	DrawVrMenuText("INTENSITY TAMES NEON-DENSE STREETS LIKE OCEAN DRIVE",
-		VR_MENU_WIDTH/2, 620, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 620, 2, 210, 190, 145);
 	DrawVrMenuText("SSR 0% OR A SHORT SSR DISTANCE GIVES THE CLASSIC LOOK",
-		VR_MENU_WIDTH/2, 644, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 644, 2, 210, 190, 145);
 }
 
 static void
@@ -4052,11 +3982,11 @@ DrawQuestWaterPage(void)
 		DrawFullVrMenuRow(rows[item], 166+item*40, 2,
 			item == gVrWaterSelection, true, false);
 	DrawVrMenuText("BLUR AND SHIMMER LIVE IN WAVES AND DISTORTION - TURN THEM DOWN",
-		VR_MENU_WIDTH/2, 620, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 620, 2, 210, 190, 145);
 	DrawVrMenuText("REFLECTION IS THE MIRROR, SHEEN THE SKY WHERE IT CANNOT REACH",
-		VR_MENU_WIDTH/2, 644, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 644, 2, 210, 190, 145);
 	DrawVrMenuText("SSR RESOLUTION IS ONE COPY SHARED WITH CAR REFLECTIONS",
-		VR_MENU_WIDTH/2, 668, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 668, 2, 210, 190, 145);
 }
 
 static void
@@ -4119,7 +4049,7 @@ DrawQuestTrafficPage(void)
 			physics.tierCount[QUEST_VEHICLE_PHYSICS_PROXY],
 			physics.managedAverageMs, physics.budgetMs);
 	DrawVrMenuText(status, VR_MENU_WIDTH/2, 478, 2,
-		125, 210, 255);
+		240, 178, 48);
 	const QuestVehicleVisualBudgetSnapshot visual =
 		QuestVehicleVisualBudgetGetSnapshot();
 	if(visual.mode != QUEST_VEHICLE_VISUAL_STOCK)
@@ -4132,30 +4062,30 @@ DrawQuestTrafficPage(void)
 		(unsigned long long)visual.atomicsSkipped,
 		(unsigned long long)visual.occupantsSkipped);
 	DrawVrMenuText(status, VR_MENU_WIDTH/2, 504, 2,
-		255, 190, 115);
+		240, 178, 48);
 	snprintf(status, sizeof(status),
 		"WALKERS %u / %.1f   CAP %d",
 		CPopulation::ms_nTotalPeds, CPopulation::VrTargetAmbientPeds,
 		CPopulation::MaxNumberOfPedsInUse);
 	DrawVrMenuText(status, VR_MENU_WIDTH/2, 530, 3,
-		125, 255, 145);
+		240, 178, 48);
 	CPedPool *pedPool = CPools::GetPedPool();
 	snprintf(status, sizeof(status), "PED POOL %d / %d",
 		pedPool != nil ? pedPool->GetNoOfUsedSpaces() : 0,
 		pedPool != nil ? pedPool->GetSize() : 0);
 	DrawVrMenuText(status, VR_MENU_WIDTH/2, 566, 3,
-		125, 255, 145);
+		240, 178, 48);
 	CVehiclePool *vehPool = CPools::GetVehiclePool();
 	snprintf(status, sizeof(status), "VEHICLE POOL %d / %d",
 		vehPool != nil ? vehPool->GetNoOfUsedSpaces() : 0,
 		vehPool != nil ? vehPool->GetSize() : 0);
 	DrawVrMenuText(status, VR_MENU_WIDTH/2, 602, 3,
-		125, 255, 145);
+		240, 178, 48);
 	DrawVrMenuText("RANGES 50-300%   STEP 5%",
-		VR_MENU_WIDTH/2, 664, 2, 255, 180, 225);
+		VR_MENU_WIDTH/2, 664, 2, 255, 222, 145);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4197,22 +4127,22 @@ DrawQuestRagdollPage(void)
 	const int selected = Min(Max(gVrRagdollSelection, 0),
 		VR_RAGDOLL_ITEM_COUNT-1);
 	DrawVrMenuText(help[selected][0], VR_MENU_WIDTH/2, 470, 2,
-		255, 180, 225);
+		255, 222, 145);
 	DrawVrMenuText(help[selected][1], VR_MENU_WIDTH/2, 494, 2,
-		170, 190, 210);
+		210, 190, 145);
 	DrawVrMenuText("WEIGHT 50-300%   BRAKE 0-2000%   GRIP 0-300%   SHOTS 25-200%",
-		VR_MENU_WIDTH/2, 548, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 548, 2, 210, 190, 145);
 	DrawVrMenuText("CHANGES APPLY NOW AND SAVE AUTOMATICALLY",
-		VR_MENU_WIDTH/2, 576, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 576, 2, 210, 190, 145);
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	DrawVrMenuText(VrRagdoll::DebugLine(), VR_MENU_WIDTH/2, 620, 2,
-		125, 210, 255);
+		240, 178, 48);
 	DrawVrMenuText(VrRagdoll::VehicleDebugLine(), VR_MENU_WIDTH/2, 648, 2,
-		125, 210, 255);
+		240, 178, 48);
 #endif
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4245,12 +4175,12 @@ DrawQuestDeformationPage(void)
 		{"RETURN TO TRAFFIC SETTINGS", ""}
 	};
 	const int selected = Min(Max(gVrDeformationSelection, 0), VR_DEFORMATION_ITEM_COUNT-1);
-	DrawVrMenuText(help[selected][0], VR_MENU_WIDTH/2, 470, 2, 255, 180, 225);
-	DrawVrMenuText(help[selected][1], VR_MENU_WIDTH/2, 494, 2, 170, 190, 210);
+	DrawVrMenuText(help[selected][0], VR_MENU_WIDTH/2, 470, 2, 255, 222, 145);
+	DrawVrMenuText(help[selected][1], VR_MENU_WIDTH/2, 494, 2, 210, 190, 145);
 	DrawVrMenuText("CHANGES APPLY NOW AND SAVE AUTOMATICALLY",
-		VR_MENU_WIDTH/2, 576, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 576, 2, 210, 190, 145);
 	DrawVrMenuText("LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4359,7 +4289,7 @@ DrawQuestHudPage(void)
 	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4432,7 +4362,7 @@ DrawQuestWristRadarPage(void)
 			VR_MENU_WIDTH/2, 690, 2, 245, 205, 90);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4554,10 +4484,10 @@ DrawQuestVehiclePage(void)
 			item == VR_VEHICLE_BIKE_THROTTLE);
 	}
 	DrawVrMenuText("VALUES ARE SAVED IN VR SETTINGS",
-		VR_MENU_WIDTH/2, 694, 2, 125, 255, 145);
+		VR_MENU_WIDTH/2, 694, 2, 240, 178, 48);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4601,7 +4531,7 @@ DrawQuestVehicleCalibrationPage(void)
 	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4653,7 +4583,7 @@ DrawQuestLocomotionPage(void)
 			VR_MENU_WIDTH/2, 668, 2, 255, 205, 90);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4685,7 +4615,7 @@ DrawQuestControlsPage(void)
 			item == gVrControlsSelection);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4745,7 +4675,7 @@ DrawQuestWeaponCalibrationPage(void)
 	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4772,10 +4702,10 @@ DrawQuestHolsterPage(void)
 	}
 	DrawVrMenuText(
 		"CLEAR THE OLD POINT BEFORE MOVING AN ASSIGNED SLOT",
-		VR_MENU_WIDTH/2, 650, 2, 255, 180, 225);
+		VR_MENU_WIDTH/2, 650, 2, 255, 222, 145);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
-		VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4796,7 +4726,7 @@ DrawQuestCheatPage(void)
 				item == gVrCheatCategorySelection);
 		}
 		DrawVrMenuText("STICK UP/DOWN SELECT   A OPEN   B BACK TO SETTINGS",
-			VR_MENU_WIDTH/2, 718, 2, 170, 190, 210);
+			VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 		return;
 	}
 	char heading[96];
@@ -4830,14 +4760,14 @@ DrawQuestCheatPage(void)
 	snprintf(page, sizeof(page), "PAGE %d OF %d",
 		first/VR_CHEAT_ITEMS_PER_PAGE+1, pageCount);
 	DrawVrMenuText(page, VR_MENU_WIDTH/2, 680, 2,
-		120, 220, 255);
+		240, 178, 48);
 	DrawVrMenuText(
 		gVrCheatStatusFrames > 0 ? gVrCheatStatus :
 			"STICK UP/DOWN SELECT   LEFT/RIGHT MODEL   A ACTIVATE   B BACK",
 		VR_MENU_WIDTH/2, 718, 2,
-		gVrCheatStatusFrames > 0 ? 255 : 170,
+		gVrCheatStatusFrames > 0 ? 255 : 210,
 		gVrCheatStatusFrames > 0 ? 220 : 190,
-		gVrCheatStatusFrames > 0 ? 80 : 210);
+		gVrCheatStatusFrames > 0 ? 80 : 145);
 }
 
 static void
@@ -4855,18 +4785,18 @@ DrawQuestMissionPage(void)
 				item == gVrMissionCategorySelection);
 		}
 		DrawVrMenuText("MISSION NUMBERS COME FROM THE ACTIVE MAIN.SCM TABLE",
-			VR_MENU_WIDTH/2, 610, 2, 255, 180, 225);
+			VR_MENU_WIDTH/2, 610, 2, 255, 222, 145);
 		DrawVrMenuText(gVrCheatStatusFrames > 0 ? gVrCheatStatus :
 			"UP/DOWN SELECT   A OPEN   B BACK TO CHEATS",
 			VR_MENU_WIDTH/2, 718, 2,
-			gVrCheatStatusFrames > 0 ? 255 : 170,
+			gVrCheatStatusFrames > 0 ? 255 : 210,
 			gVrCheatStatusFrames > 0 ? 220 : 190,
-			gVrCheatStatusFrames > 0 ? 80 : 210);
+			gVrCheatStatusFrames > 0 ? 80 : 145);
 		return;
 	}
 
 	DrawVrMenuText(GetVrMissionCategoryName(gVrMissionCategory),
-		VR_MENU_WIDTH/2, 132, 2, 255, 180, 225);
+		VR_MENU_WIDTH/2, 132, 2, 255, 222, 145);
 	const int count = GetVrMissionCount(gVrMissionCategory);
 	const int first = (gVrMissionSelection/VR_CHEAT_ITEMS_PER_PAGE)*
 		VR_CHEAT_ITEMS_PER_PAGE;
@@ -4881,13 +4811,13 @@ DrawQuestMissionPage(void)
 		(count+VR_CHEAT_ITEMS_PER_PAGE-1)/VR_CHEAT_ITEMS_PER_PAGE);
 	snprintf(page, sizeof(page), "PAGE %d OF %d",
 		first/VR_CHEAT_ITEMS_PER_PAGE+1, pageCount);
-	DrawVrMenuText(page, VR_MENU_WIDTH/2, 650, 2, 120, 220, 255);
+	DrawVrMenuText(page, VR_MENU_WIDTH/2, 650, 2, 240, 178, 48);
 	DrawVrMenuText(gVrCheatStatusFrames > 0 ? gVrCheatStatus :
 		"A STARTS THE MISSION   B RETURNS TO CATEGORIES",
 		VR_MENU_WIDTH/2, 718, 2,
-		gVrCheatStatusFrames > 0 ? 255 : 170,
+		gVrCheatStatusFrames > 0 ? 255 : 210,
 		gVrCheatStatusFrames > 0 ? 220 : 190,
-		gVrCheatStatusFrames > 0 ? 80 : 210);
+		gVrCheatStatusFrames > 0 ? 80 : 145);
 }
 
 static void
@@ -4917,9 +4847,9 @@ DrawQuestAboutPage(void)
 		const bool warning = index >= 6 && index <= 10;
 		const bool close = index == (int)ARRAY_SIZE(lines)-1;
 		DrawVrMenuText(lines[index], VR_MENU_WIDTH/2, 170+index*32,
-			2, close ? 255 : (warning ? 255 : 215),
-			close ? 205 : (warning ? 145 : 225),
-			close ? 80 : (warning ? 70 : 235));
+			2, close ? 255 : (warning ? 255 : 240),
+			close ? 205 : (warning ? 145 : 178),
+			close ? 80 : (warning ? 70 : 48));
 	}
 }
 
@@ -4941,11 +4871,11 @@ DrawCutsceneCameraAnchorCalibrationPage(void)
 	// keep the cutscene visible so the player can judge the anchor live.
 	FillVrMenuRect(0, 0, VR_MENU_WIDTH, VR_MENU_HEIGHT, 0, 0, 0, 0);
 	FillVrMenuRect(120, 28, VR_MENU_WIDTH-120, 258,
-		5, 10, 20, 220);
+		50, 49, 65, 220);
 	FillVrMenuRect(120, 28, VR_MENU_WIDTH-120, 34,
-		95, 32, 78, 235);
+		240, 178, 48, 235);
 	DrawVrMenuText("CUTSCENE CAMERA ANCHOR", VR_MENU_WIDTH/2, 48, 3,
-		255, 120, 205);
+		240, 178, 48);
 	char modelName[48];
 	float sideCm = 0.0f, forwardCm = 0.0f, heightCm = 0.0f;
 	int modelIndex = -1;
@@ -4954,16 +4884,16 @@ DrawCutsceneCameraAnchorCalibrationPage(void)
 	char line[160];
 	snprintf(line, sizeof(line), "MODEL %s  INDEX %d", modelName,
 		modelIndex);
-	DrawVrMenuText(line, VR_MENU_WIDTH/2, 88, 2, 240, 240, 240);
+	DrawVrMenuText(line, VR_MENU_WIDTH/2, 88, 2, 240, 178, 48);
 	snprintf(line, sizeof(line), "SIDE %+05.1f CM  FORWARD %+05.1f CM  HEIGHT %+05.1f CM",
 		sideCm, forwardCm, heightCm);
-	DrawVrMenuText(line, VR_MENU_WIDTH/2, 120, 2, 120, 220, 255);
+	DrawVrMenuText(line, VR_MENU_WIDTH/2, 120, 2, 240, 178, 48);
 	DrawVrMenuText("LEFT STICK X SIDE  LEFT STICK Y HEIGHT",
-		VR_MENU_WIDTH/2, 158, 2, 235, 220, 170);
+		VR_MENU_WIDTH/2, 158, 2, 210, 190, 145);
 	DrawVrMenuText("RIGHT STICK Y FORWARD BACK",
-		VR_MENU_WIDTH/2, 186, 2, 235, 220, 170);
+		VR_MENU_WIDTH/2, 186, 2, 210, 190, 145);
 	DrawVrMenuText("A SAVE AND EXIT   B OR L3+R3 CANCEL",
-		VR_MENU_WIDTH/2, 216, 2, 255, 180, 225);
+		VR_MENU_WIDTH/2, 216, 2, 255, 222, 145);
 }
 
 static void
@@ -4971,9 +4901,9 @@ DrawCutsceneCameraAnchorNotice(void)
 {
 	FillVrMenuRect(0, 0, VR_MENU_WIDTH, VR_MENU_HEIGHT, 0, 0, 0, 0);
 	FillVrMenuRect(180, 48, VR_MENU_WIDTH-180, 136,
-		5, 10, 20, 220);
+		50, 49, 65, 220);
 	DrawVrMenuText(gCutsceneAnchorNotice, VR_MENU_WIDTH/2, 82, 3,
-		255, 180, 225);
+		255, 222, 145);
 }
 
 // Fills the same 1024x768 menu surface as desktop. Compact diagnostics use
