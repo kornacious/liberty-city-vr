@@ -10,6 +10,7 @@
 #define GTA_VR_WEAPONS
 #define FIX_BUGS
 using uint32 = uint32_t;
+using uint64 = uint64_t;
 using int32 = int32_t;
 template<class T> T Min(T a, T b) { return a < b ? a : b; }
 static double clockMs;

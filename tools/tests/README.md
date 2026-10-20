@@ -17,7 +17,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 34 suites against that tree or the kit's production helpers. Each suite
+runs 35 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
@@ -69,6 +69,15 @@ it does not mean handling is FPS-independent. See
 [the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
 measured differences and limits. No original game data is used.
 
+`test-gameplay-timing.ps1 -StageRoot <assembled-tree>` compiles the production
+timer, gameplay schedule helper, swinging-door simulation and aircraft
+destruction sequences. It checks 15–144 FPS, door axes/directions, 30 FPS
+reference motion, pause/slow motion, uneven pacing, bounded door stops,
+crossed schedule phases, partition coverage and deferred destruction with
+exactly-once explosions and mission callbacks. Source checks verify the
+helper is wired into the selected engine schedules; full gameplay scenarios
+still require headset testing.
+
 The header-only ragdoll suite works directly against the kit:
 
 ```powershell
@@ -99,7 +108,7 @@ evidence for this port:
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 34 synthetic
+and actual-mesh diagnostics below are also separate from the 35 synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:

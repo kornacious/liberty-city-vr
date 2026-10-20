@@ -40,6 +40,12 @@ for distance attenuation. Gain stays full inside the supplied minimum range,
 falls quadratically to silence at the maximum range, and updates as sources
 move. The existing effects/fade controls and 2D audio paths remain in effect.
 
+Quest swinging-door motion and aircraft destruction sequences follow elapsed
+game time with their original 30 FPS reference behavior. Pickup partitions,
+population/world cleanup, garage checks, siren yielding and distant train/plane
+updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
+Crossed schedule phases are processed when a frame spans multiple ticks.
+
 Current source-kit version: **v0.5.6**.
 
 This release adds articulated ragdolls with car and wall contact, optional
@@ -122,7 +128,7 @@ The exact patch base comes from the public upstream re3 project:
 
 The tested public `master` commit is
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly scripts never modify
-that checkout: they copy it to a new directory, apply all nine patches in
+that checkout: they copy it to a new directory, apply all ten patches in
 `patches/` in filename order, and add the port overlay and bundled librw fork.
 No private repository is required or referenced.
 
