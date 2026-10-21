@@ -1,0 +1,76 @@
+diff --git a/src/control/CarCtrl.cpp b/src/control/CarCtrl.cpp
+index 2085681..91c5d30 100644
+--- a/src/control/CarCtrl.cpp
++++ b/src/control/CarCtrl.cpp
+@@ -2,6 +2,10 @@
+ 
+ #include "CarCtrl.h"
+ 
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++#include "QuestTrafficVisibility.h"
++#endif
++
+ #include "Accident.h"
+ #include "Automobile.h"
+ #include "Camera.h"
+@@ -265,6 +269,11 @@ CCarCtrl::GenerateOneRandomCar()
+ 			break;
+ 		}
+ 	}
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	// The mono camera's side/rear sectors are still visible in the headset.
++	// Never use the stock 40 m offscreen spawn ring in VR.
++	preferredDistance = QuestTrafficVisibility::SpawnDistance(TheCamera.GenerationDistMultiplier);
++#endif
+ 	if (!ThePaths.NewGenerateCarCreationCoors(vecTargetPos.x, vecTargetPos.y, frontX, frontY,
+ 		preferredDistance, angleLimit, invertAngleLimitTest, &spawnPosition, &curNodeId, &nextNodeId,
+ 		&positionBetweenNodes, carClass == COPS && pWanted->GetWantedLevel() >= 1))
+@@ -542,6 +551,15 @@ CCarCtrl::GenerateOneRandomCar()
+ 		break;
+ 	}
+ 	CVisibilityPlugins::SetClumpAlpha(pVehicle->GetClump(), 0);
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	if (!QuestTrafficVisibility::CanSpawn(
++		(vecTargetPos - pVehicle->GetPosition()).Magnitude2D(),
++		(TheCamera.GetPosition() - pVehicle->GetPosition()).Magnitude2D(),
++		TheCamera.GenerationDistMultiplier)){
++		delete pVehicle;
++		return;
++	}
++#else
+ 	if (!pVehicle->GetIsOnScreen()){
+ 		if ((vecTargetPos - pVehicle->GetPosition()).Magnitude2D() > 50.0f) {
+ 			/* Too far away cars that are not visible aren't needed. */
+@@ -556,6 +574,7 @@ CCarCtrl::GenerateOneRandomCar()
+ 		delete pVehicle;
+ 		return;
+ 	}
++#endif
+ 	CVehicleModelInfo* pVehicleModel = pVehicle->GetModelInfo();
+ 	float radiusToTest = pVehicleModel->GetColModel()->boundingSphere.radius;
+ 	if (testForCollision){
+@@ -747,6 +766,10 @@ CCarCtrl::PossiblyRemoveVehicle(CVehicle* pVehicle)
+ 		{
+ 			threshold = 130.0f * TheCamera.GenerationDistMultiplier;
+ 		}
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		// Head turning must not trigger the mono camera's 50 m cleanup.
++		threshold = Max(threshold, QuestTrafficVisibility::RetentionDistance(TheCamera.GenerationDistMultiplier));
++#endif
+ 		if (pVehicle->bExtendedRange)
+ 			threshold *= 1.5f;
+ 		if (distanceToPlayer > threshold && !CGarages::IsPointWithinHideOutGarage(pVehicle->GetPosition())){
+@@ -762,7 +785,13 @@ CCarCtrl::PossiblyRemoveVehicle(CVehicle* pVehicle)
+ 	if ((pVehicle->GetStatus() == STATUS_SIMPLE || pVehicle->GetStatus() == STATUS_PHYSICS && pVehicle->AutoPilot.m_nDrivingStyle == DRIVINGSTYLE_STOP_FOR_CARS) &&
+ 		CTimer::GetTimeInMilliseconds() - pVehicle->AutoPilot.m_nTimeToStartMission > 5000 &&
+ 		!pVehicle->GetIsOnScreen() &&
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++		// A stopped car outside the mono frustum may be in either eye's view.
++		(pVehicle->GetPosition() - vecPlayerPos).Magnitude2D() >
++			QuestTrafficVisibility::RetentionDistance(TheCamera.GenerationDistMultiplier) &&
++#else
+ 		(pVehicle->GetPosition() - vecPlayerPos).Magnitude2D() > 25.0f &&
++#endif
+ 		!IsThisVehicleInteresting(pVehicle) &&
+ 		!pVehicle->bIsLocked &&
+ 		pVehicle->CanBeDeleted() &&

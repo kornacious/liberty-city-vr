@@ -17,12 +17,20 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 43 suites against that tree or the kit's production helpers. Each suite
+runs 44 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
 private historical checkout is needed. Use `-OutDir` with a new directory to
 choose where the assembled sources, binaries and logs are kept.
+
+`test-traffic-visibility.ps1 -StageRoot <assembled-tree>` checks the production
+VR traffic spawn/retention policy across 360 directions and generation distance
+multipliers, including near-spawn rejection and camera separation boundaries.
+It also verifies integration into random spawning and both cleanup paths.
+The policy uses the distant spawn ring in every direction and retains nearby
+traffic independently of the mono camera frustum. These checks do not establish
+headset appearance, traffic density or performance.
 
 `test-held-weapon-frame.ps1 -StageRoot <assembled-tree>` extracts the body IK
 entry point, floating-hand pose conversion, both skeleton carrier blocks and
