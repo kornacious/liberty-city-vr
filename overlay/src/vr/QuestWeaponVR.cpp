@@ -19,6 +19,7 @@
 #include "VRHandModel.h"
 #include "WeaponInfo.h"
 #include "WeaponType.h"
+#include "QuestWeaponGrip.h"
 #include "World.h"
 #include "ModelSets.h"
 #include "Sprite.h"
@@ -44,7 +45,8 @@ enum {
 	WEAPON_VALUE_SCALE = 2,
 	SUPPORT_GRIP_LEGACY_VERSION = 3,
 	SUPPORT_GRIP_MODEL_BOUND_V4 = 4,
-	SUPPORT_GRIP_POSE_VERSION = 5,
+	SUPPORT_GRIP_MODEL_BOUND_V5 = 5,
+	SUPPORT_GRIP_POSE_VERSION = 6,
 	WEAPON_AIM_ALIGNMENT_SCALE = 1000000
 };
 
@@ -659,7 +661,7 @@ ApplyDefaultSupportGrip(int weaponType, int hand,
 		canonical.supportRotationZ = 0;
 		canonical.supportGripType = SUPPORT_GRIP_MAGAZINE;
 	}
-	canonical.supportPoseVersion = SUPPORT_GRIP_POSE_VERSION;
+	canonical.supportPoseVersion = SUPPORT_GRIP_MODEL_BOUND_V5;
 	if(hand == 0)
 		ApplyMirroredSupportGrip(canonical, calibration);
 	else{
@@ -717,6 +719,54 @@ GetDefaultCalibrationForSet(int weaponType, int hand,
 		}
 	}
 	ApplyDefaultSupportGrip(weaponType, hand, modelSet, calibration);
+	if(modelSet != ModelSets::MODEL_SET_MODERN){
+		const QuestWeaponGrip::Profile *profile = QuestWeaponGrip::Find(weaponType);
+		if(profile){
+			// Cancel the inherited 90-degree X rotation: III is Z-up, VC is Y-up.
+			calibration->rotationX = -180;
+			calibration->rotationY = (int)roundf(profile->pitch*WEAPON_VALUE_SCALE);
+			calibration->rotationZ = 0;
+			const float a = DEGTORAD(profile->pitch);
+			const float x = cosf(a)*profile->x+sinf(a)*profile->z;
+			const float z = -sinf(a)*profile->x+cosf(a)*profile->z;
+			// Put the physical grip in the closed palm, 5.5 cm ahead of the
+			// controller origin and 4.5 cm below it (the baked wrist offset).
+			calibration->offsetX = (int)roundf(profile->y*200.0f);
+			calibration->offsetY = (int)roundf((0.055f-x)*200.0f);
+			calibration->offsetZ = (int)roundf((-0.045f-z)*200.0f);
+		}
+		// Wrist sockets beside/below III's actual foregrips, in lateral,
+		// barrel, top coordinates. Mirror once for left-primary gameplay.
+		static const BuiltInSupportGripDefaults grips[] = {
+			{ WEAPONTYPE_SHOTGUN, ModelSets::MODEL_SET_CLASSIC, { -10,90,8 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+			{ WEAPONTYPE_AK47, ModelSets::MODEL_SET_CLASSIC, { -10,68,6 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+			{ WEAPONTYPE_M16, ModelSets::MODEL_SET_CLASSIC, { -10,76,12 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+			{ WEAPONTYPE_SNIPERRIFLE, ModelSets::MODEL_SET_CLASSIC, { -10,60,4 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+			{ WEAPONTYPE_ROCKETLAUNCHER, ModelSets::MODEL_SET_CLASSIC, { -10,34,-28 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+			{ WEAPONTYPE_FLAMETHROWER, ModelSets::MODEL_SET_CLASSIC, { -14,36,10 }, { 0,360,-292 }, SUPPORT_GRIP_FROM_BELOW },
+		};
+		for(unsigned i = 0; i < ARRAY_SIZE(grips); ++i){
+			if(grips[i].weaponType != weaponType) continue;
+			WeaponCalibration canonical = *calibration;
+			canonical.supportX = grips[i].offset[0];
+			canonical.supportY = grips[i].offset[1];
+			canonical.supportZ = grips[i].offset[2];
+			canonical.supportRotationX = grips[i].rotation[0];
+			canonical.supportRotationY = grips[i].rotation[1];
+			canonical.supportRotationZ = grips[i].rotation[2];
+			canonical.supportGripType = grips[i].gripType;
+			canonical.supportPoseVersion = SUPPORT_GRIP_POSE_VERSION;
+			if(hand == 0) ApplyMirroredSupportGrip(canonical, &canonical);
+			calibration->supportX = canonical.supportX;
+			calibration->supportY = canonical.supportY;
+			calibration->supportZ = canonical.supportZ;
+			calibration->supportRotationX = canonical.supportRotationX;
+			calibration->supportRotationY = canonical.supportRotationY;
+			calibration->supportRotationZ = canonical.supportRotationZ;
+			calibration->supportGripType = canonical.supportGripType;
+			calibration->supportPoseVersion = canonical.supportPoseVersion;
+		}
+	}
 	calibration->valid = true;
 }
 
@@ -859,7 +909,7 @@ GetCalibration(int hand, int weaponType)
 			calibration.supportX = -oldZ;
 			calibration.supportY = oldX;
 			calibration.supportZ = -oldY;
-			calibration.supportPoseVersion = SUPPORT_GRIP_POSE_VERSION;
+			calibration.supportPoseVersion = SUPPORT_GRIP_MODEL_BOUND_V5;
 		}
 		if(mirrorSupportFromRight){
 			WeaponCalibration canonical = calibration;
@@ -1241,7 +1291,9 @@ WeaponHandLocalToWorld(const CVector &local, const CVector &right,
 static void
 ApplyBakedLeftWeaponPosition(int hand, CMatrix *matrix)
 {
-	if(!matrix || hand != 0)
+	if(!matrix || hand != 0 ||
+	   ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+	   ModelSets::MODEL_SET_MODERN)
 		return;
 
 	CVector handPosition, right, up, forward;
@@ -1315,6 +1367,21 @@ BuildHolsterMatrix(int slot, CMatrix *matrix)
 	return true;
 }
 
+static void
+GetSupportModelAxes(int weaponType, const WeaponCalibration &calibration,
+	const CMatrix &model, CVector *barrel, CVector *top)
+{
+	*barrel = model.GetRight();
+	*top = calibration.supportPoseVersion >= SUPPORT_GRIP_POSE_VERSION ?
+		model.GetUp() : model.GetForward();
+	if(calibration.supportPoseVersion >= SUPPORT_GRIP_POSE_VERSION &&
+	   weaponType == WEAPONTYPE_ROCKETLAUNCHER){
+		// III's launcher tube rises diagonally along native Z, unlike its rifles.
+		*barrel = model.GetRight()*-0.300706f+model.GetUp()*0.953717f;
+		*top = model.GetRight()*-0.953717f-model.GetUp()*0.300706f;
+	}
+}
+
 static bool
 BuildSupportVector(int primary, int weaponType, CVector *pivot,
 	CVector *expected, CVector *frameRight = nil, CVector *frameUp = nil,
@@ -1340,12 +1407,12 @@ BuildSupportVector(int primary, int weaponType, CVector *pivot,
 	CVector visualUp = rawUp;
 	CVector visualForward = rawForward;
 	CVector socketOrigin = *pivot;
-	if(calibration->supportPoseVersion >= SUPPORT_GRIP_POSE_VERSION){
+	if(calibration->supportPoseVersion >= SUPPORT_GRIP_MODEL_BOUND_V5){
 		CMatrix weaponModel;
 		if(!BuildWeaponModelMatrix(primary, *calibration, &weaponModel))
 			return false;
-		CVector barrel = weaponModel.GetRight();
-		CVector top = weaponModel.GetForward();
+		CVector barrel, top;
+		GetSupportModelAxes(weaponType, *calibration, weaponModel, &barrel, &top);
 		CVector lateral;
 		if(!BuildCanonicalSupportFrame(barrel, top,
 		   &lateral, &top, &barrel))
@@ -1364,7 +1431,7 @@ BuildSupportVector(int primary, int weaponType, CVector *pivot,
 		socketUp*((float)calibration->supportZ/200.0f);
 	*expected = socket-*pivot;
 	if(frameRight){
-		if(calibration->supportPoseVersion < SUPPORT_GRIP_POSE_VERSION &&
+		if(calibration->supportPoseVersion < SUPPORT_GRIP_MODEL_BOUND_V5 &&
 		   !BuildCanonicalSupportFrame(visualForward, visualUp,
 		   &visualRight, &visualUp, &visualForward))
 			return false;
@@ -2216,6 +2283,9 @@ GetWeaponLocalBarrelDirection(int weaponType)
 	case WEAPONTYPE_SNIPERRIFLE:
 		return CVector(0.9891f, -0.1477f, 0.0f);
 	case WEAPONTYPE_ROCKETLAUNCHER:
+		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+		   ModelSets::MODEL_SET_MODERN)
+			return CVector(-0.300706f, 0.0f, 0.953717f);
 		return CVector(1.0f, 0.0f, 0.0f);
 	case WEAPONTYPE_FLAMETHROWER:
 		return CVector(1.0f, 0.0f, 0.0f);
@@ -2241,6 +2311,9 @@ GetWeaponLocalMuzzle(int weaponType)
 	case WEAPONTYPE_SNIPERRIFLE:
 		return CVector(0.770f, -0.0902f, 0.0902f);
 	case WEAPONTYPE_ROCKETLAUNCHER:
+		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+		   ModelSets::MODEL_SET_MODERN)
+			return CVector(-0.070f, 0.040f, 0.750f);
 		return CVector(0.553f, 0.000f, 0.000f);
 	case WEAPONTYPE_FLAMETHROWER:
 		return CVector(0.780f, -0.058f, 0.095f);
@@ -3381,12 +3454,13 @@ ApplyTwoHandVisualHandLock(int hand, CMatrix *handMatrix,
 	const CVector lockedSocket = pivot+expected;
 	WeaponCalibration *calibration = GetCalibration(primary, weaponType);
 	if(calibration &&
-	   calibration->supportPoseVersion >= SUPPORT_GRIP_POSE_VERSION &&
+	   calibration->supportPoseVersion >= SUPPORT_GRIP_MODEL_BOUND_V5 &&
 	   gWeaponContactSlot[primary] == primarySlot &&
 	   gWeaponContactType[primary] == weaponType &&
 	   gWeaponContactFrame[primary] == CTimer::GetFrameCounter()){
-		CVector barrel = gWeaponContactMatrix[primary].GetRight();
-		CVector top = gWeaponContactMatrix[primary].GetForward();
+		CVector barrel, top;
+		GetSupportModelAxes(weaponType, *calibration,
+			gWeaponContactMatrix[primary], &barrel, &top);
 		CVector lateral;
 		if(BuildCanonicalSupportFrame(barrel, top,
 		   &lateral, &top, &barrel)){
@@ -3840,7 +3914,7 @@ SaveQuestCalibration(int hand, int weaponType,
 	WriteCalibrationInt(section, hand, "SupportGripRotationZ",
 		calibration.supportRotationZ);
 	WriteCalibrationInt(section, hand, "SupportGripPoseVersion",
-		SUPPORT_GRIP_POSE_VERSION);
+		calibration.supportPoseVersion);
 	char style[16];
 	sprintf(style, "%d", calibration.supportGripType);
 	WritePrivateProfileStringA(section, "SupportGripStyle", style,
@@ -3877,8 +3951,8 @@ AdjustQuestCalibrationValue(int hand, int weaponType, int item,
 	   calibration->supportRotationZ == 0)
 		calibration->supportRotationZ =
 			SUPPORT_GRIP_FROM_BELOW_ROLL_HALF_DEG;
-	if(item >= 12)
-		calibration->supportPoseVersion = SUPPORT_GRIP_POSE_VERSION;
+	if(item >= 12 && calibration->supportPoseVersion < SUPPORT_GRIP_MODEL_BOUND_V5)
+		calibration->supportPoseVersion = SUPPORT_GRIP_MODEL_BOUND_V5;
 	SaveQuestCalibration(hand, weaponType, *calibration);
 }
 
