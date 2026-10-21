@@ -6,6 +6,7 @@
 #include "OculusVR.h"
 #include "Ped.h"
 #include "PlayerInfo.h"
+#include "World.h"
 #include "PlayerPed.h"
 #include "Vehicle.h"
 #include "RwHelper.h"
@@ -51,6 +52,30 @@ SetVehicleTransition(bool active)
 static bool
 BodyIKGameplayContext(void)
 {
+	CPed *player = FindPlayerPed();
+	if(player == nil || player->m_fHealth <= 0.0f ||
+	   CWorld::Players[CWorld::PlayerInFocus].m_WBState != WBSTATE_PLAYING ||
+	   VrRagdoll::Owns(player))
+		return false;
+
+	// These animations own the entire skeleton. Pinning the torso to the HMD
+	// while the hips follow a fall/death/arrest tears the body apart. Ped state
+	// changes can precede PlayerInfo's Wasted/Busted restart sequence.
+	switch(player->m_nPedState){
+	case PED_FALL:
+	case PED_GETUP:
+	case PED_STAGGER:
+	case PED_DIVE_AWAY:
+	case PED_DIE:
+	case PED_DEAD:
+	case PED_HANDS_UP:
+	case PED_ARRESTED:
+	case PED_DRAG_FROM_CAR:
+		return false;
+	default:
+		break;
+	}
+
 	// Stereo cutscenes deliberately run through the first-person rendering path,
 	// so gVrFirstPersonActive by itself is NOT proof that gameplay IK should run.
 	// Native cutscene/scripted animation must own the player while those sequences
@@ -1156,7 +1181,7 @@ GetVehicleNeckWorld(CPed *ped, CVector *position)
 	(void)position;
 	return false;
 #else
-	if(!position || ped == nil || !VehicleEnabled() ||
+	if(!position || ped == nil || !BodyIKGameplayContext() || !VehicleEnabled() ||
 	   !ped->InVehicle() || ped->m_pMyVehicle == nil ||
 	   !ped->m_pMyVehicle->IsBike() ||
 	   !gVehicleNeckValid ||
@@ -1797,8 +1822,13 @@ void Apply(CPed *ped)
 	(void)ped;
 	return;
 #else
-	if(ped == nil || !ped->IsPlayer() || VrRagdoll::Owns(ped))
+	if(ped == nil || !ped->IsPlayer())
 		return;
+
+	if(VrRagdoll::Owns(ped)){
+		Reset();
+		return;
+	}
 
 	const bool isSkinned = ped->GetClump() != nil && IsClumpSkinned(ped->GetClump());
 	if(ped->GetClump() != nil && !isSkinned){
@@ -1809,7 +1839,14 @@ void Apply(CPed *ped)
 		}
 	}
 
-	if(!BodyIKGameplayContext() || (gVehicleTransitionActive && isSkinned)){
+	// The non-skinned clump root above must first lose its previous roomscale
+	// offset. Leave native bones untouched and clear caches for recovery.
+	if(!BodyIKGameplayContext()){
+		Reset();
+		return;
+	}
+
+	if(gVehicleTransitionActive && isSkinned){
 		gSolvedHandValid[0] = false;
 		gSolvedHandValid[1] = false;
 		gRigidWeaponLink[0] = RigidWeaponHandLink();

@@ -11,6 +11,8 @@ function Extract([string]$pattern) {
     if (-not $match.Success) { throw "Cannot extract held-weapon frame production code: $pattern" }
     return $match.Value
 }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'held-weapon-context.inc'),
+    (Extract '(?ms)^static bool\r?\nBodyIKGameplayContext\(void\).*?(?=^namespace\r?\n\{)'))
 $helpers = @(
     (Extract '(?ms)^static CVector ToBasisLocal\(.*?(?=^static bool BuildBikeCarrierBasis)'),
     (Extract '(?ms)^static void CaptureRigidWeaponLink\(.*?(?=^static void OrthonormaliseBasis)'),
