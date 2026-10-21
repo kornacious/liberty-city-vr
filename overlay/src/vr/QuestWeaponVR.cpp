@@ -722,8 +722,9 @@ GetDefaultCalibrationForSet(int weaponType, int hand,
 	if(modelSet != ModelSets::MODEL_SET_MODERN){
 		const QuestWeaponGrip::Profile *profile = QuestWeaponGrip::Find(weaponType);
 		if(profile){
-			// Cancel the inherited 90-degree X rotation: III is Z-up, VC is Y-up.
-			calibration->rotationX = -180;
+			// Keep the established controller-to-hand roll. Mesh Z-up does not
+			// mean that the calibrated hand basis itself is world Z-up.
+			calibration->rotationX = 0;
 			calibration->rotationY = (int)roundf(profile->pitch*WEAPON_VALUE_SCALE);
 			calibration->rotationZ = 0;
 			const float a = DEGTORAD(profile->pitch);
@@ -731,9 +732,9 @@ GetDefaultCalibrationForSet(int weaponType, int hand,
 			const float z = -sinf(a)*profile->x+cosf(a)*profile->z;
 			// Put the physical grip in the closed palm, 5.5 cm ahead of the
 			// controller origin and 4.5 cm below it (the baked wrist offset).
-			calibration->offsetX = (int)roundf(profile->y*200.0f);
+			calibration->offsetX = (int)roundf(-z*200.0f);
 			calibration->offsetY = (int)roundf((0.055f-x)*200.0f);
-			calibration->offsetZ = (int)roundf((-0.045f-z)*200.0f);
+			calibration->offsetZ = (int)roundf((-0.045f-profile->y)*200.0f);
 		}
 		// Wrist sockets beside/below III's actual foregrips, in lateral,
 		// barrel, top coordinates. Mirror once for left-primary gameplay.

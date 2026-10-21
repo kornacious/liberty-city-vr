@@ -1,19 +1,21 @@
 # GTA III weapon grips
 
 The Classic and Xbox sets use the local GTA III `models/generic/weapons.dff`.
-The inspected Xbox archive contains no weapon replacements. The previous
-defaults came from the desktop port and used its Y-up placement and support
-frame. GTA III's rifle/pistol meshes have X along the barrel and Z along the
-top. The grenade and bottle also use Z for height. The inherited extra
-90-degree X rotation and the universal left-only position correction therefore
-do not belong to these meshes.
+The inspected Xbox archive contains no weapon replacements. GTA III's
+rifle/pistol meshes have X along the barrel and Z along the top; the grenade
+and bottle also use Z for height. This mesh convention is distinct from the
+calibrated controller/hand basis. The established base rotation must remain:
+removing its 90-degree X component rolled every weapon sideways in the headset.
+The 2026-10-21 follow-up screenshots confirmed that regression.
 
 `QuestWeaponGrip.h` records a primary grip centre for every firearm and
-throwable, including the detonator. The default builder cancels that extra
-rotation and translates each grip into the closed palm. The initial palm
-target is 5.5 cm forward and 4.5 cm below the controller origin, using the
-existing wrist calibration. Positions retain the settings system's half-cm
-resolution. The bat and unarmed profiles retain their existing behaviour.
+throwable, including the detonator. The default builder retains the established
+controller-to-hand roll and translates each grip into the closed palm. It
+calculates translation after rotating the grip, so correcting the roll does not
+move the physical contact point. The initial palm target is 5.5 cm forward and
+4.5 cm below the controller origin, using the existing wrist calibration.
+Positions retain the settings system's half-cm resolution. Primary grip data
+and the native model-bound support sockets remain separate from the hand basis.
 
 The launcher is a separate case: its tube runs diagonally along native Z.
 Its 107.5-degree local pitch, muzzle direction, muzzle origin, and support
@@ -47,3 +49,14 @@ install -r` on verified Quest 3 `personal Quest 3 device`. The broader source re
 run passed 20 suites before stopping at the unchanged graphics-menu fixture:
 MSVC C4505 (`QuestMenuPageColour` unused) is treated as an error there. The
 remaining suites in that runner did not run; this is not a full-suite pass.
+
+Follow-up roll correction: 341 grip checks pass, now exercising the production
+model-matrix builder for both hands and three hand orientations. They check
+mesh top relative to the calibrated hand, barrel direction, and palm contact.
+Restoring the previous bad roll and its matching translation as a negative
+control fails specifically at the hand-relative mesh-top assertion. The initial
+121 checks validated positions and missed this orientation error. The corrected
+APK also builds successfully; final finger contact still needs headset feedback.
+
+The follow-up APK installed successfully with adb install -r on verified Quest 3
+personal Quest 3 device, preserving existing application data.

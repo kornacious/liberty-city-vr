@@ -13,6 +13,7 @@ function Extract([string]$pattern) {
 }
 $code = Extract '(?ms)^enum \{\r?\n\tVR_HAND_COUNT.*?(?=^struct DroppedWeapon)'
 $code += Extract '(?ms)^static void\r?\nApplyBuiltInHandCalibration\(.*?(?=^static void\r?\nGetDefaultCalibration\()'
+$code += Extract '(?ms)^static bool\r?\nBuildWeaponModelMatrixBase\(int hand,.*?^}'
 $code += Extract '(?ms)^static void\r?\nGetSupportModelAxes\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalBarrelDirection\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalMuzzle\(.*?^}'
