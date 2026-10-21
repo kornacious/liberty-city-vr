@@ -477,7 +477,7 @@ LoadSettings()
 	static const char *keys[HOLSTER_POINT_COUNT] = {
 		"HolsterWaistLeftSlot", "HolsterWaistRightSlot",
 		"HolsterChestLeftSlot", "HolsterChestRightSlot",
-		nil, "HolsterBackLeftSlot", "HolsterBackRightSlot"
+		"HolsterChestCentreSlot", "HolsterBackLeftSlot", "HolsterBackRightSlot"
 	};
 	for(int point = 0; point < HOLSTER_POINT_COUNT; point++){
 		if(!keys[point])
@@ -487,9 +487,9 @@ LoadSettings()
 		if(stored >= -1 && stored < TOTAL_WEAPON_SLOTS)
 			gHolsterPointSlot[point] = stored;
 	}
-	// The centre chest point is intentionally dedicated to throwables. It
-	// remains usable even if an older settings file assigned another slot.
-	gHolsterPointSlot[HOLSTER_CHEST_CENTRE] = WEAPONSLOT_PROJECTILE;
+	// Keep the centre dedicated to throwables while allowing either inventory item.
+	if(gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != WEAPONSLOT_GRENADE)
+		gHolsterPointSlot[HOLSTER_CHEST_CENTRE] = WEAPONSLOT_PROJECTILE;
 	gSettingsLoaded = true;
 }
 
@@ -2889,7 +2889,7 @@ GetWeaponHolsterMatrix(int slot, CMatrix *matrix)
 bool IsPhysicalGunType(int weaponType) { return IsPhysicalGun(weaponType); }
 bool IsPhysicalMeleeType(int weaponType) { return IsPhysicalMelee(weaponType); }
 bool IsPhysicalThrowableType(int weaponType) { return IsPhysicalThrowable(weaponType); }
-bool IsPhysicalWeaponType(int weaponType) { return IsPhysicalGun(weaponType) || IsPhysicalMelee(weaponType) || IsPhysicalThrowable(weaponType); }
+bool IsPhysicalWeaponType(int weaponType) { return IsPhysicalGun(weaponType) || IsPhysicalMelee(weaponType) || IsPhysicalThrowable(weaponType) || weaponType == WEAPONTYPE_DETONATOR; }
 bool IsPhysicalWeaponInteractionActive() { return AreTrackedHandsEnabled() && IsGameplayAvailable() && !FindPlayerVehicle(); }
 bool IsQuestFirstPersonOnFoot() { return gVrFirstPersonActive && !FindPlayerVehicle(); }
 bool IsTrackedWeaponHeld(int hand)
@@ -3911,14 +3911,14 @@ void
 CycleQuestHolsterPointSlot(int point, int direction)
 {
 	LoadSettings();
-	if(point < 0 || point >= HOLSTER_POINT_COUNT || direction == 0 ||
-	   point == HOLSTER_CHEST_CENTRE)
+	if(point < 0 || point >= HOLSTER_POINT_COUNT || direction == 0)
 		return;
 	static const int choices[] = {
 		-1, WEAPONSLOT_MELEE, WEAPONSLOT_HANDGUN,
 		WEAPONSLOT_SHOTGUN, WEAPONSLOT_SUBMACHINEGUN,
 		WEAPONSLOT_RIFLE, WEAPONSLOT_HEAVY, WEAPONSLOT_SNIPER,
-		WEAPONSLOT_OTHER
+		WEAPONSLOT_OTHER, WEAPONSLOT_AK47, WEAPONSLOT_ROCKET,
+		WEAPONSLOT_PROJECTILE, WEAPONSLOT_GRENADE
 	};
 	int choice = 0;
 	for(int index = 0; index < (int)ARRAY_SIZE(choices); index++)
@@ -3929,6 +3929,9 @@ CycleQuestHolsterPointSlot(int point, int direction)
 		choice = (choice+(direction < 0 ? -1 : 1)+
 			(int)ARRAY_SIZE(choices))%(int)ARRAY_SIZE(choices);
 		const int candidate = choices[choice];
+		if(point == HOLSTER_CHEST_CENTRE && candidate != WEAPONSLOT_PROJECTILE &&
+		   candidate != WEAPONSLOT_GRENADE)
+			continue;
 		bool used = false;
 		if(candidate >= 0)
 			for(int other = 0; other < HOLSTER_POINT_COUNT; other++)
@@ -3942,7 +3945,7 @@ CycleQuestHolsterPointSlot(int point, int direction)
 	}
 	static const char *keys[HOLSTER_POINT_COUNT] = {
 		"HolsterWaistLeftSlot", "HolsterWaistRightSlot",
-		"HolsterChestLeftSlot", "HolsterChestRightSlot", nil,
+		"HolsterChestLeftSlot", "HolsterChestRightSlot", "HolsterChestCentreSlot",
 		"HolsterBackLeftSlot", "HolsterBackRightSlot"
 	};
 	if(keys[point]){

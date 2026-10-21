@@ -2,6 +2,11 @@
 
 ## 0.5.6
 
+- Made every inventory weapon independently selectable in the VR holster loadout,
+  including the rocket launcher, grenade, AK-47 and detonator. The weapon cheat
+  now includes the detonator; the chest center can select grenade or Molotov.
+- Kept one EMPTY holster choice and displayed assigned weapon names even when
+  that weapon is not owned.
 - Made the wasted transition fade to pure white across both complete eye views,
   preserving its fade-out and respawn fade-in timing.
 - Kept the initial loading artwork, then used a full-view black fade to reveal

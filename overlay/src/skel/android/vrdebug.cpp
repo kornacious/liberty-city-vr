@@ -4682,19 +4682,17 @@ static void
 DrawQuestHolsterPage(void)
 {
 	BeginFullVrMenuPage("HOLSTER LOADOUT",
-		"SEVEN BODY POINTS - CENTER THROWABLE SLOT IS FIXED");
+		"SEVEN BODY POINTS - CENTER SELECTS GRENADE OR MOLOTOV");
 	const int points = OculusVR::GetQuestHolsterPointCount();
 	for(int item = 0; item <= points; item++){
 		char row[128];
 		if(item < points){
 			const int slot =
 				OculusVR::GetQuestHolsterPointSlot(item);
-			const char *slotName = slot < 0 ? "EMPTY" :
-				GetVrWeaponName(GetVrWeaponTypeForSlot(slot));
+			const char *slotName = OculusVR::GetVrHolsterSlotName(slot);
 			snprintf(row, sizeof(row), "%s  %c %s %c",
 				OculusVR::GetQuestHolsterPointName(item),
-				item == 4 ? '[' : '<', slotName,
-				item == 4 ? ']' : '>');
+				'<', slotName, '>');
 		}else
 			strcpy(row, "BACK TO SETTINGS");
 		DrawFullVrMenuRow(row, 180+item*55, 3,
