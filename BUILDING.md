@@ -287,6 +287,21 @@ The culling inspector and other developer-only diagnostics require the explicit
 -PlibertyvrDevTools=true option. It is off by default for both debug and release
 builds; ordinary player graphics settings are independent of it.
 
+For native memory diagnostics, build `:app:assembleDebug -PlibertyvrAsan=true`
+from the assembled `android` directory. This opt-in build instruments the engine
+and librw with AddressSanitizer and packages its NDK runtime plus an Android
+launch wrapper. Install it with `adb -s <serial> install -r <apk>` to preserve
+saves and game data, reproduce the failure, and capture `adb -s <serial> logcat
+-b all -d`. Keep that build's unstripped `liblibertyvr.so` for symbolication;
+addresses must match its Build ID. ASan slows the game and increases memory use.
+It stops on the first detected memory error rather than continuing with corrupt
+state. Release variants are unavailable while this option is enabled.
+
+Rebuild without `libertyvrAsan` to return to a player APK. Normal debug/release
+packages exclude both the sanitizer runtime and wrapper, including when reusing
+the same build directory. Verify the resulting artifact with
+`tools/tests/test-asan-apk.ps1 -Apk <apk>`; add `-ExpectAsan` for a diagnostic APK.
+
 ## Updating without downloading another source ZIP
 
 Use the root `UPDATE.bat` / `UPDATE.sh` wrapper after the initial installation.

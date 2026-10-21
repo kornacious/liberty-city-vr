@@ -26,12 +26,38 @@ abstract class StageNdkSharedStl : DefaultTask() {
 	}
 }
 
+abstract class StageQuestAsan : DefaultTask() {
+	@get:InputFile
+	@get:PathSensitive(PathSensitivity.NONE)
+	abstract val runtime: RegularFileProperty
+	@get:InputFile
+	@get:PathSensitive(PathSensitivity.NONE)
+	abstract val wrapper: RegularFileProperty
+	@get:OutputDirectory
+	abstract val jniDirectory: DirectoryProperty
+	@get:OutputDirectory
+	abstract val resourceDirectory: DirectoryProperty
+	@TaskAction
+	fun stage() {
+		project.copy {
+			from(runtime)
+			into(jniDirectory.dir("arm64-v8a"))
+		}
+		project.copy {
+			from(wrapper)
+			rename { "wrap.sh" }
+			into(resourceDirectory.dir("lib/arm64-v8a"))
+		}
+	}
+}
+
 plugins {
 	id("com.android.application")
 }
 
 val questNdkVersion = "27.2.12479018"
 val questVehicleCapture = providers.gradleProperty("libertyvrVehicleCapture").orNull == "true"
+val questAsan = providers.gradleProperty("libertyvrAsan").orNull == "true"
 
 // Developer tools require an explicit invocation: -PlibertyvrDevTools=true.
 // Debug APK packaging and native debug symbols are independent of this flag.
@@ -68,6 +94,9 @@ val hasReleaseSigning = releaseSigningKeys.all {
 }
 val releaseBuildRequested = gradle.startParameter.taskNames.any {
 	it.contains("Release", ignoreCase = true)
+}
+if (questAsan && releaseBuildRequested) {
+	throw GradleException("AddressSanitizer is supported only for diagnostic debug builds.")
 }
 if (releaseBuildRequested && !questUnsignedRelease && !hasReleaseSigning) {
 	throw GradleException(
@@ -109,7 +138,7 @@ android {
 					// Native optimization is independent of APK debuggability.
 					"-DCMAKE_BUILD_TYPE=RelWithDebInfo",
 					// Sanitizer runtimes are excluded from normal Quest packages.
-					"-DLIBERTYVR_ASAN=OFF",
+					"-DLIBERTYVR_ASAN=${if (questAsan) "ON" else "OFF"}",
 					"-DANDROID_STL=c++_shared",
 					// Legacy engine code requires both C++ runtime features.
 					"-DANDROID_CPP_FEATURES=exceptions rtti"
@@ -143,10 +172,10 @@ android {
 			// without its runtime dependency.
 			pickFirsts += "**/libc++_shared.so"
 			// Diagnostic ASan libraries must not enter player packages.
-			excludes += "**/libclang_rt.asan-*-android.so"
+			if (!questAsan) excludes += "**/libclang_rt.asan-*-android.so"
 		}
 		resources {
-			excludes += "lib/*/wrap.sh"
+			if (!questAsan) excludes += "lib/*/wrap.sh"
 		}
 	}
 
@@ -196,6 +225,9 @@ val ndkPrebuiltHost = when {
 }
 
 androidComponents {
+	beforeVariants(selector().withBuildType("release")) { variant ->
+		if (questAsan) variant.enable = false
+	}
 	onVariants(selector().all()) { variant ->
 		val taskSuffix = variant.name.replaceFirstChar {
 			if (it.isLowerCase()) it.titlecase() else it.toString()
@@ -219,6 +251,19 @@ androidComponents {
 			stageSharedStl,
 			StageNdkSharedStl::outputDirectory
 		)
+		if (questAsan && variant.buildType == "debug") {
+			val stageAsan = tasks.register<StageQuestAsan>("stage${taskSuffix}Asan") {
+				runtime.set(sdkComponents.sdkDirectory.map { sdkDirectory ->
+					sdkDirectory.file("ndk/$questNdkVersion/toolchains/llvm/prebuilt/$ndkPrebuiltHost/" +
+						"lib/clang/18/lib/linux/libclang_rt.asan-aarch64-android.so")
+				})
+				wrapper.set(rootProject.layout.projectDirectory.file("diagnostics/asan-wrap.sh"))
+				jniDirectory.set(layout.buildDirectory.dir("generated/asan-jniLibs/${variant.name}"))
+				resourceDirectory.set(layout.buildDirectory.dir("generated/asan-resources/${variant.name}"))
+			}
+			variant.sources.jniLibs?.addGeneratedSourceDirectory(stageAsan, StageQuestAsan::jniDirectory)
+			variant.sources.resources?.addGeneratedSourceDirectory(stageAsan, StageQuestAsan::resourceDirectory)
+		}
 	}
 }
 

@@ -1,0 +1,43 @@
+--- a/src/core/Directory.cpp
++++ b/src/core/Directory.cpp
+@@ -3,6 +3,8 @@
+ #include "General.h"
+ #include "FileMgr.h"
+ #include "Directory.h"
++#include <climits>
++#include <new>
+ 
+ CDirectory::CDirectory(int32 maxEntries)
+  : numEntries(0), maxEntries(maxEntries)
+@@ -41,14 +43,29 @@
+ void
+ CDirectory::AddItem(const DirectoryInfo &dirinfo)
+ {
+-	assert(numEntries < maxEntries);
++	assert(numEntries >= 0 && numEntries <= maxEntries);
+ #ifdef FIX_BUGS
+ 	// don't add if already exists
+ 	uint32 offset, size;
+ 	if(FindItem(dirinfo.name, offset, size))
+ 		return;
+ #endif
+-	entries[numEntries++] = dirinfo;
++	// Model overlays can exceed the original 128 extra-object entries.
++	// The old assert disappears in player builds, turning entry 129 into a
++	// heap overwrite of unrelated texture/driver objects.
++	const DirectoryInfo item = dirinfo; // may alias entries during growth
++	if(numEntries == maxEntries){
++		if(maxEntries > INT_MAX / 2)
++			throw std::bad_alloc();
++		const int32 capacity = maxEntries > 0 ? maxEntries * 2 : 16;
++		DirectoryInfo *expanded = new DirectoryInfo[capacity];
++		for(int32 i = 0; i < numEntries; ++i)
++			expanded[i] = entries[i];
++		delete[] entries;
++		entries = expanded;
++		maxEntries = capacity;
++	}
++	entries[numEntries++] = item;
+ }
+ 
+ void
