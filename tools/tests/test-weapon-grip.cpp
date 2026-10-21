@@ -25,7 +25,7 @@ struct CMatrix {
     CVector &GetRight(){return r;} const CVector &GetRight() const {return r;}
     CVector &GetForward(){return f;} const CVector &GetForward() const {return f;}
     CVector &GetUp(){return u;} const CVector &GetUp() const {return u;}
-    CVector &GetPosition(){return p;}
+    CVector &GetPosition(){return p;} const CVector &GetPosition() const {return p;}
     void SetUnity(){*this=CMatrix();}
     void SetRotateX(float a){SetUnity();const float c=std::cos(a),s=std::sin(a);f={0,c,s};u={0,-s,c};}
     void SetRotateY(float a){SetUnity();const float c=std::cos(a),s=std::sin(a);r={c,0,-s};u={s,0,c};}
@@ -121,13 +121,36 @@ int main() {
     Check((top-CVector(0,1,0)).Magnitude()<.0001f,"saved v5 support frame retains mesh Y");
     frame.supportPoseVersion=6;
     GetSupportModelAxes(WEAPONTYPE_ROCKETLAUNCHER,frame,model,&barrel,&top);
-    const CVector rocket=GetWeaponLocalBarrelDirection(WEAPONTYPE_ROCKETLAUNCHER);
-    Check((barrel-rocket).Magnitude()<.0001f && std::fabs(DotProduct(barrel,top))<.0001f,
-        "launcher support frame follows actual tube and orthogonal top");
-    const float pitch=DEGTORAD(107.5f);
-    Check(std::fabs(-std::sin(pitch)*rocket.x+std::cos(pitch)*rocket.z)<.0001f,
-        "launcher ray follows controller forward after model alignment");
-    Check(GetWeaponLocalMuzzle(WEAPONTYPE_ROCKETLAUNCHER).z>.7f,"launcher ray starts at tube mouth");
+    Check(std::fabs(DotProduct(barrel,top))<.0001f,
+        "authored launcher support frame retains orthogonal axes");
+    // Independent reference centres measured from the III weapon mesh.
+    const CVector opening(-0.070460401f,0.114642583f,0.783905983f);
+    const CVector rear(0.251384735f,-0.029805297f,-0.247366756f);
+    for(auto set:{ModelSets::MODEL_SET_CLASSIC,ModelSets::MODEL_SET_XBOX}){
+        ModelSets::active=set;
+        for(int hand=0;hand<2;++hand){
+            WeaponCalibration calibration;
+            GetDefaultCalibrationForSet(WEAPONTYPE_ROCKETLAUNCHER,hand,set,&calibration);
+            for(int pose=0;pose<6;++pose){
+                // The model matrix includes the saved grip plus arbitrary rigid
+                // rotations, as on the normal and two-hand contact-frame paths.
+                tracked.SetRotate(.31f*pose,-.43f*pose,.71f*pose);
+                tracked.p={3.4f,-1.2f,2.7f};
+                CMatrix rendered;
+                Check(BuildWeaponModelMatrixBase(hand,calibration,&rendered),"launcher model matrix builds");
+                CVector source,direction;
+                Check(BuildWeaponMuzzleRay(rendered,WEAPONTYPE_ROCKETLAUNCHER,&source,&direction),"launcher muzzle ray builds");
+                Check((source-rendered.p-rendered.Vector(opening)).Magnitude()<.000002f,
+                    "launcher laser and launch ray start at opening centre");
+                CVector expected=rendered.Vector(opening-rear);expected.Normalise();
+                Check(DotProduct(direction,expected)>.999999f,
+                    "launcher direction follows measured tube centreline");
+                const CVector back=rendered.p+rendered.Vector(rear);
+                Check(CrossProduct(source-back,direction).Magnitude()<.000002f,
+                    "muzzle ray lies on tube axis for both hands and all rigid poses");
+            }
+        }
+    }
     ModelSets::active=ModelSets::MODEL_SET_MODERN;
     Check(GetWeaponLocalBarrelDirection(WEAPONTYPE_ROCKETLAUNCHER).x==1.f &&
         GetWeaponLocalMuzzle(WEAPONTYPE_ROCKETLAUNCHER).x==.553f,"Modern launcher aim unchanged");

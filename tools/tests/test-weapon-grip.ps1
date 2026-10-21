@@ -17,6 +17,7 @@ $code += Extract '(?ms)^static bool\r?\nBuildWeaponModelMatrixBase\(int hand,.*?
 $code += Extract '(?ms)^static void\r?\nGetSupportModelAxes\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalBarrelDirection\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalMuzzle\(.*?^}'
+$code += Extract '(?ms)^static bool\r?\nBuildWeaponMuzzleRay\(.*?^}'
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-grip-production.inc'), $code)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-calibration-production.inc'),
     (Extract '(?ms)^static int \*\r?\nQuestCalibrationValue\(.*?(?=^int\r?\nGetQuestHolsterPointCount\()'))

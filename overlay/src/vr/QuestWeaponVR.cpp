@@ -2312,7 +2312,8 @@ GetWeaponLocalBarrelDirection(int weaponType)
 	case WEAPONTYPE_ROCKETLAUNCHER:
 		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
 		   ModelSets::MODEL_SET_MODERN)
-			return CVector(-0.300706f, 0.0f, 0.953717f);
+			// Direction between the III mesh's rear and front tube centres.
+			return CVector(-0.295286557f, 0.132528077f, 0.946172372f);
 		return CVector(1.0f, 0.0f, 0.0f);
 	case WEAPONTYPE_FLAMETHROWER:
 		return CVector(1.0f, 0.0f, 0.0f);
@@ -2340,13 +2341,34 @@ GetWeaponLocalMuzzle(int weaponType)
 	case WEAPONTYPE_ROCKETLAUNCHER:
 		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
 		   ModelSets::MODEL_SET_MODERN)
-			return CVector(-0.070f, 0.040f, 0.750f);
+			// Centre of the front opening, not an approximate point beside it.
+			return CVector(-0.070460401f, 0.114642583f, 0.783905983f);
 		return CVector(0.553f, 0.000f, 0.000f);
 	case WEAPONTYPE_FLAMETHROWER:
 		return CVector(0.780f, -0.058f, 0.095f);
 	default:
 		return CVector(0.250f, 0.0f, 0.080f);
 	}
+}
+
+static bool
+BuildWeaponMuzzleRay(const CMatrix &weaponMatrix, int weaponType,
+	CVector *source, CVector *direction)
+{
+	const CVector localDir = GetWeaponLocalBarrelDirection(weaponType);
+	*direction = weaponMatrix.GetRight() * localDir.x +
+		weaponMatrix.GetForward() * localDir.y +
+		weaponMatrix.GetUp() * localDir.z;
+	if(direction->MagnitudeSqr() <= 0.0001f)
+		return false;
+	direction->Normalise();
+
+	const CVector localMuzzle = GetWeaponLocalMuzzle(weaponType);
+	*source = weaponMatrix.GetPosition() +
+		weaponMatrix.GetRight()*localMuzzle.x +
+		weaponMatrix.GetForward()*localMuzzle.y +
+		weaponMatrix.GetUp()*localMuzzle.z;
+	return true;
 }
 
 static bool
@@ -2393,20 +2415,7 @@ BuildAim(int hand, int weaponType, CVector *source, CVector *direction)
 	if(!haveMatrix)
 		return false;
 
-	const CVector localDir = GetWeaponLocalBarrelDirection(weaponType);
-	*direction = weaponMatrix.GetRight() * localDir.x +
-		weaponMatrix.GetForward() * localDir.y +
-		weaponMatrix.GetUp() * localDir.z;
-	if(direction->MagnitudeSqr() <= 0.0001f)
-		return false;
-	direction->Normalise();
-
-	const CVector localMuzzle = GetWeaponLocalMuzzle(weaponType);
-	*source = weaponMatrix.GetPosition() +
-		weaponMatrix.GetRight()*localMuzzle.x +
-		weaponMatrix.GetForward()*localMuzzle.y +
-		weaponMatrix.GetUp()*localMuzzle.z;
-	return true;
+	return BuildWeaponMuzzleRay(weaponMatrix, weaponType, source, direction);
 }
 
 static bool

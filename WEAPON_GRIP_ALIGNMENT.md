@@ -60,3 +60,22 @@ APK also builds successfully; final finger contact still needs headset feedback.
 
 The follow-up APK installed successfully with adb install -r on verified Quest 3
 personal Quest 3 device, preserving existing application data.
+
+Rocket launcher muzzle correction (2026-10-21): the original approximate native
+muzzle `(-0.070, 0.040, 0.750)` was about 7 cm radially off the tube centreline.
+The measured front opening centre is `(-0.070460401, 0.114642583, 0.783905983)`.
+The rear centre is `(0.251384735, -0.029805297, -0.247366756)`; their normalized
+difference gives the bore direction `(-0.295286557, 0.132528077, 0.946172372)`.
+The previous direction omitted the tube's native Y component.
+
+Classic/Xbox aiming now transforms this point and direction through the current
+rendered weapon matrix. The laser and projectile launch use that same aiming
+path. Modern retains its existing muzzle profile. Saved hand profiles and the
+support-socket frame remain unchanged so this correction does not move the
+headset-authored grips.
+
+Validation passes 2,304 grip/calibration checks, including muzzle-centre and
+bore-line assertions for both hands, Classic/Xbox, and six rigid poses per
+combination. Restoring the previous approximate muzzle in a host-test negative
+control fails the opening-centre assertion. Mesh measurements remain in the
+ignored local cache; no game assets are included in the source change.
