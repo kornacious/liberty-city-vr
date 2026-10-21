@@ -69,7 +69,7 @@ foreach ($name in @(
     'OpenCheatMenu', 'ReturnFromCheatMenu', 'CycleQuestCheatMenuSelection',
     'ActivateQuestCheatMenuSelection', 'CurrentMenuSelection',
     'CurrentMenuItemCount', 'CurrentMenuValueRepeats', 'ReturnFromRagdollMenu', 'ReturnFromDeformationMenu',
-    'ReturnFromCurrentMenuPage', 'DrawQuestCheatPage'
+    'ReturnFromCurrentMenuPage', 'DrawQuestCheatPage', 'DrawQuestWeaponCalibrationPage'
 )) {
     $match = [regex]::Match($source, '(?ms)^static [^\r\n]+\r?\n' + $name + '\(.*?^\}')
     if (-not $match.Success) { throw "Cannot extract production function: $name" }

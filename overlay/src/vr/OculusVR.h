@@ -336,6 +336,9 @@ void InvalidateQuestWeaponLaserOverrides();
 int GetQuestCalibrationValue(int hand, int weaponType, int item);
 void AdjustQuestCalibrationValue(int hand, int weaponType, int item,
 	int direction);
+void SaveQuestCalibrationDefault(int hand, int weaponType);
+void RestoreQuestCalibrationDefault(int hand, int weaponType, bool factory = false);
+void CopyQuestCalibrationToOtherHand(int hand, int weaponType);
 int GetQuestHolsterPointCount();
 const char *GetQuestHolsterPointName(int point);
 int GetQuestHolsterPointSlot(int point);

@@ -20,6 +20,7 @@
 #include "WeaponInfo.h"
 #include "WeaponType.h"
 #include "QuestWeaponGrip.h"
+#include "VrWeaponCalibrationMenu.h"
 #include "World.h"
 #include "ModelSets.h"
 #include "Sprite.h"
@@ -900,9 +901,10 @@ GetCalibration(int hand, int weaponType)
 		calibration.supportPoseVersion = clamp(ReadCalibrationValue(section,
 			supportHand, "SupportGripPoseVersion",
 			SUPPORT_GRIP_LEGACY_VERSION), 1, SUPPORT_GRIP_POSE_VERSION);
-		calibration.supportGripType = clamp((int)(int32)GetPrivateProfileIntA(
-			section, "SupportGripStyle", defaults.supportGripType,
-			kSettingsPath), 0, SUPPORT_GRIP_TYPE_COUNT-1);
+		calibration.supportGripType = clamp(ReadCalibrationValue(section, supportHand,
+			"SupportGripStyle", (int)(int32)GetPrivateProfileIntA(section,
+				"SupportGripStyle", defaults.supportGripType, kSettingsPath)),
+			0, SUPPORT_GRIP_TYPE_COUNT-1);
 		if(calibration.supportPoseVersion == SUPPORT_GRIP_MODEL_BOUND_V4){
 			const int oldX = calibration.supportX;
 			const int oldY = calibration.supportY;
@@ -3868,14 +3870,9 @@ WriteCalibrationInt(const char *section, int hand, const char *name,
 }
 
 static void
-SaveQuestCalibration(int hand, int weaponType,
+SaveQuestCalibrationToSection(const char *section, int hand,
 	const WeaponCalibration &calibration)
 {
-	char section[96];
-	sprintf(section, ModelSets::GetActiveForCategory(
-		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN ?
-		"VRWeaponModern_%02d_%s" : "VRWeapon_%02d_%s", weaponType,
-		GetVrWeaponName(weaponType));
 	WriteCalibrationInt(section, hand, "Configured", 1);
 	WriteCalibrationInt(section, hand, "ValueScale", WEAPON_VALUE_SCALE);
 	WriteCalibrationInt(section, hand, "OffsetX", calibration.offsetX);
@@ -3916,10 +3913,73 @@ SaveQuestCalibration(int hand, int weaponType,
 		calibration.supportRotationZ);
 	WriteCalibrationInt(section, hand, "SupportGripPoseVersion",
 		calibration.supportPoseVersion);
-	char style[16];
-	sprintf(style, "%d", calibration.supportGripType);
-	WritePrivateProfileStringA(section, "SupportGripStyle", style,
-		kSettingsPath);
+	WriteCalibrationInt(section, hand, "SupportGripStyle", calibration.supportGripType);
+}
+
+static void
+QuestCalibrationSection(int weaponType, bool defaults, char *section)
+{
+	sprintf(section, ModelSets::GetActiveForCategory(
+		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN ?
+		"VRWeaponModern%s_%02d_%s" : "VRWeapon%s_%02d_%s",
+		defaults ? "Default" : "", weaponType, GetVrWeaponName(weaponType));
+}
+
+static void
+SaveQuestCalibration(int hand, int weaponType, const WeaponCalibration &calibration)
+{
+	char section[96];
+	QuestCalibrationSection(weaponType, false, section);
+	SaveQuestCalibrationToSection(section, hand, calibration);
+}
+
+void
+SaveQuestCalibrationDefault(int hand, int weaponType)
+{
+	WeaponCalibration *calibration = GetCalibration(hand, weaponType);
+	if(!calibration) return;
+	char section[96];
+	QuestCalibrationSection(weaponType, true, section);
+	SaveQuestCalibrationToSection(section, hand, *calibration);
+}
+
+void
+RestoreQuestCalibrationDefault(int hand, int weaponType, bool factory)
+{
+	WeaponCalibration *calibration = GetCalibration(hand, weaponType);
+	if(!calibration) return;
+	GetDefaultCalibrationForSet(weaponType, hand,
+		ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS), calibration);
+	char section[96];
+	QuestCalibrationSection(weaponType, true, section);
+	if(!factory && ReadCalibrationValue(section, hand, "Configured", 0)){
+		static const char *keys[] = {
+			"AimOffsetX", "AimOffsetY", "AimOffsetZ",
+			"AimRotationX", "AimRotationY", "AimRotationZ",
+			"OffsetX", "OffsetY", "OffsetZ", "RotationX", "RotationY", "RotationZ",
+			"SupportGripOffsetX", "SupportGripOffsetY", "SupportGripOffsetZ",
+			"SupportGripRotationX", "SupportGripRotationY", "SupportGripRotationZ",
+			"SupportGripStyle"
+		};
+		for(int item = 0; item < (int)ARRAY_SIZE(keys); ++item){
+			int minimum, maximum;
+			int *value = QuestCalibrationValue(calibration, item, &minimum, &maximum);
+			*value = clamp(ReadCalibrationValue(section, hand, keys[item], *value), minimum, maximum);
+		}
+		calibration->supportPoseVersion = clamp(ReadCalibrationValue(section, hand,
+			"SupportGripPoseVersion", calibration->supportPoseVersion), 1, SUPPORT_GRIP_POSE_VERSION);
+	}
+	SaveQuestCalibration(hand, weaponType, *calibration);
+}
+
+void
+CopyQuestCalibrationToOtherHand(int hand, int weaponType)
+{
+	WeaponCalibration *source = GetCalibration(hand, weaponType);
+	WeaponCalibration *destination = GetCalibration(1-hand, weaponType);
+	if(!source || !destination) return;
+	*destination = *source;
+	SaveQuestCalibration(1-hand, weaponType, *destination);
 }
 
 int
@@ -3943,8 +4003,8 @@ AdjustQuestCalibrationValue(int hand, int weaponType, int item,
 		&minimum, &maximum);
 	if(!value)
 		return;
-	*value = clamp(*value+(direction < 0 ? -1 : 1),
-		minimum, maximum);
+	*value = VrWeaponCalibrationMenu::Adjusted(*value, item,
+		direction, minimum, maximum);
 	// The underhand grip starts palm down, which points the fingers at the
 	// floor instead of around the grip. Seed the roll the first time the
 	// style is picked; a wrist that has already been rolled keeps its own.

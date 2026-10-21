@@ -34,6 +34,7 @@
 #include "VrRagdoll.h"
 #include "VrBodyIK.h"
 #include "VrCheatMenu.h"
+#include "VrWeaponCalibrationMenu.h"
 #include "VrCullViz.h"
 #include "ParticleObject.h"
 #include "CutsceneMgr.h"
@@ -483,6 +484,10 @@ static int gVrLocomotionSelection;
 static int gVrControlsSelection;
 static int gVrCalibrationSelection;
 static int gVrCalibrationHand = 1;
+static int gVrCalibrationGroup = -1;
+static bool gVrCalibrationTurbo;
+static bool gVrCalibrationTurboDown;
+static char gVrCalibrationNotice[96];
 static int gVrHolsterSelection;
 static bool gVrWelcomePending;
 static bool gVrWelcomeFirstRun;
@@ -2223,7 +2228,7 @@ CurrentMenuItemCount(void)
 			OculusVR::GetQuestVehicleCalibrationItemCount()+1);
 	case VR_MENU_PAGE_LOCOMOTION: return VR_LOCOMOTION_ITEM_COUNT;
 	case VR_MENU_PAGE_CONTROLS: return VR_CONTROLS_ITEM_COUNT;
-	case VR_MENU_PAGE_CALIBRATION: return 22;
+	case VR_MENU_PAGE_CALIBRATION: return VrWeaponCalibrationMenu::Count(gVrCalibrationGroup);
 	case VR_MENU_PAGE_HOLSTERS:
 		return OculusVR::GetQuestHolsterPointCount()+1;
 	case VR_MENU_PAGE_CHEATS:
@@ -2335,8 +2340,8 @@ static bool
 CurrentMenuValueRepeats(void)
 {
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION)
-		return gVrCalibrationSelection >= 1 &&
-			gVrCalibrationSelection <= 18;
+		return VrWeaponCalibrationMenu::ValueItem(
+			gVrCalibrationGroup, gVrCalibrationSelection) >= 0;
 	if(gVrMenuPage == VR_MENU_PAGE_HUD)
 		return gVrHudSelection >= VR_HUD_HORIZONTAL_SCALE &&
 			gVrHudSelection <= VR_HUD_OFFSET_Y;
@@ -2379,6 +2384,15 @@ CurrentMenuValueRepeats(void)
 static void
 ReturnFromCurrentMenuPage(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION){
+		if(gVrCalibrationGroup >= 0){
+			gVrCalibrationSelection = VrWeaponCalibrationMenu::AIM_OFFSET+gVrCalibrationGroup;
+			gVrCalibrationGroup = -1;
+		}else
+			gVrMenuPage = VR_MENU_PAGE_WEAPONS;
+		gVrCalibrationNotice[0] = '\0';
+		return;
+	}
 	if(gVrMenuPage == VR_MENU_PAGE_CHEATS){
 		ReturnFromCheatMenu();
 		return;
@@ -2694,6 +2708,10 @@ VrDebugUpdate(const PadInput &in)
 	// can be left in half a dozen ways and each one would have to remember.
 	OculusVR::SetQuestWeaponCalibrationPreview(
 		gVrMenuVisible && gVrMenuPage == VR_MENU_PAGE_CALIBRATION);
+	if(gVrMenuVisible && gVrMenuPage == VR_MENU_PAGE_CALIBRATION &&
+	   in.y && !gVrCalibrationTurboDown)
+		gVrCalibrationTurbo = !gVrCalibrationTurbo;
+	gVrCalibrationTurboDown = in.y;
 	if(gVrMenuVisible){
 		if(gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION &&
 		   !OculusVR::IsQuestVehicleCalibrationAvailable()){
@@ -2904,6 +2922,8 @@ VrDebugUpdate(const PadInput &in)
 				else if(gVrWeaponsSelection == VR_WEAPONS_CALIBRATION){
 					gVrMenuPage = VR_MENU_PAGE_CALIBRATION;
 					gVrCalibrationSelection = 0;
+					gVrCalibrationGroup = -1;
+					gVrCalibrationNotice[0] = '\0';
 				}else if(gVrWeaponsSelection == VR_WEAPONS_BACK){
 					gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 				}
@@ -3585,29 +3605,46 @@ VrDebugUpdate(const PadInput &in)
 			}else if(gVrControlsSelection == VR_CONTROLS_BACK){
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 			}
-		}else if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION){
-			if(gVrCalibrationSelection == 0 &&
-			   (positivePulse || decreasePulse))
+		}else if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION && (positivePulse || decreasePulse)){
+			using namespace VrWeaponCalibrationMenu;
+			const int row = gVrCalibrationSelection;
+			const int weaponType = OculusVR::GetQuestCalibrationWeaponType(gVrCalibrationHand);
+			const int item = ValueItem(gVrCalibrationGroup, row);
+			gVrCalibrationNotice[0] = '\0';
+			if(row == HAND)
 				gVrCalibrationHand = 1-gVrCalibrationHand;
-			else if(gVrCalibrationSelection >= 1 &&
-			        gVrCalibrationSelection <= 19 &&
-			        (positivePulse || decreasePulse)){
-				const int weaponType =
-					OculusVR::GetQuestCalibrationWeaponType(
-						gVrCalibrationHand);
-				OculusVR::AdjustQuestCalibrationValue(
-					gVrCalibrationHand, weaponType,
-					gVrCalibrationSelection-1,
-					(decreasePulse ? -1 : 1)*repeatMagnitude);
-			}else if(gVrCalibrationSelection == 20 &&
-			         (positivePulse || decreasePulse)){
-				OculusVR::CycleQuestWeaponLaserOverride(
-					OculusVR::GetQuestCalibrationWeaponType(
-						gVrCalibrationHand),
+			else if(row == STEP)
+				gVrCalibrationTurbo = !gVrCalibrationTurbo;
+			else if(item >= 0)
+				OculusVR::AdjustQuestCalibrationValue(gVrCalibrationHand, weaponType,
+					item, (decreasePulse ? -1 : 1)*StepSize(gVrCalibrationTurbo));
+			else if(gVrCalibrationGroup >= 0){
+				if(row == GROUP_BACK) ReturnFromCurrentMenuPage();
+			}else if(row >= AIM_OFFSET && row <= SUPPORT_ROTATION){
+				gVrCalibrationGroup = row-AIM_OFFSET;
+				gVrCalibrationSelection = 2;
+			}else if(row == STYLE)
+				OculusVR::AdjustQuestCalibrationValue(gVrCalibrationHand, weaponType, 18,
 					decreasePulse ? -1 : 1);
-			}else if(gVrCalibrationSelection == 21 &&
-			         positivePulse)
-				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+			else if(row == LASER)
+				OculusVR::CycleQuestWeaponLaserOverride(weaponType, decreasePulse ? -1 : 1);
+			else if(positivePulse){
+				if(row == SAVE_DEFAULT){
+					OculusVR::SaveQuestCalibrationDefault(gVrCalibrationHand, weaponType);
+					strcpy(gVrCalibrationNotice, "DEFAULT SAVED FOR THIS WEAPON AND HAND");
+				}else if(row == RESTORE_DEFAULT){
+					OculusVR::RestoreQuestCalibrationDefault(gVrCalibrationHand, weaponType);
+					strcpy(gVrCalibrationNotice, "DEFAULT RESTORED FOR THIS WEAPON AND HAND");
+				}else if(row == COPY_HAND){
+					OculusVR::CopyQuestCalibrationToOtherHand(gVrCalibrationHand, weaponType);
+					snprintf(gVrCalibrationNotice, sizeof(gVrCalibrationNotice),
+						"VALUES COPIED TO %s HAND", gVrCalibrationHand == 0 ? "RIGHT" : "LEFT");
+				}else if(row == FACTORY_DEFAULT){
+					OculusVR::RestoreQuestCalibrationDefault(gVrCalibrationHand, weaponType, true);
+					strcpy(gVrCalibrationNotice, "FACTORY VALUES RESTORED - SAVED DEFAULT KEPT");
+				}else if(row == BACK)
+					ReturnFromCurrentMenuPage();
+			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_HOLSTERS){
 			const int points = OculusVR::GetQuestHolsterPointCount();
 			if(gVrHolsterSelection < points &&
@@ -4627,60 +4664,51 @@ DrawQuestControlsPage(void)
 static void
 DrawQuestWeaponCalibrationPage(void)
 {
-	const int weaponType =
-		OculusVR::GetQuestCalibrationWeaponType(gVrCalibrationHand);
+	using namespace VrWeaponCalibrationMenu;
+	const int weaponType = OculusVR::GetQuestCalibrationWeaponType(gVrCalibrationHand);
 	char weaponName[48], heading[128];
-	CopyMenuText(weaponName, ARRAY_SIZE(weaponName),
-		GetVrWeaponName(weaponType));
-	snprintf(heading, sizeof(heading),
-		"WEAPON CALIBRATION - %s - %s HAND", weaponName,
-		gVrCalibrationHand == 0 ? "LEFT" : "RIGHT");
-	BeginFullVrMenuPage(heading,
-		"VALUES ARE SAVED PER WEAPON AND PER HAND");
-	static const char *labels[19] = {
-		"AIM X OFFSET", "AIM Y OFFSET", "AIM Z OFFSET",
-		"AIM LOCAL ROT X", "AIM LOCAL ROT Y", "AIM LOCAL ROT Z",
-		"WEAPON X OFFSET", "WEAPON Y OFFSET", "WEAPON Z OFFSET",
-		"WEAPON LOCAL ROT X", "WEAPON LOCAL ROT Y",
-		"WEAPON LOCAL ROT Z", "SUPPORT GRIP X",
-		"SUPPORT GRIP Y", "SUPPORT GRIP Z",
-		"SUPPORT GRIP ROT X", "SUPPORT GRIP ROT Y",
-		"SUPPORT GRIP ROT Z", "SUPPORT GRIP STYLE"
+	CopyMenuText(weaponName, ARRAY_SIZE(weaponName), GetVrWeaponName(weaponType));
+	static const char *groups[GROUP_COUNT] = {
+		"AIM OFFSET", "AIM LOCAL ROTATION", "WEAPON OFFSET", "WEAPON LOCAL ROTATION",
+		"SUPPORT GRIP OFFSET", "SUPPORT GRIP ROTATION"
 	};
-	for(int item = 0; item < 22; item++){
+	snprintf(heading, sizeof(heading), "CALIBRATION - %s - %s",
+		weaponName, gVrCalibrationHand == 0 ? "LEFT" : "RIGHT");
+	char subtitle[112];
+	snprintf(subtitle, sizeof(subtitle), "%s - EDITS AUTO-SAVE",
+		gVrCalibrationGroup < 0 ? "PER-WEAPON / PER-HAND DEFAULTS" : groups[gVrCalibrationGroup]);
+	BeginFullVrMenuPage(heading, subtitle);
+	for(int rowIndex = 0; rowIndex < Count(gVrCalibrationGroup); ++rowIndex){
 		char row[112];
-		if(item == 0)
-			snprintf(row, sizeof(row), "EDIT HAND  < %s >",
-				gVrCalibrationHand == 0 ? "LEFT" : "RIGHT");
-		else if(item == 20){
-			const int laser =
-				OculusVR::GetQuestWeaponLaserOverride(weaponType);
-			snprintf(row, sizeof(row), "LASER SIGHT  < %s >",
-				laser < 0 ? "FOLLOW WEAPONS PAGE" :
-					(laser ? "ON" : "OFF"));
-		}
-		else if(item <= 19){
-			const int value =
-				OculusVR::GetQuestCalibrationValue(
-					gVrCalibrationHand, weaponType, item-1);
-			if(item == 19)
-				snprintf(row, sizeof(row), "%s  < %s >",
-					labels[item-1], value == 1 ?
-						"FROM BELOW" : "MAGAZINE");
-			else
-				snprintf(row, sizeof(row), "%s  < %+.1f %s >",
-					labels[item-1], (float)value/2.0f,
-					((item >= 4 && item <= 6) ||
-					 (item >= 10 && item <= 12) ||
-					 (item >= 16 && item <= 18)) ?
-						"DEG" : "CM");
-		}else
-			strcpy(row, "BACK TO SETTINGS");
-		DrawFullVrMenuRow(row, 154+item*25, 2,
-			item == gVrCalibrationSelection);
+		const int item = ValueItem(gVrCalibrationGroup, rowIndex);
+		if(rowIndex == HAND)
+			snprintf(row, sizeof(row), "EDIT HAND  < %s >", gVrCalibrationHand == 0 ? "LEFT" : "RIGHT");
+		else if(rowIndex == STEP)
+			snprintf(row, sizeof(row), "STEP  < %s >", gVrCalibrationTurbo ? "TURBO 10.0" : "NORMAL 0.5");
+		else if(item >= 0)
+			snprintf(row, sizeof(row), "%s %c  < %+.1f %s >", groups[gVrCalibrationGroup],
+				'X'+rowIndex-2, (float)OculusVR::GetQuestCalibrationValue(gVrCalibrationHand, weaponType, item)/2.0f,
+				IsRotation(item) ? "DEG" : "CM");
+		else if(gVrCalibrationGroup >= 0)
+			strcpy(row, "BACK TO WEAPON CALIBRATION");
+		else if(rowIndex >= AIM_OFFSET && rowIndex <= SUPPORT_ROTATION)
+			snprintf(row, sizeof(row), "%s  < OPEN >", groups[rowIndex-AIM_OFFSET]);
+		else if(rowIndex == STYLE)
+			snprintf(row, sizeof(row), "SUPPORT GRIP STYLE  < %s >",
+				OculusVR::GetQuestCalibrationValue(gVrCalibrationHand, weaponType, 18) == 1 ? "FROM BELOW" : "MAGAZINE");
+		else if(rowIndex == LASER){
+			const int laser = OculusVR::GetQuestWeaponLaserOverride(weaponType);
+			snprintf(row, sizeof(row), "LASER SIGHT  < %s >", laser < 0 ? "FOLLOW WEAPONS PAGE" : laser ? "ON" : "OFF");
+		}else if(rowIndex == SAVE_DEFAULT) strcpy(row, "SAVE AS DEFAULT");
+		else if(rowIndex == RESTORE_DEFAULT) strcpy(row, "RESTORE DEFAULT");
+		else if(rowIndex == COPY_HAND)
+			snprintf(row, sizeof(row), "COPY VALUES TO %s HAND", gVrCalibrationHand == 0 ? "RIGHT" : "LEFT");
+		else if(rowIndex == FACTORY_DEFAULT) strcpy(row, "RESTORE FACTORY VALUES");
+		else strcpy(row, "BACK TO WEAPONS");
+		DrawFullVrMenuRow(row, 182+rowIndex*31, 2, rowIndex == gVrCalibrationSelection);
 	}
-	DrawVrMenuText(
-		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
+	DrawVrMenuText(gVrCalibrationNotice, VR_MENU_WIDTH/2, 672, 2, 180, 220, 145);
+	DrawVrMenuText("LEFT STICK SELECT  L2 MINUS  R2 / A PLUS  Y STEP  B BACK",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 

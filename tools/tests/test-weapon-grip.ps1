@@ -18,6 +18,8 @@ $code += Extract '(?ms)^static void\r?\nGetSupportModelAxes\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalBarrelDirection\(.*?^}'
 $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalMuzzle\(.*?^}'
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-grip-production.inc'), $code)
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-calibration-production.inc'),
+    (Extract '(?ms)^static int \*\r?\nQuestCalibrationValue\(.*?(?=^int\r?\nGetQuestHolsterPointCount\()'))
 $types = Join-Path $StageRoot 'src/weapons/WeaponType.h'
 if (-not (Test-Path $types)) { throw 'Pass -StageRoot pointing to an assembled Liberty City source tree.' }
 Copy-Item $types (Join-Path $PSScriptRoot 'weapon-grip-types.inc')

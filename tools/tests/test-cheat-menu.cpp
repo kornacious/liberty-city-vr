@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
 template<class T> static T Min(T a, T b) { return a < b ? a : b; }
@@ -21,6 +22,9 @@ static int GetQuestVehicleCalibrationItemCount() { return 2; }
 static int GetQuestVehicleCalibrationItemForRow(int row) { return row; }
 static int GetQuestHolsterPointCount() { return 3; }
 static void SetQuestVehicleCalibrationPreview(bool) {}
+static int GetQuestCalibrationWeaponType(int){return 0;}
+static int GetQuestCalibrationValue(int,int,int){return 360;}
+static int GetQuestWeaponLaserOverride(int){return -1;}
 }
 static int nativeCount = 29;
 static int activatedSource = -1, activationCount, cycledSource = -1, cycleDirection;
@@ -57,6 +61,8 @@ static bool CycleVrCheatSelection(int source, int direction)
 struct DrawnRow { std::string text; int y; bool selected, off, on; };
 static std::vector<DrawnRow> rows;
 static std::string title;
+static const char *GetVrWeaponName(int){return "ROCKET LAUNCHER";}
+static void CopyMenuText(char *out,int size,const char *in){std::snprintf(out,size,"%s",in);}
 static void BeginFullVrMenuPage(const char *heading, const char * = nullptr)
 { rows.clear(); title = heading; }
 static void DrawVrMenuText(const char *, int, int, int, int, int, int) {}
@@ -200,5 +206,33 @@ int main()
 	Check(!MenuRepeatPulse(true, down, repeatAt, holdStart, 9000.0, false), "held trigger cannot repeatedly cycle models");
 	Check(!MenuRepeatPulse(false, down, repeatAt, holdStart, 9010.0, false), "trigger release resets latch");
 	Check(MenuRepeatPulse(true, down, repeatAt, holdStart, 9020.0, false), "fresh trigger tap works");
+	gVrMenuPage=VR_MENU_PAGE_CALIBRATION;
+	gVrCalibrationGroup=-1;
+	Check(CurrentMenuItemCount()==15,"calibration root fits grouped controls and actions");
+	for(int row=0;row<CurrentMenuItemCount();++row){
+		gVrCalibrationSelection=row;
+		Check(!CurrentMenuValueRepeats(),"root calibration actions never repeat while held");
+		DrawQuestWeaponCalibrationPage();CheckDrawSelection(row);
+		Check(rows.size()==15,"root renders exactly its selectable rows");
+		Check(title.size()*6*4<968,"longest weapon heading fits panel");
+		for(const auto &drawn:rows)Check(drawn.text.size()*6*2<850,"calibration row fits highlight width");
+	}
+	for(int group=0;group<6;++group){
+		gVrCalibrationGroup=group;
+		Check(CurrentMenuItemCount()==6,"each calibration submenu has hand, step, XYZ and Back");
+		for(int row=0;row<6;++row){
+			gVrCalibrationSelection=row;
+			Check(CurrentMenuValueRepeats()==(row>=2 && row<=4),"repeat applies only to numeric axes");
+			DrawQuestWeaponCalibrationPage();CheckDrawSelection(row);
+			Check(rows.size()==6,"submenu renders exactly its selectable rows");
+			Check(title.size()*6*4<968,"submenu heading fits panel");
+			if(row>=2 && row<=4)Check(VrWeaponCalibrationMenu::ValueItem(group,row)==group*3+row-2,"axis maps to correct production field");
+		}
+		ReturnFromCurrentMenuPage();
+		Check(gVrCalibrationGroup==-1 && gVrMenuPage==VR_MENU_PAGE_CALIBRATION &&
+			gVrCalibrationSelection==group+2,"submenu Back highlights parent group");
+	}
+	ReturnFromCurrentMenuPage();
+	Check(gVrMenuPage==VR_MENU_PAGE_WEAPONS,"calibration root Back returns to Weapons");
 	std::printf("PASS: %d checks; all 29 retained cheats, no mission-pass entry, nine submenus, rendering, toggle/model dispatch, Back and navigation.\n", checks);
 }

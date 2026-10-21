@@ -1,8 +1,13 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <cmath>
 #include <initializer_list>
 #define nil nullptr
 #include <cstdio>
 #include <cstdlib>
+#include <map>
+#include <string>
+#include <cstring>
+#include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
 #include "ragdoll-test-vector.h"
 #include "weapon-grip-types.inc"
 #include "../../overlay/src/vr/QuestWeaponGrip.h"
@@ -37,6 +42,28 @@ static bool BuildTrackedWeaponHandBasis(int, CVector *position, CVector *right, 
     *position=tracked.p;*right=tracked.r;*up=tracked.u;*forward=tracked.f;return true;
 }
 #include "weapon-grip-production.inc"
+template<class T,class U,class V> static T clamp(T value, U low, V high){return value<low?(T)low:value>high?(T)high:value;}
+static std::map<std::string,std::string> ini;
+static const char *kSettingsPath="test.ini";
+static const char *GetVrWeaponName(int type){return type==WEAPONTYPE_AK47?"AK47":"COLT45";}
+static const char *CalibrationKey(int hand,const char *name,char *key){
+    if(hand==0){std::sprintf(key,"Left%s",name);return key;} return name;
+}
+static bool WritePrivateProfileStringA(const char *section,const char *key,const char *value,const char *){
+    ini[std::string(section)+"/"+key]=value;return true;
+}
+static int ReadCalibrationValue(const char *section,int hand,const char *name,int fallback){
+    char key[64];auto it=ini.find(std::string(section)+"/"+CalibrationKey(hand,name,key));
+    return it==ini.end()?fallback:std::atoi(it->second.c_str());
+}
+static WeaponCalibration working[2][WEAPONTYPE_TOTALWEAPONS];
+static WeaponCalibration *GetCalibration(int hand,int type){
+    if(hand<0 || hand>1 || type<0 || type>=WEAPONTYPE_TOTALWEAPONS)return nullptr;
+    WeaponCalibration &c=working[hand][type];
+    if(!c.valid)GetDefaultCalibrationForSet(type,hand,ModelSets::active,&c);
+    return &c;
+}
+#include "weapon-calibration-production.inc"
 static int checks;
 static void Check(bool ok, const char *message) {
     ++checks; if(!ok){std::fprintf(stderr,"FAIL: %s\n",message);std::exit(1);}
@@ -107,5 +134,56 @@ int main() {
     GetDefaultCalibrationForSet(WEAPONTYPE_COLT45,1,ModelSets::MODEL_SET_MODERN,&modern);
     Check(modern.rotationX==-4 && modern.offsetZ==-7,"Modern primary calibration unchanged");
     Check(QuestWeaponGrip::Find(WEAPONTYPE_UNARMED)==nullptr,"unarmed is not repositioned");
+    using namespace VrWeaponCalibrationMenu;
+    ModelSets::active=ModelSets::MODEL_SET_CLASSIC;
+    // All operations below call the extracted production API, backed by an INI store.
+    for(int item=0;item<19;++item){
+        int minimum,maximum;int *v=QuestCalibrationValue(GetCalibration(0,WEAPONTYPE_AK47),item,&minimum,&maximum);
+        *v=maximum;
+        AdjustQuestCalibrationValue(0,WEAPONTYPE_AK47,item,StepSize(false));
+        Check(*v==(IsRotation(item)?-359:maximum),"fine step wraps angles and clamps distances/styles");
+        *v=minimum;
+        AdjustQuestCalibrationValue(0,WEAPONTYPE_AK47,item,-StepSize(false));
+        Check(*v==(IsRotation(item)?359:minimum),"negative fine step crosses rotation seam only");
+        *v=maximum;
+        AdjustQuestCalibrationValue(0,WEAPONTYPE_AK47,item,StepSize(true));
+        Check(*v==(IsRotation(item)?-340:maximum),"turbo preserves ten-degree seam overshoot");
+        *v=0;
+        AdjustQuestCalibrationValue(0,WEAPONTYPE_AK47,item,StepSize(true));
+        Check(*v==(item==18?1:20),"turbo moves ten physical units, not one half-unit");
+    }
+    const int type=WEAPONTYPE_AK47;
+    WeaponCalibration &left=*GetCalibration(0,type), &right=*GetCalibration(1,type);
+    left.aimOffsetX=37;left.rotationZ=-57;left.supportGripType=0;left.supportPoseVersion=5;
+    right.aimOffsetX=-13;right.supportGripType=1;
+    SaveQuestCalibrationDefault(0,type);SaveQuestCalibrationDefault(1,type);
+    left.aimOffsetX=99;right.aimOffsetX=88;
+    RestoreQuestCalibrationDefault(0,type,false);
+    Check(left.aimOffsetX==37 && left.rotationZ==-57 && left.supportPoseVersion==5,"saved default restores all fields and frame version");
+    Check(right.aimOffsetX==88,"restore affects only selected hand");
+    RestoreQuestCalibrationDefault(1,type,false);
+    Check(right.aimOffsetX==-13 && right.supportGripType==1,"opposite hand has its own checkpoint and grip style");
+    CopyQuestCalibrationToOtherHand(0,type);
+    Check(right.aimOffsetX==37 && right.rotationZ==-57 && right.supportGripType==0,"copy transfers exact values to opposite hand");
+    Check(ReadCalibrationValue("VRWeapon_05_AK47",0,"SupportGripStyle",-1)==0 &&
+          ReadCalibrationValue("VRWeapon_05_AK47",1,"SupportGripStyle",-1)==0,"working grip style saved separately for both hands");
+    RestoreQuestCalibrationDefault(1,type,false);
+    Check(right.aimOffsetX==-13 && right.supportGripType==1,"copy leaves destination default checkpoint intact");
+    working[0][type]=WeaponCalibration();
+    RestoreQuestCalibrationDefault(0,type,false);
+    Check(left.aimOffsetX==37,"saved checkpoint survives runtime cache reload");
+    RestoreQuestCalibrationDefault(0,type,true);
+    Check(left.aimOffsetX!=37 && left.supportPoseVersion==6,"factory restore uses built-in profile");
+    RestoreQuestCalibrationDefault(0,type,false);
+    Check(left.aimOffsetX==37,"factory restore preserves personal checkpoint");
+    ModelSets::active=ModelSets::MODEL_SET_MODERN;
+    left.aimOffsetX=21;SaveQuestCalibrationDefault(0,type);
+    ModelSets::active=ModelSets::MODEL_SET_CLASSIC;RestoreQuestCalibrationDefault(0,type,false);
+    Check(left.aimOffsetX==37,"Modern and Classic checkpoints are isolated");
+    ModelSets::active=ModelSets::MODEL_SET_MODERN;RestoreQuestCalibrationDefault(0,type,false);
+    Check(left.aimOffsetX==21,"Modern checkpoint restores its own values");
+    RestoreQuestCalibrationDefault(0,WEAPONTYPE_COLT45,false);
+    WeaponCalibration factory;GetDefaultCalibrationForSet(WEAPONTYPE_COLT45,0,ModelSets::active,&factory);
+    Check(GetQuestCalibrationValue(0,WEAPONTYPE_COLT45,0)==factory.aimOffsetX,"missing personal checkpoint falls back to factory");
     std::printf("Weapon grip regression: %d checks passed.\n",checks);
 }
