@@ -11,6 +11,7 @@
 #include "ragdoll-test-vector.h"
 #include "weapon-grip-types.inc"
 #include "../../overlay/src/vr/QuestWeaponGrip.h"
+#include "../../overlay/src/vr/QuestWeaponFactoryDefaults.h"
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define DEGTORAD(a) ((a)*3.14159265358979323846f/180.0f)
 namespace ModelSets {
@@ -72,8 +73,8 @@ int main() {
     for(const auto &profile : QuestWeaponGrip::profiles){
         for(int hand=0; hand<2; ++hand){
             WeaponCalibration a,b;
-            GetDefaultCalibrationForSet(profile.type,hand,ModelSets::MODEL_SET_CLASSIC,&a);
-            GetDefaultCalibrationForSet(profile.type,hand,ModelSets::MODEL_SET_XBOX,&b);
+            GetFallbackCalibrationForSet(profile.type,hand,ModelSets::MODEL_SET_CLASSIC,&a);
+            GetFallbackCalibrationForSet(profile.type,hand,ModelSets::MODEL_SET_XBOX,&b);
             Check(a.valid && b.valid,"profile loaded");
             Check(a.offsetX==b.offsetX && a.offsetY==b.offsetY && a.offsetZ==b.offsetZ &&
                 a.rotationX==b.rotationX && a.rotationY==b.rotationY,"Xbox shares the generic III weapon geometry");
@@ -98,9 +99,9 @@ int main() {
     }
     for(int type : {WEAPONTYPE_AK47,WEAPONTYPE_M16,WEAPONTYPE_SHOTGUN,WEAPONTYPE_SNIPERRIFLE,WEAPONTYPE_ROCKETLAUNCHER,WEAPONTYPE_FLAMETHROWER}){
         WeaponCalibration l,r,m;
-        GetDefaultCalibrationForSet(type,0,ModelSets::MODEL_SET_CLASSIC,&l);
-        GetDefaultCalibrationForSet(type,1,ModelSets::MODEL_SET_CLASSIC,&r);
-        GetDefaultCalibrationForSet(type,1,ModelSets::MODEL_SET_MODERN,&m);
+        GetFallbackCalibrationForSet(type,0,ModelSets::MODEL_SET_CLASSIC,&l);
+        GetFallbackCalibrationForSet(type,1,ModelSets::MODEL_SET_CLASSIC,&r);
+        GetFallbackCalibrationForSet(type,1,ModelSets::MODEL_SET_MODERN,&m);
         Check(l.supportPoseVersion==6 && r.supportPoseVersion==6,"III sockets use native Z-up version");
         Check(m.supportPoseVersion==5,"Modern retains Y-up v5 sockets");
         Check(l.supportX==-r.supportX && l.supportY==r.supportY && l.supportZ==r.supportZ,
@@ -134,6 +135,39 @@ int main() {
     GetDefaultCalibrationForSet(WEAPONTYPE_COLT45,1,ModelSets::MODEL_SET_MODERN,&modern);
     Check(modern.rotationX==-4 && modern.offsetZ==-7,"Modern primary calibration unchanged");
     Check(QuestWeaponGrip::Find(WEAPONTYPE_UNARMED)==nullptr,"unarmed is not repositioned");
+    Check(ARRAY_SIZE(QuestWeaponFactoryDefaults::profiles)==22,"all saved headset hand profiles are baked in");
+    for(const auto &profile:QuestWeaponFactoryDefaults::profiles){
+        for(auto set:{ModelSets::MODEL_SET_CLASSIC,ModelSets::MODEL_SET_XBOX}){
+            ModelSets::active=set;
+            WeaponCalibration builtin;
+            GetDefaultCalibrationForSet(profile.weaponType,profile.hand,set,&builtin);
+            working[profile.hand][profile.weaponType].aimOffsetX=99;
+            RestoreQuestCalibrationDefault(profile.hand,profile.weaponType,true);
+            const int mainIndex[]={3,4,5,6,7,8,0,1,2,9,10,11};
+            for(int item=0;item<19;++item){
+                const int expected=item<12?profile.main[mainIndex[item]]:profile.support[item-12];
+                int minimum,maximum;
+                Check(*QuestCalibrationValue(&builtin,item,&minimum,&maximum)==expected,
+                    "fresh factory profile matches headset checkpoint field exactly");
+                Check(GetQuestCalibrationValue(profile.hand,profile.weaponType,item)==expected,
+                    "Restore Factory Values loads authored hand profile exactly");
+            }
+            Check(builtin.supportPoseVersion==profile.supportPoseVersion &&
+                GetCalibration(profile.hand,profile.weaponType)->supportPoseVersion==profile.supportPoseVersion,
+                "fresh and restored factory profiles retain saved support frame version");
+        }
+    }
+    for(int type:{WEAPONTYPE_GRENADE,WEAPONTYPE_DETONATOR}){
+        Check(QuestWeaponFactoryDefaults::Find(type,1)==nullptr,"unsaved right-hand profiles stay unmodified");
+        WeaponCalibration original,factory;
+        GetFallbackCalibrationForSet(type,1,ModelSets::MODEL_SET_CLASSIC,&original);
+        GetDefaultCalibrationForSet(type,1,ModelSets::MODEL_SET_CLASSIC,&factory);
+        for(int item=0;item<19;++item){
+            int low,high;
+            Check(*QuestCalibrationValue(&original,item,&low,&high)==*QuestCalibrationValue(&factory,item,&low,&high),
+                "right-hand grenade/detonator preserve existing factory fields");
+        }
+    }
     using namespace VrWeaponCalibrationMenu;
     ModelSets::active=ModelSets::MODEL_SET_CLASSIC;
     // All operations below call the extracted production API, backed by an INI store.

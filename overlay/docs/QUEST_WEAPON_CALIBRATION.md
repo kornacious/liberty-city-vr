@@ -33,6 +33,16 @@ The laser remains a per-weapon setting and is not included in a hand checkpoint.
 Grip style now has a per-hand key, with compatibility fallback for older files.
 Installing this update does not replace existing INI calibrations or saves.
 
+The factory profiles now include the headset-authored checkpoints captured on
+2026-10-21: 22 independently saved hand profiles across 12 weapons. The exact
+values, grip styles, and support-frame versions are recorded in
+`src/vr/QuestWeaponFactoryDefaults.h`. Classic/Xbox fresh defaults and Restore
+Factory Values apply these profiles after the older fallback calculations.
+Modern keeps its existing factory profiles. Grenade and detonator had only
+left-hand checkpoints; their right-hand factory values remain unchanged at the
+user's request. Current working calibrations and personal checkpoints continue
+to take precedence and are not replaced during installation.
+
 Validation: 429 production grip/calibration checks cover fine/turbo edits,
 rotation wrapping, distance limits, checkpoint persistence, hand/model-set
 isolation, copy, and factory fallback. The menu suite passes 2,362 checks,
@@ -40,3 +50,10 @@ including the existing cheat controls and the new calibration row mapping,
 repeat gating, Back navigation, and text/row bounds for the longest weapon
 heading. The debug APK builds successfully. These automated checks do not
 replace a headset usability check of the new controls.
+
+Factory-profile validation passes 2,186 grip/calibration checks. Every field
+from each of the 22 checkpoint profiles is checked through both initial factory
+loading and Restore Factory Values for Classic and Xbox. The imported table
+was also compared against the local saved checkpoints without unit conversion
+or mirroring. Tests retain coverage for the geometry fallback, Modern profiles,
+and the two intentionally unchanged right-hand profiles.

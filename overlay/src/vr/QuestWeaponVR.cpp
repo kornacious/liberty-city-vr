@@ -20,6 +20,7 @@
 #include "WeaponInfo.h"
 #include "WeaponType.h"
 #include "QuestWeaponGrip.h"
+#include "QuestWeaponFactoryDefaults.h"
 #include "VrWeaponCalibrationMenu.h"
 #include "World.h"
 #include "ModelSets.h"
@@ -678,7 +679,7 @@ ApplyDefaultSupportGrip(int weaponType, int hand,
 }
 
 static void
-GetDefaultCalibrationForSet(int weaponType, int hand,
+GetFallbackCalibrationForSet(int weaponType, int hand,
 	ModelSets::eModelSet modelSet,
 	WeaponCalibration *calibration)
 {
@@ -770,6 +771,29 @@ GetDefaultCalibrationForSet(int weaponType, int hand,
 		}
 	}
 	calibration->valid = true;
+}
+
+static void
+GetDefaultCalibrationForSet(int weaponType, int hand,
+	ModelSets::eModelSet modelSet, WeaponCalibration *calibration)
+{
+	GetFallbackCalibrationForSet(weaponType, hand, modelSet, calibration);
+	if(!calibration || modelSet == ModelSets::MODEL_SET_MODERN)
+		return;
+	const QuestWeaponFactoryDefaults::Profile *profile =
+		QuestWeaponFactoryDefaults::Find(weaponType, hand);
+	if(!profile)
+		return;
+	// Apply authored values last, without mirroring or coordinate conversion.
+	BuiltInHandCalibration primary;
+	memcpy(primary.main, profile->main, sizeof(primary.main));
+	memcpy(primary.support, profile->support, sizeof(primary.support));
+	ApplyBuiltInHandCalibration(primary, calibration);
+	calibration->supportRotationX = profile->support[3];
+	calibration->supportRotationY = profile->support[4];
+	calibration->supportRotationZ = profile->support[5];
+	calibration->supportGripType = profile->support[6];
+	calibration->supportPoseVersion = profile->supportPoseVersion;
 }
 
 static void
