@@ -41,7 +41,7 @@ diff --git a/src/control/ScriptDebug.cpp b/src/control/ScriptDebug.cpp
 index 9eb3dff..06f2c66 100644
 --- a/src/control/ScriptDebug.cpp
 +++ b/src/control/ScriptDebug.cpp
-@@ -1396,6 +1396,44 @@ void FlushLog()
+@@ -1396,11 +1396,53 @@ void FlushLog()
  
  
  #ifdef MISSION_SWITCHER
@@ -57,8 +57,12 @@ index 9eb3dff..06f2c66 100644
 +	// A running mission can only be unwound after its death/arrest return
 +	// frame exists. Starting another mission during an early setup/cutscene
 +	// window would corrupt the shared mission script area.
++	// LAUNCH_MISSION also marks main-script threads as mission scripts.
++	// Only LOAD_AND_LAUNCH_MISSION_INTERNAL owns the shared mission area
++	// (m_bMissionFlag); background main-script threads need no return frame
++	// and must survive the switch.
 +	for (CRunningScript *script = pActiveScripts; script; script = script->GetNext()) {
-+		if (!script->m_bIsMissionScript)
++		if (!script->m_bMissionFlag)
 +			continue;
 +		if (!script->m_bDeatharrestEnabled || script->m_nStackPointer < 1)
 +			return false;
@@ -86,6 +90,12 @@ index 9eb3dff..06f2c66 100644
  void
  CTheScripts::SwitchToMission(int32 mission)
  {
+ 	for (CRunningScript* pScript = CTheScripts::pActiveScripts; pScript != nil; pScript = pScript->GetNext()) {
+-		if (!pScript->m_bIsMissionScript || !pScript->m_bDeatharrestEnabled) {
++		if (!pScript->m_bMissionFlag || !pScript->m_bDeatharrestEnabled) {
+ 			continue;
+ 		}
+ 		while (pScript->m_nStackPointer > 0)
 diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
 index 2f61895..f949f38 100644
 --- a/src/core/Pad.cpp

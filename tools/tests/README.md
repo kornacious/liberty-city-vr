@@ -9,6 +9,14 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+`test-mission-selector.ps1 -StageRoot <assembled-tree>` extracts the actual
+mission safety check and switch routine. It checks free-roam launches with
+main-script mission threads, preservation of those threads during cleanup,
+rejection of loaded missions without a death/arrest return frame, safe loaded
+mission cleanup, invalid indices and file read failures. The previous source
+fails the background-thread launch case. File I/O and script execution are
+adapters; live mission playback still requires headset verification.
+
 Run the supported Liberty City suites together from a normal PowerShell session:
 
 ```powershell

@@ -2,6 +2,8 @@
 
 ## 0.5.6
 
+- Fixed mission selection falsely reporting "MISSION NOT SAFE RIGHT NOW" for
+  background main-script threads, and preserved those threads during switches.
 - Kept VR random traffic on the distant spawn ring in every direction and
   protected nearby traffic from mono-camera offscreen cleanup, independently
   of the experimental director settings.
