@@ -92,8 +92,12 @@ updateSpatialization(AndroidChannel &channel)
 			(maximum - distance) / (maximum - minimum);
 		channel.distanceGain = float(gain * gain);
 	}
-	const float normal = channel.maxDistance > 0.01f ?
-		std::max(-1.0f, std::min(1.0f, -channel.x / channel.maxDistance)) : 0.0f;
+	// Pan by direction, independently of the attenuation radius. Frontend
+	// stereo pairs use positions at +/-1000 with a 100000-unit radius: dividing
+	// by that radius collapses both halves to the centre and blends their phase.
+	// Match the PC listener's +Y forward, +Z up orientation (+X is right).
+	const float normal = distance > 0.01 ?
+		float(std::max(-1.0, std::min(1.0, channel.x / distance))) : 0.0f;
 	channel.pan = uint32(std::max(0.0f, std::min(127.0f, 63.0f + normal * 64.0f)));
 }
 
@@ -149,7 +153,17 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 					index = loopStart;
 			}
 
-			const int sample = samples[index];
+			// SDT effects use many rates (some frontend sounds are only 6 kHz).
+			// Interpolate at the fractional source position instead of holding
+			// each value for several output frames, which adds strong images to
+			// low-rate sounds on the headset's 48 kHz output. Keep the cursor in
+			// source frames so game-requested pitch and duration stay unchanged.
+			uint32 next = index + 1;
+			if(next >= loopEnd)
+				next = channel.loopCount != 1 && loopStart < loopEnd ? loopStart : index;
+			const double fraction = channel.cursor - double(index);
+			const float sample = float(samples[index] +
+				(samples[next] - samples[index]) * fraction);
 			const int left = int(sample * volume * leftPan);
 			const int right = int(sample * volume * rightPan);
 			output[frame * 2] = int16_t(clampSample(output[frame * 2] + left));

@@ -12,7 +12,7 @@ using uint64 = uint64_t;
 using int32 = int32_t;
 using bool8 = bool;
 constexpr int MAXCHANNELS = 2, MAX2DCHANNELS = 1, CHANNEL2D = 2;
-constexpr uint32 MAX_VOLUME = 127, DIGITALRATE = 48000, TOTAL_AUDIO_SAMPLES = 1;
+constexpr uint32 MAX_VOLUME = 127, DIGITALRATE = 48000, TOTAL_AUDIO_SAMPLES = 2;
 constexpr int MUSICMODE_CUTSCENE = 1, AAUDIO_CALLBACK_RESULT_CONTINUE = 0;
 using aaudio_data_callback_result_t = int;
 struct AAudioStream {};
@@ -28,7 +28,7 @@ struct tSample { int32 nOffset = 0; uint32 nSize = sizeof(raw), nFrequency = DIG
 tSample *gAndroidSampleTable;
 struct { int mode = 0; int GetMusicMode() { return mode; } } MusicManager;
 struct cSampleManager {
-    tSample m_aSamples[1];
+    tSample m_aSamples[TOTAL_AUDIO_SAMPLES];
     uint32 m_nEffectsFadeVolume = 127, m_nEffectsVolume = 127;
     bool IsSampleBankLoaded(uint8) { return true; }
     bool8 InitialiseChannel(uint32, uint32, uint8);
@@ -37,6 +37,9 @@ struct cSampleManager {
     void SetChannel3DDistances(uint32, float, float);
     void SetChannelVolume(uint32, uint32);
     void SetChannelPan(uint32, uint32);
+    void SetChannelFrequency(uint32, uint32);
+    void SetChannelLoopPoints(uint32, uint32, int32);
+    void SetChannelLoopCount(uint32, uint32);
     void StartChannel(uint32);
 } manager;
 #include "android-audio-production.inc"
@@ -151,5 +154,81 @@ int main() {
     Near(gChannels[0].distanceGain, 0); Require(gChannels[0].pan == 63);
     manager.SetChannel3DPosition(0, 0, std::numeric_limits<float>::max(), 0);
     Near(gChannels[0].distanceGain, 0);
+    // A ramp makes fractional resampling measurable, unlike constant-volume
+    // fixtures. Include the 6 kHz frontend rate found in the retail SDT, pitch
+    // overrides used by weapon pickups, and both common device output rates.
+    gChannels[0].playing = gChannels[1].playing = false;
+    for(int i = 0; i < 64; ++i) raw[i] = int16_t(i * 400);
+    for(int outputRate : {44100, 48000}) {
+        gOutputRate = outputRate;
+        for(uint32 sourceRate : {6000u, 11025u, 22050u, 32000u, 44100u, 48000u}) {
+            manager.m_aSamples[0].nFrequency = sourceRate;
+            for(uint32 playbackRate : {sourceRate, 32000u, 48000u}) {
+                Require(manager.InitialiseChannel(CHANNEL2D, 0, 0));
+                manager.SetChannelFrequency(CHANNEL2D, playbackRate);
+                manager.StartChannel(CHANNEL2D);
+                int frames = 0;
+                while(gChannels[CHANNEL2D].playing && frames < 600) {
+                    int16_t output[2];
+                    audioCallback(nullptr, nullptr, output, 1);
+                    const double position = double(frames) * playbackRate / outputRate;
+                    if(position < 64.0 - 1e-8) {
+                        const double value = std::min(position, 63.0) * 400;
+                        const int expected = int(value);
+                        Require(std::abs(int(output[0]) - expected) <= 2);
+                        Require(output[0] == output[1]);
+                    }
+                    ++frames;
+                }
+                // One additional callback observes completion after the final
+                // source frame; floating point rounding can add one frame.
+                const double duration = 64.0 * outputRate / playbackRate;
+                Require(std::abs(double(frames - 1) - std::ceil(duration)) <= 1);
+            }
+        }
+    }
+    // Interpolation at the loop seam must use the loop start, not the tail.
+    gOutputRate = 48000;
+    Require(manager.InitialiseChannel(CHANNEL2D, 0, 0));
+    manager.SetChannelFrequency(CHANNEL2D, 6000);
+    manager.SetChannelLoopPoints(CHANNEL2D, 4, 8); // source frames [2,4)
+    manager.SetChannelLoopCount(CHANNEL2D, 0);
+    manager.StartChannel(CHANNEL2D);
+    gChannels[CHANNEL2D].cursor = 3.5;
+    int16_t seam[2];
+    audioCallback(nullptr, nullptr, seam, 1);
+    Require(std::abs(int(seam[0]) - 1000) <= 1); // halfway from 1200 to 800
+    Require(gChannels[CHANNEL2D].cursor == 3.625);
+    // A one-shot holds its final value instead of reading past the buffer.
+    manager.SetChannelLoopCount(CHANNEL2D, 1);
+    gChannels[CHANNEL2D].cursor = 3.5;
+    audioCallback(nullptr, nullptr, seam, 1);
+    Require(std::abs(int(seam[0]) - 1200) <= 1);
+    // Frontend stereo pairs go through the spatial channels with an enormous
+    // attenuation radius. Opposite-polarity halves must remain separate rather
+    // than cancelling in the centre. +X is right in the PC OpenAL listener.
+    gChannels[CHANNEL2D].playing = false;
+    std::fill(std::begin(raw), std::begin(raw) + 32, int16_t(10000));
+    std::fill(std::begin(raw) + 32, std::end(raw), int16_t(-10000));
+    manager.m_aSamples[0].nSize = 64;
+    manager.m_aSamples[1].nOffset = 64;
+    manager.m_aSamples[1].nSize = 64;
+    for(int i = 0; i < 2; ++i) {
+        Require(manager.InitialiseChannel(uint32(i), uint32(i), 0));
+        manager.SetChannel3DPosition(uint32(i), i == 0 ? -1000.0f : 1000.0f, 0, 0);
+        manager.SetChannel3DDistances(uint32(i), 100000, 25000);
+        manager.StartChannel(uint32(i));
+    }
+    int16_t stereo[2];
+    audioCallback(nullptr, nullptr, stereo, 1);
+    Require(stereo[0] > 9800 && stereo[1] == -10000);
+    // Changing audible range cannot change the bearing or stereo separation.
+    const uint32 rightPan = gChannels[1].pan;
+    manager.SetChannel3DDistances(1, 200000, 50000);
+    Require(gChannels[1].pan == rightPan);
+    manager.SetChannel3DPosition(1, 0, 1000, 0);
+    Require(gChannels[1].pan == 63);
+    manager.SetChannel3DPosition(1, 0, 0, 1000);
+    Require(gChannels[1].pan == 63);
     std::printf("Android audio: %d assertions passed against production setters and AAudio callback.\n", checks);
 }

@@ -11,7 +11,7 @@ $code = ''
 foreach ($name in @('clampSample', 'updateSpatialization', 'audioCallback')) {
     $code += (Extract ('(?ms)^static (?:int|void|aaudio_data_callback_result_t)\s+' + $name + '\(.*?^}')) + "`n"
 }
-foreach ($name in @('InitialiseChannel', 'SetChannelEmittingVolume', 'SetChannel3DPosition', 'SetChannel3DDistances', 'SetChannelVolume', 'SetChannelPan', 'StartChannel')) {
+foreach ($name in @('InitialiseChannel', 'SetChannelEmittingVolume', 'SetChannel3DPosition', 'SetChannel3DDistances', 'SetChannelVolume', 'SetChannelPan', 'SetChannelFrequency', 'SetChannelLoopPoints', 'SetChannelLoopCount', 'StartChannel')) {
     $code += (Extract ('(?ms)^(?:bool8|void)\s+cSampleManager::' + $name + '\(.*?^}')) + "`n"
 }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'android-audio-types.inc'), $types)
