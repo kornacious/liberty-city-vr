@@ -9,6 +9,12 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+`test-cd-stream-sync.ps1` runs the production Android streaming queue with a
+controlled reader. It exercises 20,000 completion-before/during-wait schedules,
+queued channels, duplicate/replacement reads, buffer ownership, read errors,
+flush and 100 shutdown/restart cycles. A deadline fails stalled runs. Actual
+archive I/O and rare end-to-end save-load reproduction require the headset.
+
 `test-mission-selector.ps1 -StageRoot <assembled-tree>` extracts the actual
 mission safety check and switch routine. It checks free-roam launches with
 main-script mission threads, preservation of those threads during cleanup,
@@ -25,7 +31,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 44 suites against that tree or the kit's production helpers. Each suite
+runs 45 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or

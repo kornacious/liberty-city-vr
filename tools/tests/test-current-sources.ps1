@@ -17,7 +17,7 @@ if ($weaponTypes -notmatch 'WEAPONTYPE_HELICANNON' -or $weaponTypes -match 'WEAP
 $stage = Join-Path $OutDir 'source'
 & (Join-Path $KitRoot 'tools/assemble.ps1') -Re3 $Re3Root -Out $stage
 if (-not (Test-Path -LiteralPath (Join-Path $stage 'src/peds/PlayerPed.cpp'))) { throw 'Assembly failed.' }
-$kitTests = @('android-audio','laser-cache','mip-worker','physical-scope','ragdoll','vulkan-descriptors','xr-focus-input')
+$kitTests = @('android-audio','cd-stream-sync','laser-cache','mip-worker','physical-scope','ragdoll','vulkan-descriptors','xr-focus-input')
 $engineTests = @(
     'traffic-visibility','mission-selector',
     'autosave','frame-timers','angular-drag-boat-lift','wheel-suspension-fps','vehicle-coupled-fps','vehicle-capture','boat-input-timing','physics-sleep-timing','heli-control-timing','gameplay-timing','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
