@@ -9,6 +9,12 @@ development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
 Those files are ignored and must not be included in a release archive.
 
+`test-radio-station.ps1 -StageRoot <assembled-tree>` exercises the production
+radio board selection, native retune dispatch and stream switch with a fake
+audio backend. It covers both directions, custom music availability, Radio Off,
+station wrapping, pending X-button taps, rapid selections and police vehicles.
+Listening to playback still requires headset verification.
+
 `test-cd-directory.ps1 -StageRoot <assembled-tree>` compiles the production
 archive directory with assertions disabled, as in the APK. It adds 4,096 entries
 from initial capacities 0, 1 and 128, verifies all sector ranges/image selectors,

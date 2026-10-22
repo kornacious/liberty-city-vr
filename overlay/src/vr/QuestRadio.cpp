@@ -29,6 +29,8 @@
 extern bool gVrFirstPersonActive;
 extern CVehicle *FindPlayerVehicle(void);
 extern const char *GetVrVehicleModelName(int model);
+extern int32 gNumRetunePresses;
+extern int32 gRetuneCounter;
 namespace QuestRadio {
 namespace {
 using RadioBoard::Placement;
@@ -118,7 +120,14 @@ void Station(int direction) {
     for(int tries=0;tries<12;++tries) {
         station=(station+direction+12)%12;
         if(station==POLICE_RADIO || (station==USERTRACK && !QuestMusic::Available())) continue;
-        MusicManager.SetRadioInCar(station); break;
+        MusicManager.SetRadioInCar(station);
+        // SetRadioInCar only saves the tuning; ServiceGameMode needs the same
+        // retune request as the normal station shortcut to change the stream.
+        // The board already selected an exact station, so discard pending taps.
+        gNumRetunePresses=0;
+        gRetuneCounter=0;
+        MusicManager.m_bSetNextStation=true;
+        break;
     }
 }
 void Activate(int button) {
