@@ -2,6 +2,12 @@
 
 ## 0.5.6
 
+- Added a head-anchored knockdown/get-up view with gentle automatic turning,
+  floor/surface protection and smooth recovery. Tracked hands, weapons and
+  aiming aids hide until recovery completes, preserving held weapon slots.
+  Locomotion's Knockdown View defaults to Level Horizon; Immersive Tilt adds
+  bounded pitch and roll while retaining physical head tracking.
+
 - Added a custom soundtrack station with background indexing, incremental local
   playback, previous/next, pause and persisted song positions. Added validated
   Windows/Linux import tools using staged uploads and headset SHA-256 checks.

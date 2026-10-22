@@ -765,6 +765,7 @@ enum eVrLocomotionMenuItem {
 	VR_LOCOMOTION_TURN_SENSITIVITY,
 	VR_LOCOMOTION_SNAP_ANGLE,
 	VR_LOCOMOTION_HEAD_BOBBING,
+	VR_LOCOMOTION_KNOCKDOWN_TILT,
 	VR_LOCOMOTION_CUTSCENES,
 	VR_LOCOMOTION_BODY_IK,
 	VR_LOCOMOTION_REFRESH_RATE,
@@ -3542,6 +3543,9 @@ VrDebugUpdate(const PadInput &in)
 				gQuestHeadBobbing = !gQuestHeadBobbing;
 				SaveVrInteger("HeadBobbing", gQuestHeadBobbing);
 				break;
+			case VR_LOCOMOTION_KNOCKDOWN_TILT:
+				androidgame::VrToggleKnockdownTilt();
+				break;
 			case VR_LOCOMOTION_BODY_IK:
 				LoadPersistentBodyIKSettings();
 				gBodyIKEnabled = !gBodyIKEnabled;
@@ -4640,6 +4644,9 @@ DrawQuestLocomotionPage(void)
 		"SNAP TURN ANGLE  < %d DEG >", gQuestSnapTurnAngleDegrees);
 	snprintf(rows[VR_LOCOMOTION_HEAD_BOBBING], sizeof(rows[0]),
 		"WALKING HEAD BOB  < %s >", gQuestHeadBobbing ? "ON" : "OFF");
+	snprintf(rows[VR_LOCOMOTION_KNOCKDOWN_TILT], sizeof(rows[0]),
+		"KNOCKDOWN VIEW  < %s >",
+		androidgame::VrKnockdownTiltEnabled() ? "IMMERSIVE TILT" : "LEVEL HORIZON");
 	snprintf(rows[VR_LOCOMOTION_CUTSCENES], sizeof(rows[0]),
 		"CUTSCENES  < %s >",
 		gCutsceneMode ? "STEREO  R3 CAMERA  L3 KEEP" : "CINEMA SCREEN");
@@ -4650,7 +4657,7 @@ DrawQuestLocomotionPage(void)
 	strcpy(rows[VR_LOCOMOTION_RECENTER], "RECENTER VIEW");
 	strcpy(rows[VR_LOCOMOTION_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++)
-		DrawFullVrMenuRow(rows[item], 160+item*54, 3,
+		DrawFullVrMenuRow(rows[item], 160+item*46, 3,
 			item == gVrLocomotionSelection);
 	// The one setting a standing player can be hurt by without knowing why.
 	if(gVrLocomotionSelection == VR_LOCOMOTION_MOVEMENT_ORIENTATION)

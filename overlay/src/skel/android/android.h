@@ -273,6 +273,11 @@ bool VrGetViewBasis(float position[3], float right[3], float up[3],
 // Exact on-foot world anchor submitted to librw::setFirstPersonAnchor.
 // Body IK uses this to measure room-scale without reconstructing offsets.
 bool VrGetOnFootBodyAnchor(float position[3]);
+// Fall/get-up presentation, including the short recovery blend. Rendering and
+// weapon input share this gate; it does not change inventory ownership.
+bool VrKnockdownPresentationActive(void);
+bool VrKnockdownTiltEnabled(void);
+void VrToggleKnockdownTilt(void);
 
 // Latch the pose being held now as the neutral one. A player who started
 // seated and then stood up is riding an eye height taken while seated until

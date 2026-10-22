@@ -448,6 +448,7 @@ IsGameplayAvailable()
 {
 	CPlayerPed *player = FindPlayerPed();
 	return gVrFirstPersonActive && player && !player->DyingOrDead() &&
+		!androidgame::VrKnockdownPresentationActive() &&
 		!FrontEndMenuManager.m_bMenuActive &&
 		!CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing() &&
 		!TheCamera.m_WideScreenOn && !CTimer::GetIsPaused();
@@ -2621,7 +2622,8 @@ ApplyTouchInput(CControllerState *state)
 		UpdateHolsterInput(vehicleCapturedHands);
 	else if(gWeaponCalibrationPreview && gameplay)
 		UpdateWeaponCalibrationSupportPreview();
-	else if(!gameplay)
+	// Preserve held slots while the fall/get-up presentation suspends input.
+	else if(!gameplay && !androidgame::VrKnockdownPresentationActive())
 		ResetInteraction();
 	// A draw or holster can change which firing path owns B during this frame.
 	if(inVehicle)
@@ -2640,6 +2642,17 @@ ApplyTouchInput(CControllerState *state)
 	// do not also pass it into the legacy vehicle action.
 	if(vehicleWeaponButtonConsumed)
 		state->Circle = 0;
+	if(androidgame::VrKnockdownPresentationActive() && !menu){
+		// Native attack/weapon cycling must not leak through while the
+		// tracked path is suspended, especially during the recovery blend.
+		androidgame::PadInput mappedInput = input;
+		androidgame::VrApplyPadBindings(state, mappedInput, false);
+		const int mode = CPad::GetPad(0)->GetMode();
+		if(mode == 0 || mode == 1) state->Circle = 0;
+		if(mode == 2) state->Cross = 0;
+		if(mode == 3) state->RightShoulder1 = 0;
+		state->LeftShoulder2 = state->RightShoulder2 = 0;
+	}
 	if(gameplay && !menu && !FindPlayerVehicle()){
 		const int padMode = CPad::GetPad(0)->GetMode();
 		// Rebuild the mapped buttons from the CONTROLS assignment without the

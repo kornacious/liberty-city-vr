@@ -31,6 +31,8 @@
 #include "Lists.h"	// CPtrList, needed by PlayerInfo.h
 #include "PlayerInfo.h"
 #include "PlayerPed.h"
+#include "VrKnockdownView.h"
+#include "ColPoint.h"
 #include "CutsceneMgr.h"
 #include "CutsceneObject.h"
 #include "RpAnimBlend.h"
@@ -80,6 +82,48 @@ size_t _dwMemAvailPhys;
 
 static bool gRwInitialised = false;
 static bool gForegroundApp = true;
+static VrKnockdownView gKnockdownView;
+static int gKnockdownTilt = -1;
+extern bool gVrFirstPersonActive;
+
+bool
+androidgame::VrKnockdownTiltEnabled(void)
+{
+	if(gKnockdownTilt < 0)
+		gKnockdownTilt = GetPrivateProfileIntA("VR", "KnockdownCameraTilt", 0,
+			".\\vr_settings.ini") != 0;
+	return gKnockdownTilt != 0;
+}
+
+void
+androidgame::VrToggleKnockdownTilt(void)
+{
+	gKnockdownTilt = !VrKnockdownTiltEnabled();
+	WritePrivateProfileStringA("VR", "KnockdownCameraTilt",
+		gKnockdownTilt ? "1" : "0", ".\\vr_settings.ini");
+}
+
+static bool
+PlayerKnockedDown(CPlayerPed *player)
+{
+	if(!player || player->InVehicle() || player->DyingOrDead()) return false;
+	switch(player->GetPedState()){
+	case PED_FALL: case PED_GETUP: case PED_STAGGER: case PED_DIVE_AWAY:
+		return true;
+	default: return false;
+	}
+}
+
+bool
+androidgame::VrKnockdownPresentationActive(void)
+{
+	CPlayerPed *player = FindPlayerPed();
+	return gVrFirstPersonActive && player && !player->InVehicle() &&
+		!player->DyingOrDead() && !FrontEndMenuManager.m_bMenuActive &&
+		!CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing() &&
+		!TheCamera.m_WideScreenOn &&
+		(PlayerKnockedDown(player) || gKnockdownView.active);
+}
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 static uint32 gQuestQuickStartSkipFrames;
@@ -1443,6 +1487,25 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		 CCutsceneMgr::IsCutsceneProcessing() ||
 		 TheCamera.m_WideScreenOn);
 	gVrFirstPersonActive = wantFirstPerson || cinematicCutscene;
+	static CPlayerPed *knockdownPlayer;
+	static CVector knockdownRoot(0,0,0);
+	static bool knockdownHeadingLatched;
+	static bool knockdownHeadingValid;
+	static bool knockdownFrameValid;
+	static uint32 knockdownFrame;
+	static float knockdownBaseYaw, lastOnFootYaw;
+	const bool knockdownContext = wantFirstPerson && !player->InVehicle() &&
+		player->m_rwObject && !player->DyingOrDead() && !vehicleTransition;
+	if(!knockdownContext || knockdownPlayer != player ||
+	   (player->GetPosition()-knockdownRoot).MagnitudeSqr() > 25.0f)
+	{
+		gKnockdownView.Reset();
+		knockdownHeadingLatched = false;
+		knockdownHeadingValid = false;
+		knockdownFrameValid = false;
+	}
+	knockdownPlayer = player;
+	if(player) knockdownRoot = player->GetPosition();
 	gVrPlayerEntity = (CEntity*)player;
 	gVrInVehicle = wantFirstPerson && player->InVehicle() &&
 		!vehicleTransition &&
@@ -1476,7 +1539,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	const bool vehicleBodyIK =
 		gVrInVehicle && androidgame::VrVehicleBodyIKEnabled();
 	gVrHidePlayerBody = gVrCameraInsidePlayerHead &&
-		((!gVrInVehicle && !androidgame::VrBodyIKEnabled()) ||
+		((!gVrInVehicle && !androidgame::VrBodyIKEnabled() &&
+		  !androidgame::VrKnockdownPresentationActive()) ||
 		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK));
 #else
 	gVrHidePlayerBody = gVrCameraInsidePlayerHead;
@@ -1692,7 +1756,113 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		}
 #endif
 
-		bool fullVehicleBasis = false;
+		bool knockdownBasis = false;
+		if(knockdownContext){
+			CVector animatedHead, animatedForward;
+			const bool down = PlayerKnockedDown(player);
+			bool posed = down && GetAnimatedPedHeadPose(player,
+				&animatedHead, &animatedForward);
+			if(down && !posed && player->m_pFrames[PED_HEAD]){
+				player->m_pedIK.GetComponentPosition(animatedHead, PED_HEAD);
+				animatedForward = player->GetForward();
+				animatedForward.z = 0.0f;
+				if(animatedForward.MagnitudeSqr() > 0.0001f){
+					animatedForward.Normalise();
+					posed = true;
+				}
+			}
+			const bool tilt = androidgame::VrKnockdownTiltEnabled();
+			const float normalYaw = Atan2(forward.y, forward.x);
+			if(!knockdownHeadingValid){
+				lastOnFootYaw = normalYaw;
+				knockdownHeadingValid = true;
+			}
+			if(down && !knockdownHeadingLatched){
+				knockdownBaseYaw = lastOnFootYaw;
+				knockdownHeadingLatched = true;
+			}
+			if(!down && !gKnockdownView.active){
+				lastOnFootYaw = normalYaw;
+				knockdownHeadingLatched = false;
+			}
+			if(posed){
+				// PreRender collapses the head basis to hide its skin. Read the
+				// uncollapsed torso for facing; a face-up/down torso can have a
+				// vertical forward axis, in which case retain our current yaw.
+				RpHAnimHierarchy *hier = GetPosedHeadHierarchy(player);
+				const int torso = hier ? RpHAnimIDGetIndex(hier, BONE_torso) : -1;
+				if(torso >= 0){
+					const RwV3d &axis = RpHAnimHierarchyGetMatrixArray(hier)[torso].up;
+					animatedForward = CVector(axis.x, axis.y, 0);
+					if(animatedForward.MagnitudeSqr() < 0.04f){
+						const float yaw = knockdownBaseYaw+gKnockdownView.yaw;
+						animatedForward = CVector(Cos(yaw), Sin(yaw), 0);
+					}else animatedForward.Normalise();
+				}
+			}
+			CVector targetOffset(0,0,0);
+			float targetYaw = VrKnockdownView::Wrap(normalYaw-knockdownBaseYaw);
+			float targetPitch = 0.0f, targetRoll = 0.0f;
+			if(posed){
+				// The authored skeleton owns the fall, independently of Body IK.
+				// A small eye lift avoids sitting exactly on the head surface.
+				targetOffset = animatedHead+CVector(0,0,0.08f)+animatedForward*0.04f-head;
+				targetYaw = VrKnockdownView::Limit(VrKnockdownView::Wrap(
+					Atan2(animatedForward.y, animatedForward.x)-
+					knockdownBaseYaw), -1.04719755f, 1.04719755f);
+				if(tilt){
+					CVector bodyUp = animatedHead-player->GetNodePosition(PED_MID);
+					if(bodyUp.MagnitudeSqr() > 0.0001f){
+						bodyUp.Normalise();
+						CVector side = CrossProduct(animatedForward, CVector(0,0,1));
+						targetPitch = VrKnockdownView::Limit(-asinf(VrKnockdownView::Limit(
+							DotProduct(bodyUp, animatedForward), -1.0f, 1.0f)), -0.43633231f, 0.43633231f);
+						targetRoll = VrKnockdownView::Limit(asinf(VrKnockdownView::Limit(
+							DotProduct(bodyUp, side), -1.0f, 1.0f)), -0.34906585f, 0.34906585f);
+					}
+				}
+			}
+			if(postPhysics && (!knockdownFrameValid ||
+			   knockdownFrame != CTimer::GetFrameCounter())){
+				knockdownFrame = CTimer::GetFrameCounter();
+				knockdownFrameValid = true;
+				gKnockdownView.Update(down && posed,
+					CTimer::GetIsPaused() ? 0.0f : CTimer::GetTimeStep()/50.0f,
+					targetOffset, targetYaw, targetPitch, targetRoll);
+			}
+			if(gKnockdownView.active){
+				head += gKnockdownView.offset;
+				const float yaw = knockdownBaseYaw+gKnockdownView.yaw;
+				forward = CVector(Cos(yaw), Sin(yaw), 0);
+				// Protect the anchor both from the floor and from surfaces between
+				// the animated neck and the smoothed eye. Never collide with Claude.
+				bool found = false;
+				const float ground = CWorld::FindGroundZFor3DCoord(head.x, head.y, head.z+0.3f, &found);
+				if(found && head.z < ground+0.12f) head.z = ground+0.12f;
+				CColPoint contact;
+				CEntity *hit = nil, *savedIgnore = CWorld::pIgnoreEntity;
+				CWorld::pIgnoreEntity = player;
+				CVector neck = posed ? animatedHead+CVector(0,0,0.12f) : head;
+				if(CWorld::ProcessLineOfSight(neck, head, contact, hit,
+				   true, true, false, true, true, false, false))
+					head = contact.point+contact.normal*0.12f;
+				CWorld::pIgnoreEntity = savedIgnore;
+				// Continue the basis until its tilt has eased out, even if the
+				// player switches the option off during recovery.
+				if(tilt || fabsf(gKnockdownView.pitch)+fabsf(gKnockdownView.roll) > 0.0001f){
+					CVector side = CrossProduct(forward, CVector(0,0,1));
+					CVector tiltedForward = forward*Cos(gKnockdownView.pitch)+
+						CVector(0,0,1)*Sin(gKnockdownView.pitch);
+					CVector up = CrossProduct(side, tiltedForward);
+					CVector tiltedSide = side*Cos(gKnockdownView.roll)+up*Sin(gKnockdownView.roll);
+					up = CrossProduct(tiltedSide, tiltedForward);
+					rw::vulkan::setFirstPersonAnchorBasis(&head.x, &tiltedSide.x,
+						&up.x, &tiltedForward.x, yaw, 1, true);
+					knockdownBasis = true;
+				}
+			}
+		}
+		bool fullVehicleBasis = knockdownBasis;
 #ifdef GTA_VR_WEAPONS
 		CVehicle *viewVehicle =
 			gVrInVehicle ? player->m_pMyVehicle : nil;
@@ -1743,15 +1913,15 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}
 		}
 #endif
+		if(!gVrInVehicle){
+			gVrOnFootBodyAnchor = head;
+			gVrOnFootBodyAnchorValid = true;
+		}else{
+			gVrOnFootBodyAnchorValid = false;
+		}
 		if(!fullVehicleBasis){
-			if(!gVrInVehicle){
-				gVrOnFootBodyAnchor = head;
-				gVrOnFootBodyAnchorValid = true;
-			}else{
-				gVrOnFootBodyAnchorValid = false;
-			}
 			rw::vulkan::setFirstPersonAnchor(&head.x,
-				Atan2(forward.y, forward.x), 1, 1);
+				Atan2(forward.y, forward.x), 1, 1, knockdownContext);
 		}
 
 #ifdef GTA_VR_WEAPONS

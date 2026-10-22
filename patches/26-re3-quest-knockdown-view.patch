@@ -1,0 +1,53 @@
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -2437,6 +2437,8 @@ RenderVrTrackedHands(void)
+ 	CPed *player = FindPlayerPed();
+ 	if(!player || !player->m_rwObject || player->DyingOrDead())
+ 		return;
++	if(androidgame::VrKnockdownPresentationActive())
++		return;
+ 	RenderVrTrackedWeapon(player, 0);
+ 	RenderVrTrackedWeapon(player, 1);
+ 	RenderVrWeaponLaser(player, 0);
+diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -45,6 +45,7 @@
+ namespace androidgame {
+ bool VrUsesHeadRelativeMovement(void);
+ void *VrCutsceneCameraActor(void);
++bool VrKnockdownPresentationActive(void);
+ }
+ #include <android/log.h>
+ #endif
+@@ -5200,6 +5200,7 @@ CPed::Render(void)
+ 	hideVrPlayerBody = (IsPlayer() && OculusVR::IsTrackedScopeOverlayActive()) ||
+ 		(IsPlayer() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
+-		((!bInVehicle && !VrBodyIK::Enabled()) ||
++		((!bInVehicle && !VrBodyIK::Enabled() &&
++		  !androidgame::VrKnockdownPresentationActive()) ||
+ 		 (bInVehicle && OculusVR::IsImmersiveDrivingActive() &&
+ 		  !VrBodyIK::VehicleEnabled())));
+
+@@ -5210,7 +5212,8 @@ CPed::Render(void)
+ 	const bool hideNonSkinnedWeapon = !IsClumpSkinned(GetClump()) &&
+ 		IsPlayer() && gVrCameraInsidePlayerHead &&
+-		(OculusVR::ShouldUseTrackedHands() || VrBodyIK::WeaponOwnershipActive());
++		(OculusVR::ShouldUseTrackedHands() || VrBodyIK::WeaponOwnershipActive() ||
++		 androidgame::VrKnockdownPresentationActive());
+
+ 	if(hideNonSkinnedHead && m_pFrames[PED_HEAD] && m_pFrames[PED_HEAD]->frame){
+ 		bool render = false;
+ 		RwFrameForAllObjects(m_pFrames[PED_HEAD]->frame, SetHeadAtomicRenderFlagCB, &render);
+@@ -5280,6 +5283,10 @@ CPed::Render(void)
+ 	renderWeaponOnPed = !IsPlayer() || !gVrCameraInsidePlayerHead ||
+ 		(!OculusVR::ShouldUseTrackedHands() && !VrBodyIK::WeaponOwnershipActive());
+ #endif
++#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++	if(IsPlayer() && androidgame::VrKnockdownPresentationActive())
++		renderWeaponOnPed = false;
++#endif
+ 	if(m_pWeaponModel && IsClumpSkinned(GetClump()) && renderWeaponOnPed){
+ 		RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(GetClump());
+ 		int idx = RpHAnimIDGetIndex(hier, m_pFrames[PED_HANDR]->nodeID);

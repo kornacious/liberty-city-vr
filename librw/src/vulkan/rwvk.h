@@ -377,8 +377,11 @@ bool32 isFirstPersonWorldBoxVisibleInStereo(
 // tracks headingYaw every frame -- cockpit behaviour for vehicles -- and a
 // change of followHeading re-latches, so entering a car starts looking down
 // its nose. Passing active=false falls back to the camera anchor.
+// preserveTracking keeps the existing physical pose reference when temporarily
+// entering/leaving the knockdown tilt basis; it never skips initial activation.
 void setFirstPersonAnchor(const float32 headWorld[3], float32 headingYaw,
-                          bool32 followHeading, bool32 active);
+                          bool32 followHeading, bool32 active,
+                          bool32 preserveTracking = 0);
 
 // Vehicle variant of setFirstPersonAnchor. right/up/forward are the
 // vehicle's orthonormal world axes. It preserves pitch and roll while still
@@ -387,7 +390,8 @@ void setFirstPersonAnchorBasis(const float32 headWorld[3],
                                const float32 right[3],
                                const float32 up[3],
                                const float32 forward[3],
-                               float32 headingYaw, bool32 active);
+                               float32 headingYaw, bool32 active,
+                               bool32 preserveTracking = 0);
 
 // View direction in game-world yaw while first person is active. Returns 0
 // when inactive. Lets the pad layer make stick movement view-relative.

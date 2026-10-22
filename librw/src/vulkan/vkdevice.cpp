@@ -3562,7 +3562,7 @@ isFirstPersonWorldBoxVisibleInStereo(const float32 worldCorners[8][3],
 
 void
 setFirstPersonAnchor(const float32 headWorld[3], float32 headingYaw,
-                     bool32 followHeading, bool32 active)
+                     bool32 followHeading, bool32 active, bool32 preserveTracking)
 {
 	if(gvk.firstPersonActive != active)
 	{
@@ -3571,7 +3571,7 @@ setFirstPersonAnchor(const float32 headWorld[3], float32 headingYaw,
 	}
 	if(active && (!gvk.firstPersonActive ||
 	              gvk.fpFollowHeading != followHeading ||
-	              gvk.fpUseFullBasis)){
+	              (gvk.fpUseFullBasis && !preserveTracking))){
 		// (Re)latch so the player's current physical facing looks along the
 		// heading: view yaw = anchorYaw + headYaw. Re-latching on a mode
 		// change makes entering a vehicle start looking down its nose.
@@ -3599,7 +3599,7 @@ setFirstPersonAnchorBasis(const float32 headWorld[3],
                           const float32 right[3],
                           const float32 up[3],
                           const float32 forward[3],
-                          float32 headingYaw, bool32 active)
+                          float32 headingYaw, bool32 active, bool32 preserveTracking)
 {
 	if(gvk.firstPersonActive != active)
 	{
@@ -3608,7 +3608,7 @@ setFirstPersonAnchorBasis(const float32 headWorld[3],
 	}
 	if(active && (!gvk.firstPersonActive ||
 	              !gvk.fpFollowHeading ||
-	              !gvk.fpUseFullBasis)){
+	              (!gvk.fpUseFullBasis && !preserveTracking))){
 		gvk.fpLatchedHeadYaw = gvk.headYaw;
 		memcpy(gvk.fpLatchedHeadPos, gvk.headPosition,
 		       sizeof(gvk.fpLatchedHeadPos));

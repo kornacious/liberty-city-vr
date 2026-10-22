@@ -103,7 +103,7 @@ RenderTrackedHands(void)
 	// scripted scene the camera is watching from inside an actor: that
 	// one is not a cutscene at all, only a camera parked on a head.
 	CPlayerPed *player = FindPlayerPed();
-	if(player == nil || player->DyingOrDead() ||
+	if(player == nil || player->DyingOrDead() || VrKnockdownPresentationActive() ||
 	   CCutsceneMgr::IsRunning() || CCutsceneMgr::IsCutsceneProcessing() ||
 	   androidgame::VrCutsceneCameraActor() != nil)
 		return;
