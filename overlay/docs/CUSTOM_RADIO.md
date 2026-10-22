@@ -49,6 +49,10 @@ Validate without accessing any headset:
 The importer validates audio metadata with ffprobe, gives files safe ASCII names
 with a content-hash suffix, uploads to hidden staging files through a shell-only
 content provider, verifies SHA-256 on the headset, and atomically finalizes them.
+Uploads use `adb push` to a unique temporary file, then device-local input to
+the provider, avoiding binary corruption through streamed ADB shell stdin on
+Windows. The temporary copy is removed after each upload; the free-space check
+also reserves room for this copy (up to the largest selected track).
 Existing identical imports are skipped; different contents are never overwritten.
 Failed transfers are cleaned up where possible; interruption may leave a hidden
 staging file that is replaced on retry and is never indexed as music.

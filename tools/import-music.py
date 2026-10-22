@@ -10,10 +10,12 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import unicodedata
+import uuid
 
 CODECS = {'.mp3': {'mp3'}, '.m4a': {'aac'}, '.ogg': {'vorbis', 'opus'}, '.opus': {'opus'}, '.flac': {'flac'}, '.wav': {'pcm_s16le'}}
 EXTENSIONS = set(CODECS)
@@ -124,6 +126,21 @@ def choose_device(adb_path, requested):
     return adb
 
 
+def upload(adb, path, name):
+    # ADB shell stdin can corrupt binary input on Windows. Use the sync
+    # protocol, then let content read a complete, device-local regular file.
+    remote = '/data/local/tmp/lcvr-music-' + uuid.uuid4().hex + '.tmp'
+    try:
+        run(adb + ['push', str(path), remote], capture_output=True)
+        command = f'content write --uri {shlex.quote(URI + "/upload/" + name)} < {shlex.quote(remote)}'
+        run(adb + ['shell', command], stdin=subprocess.DEVNULL, capture_output=True)
+    finally:
+        try:
+            run(adb + ['shell', 'rm', '-f', remote], stdin=subprocess.DEVNULL, capture_output=True)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+            print(f'Warning: could not remove temporary upload {remote}: {error}', file=sys.stderr)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('files', nargs='*', type=pathlib.Path, help='Files or flat music directories')
@@ -192,13 +209,13 @@ def main(argv=None):
         raise RuntimeError('Existing library plus selection exceeds 1000 files')
     if info.get('duration', 0) + sum(t[2] for t in accepted) > MAX_DURATION:
         raise RuntimeError('Existing library plus selection exceeds 24 days total duration')
-    if info['free'] - sum(t[1] for t in accepted) < RESERVE:
+    # The largest file also needs a temporary ADB copy during upload.
+    if info['free'] - sum(t[1] for t in accepted) - max((t[1] for t in accepted), default=0) < RESERVE:
         raise RuntimeError('Import would leave less than 1 GiB free')
     imported = 0
     for path, size, duration, sha, name in accepted:
         try:
-            with path.open('rb') as source:
-                run(adb + ['shell', 'content', 'write', '--uri', URI + '/upload/' + name], stdin=source, capture_output=True)
+            upload(adb, path, name)
             result = provider(adb, 'commit', name + ':' + sha)
             if result.get('bytes') != size:
                 raise RuntimeError('Verified file size does not match local source')

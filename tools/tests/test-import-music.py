@@ -70,6 +70,31 @@ class ImportTests(unittest.TestCase):
         with patch.object(module.subprocess,'run',side_effect=FileNotFoundError(2,'missing')):
             with self.assertRaisesRegex(RuntimeError,"Cannot launch 'missing-adb'"):
                 module.run(['missing-adb','devices','-l'])
+    def test_upload_uses_sync_and_device_local_input(self):
+        adb=['adb','-s','TEST']
+        with patch.object(module,'run') as run:
+            module.upload(adb,self.path,'song.mp3')
+        calls=run.call_args_list
+        self.assertEqual(len(calls),3)
+        push=calls[0].args[0]
+        self.assertEqual(push[:4],adb+['push'])
+        self.assertEqual(push[4],str(self.path))
+        remote=push[5]
+        self.assertRegex(remote,r'^/data/local/tmp/lcvr-music-[a-f0-9]{32}\.tmp$')
+        self.assertEqual(calls[1].args[0],adb+['shell',f'content write --uri {module.URI}/upload/song.mp3 < {remote}'])
+        self.assertEqual(calls[1].kwargs['stdin'],subprocess.DEVNULL)
+        self.assertEqual(calls[2].args[0],adb+['shell','rm','-f',remote])
+    def test_upload_failure_cleans_temporary_file(self):
+        for failure in (0,1):
+            calls=[]
+            def run(args,**kwargs):
+                calls.append(args)
+                if len(calls)==failure+1:
+                    raise RuntimeError('Upload failed')
+            with self.subTest(failure=failure),patch.object(module,'run',side_effect=run):
+                with self.assertRaisesRegex(RuntimeError,'Upload failed'):
+                    module.upload(['adb','-s','TEST'],self.path,'song.mp3')
+            self.assertEqual(calls[-1][3:6],['shell','rm','-f'])
     def workflow(self,fail=False,remote=None):
         calls=[]; sha=module.digest(self.path); name=module.safe_name(self.path,sha)
         def provider(adb,method,arg=None):
