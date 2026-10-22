@@ -21,7 +21,7 @@ $kitTests = @('android-audio','cd-stream-sync','laser-cache','mip-worker','physi
 $engineTests = @(
     'cd-directory','traffic-visibility','mission-selector','radio-station',
     'autosave','frame-timers','angular-drag-boat-lift','wheel-suspension-fps','vehicle-coupled-fps','vehicle-capture','boat-input-timing','physics-sleep-timing','heli-control-timing','gameplay-timing','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
-    'quest-melee','quest-sprint','held-weapon-frame','weapon-grip','weapon-cadence','ragdoll-brake-hook','ragdoll-explosion',
+    'quest-melee','quest-sprint','held-weapon-frame','wheel-hand-basis','weapon-grip','weapon-cadence','ragdoll-brake-hook','ragdoll-explosion',
     'ragdoll-lifecycle','ragdoll-menu','ragdoll-off-cost','ragdoll-platform',
     'ragdoll-presentation','ragdoll-ray-resolver','ragdoll-schedule','ragdoll-weight',
     'vehicle-deformation-hitframe','vehicle-deformation-menu','vehicle-deformation-mesh',

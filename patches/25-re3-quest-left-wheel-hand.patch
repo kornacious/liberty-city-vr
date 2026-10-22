@@ -1,0 +1,21 @@
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -1736,6 +1736,17 @@ RenderVrTrackedHand(int hand)
+ 		if(hand == 0 && OculusVR::IsImmersiveSteeringHandleGrabbed(hand))
+ 			right *= -1.0f;
+ 	}
++	if(hand == 0 && OculusVR::IsImmersiveCarDrivingActive() &&
++	   OculusVR::IsImmersiveSteeringHandleGrabbed(hand)){
++		// The left palm faces the opposite way around the rim. Reverse its
++		// finger axis, then rebuild the lateral axis instead of reflecting the
++		// mesh with the legacy left steering sign above. Do this after the IK
++		// override so both floating and body-owned hands use the same basis.
++		// This is visual only: the wheel anchor and steering ray stay intact.
++		forward *= -1.0f;
++		right = CrossProduct(up, forward);
++		right.Normalise();
++	}
+ 	const bool holdingDetonator = OculusVR::IsTrackedDetonatorActive(hand);
+ 	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
+ 	if(holdingDetonator ||
