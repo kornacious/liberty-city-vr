@@ -299,6 +299,9 @@ void setIm2DSafeAreaTransform(float32 scaleX, float32 scaleY,
 // coordinates around the panel centre would drag it off the wrist.
 void setIm2DSafeAreaSuspended(bool32 suspended);
 void setImmediate2DStrictDepth(bool32 enabled);
+// Scope loading artwork to the complete eye images, using game screen pixels.
+// Disable immediately after drawing so normal HUD geometry keeps its VR plane.
+void setImmediate2DFullscreen(bool32 enabled, float32 width, float32 height);
 bool32 getImmediate2DStrictDepth(void);
 
 // Mid-eye pose in play space this frame: position plus yaw about the vertical
@@ -394,8 +397,6 @@ bool32 getFirstPersonLocalHeadYaw(float32 *yawOut);
 // Sky colour for the frame; used as the render pass clear colour so the sky
 // covers the full view rather than the 2D panel.
 void setClearColour(uint8 red, uint8 green, uint8 blue);
-// Full-eye black loading transition, independent of the floating HUD plane.
-void setLoadingFade(uint8 alpha);
 // Camera fade applied after colour grading, across both complete eye images.
 void setScreenFade(uint8 red, uint8 green, uint8 blue, uint8 alpha);
 

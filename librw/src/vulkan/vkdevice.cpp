@@ -3673,12 +3673,6 @@ setClearColour(uint8 red, uint8 green, uint8 blue)
 }
 
 void
-setLoadingFade(uint8 alpha)
-{
-	setScreenFade(0, 0, 0, alpha);
-}
-
-void
 setScreenFade(uint8 red, uint8 green, uint8 blue, uint8 alpha)
 {
 	gvk.postFxConstants.screenFade[0] = red / 255.0f;

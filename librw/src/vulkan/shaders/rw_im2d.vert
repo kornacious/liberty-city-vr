@@ -47,10 +47,9 @@ void main()
 	vec3 eye = scene.im2dParams.yzw;
 	vec3 world = eye + (plane.xyz - eye) * (depth/panel);
 	gl_Position = scene.viewProj[gl_ViewIndex] * vec4(world, 1.0);
-	// Wrist minimap. That map renders into a small texture of its own, where
-	// the model slot is a straight screen-pixels-to-clip matrix and neither
-	// eye is involved: both multiview layers receive the same flat map, and
-	// what the eyes converge on is the quad the game hangs off the wrist.
+	// Wrist minimap and full-screen loading artwork: the model slot carries
+	// a screen-pixels-to-clip matrix. Both multiview layers receive the same
+	// flat image, independent of the HUD plane or camera projection.
 	if(push.surfaceProps.x > 1.5)
 		gl_Position = vec4(plane.xy, 0.5, 1.0);
 	// Radar-only depth masking must sit in front of the already-rendered

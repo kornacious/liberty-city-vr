@@ -349,7 +349,11 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		xrvk::setDebugOverlay(pixels, width, height);
 	}
 
-	const bool theaterBefore = androidgame::VrShouldUseTheaterMode();
+	// Loading artwork fills the eye images rather than the cinema quad.
+	// Capture this before Step: initialisation can enter PLAYING_GAME inside it.
+	const bool loadingFrame = gGameState == GS_INIT_PLAYING_GAME ||
+		FrontEndMenuManager.m_bWantToRestart;
+	const bool theaterBefore = !loadingFrame && androidgame::VrShouldUseTheaterMode();
 	xrvk::setTheaterMode(theaterBefore);
 	if(theaterBefore){
 		float theaterViewProj[16], theaterIm2D[16], theaterDistance;
@@ -389,10 +393,6 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	androidgame::QuestProfilerEndVkBegin();
 	platform::setCheckpoint("game/Step");
 	androidgame::QuestProfilerBeginStep();
-	// Initialisation may draw a loading splash and become PLAYING_GAME
-	// inside Step, before any world frame has been rendered.
-	const bool loadingFrame = gGameState == GS_INIT_PLAYING_GAME ||
-		FrontEndMenuManager.m_bWantToRestart;
 	androidgame::Step();
 	const int64_t stepEndNs = monotonicNowNs();
 	androidgame::QuestProfilerEndStep();
@@ -452,8 +452,6 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		break;
 	}
 	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
-	if(loadingFrame)
-		rw::vulkan::setLoadingFade(255);
 	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
 	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
 	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());

@@ -1,25 +1,72 @@
 diff --git a/src/core/main.cpp b/src/core/main.cpp
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
-@@ -351,6 +351,21 @@ DoFade(void)
+@@ -352,6 +352,15 @@
  	}
- 
+
  	if(CDraw::FadeValue != 0 || CMenuManager::m_PrefsBrightness < 256){
 +#if defined(RW_VULKAN) && defined(__ANDROID__)
-+		// Camera fades cover both complete eyes after colour grading.
-+		// Drawing them as sprites confines them to the HUD plane and tints
-+		// neutral fade colours with the world's timecycle colour filter.
-+		// The initial theatre loading artwork remains; its later splash
-+		// fade becomes black when revealing the rendered world.
-+		if(CDraw::FadeValue != 0){
-+			const bool splash = TheCamera.m_FadeTargetIsSplashScreen;
-+			rw::vulkan::setScreenFade(splash ? 0 : CDraw::FadeRed,
-+				splash ? 0 : CDraw::FadeGreen,
-+				splash ? 0 : CDraw::FadeBlue, CDraw::FadeValue);
++		// Solid camera fades still run after grading across both complete eyes.
++		// Splash fades use the original artwork and opacity below.
++		if(CDraw::FadeValue != 0 && !TheCamera.m_FadeTargetIsSplashScreen){
++			rw::vulkan::setScreenFade(CDraw::FadeRed, CDraw::FadeGreen,
++				CDraw::FadeBlue, CDraw::FadeValue);
 +			return;
 +		}
 +#endif
-+
  		CSprite2d *splash = LoadSplash(nil);
- 
+
  		CRGBA fadeColor;
+@@ -411,7 +420,13 @@
+ 			fadeColor.g = 255;
+ 			fadeColor.b = 255;
+ 			fadeColor.a = CDraw::FadeValue;
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			rw::vulkan::setImmediate2DFullscreen(true, SCREEN_WIDTH, SCREEN_HEIGHT);
++#endif
+ 			splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), fadeColor, fadeColor, fadeColor, fadeColor);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++			rw::vulkan::setImmediate2DFullscreen(false, 0, 0);
++#endif
+ 		}
+ 	}
+ }
+@@ -791,6 +806,9 @@
+ 		CFont::InitPerFrame();
+ 		DefinedState();
+ 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		rw::vulkan::setImmediate2DFullscreen(true, SCREEN_WIDTH, SCREEN_HEIGHT);
++#endif
+ 		splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(255, 255, 255, 255));
+
+ 		if(str1){
+@@ -832,6 +850,9 @@
+ 		}
+
+ 		CFont::DrawFonts();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++		rw::vulkan::setImmediate2DFullscreen(false, 0, 0);
++#endif
+  		DoRWStuffEndOfFrame();
+ 	}
+ }
+@@ -860,6 +881,9 @@
+ 	CFont::InitPerFrame();
+ 	DefinedState();
+ 	col = CRGBA(255, 255, 255, 255);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	rw::vulkan::setImmediate2DFullscreen(true, SCREEN_WIDTH, SCREEN_HEIGHT);
++#endif
+ 	splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), col, col, col, col);
+ 	CFont::SetBackgroundOff();
+ #ifdef FIX_BUGS
+@@ -918,5 +942,8 @@
+ 	#endif
+ #endif
+ 	CFont::DrawFonts();
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	rw::vulkan::setImmediate2DFullscreen(false, 0, 0);
++#endif
+ 	DoRWStuffEndOfFrame();
+ }

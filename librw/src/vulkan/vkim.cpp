@@ -39,6 +39,8 @@ struct Im3DState
 } gim3d;
 
 static bool32 gImmediate2DStrictDepth;
+static bool32 gImmediate2DFullscreen;
+static float32 gFullscreenWidth, gFullscreenHeight;
 
 // Triangle fans never reach the device.
 //
@@ -130,6 +132,12 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 		memcpy(push.model, gvk.im2dTransformActive, sizeof(push.model));
 	else
 		multiplyMatrix(push.model, gvk.worldToPlay, model);
+	if(shader == SHADER_IM2D && gImmediate2DFullscreen){
+		identity(push.model);
+		push.model[0] = 2.0f/gFullscreenWidth;
+		push.model[5] = 2.0f/gFullscreenHeight;
+		push.model[12] = push.model[13] = -1.0f;
+	}
 	if(gvk.sgsrMode != SGSR_OFF && shader != SHADER_IM2D){
 		// Immediate geometry has no persistent object identity/history. Keep its
 		// packed root vector at zero so the post pass uses depth reconstruction.
@@ -139,12 +147,11 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 	}
 	push.materialColour[0] = push.materialColour[1] =
 	push.materialColour[2] = push.materialColour[3] = 1.0f;
-	// Doubles as the Im2D target select. The wrist minimap renders in a pass
-	// of its own, where the model slot carries a straight screen-pixels-to-
-	// clip matrix rather than a plane in the world; nothing else in the
-	// immediate shaders reads this field.
+	// The wrist minimap and full-screen loading artwork use a direct
+	// pixels-to-clip matrix instead of the interface plane in the world.
 	push.surfaceProps[0] =
-		shader == SHADER_IM2D && gvk.wristPanelOffscreen ? 2.0f : 1.0f;
+		shader == SHADER_IM2D &&
+		(gvk.wristPanelOffscreen || gImmediate2DFullscreen) ? 2.0f : 1.0f;
 	push.surfaceProps[1] = 0.0f;	// immediate geometry is never lit
 	// The strict radar pass is pinned to the near depth plane. This keeps the
 	// map visible through a vehicle cockpit while preserving the original
@@ -260,7 +267,7 @@ uploadIm2DVertices(const Im2DVertex *source, int32 count,
 	// The wrist minimap is exempt in both directions: its own target has no
 	// safe area, and the quad on the arm carries a transform of its own that
 	// a remap around the panel centre would drag off the wrist.
-	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended ||
+	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended || gImmediate2DFullscreen ||
 	   (fabsf(gIm2DSafeAreaScaleX-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaScaleY-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaOffsetX) < 0.0001f &&
@@ -415,6 +422,14 @@ void
 setImmediate2DStrictDepth(bool32 enabled)
 {
 	gImmediate2DStrictDepth = enabled;
+}
+
+void
+setImmediate2DFullscreen(bool32 enabled, float32 width, float32 height)
+{
+	gImmediate2DFullscreen = enabled && width > 0.0f && height > 0.0f;
+	gFullscreenWidth = width;
+	gFullscreenHeight = height;
 }
 
 bool32
