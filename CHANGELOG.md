@@ -24,8 +24,8 @@
   that weapon is not owned.
 - Made the wasted transition fade to pure white across both complete eye views,
   preserving its fade-out and respawn fade-in timing.
-- Restored the original loading artwork and its fade into the scene when starting
-  a game or loading a save in VR, covering both complete eye views.
+- Unified VR startup, loading and splash fades on the cyan artwork, fitted at
+  its native aspect ratio without cropping, with black bars in unused space.
 - Added the optional Xbox assets profile to the model downloader and asset menu.
 - Restored vehicle drive-by gun controls: left grip + B left, right grip + B right.
 - Added explosion reactions for existing ragdolls and bounded late activation of nearby corpses.

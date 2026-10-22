@@ -5,9 +5,11 @@ small native adapters. They check code behavior; they do not launch the game,
 replace game data or establish headset appearance/FPS.
 
 `python3 tools/tests/test-loading-artwork.py <assembled-tree>` uses a C++17
-compiler (`--cxx` selects it) to exercise the production `DoFade` and Vulkan
-fullscreen transform. It checks all 256 opacities for artwork and solid camera
-fades, scope reset, and full-screen corner coverage at twelve resolutions.
+compiler (`--cxx` selects it; `--cxx msvc` discovers the Windows toolchain) to
+exercise the production splash loader, artwork fit, `DoFade` and Vulkan
+fullscreen transform. It checks cyan texture selection/cache reuse, native
+aspect ratio, maximal fit without cropping, centered black bars, all 256
+opacities, solid camera fades, scope reset, and twelve framebuffer sizes.
 GPU rendering and compositor presentation still require headset verification.
 
 Windows tests require Visual Studio 2022 or Build Tools with the Desktop

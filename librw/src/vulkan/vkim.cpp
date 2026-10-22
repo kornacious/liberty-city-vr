@@ -41,6 +41,7 @@ struct Im3DState
 static bool32 gImmediate2DStrictDepth;
 static bool32 gImmediate2DFullscreen;
 static float32 gFullscreenWidth, gFullscreenHeight;
+static float32 gImmediate2DDisplayAspect = 16.0f/9.0f;
 
 // Triangle fans never reach the device.
 //
@@ -430,6 +431,19 @@ setImmediate2DFullscreen(bool32 enabled, float32 width, float32 height)
 	gImmediate2DFullscreen = enabled && width > 0.0f && height > 0.0f;
 	gFullscreenWidth = width;
 	gFullscreenHeight = height;
+}
+
+void
+setImmediate2DDisplayAspect(float32 aspect)
+{
+	if(aspect > 0.0f)
+		gImmediate2DDisplayAspect = aspect;
+}
+
+float32
+getImmediate2DDisplayAspect(void)
+{
+	return gImmediate2DDisplayAspect;
 }
 
 bool32

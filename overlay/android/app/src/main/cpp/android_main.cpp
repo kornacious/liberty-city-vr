@@ -355,6 +355,10 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		FrontEndMenuManager.m_bWantToRestart;
 	const bool theaterBefore = !loadingFrame && androidgame::VrShouldUseTheaterMode();
 	xrvk::setTheaterMode(theaterBefore);
+	// Artwork is fitted against the display, not the portrait texture storage.
+	// Latch this with the submission mode: Step can change game state mid-frame.
+	rw::vulkan::setImmediate2DDisplayAspect(theaterBefore ?
+		androidgame::VrTheaterAspectRatio() : fabsf(viewProj[0][5]/viewProj[0][0]));
 	if(theaterBefore){
 		float theaterViewProj[16], theaterIm2D[16], theaterDistance;
 		makeTheaterMatrices(theaterViewProj, theaterIm2D, &theaterDistance);
