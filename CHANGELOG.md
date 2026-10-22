@@ -2,6 +2,13 @@
 
 ## 0.5.6
 
+- Added a custom soundtrack station with background indexing, incremental local
+  playback, previous/next, pause and persisted song positions. Added validated
+  Windows/Linux import tools using staged uploads and headset SHA-256 checks.
+- Added a vehicle-mounted radio board with pointer/trigger controls while holding
+  X, global/per-model placement, save/cancel/reset, and shareable layout exports.
+  Bundled model defaults remain separate from personal overrides.
+
 - Added a minimal performance overlay with FPS above frame time, fitted to the
   upper right of both eyes' visible area. Minimal mode avoids full profiling overhead.
 

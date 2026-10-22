@@ -13,6 +13,8 @@
 #include "android.h"
 #include "platform_android.h"
 #include "OculusVR.h"
+#include "QuestRadio.h"
+#include "QuestMusic.h"
 #include "QuestProfiler.h"
 #include "PhysicsDirector.h"
 #include "VehicleVisualDirector.h"
@@ -478,6 +480,7 @@ static int gVrCheatSelection;
 static int gVrCheatCategory = -1;
 static int gVrCheatCategorySelection;
 static int gVrVehicleSelection;
+static int gVrRadioSelection;
 static int gVrVehicleCalibrationSelection;
 static int gVrVehicleCalibrationHand;
 static int gVrLocomotionSelection;
@@ -523,6 +526,7 @@ enum {
 	VR_MENU_PAGE_MODEL_ASSETS,
 	VR_MENU_PAGE_VEHICLE,
 	VR_MENU_PAGE_VEHICLE_CALIBRATION,
+	VR_MENU_PAGE_RADIO,
 	VR_MENU_PAGE_LOCOMOTION,
 	VR_MENU_PAGE_CONTROLS,
 	VR_MENU_PAGE_CALIBRATION,
@@ -662,6 +666,7 @@ enum eVrMainMenuItem {
 	VR_MAIN_WEAPONS,
 	VR_MAIN_HOLSTERS,
 	VR_MAIN_CHEATS,
+	VR_MAIN_RADIO,
 	VR_MAIN_ABOUT,
 	VR_MAIN_ITEM_COUNT
 };
@@ -830,6 +835,8 @@ FindDebugGlyph(char character)
 			return gDebugGlyphs[i].rows;
 	return gDebugGlyphs[0].rows;
 }
+
+namespace androidgame { const unsigned char *VrRadioGlyph(char character) { return FindDebugGlyph(character); } }
 
 static void
 PutDebugPixel(int x, int y, uint8 red, uint8 green, uint8 blue, uint8 alpha)
@@ -2190,6 +2197,7 @@ CurrentMenuSelection(void)
 	case VR_MENU_PAGE_RAGDOLL: return &gVrRagdollSelection;
 	case VR_MENU_PAGE_DEFORMATION: return &gVrDeformationSelection;
 	case VR_MENU_PAGE_MODEL_ASSETS: return &gVrModelAssetsSelection;
+	case VR_MENU_PAGE_RADIO: return &gVrRadioSelection;
 	case VR_MENU_PAGE_VEHICLE: return &gVrVehicleSelection;
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return &gVrVehicleCalibrationSelection;
@@ -2222,6 +2230,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_RAGDOLL: return VR_RAGDOLL_ITEM_COUNT;
 	case VR_MENU_PAGE_DEFORMATION: return VR_DEFORMATION_ITEM_COUNT;
 	case VR_MENU_PAGE_MODEL_ASSETS: return VR_MODEL_ASSETS_ITEM_COUNT;
+	case VR_MENU_PAGE_RADIO: return 15;
 	case VR_MENU_PAGE_VEHICLE: return VR_VEHICLE_ITEM_COUNT;
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return Max(1,
@@ -2339,6 +2348,7 @@ IsMenuItemVisible(int page, int item)
 static bool
 CurrentMenuValueRepeats(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_RADIO) return gVrRadioSelection >= 2 && gVrRadioSelection <= 8;
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION)
 		return VrWeaponCalibrationMenu::ValueItem(
 			gVrCalibrationGroup, gVrCalibrationSelection) >= 0;
@@ -2393,6 +2403,7 @@ ReturnFromCurrentMenuPage(void)
 		gVrCalibrationNotice[0] = '\0';
 		return;
 	}
+	if(gVrMenuPage == VR_MENU_PAGE_RADIO) QuestRadio::CloseEditor();
 	if(gVrMenuPage == VR_MENU_PAGE_CHEATS){
 		ReturnFromCheatMenu();
 		return;
@@ -2712,6 +2723,7 @@ VrDebugUpdate(const PadInput &in)
 	   in.y && !gVrCalibrationTurboDown)
 		gVrCalibrationTurbo = !gVrCalibrationTurbo;
 	gVrCalibrationTurboDown = in.y;
+	if(!gVrMenuVisible || gVrMenuPage != VR_MENU_PAGE_RADIO) QuestRadio::CloseEditor();
 	if(gVrMenuVisible){
 		if(gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION &&
 		   !OculusVR::IsQuestVehicleCalibrationAvailable()){
@@ -2758,7 +2770,10 @@ VrDebugUpdate(const PadInput &in)
 
 		if(gVrMenuPage == VR_MENU_PAGE_SETTINGS &&
 		   (positivePulse || decreasePulse)){
-			if(gVrMenuSelection == VR_MAIN_GRAPHICS){
+			if(gVrMenuSelection == VR_MAIN_RADIO){
+				gVrMenuPage = VR_MENU_PAGE_RADIO;
+				gVrRadioSelection = 0;
+			}else if(gVrMenuSelection == VR_MAIN_GRAPHICS){
 				gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
 				gVrGraphicsSelection = 0;
 			}else if(gVrMenuSelection == VR_MAIN_HUD){
@@ -3340,6 +3355,9 @@ VrDebugUpdate(const PadInput &in)
 				gVrMenuPage = VR_MENU_PAGE_HUD;
 				break;
 			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_RADIO && (positivePulse || decreasePulse)){
+            if(gVrRadioSelection == 14) { QuestRadio::CloseEditor(); gVrMenuPage = VR_MENU_PAGE_SETTINGS; }
+            else QuestRadio::MenuAction(gVrRadioSelection, (decreasePulse ? -1 : 1)*repeatMagnitude);
 		}else if(gVrMenuPage == VR_MENU_PAGE_VEHICLE &&
 		         (positivePulse || decreasePulse)){
 			const int direction = decreasePulse ? -1 : 1;
@@ -3757,10 +3775,11 @@ DrawQuestSettingsPage(void)
 	strcpy(rows[VR_MAIN_WEAPONS], "WEAPONS  < OPEN >");
 	strcpy(rows[VR_MAIN_HOLSTERS], "HOLSTER LOADOUT  < OPEN >");
 	strcpy(rows[VR_MAIN_CHEATS], "CHEAT MENU  < OPEN >");
+	strcpy(rows[VR_MAIN_RADIO], "RADIO AND CUSTOM MUSIC  < OPEN >");
 	strcpy(rows[VR_MAIN_ABOUT], "ABOUT LIBERTY CITY VR  < OPEN >");
 
 	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
-		DrawFullVrMenuRow(rows[item], 160+item*50, 3,
+		DrawFullVrMenuRow(rows[item], 160+item*44, 3,
 			item == gVrMenuSelection, true);
 
 	}
@@ -4534,6 +4553,20 @@ DrawQuestVehiclePage(void)
 }
 
 static void
+DrawQuestRadioPage(void)
+{
+    BeginFullVrMenuPage("RADIO AND CUSTOM MUSIC");
+    for(int row=0;row<15;++row) {
+        char text[112]; QuestRadio::MenuRow(row,text,sizeof(text));
+        DrawFullVrMenuRow(text,158+row*30,2,row==gVrRadioSelection,true);
+    }
+    DrawVrMenuText(QuestMusic::Status(),VR_MENU_WIDTH/2,626,2,110,230,170);
+    DrawVrMenuText(QuestRadio::MenuStatus(),VR_MENU_WIDTH/2,654,2,240,178,48);
+    DrawVrMenuText("POSITION CHANGES ARE PREVIEWS UNTIL SAVED",VR_MENU_WIDTH/2,686,2,210,190,145);
+    DrawVrMenuText("LEFT STICK SELECT   L2 / R2 ADJUST   A SELECT   B BACK",VR_MENU_WIDTH/2,718,2,210,190,145);
+}
+
+static void
 DrawQuestVehicleCalibrationPage(void)
 {
 	char heading[128];
@@ -4998,6 +5031,9 @@ VrDebugPixels(int *width, int *height)
 			break;
 		case VR_MENU_PAGE_MODEL_ASSETS:
 			DrawQuestModelAssetsPage();
+			break;
+		case VR_MENU_PAGE_RADIO:
+			DrawQuestRadioPage();
 			break;
 		case VR_MENU_PAGE_VEHICLE:
 			DrawQuestVehiclePage();

@@ -1,0 +1,22 @@
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -89,6 +89,9 @@
+ #include "VrBodyIK.h"
+ #include "VRHandModel.h"
+ #endif
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#include "QuestRadio.h"
++#endif
+ #ifdef USE_OUR_VERSIONING
+ #include "GitSHA1.h"
+ #endif
+@@ -2600,6 +2603,8 @@
+ 	CRenderer::RenderFirstPersonVehicle();
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ #ifdef GTA_VR_WEAPONS
++	// Independent of hand visibility and physical steering mode.
++	QuestRadio::Render();
+ 	RenderVrTrackedHands();
+ #else
+ 	androidgame::RenderTrackedHands();

@@ -68,3 +68,7 @@ tools/tests/*.inc
 tools/tests/checks-*/
 tools/tests/audit-*/
 tools/tests/audit-*
+
+# Agent scratch work and generated validation artifacts
+/work/
+__pycache__/

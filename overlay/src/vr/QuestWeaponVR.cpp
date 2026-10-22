@@ -3,6 +3,7 @@
 #if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
 
 #include "OculusVR.h"
+#include "QuestRadio.h"
 #include "VrBodyIK.h"
 
 #include "android.h"
@@ -2610,7 +2611,7 @@ ApplyTouchInput(CControllerState *state)
 	const bool inVehicle = FindPlayerVehicle() != nil;
 	if(!inVehicle)
 		UpdateWeaponTriggerEdges(menu || !gameplay, vehicleCapturedHands, input);
-	UpdateTrackedDetonatorInput(menu || !gameplay);
+	UpdateTrackedDetonatorInput(menu || !gameplay || QuestRadio::Interacting());
 	// Quest has no in-vehicle magazine insertion path. Entering any vehicle
 	// makes ManualReloadAvailable false, which also clears an in-progress
 	// reload instead of leaving a magazine hand reserved behind the wheel.
@@ -2624,7 +2625,7 @@ ApplyTouchInput(CControllerState *state)
 		ResetInteraction();
 	// A draw or holster can change which firing path owns B during this frame.
 	if(inVehicle)
-		UpdateWeaponTriggerEdges(menu || !gameplay, vehicleCapturedHands, input);
+		UpdateWeaponTriggerEdges(menu || !gameplay || QuestRadio::Interacting(), vehicleCapturedHands, input);
 	ApplyQuestVehicleButtonInput(state, menu || !gameplay);
 	const bool vehicleWeaponButtonConsumed =
 		gameplay && !menu && inVehicle && IsImmersiveDrivingActive() &&

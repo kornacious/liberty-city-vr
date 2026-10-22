@@ -3,6 +3,7 @@
 #if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
 
 #include "OculusVR.h"
+#include "QuestRadio.h"
 
 #include "android.h"
 #include "platform_android.h"
@@ -305,7 +306,6 @@ static float gCarHornPreviousDistance[VR_HAND_COUNT] = {
 	1000.0f, 1000.0f
 };
 
-static bool gVrRadioButtonDown;
 static bool gVrRadioChangeJustPressed;
 
 static CVehicle *gMotionSteeringVehicle;
@@ -2405,11 +2405,8 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 	const androidgame::PadInput &input = androidgame::GetPadInput();
 	CVehicle *vehicle = FindPlayerVehicle();
 
-	const bool radioPressed =
-		!blocked && vehicle && input.x;
-	gVrRadioChangeJustPressed =
-		radioPressed && !gVrRadioButtonDown;
-	gVrRadioButtonDown = radioPressed;
+	gVrRadioChangeJustPressed = QuestRadio::Update(blocked);
+    const bool radioInteracting = QuestRadio::Interacting();
 	if(vehicle && !blocked){
 		// X is a dedicated radio edge in VR. Preserve L2 brake/reverse, but
 		// remove CapturePad's face-X contribution to Square. A is the dedicated
@@ -2425,11 +2422,11 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 	const float grips[VR_HAND_COUNT] = {
 		input.leftGrip, input.rightGrip
 	};
-	const uint32 blockedHands = blocked ? 3u : 0u;
+	const uint32 blockedHands = (blocked || radioInteracting) ? 3u : 0u;
 	uint32 captured = UpdateImmersiveBikeInput(
 		grips, input, blockedHands);
 	captured |= UpdateImmersiveCarInput(grips, blockedHands);
-	UpdateMotionInput(input, blocked);
+	UpdateMotionInput(input, blocked || radioInteracting);
 
 	if(IsVrCarActive()){
 		// Car grips belong to the virtual wheel/horn system, even while the
@@ -2454,16 +2451,17 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 		}
 	}
 	MapHornToPad(state);
-	return captured;
+	return radioInteracting ? 3u : captured;
 }
 
 void
 ApplyQuestVehicleButtonInput(CControllerState *state, bool blocked)
 {
 	const androidgame::PadInput &input = androidgame::GetPadInput();
-	MapButtonDriveBy(state, input, blocked);
+	MapButtonDriveBy(state, input, blocked || QuestRadio::Interacting());
 	// The explicit handbrake remains available while firing.
 	MapHandbrakeToPad(state, FindPlayerVehicle() && !blocked && input.a);
+	QuestRadio::SuppressDriving(state);
 }
 
 void
@@ -2474,7 +2472,6 @@ ResetQuestDrivingInteraction()
 	ResetBikeInteraction();
 	ResetCarInteraction();
 	ResetMotionInteraction();
-	gVrRadioButtonDown = false;
 	gVrRadioChangeJustPressed = false;
 }
 

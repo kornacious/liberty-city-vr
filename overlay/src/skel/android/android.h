@@ -160,6 +160,7 @@ void GetIm2DViewWindow(float *x, float *y);
 void VrDebugUpdate(const PadInput &input);
 const unsigned char *VrDebugPixels(int *width, int *height);
 bool VrMenuConsumesInput(void);
+const unsigned char *VrRadioGlyph(char character);
 bool VrColorFilterEnabled(void);
 bool VrViceCityColorEnabled(void);
 bool VrFxaaEnabled(void);

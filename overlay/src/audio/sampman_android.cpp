@@ -5,6 +5,7 @@
 #include "sampman.h"
 #include "AudioManager.h"
 #include "MusicManager.h"
+#include "QuestMusic.h"
 #include "platform_android.h"
 
 #include <aaudio/AAudio.h>
@@ -63,6 +64,7 @@ static uint8 gStreamPan[MAX_STREAMS] = { 63, 63 };
 static uint8 gStreamEffect[MAX_STREAMS] = {};
 static bool gStreamLoop[MAX_STREAMS] = {};
 static uint32 gTrackLengths[TOTAL_STREAMED_SOUNDS] = {};
+static bool gCustomMusic = false;
 
 static int
 clampSample(int value)
@@ -322,7 +324,7 @@ char *cSampleManager::Get3DProviderName(uint8)
 void cSampleManager::Set3DProviderName(uint8, char *) {}
 int8 cSampleManager::GetCurrent3DProviderIndex(void) { return 0; }
 int8 cSampleManager::SetCurrent3DProvider(uint8) { return 0; }
-bool8 cSampleManager::IsMP3RadioChannelAvailable(void) { return false; }
+bool8 cSampleManager::IsMP3RadioChannelAvailable(void) { return QuestMusic::Available(); }
 void cSampleManager::ReleaseDigitalHandle(void) {}
 void cSampleManager::ReacquireDigitalHandle(void) {}
 
@@ -358,6 +360,7 @@ cSampleManager::Initialise(void)
 	gBankLoaded[SFX_BANK_PED_COMMENTS] = true;
 	m_bInitialised = true;
 	_bSampmanInitialised = true;
+	QuestMusic::Initialise();
 	LOGI("Android audio backend initialised");
 	return true;
 }
@@ -365,6 +368,8 @@ cSampleManager::Initialise(void)
 void
 cSampleManager::Terminate(void)
 {
+	QuestMusic::Terminate();
+	gCustomMusic = false;
 	if(!_bSampmanInitialised && gRawSamples == nullptr)
 		return;
 	for(int i = 0; i < MAX_STREAMS; ++i)
@@ -562,13 +567,15 @@ void cSampleManager::StopChannel(uint32 channel)
 void cSampleManager::PreloadStreamedFile(uint8 file, uint8 stream)
 {
 	if(file >= TOTAL_STREAMED_SOUNDS || stream >= MAX_STREAMS) return;
+	if(stream == 0) { QuestMusic::Stop(); gCustomMusic = false; }
 	char path[768];
 	if(platform::resolveGamePathCaseInsensitive(path, sizeof(path), StreamedNameTable[file]))
 		platform::audioLoadStream(stream, path, 0, gStreamLoop[stream], false);
 }
 void cSampleManager::PauseStream(bool8 pause, uint8 stream)
 {
-	if(stream < MAX_STREAMS) platform::audioPauseStream(stream, pause != 0);
+	if(stream == 0 && gCustomMusic) QuestMusic::Pause(pause != 0);
+	else if(stream < MAX_STREAMS) platform::audioPauseStream(stream, pause != 0);
 }
 void cSampleManager::StartPreloadedStreamedFile(uint8 stream)
 {
@@ -578,6 +585,12 @@ bool8 cSampleManager::StartStreamedFile(uint8 file, uint32 position, uint8 strea
 {
 	if(stream >= MAX_STREAMS) return false;
 	if(file >= TOTAL_STREAMED_SOUNDS) return false;
+    if(stream == 0 && file == STREAMED_SOUND_RADIO_MP3_PLAYER) {
+        gCustomMusic = QuestMusic::Start(position);
+        if(gCustomMusic) applyStreamVolume(stream);
+        return gCustomMusic;
+    }
+    if(stream == 0) { QuestMusic::Stop(); gCustomMusic = false; }
 	char path[768];
 	if(!platform::resolveGamePathCaseInsensitive(path, sizeof(path), StreamedNameTable[file])){
 		LOGE("stream not found: %s", StreamedNameTable[file]);
@@ -590,10 +603,12 @@ bool8 cSampleManager::StartStreamedFile(uint8 file, uint32 position, uint8 strea
 }
 void cSampleManager::StopStreamedFile(uint8 stream)
 {
+	if(stream == 0) { QuestMusic::Stop(); gCustomMusic = false; }
 	if(stream < MAX_STREAMS) platform::audioStopStream(stream);
 }
 int32 cSampleManager::GetStreamedFilePosition(uint8 stream)
 {
+	if(stream == 0 && gCustomMusic) return QuestMusic::Position();
 	return stream < MAX_STREAMS ? platform::audioGetStreamPosition(stream) : 0;
 }
 void cSampleManager::SetStreamedVolumeAndPan(uint8 volume, uint8 pan,
@@ -622,13 +637,15 @@ void cSampleManager::SetStreamedVolumeAndPan(uint8 volume, uint8 pan,
 }
 int32 cSampleManager::GetStreamedFileLength(uint8 stream)
 {
-	return gTrackLengths[stream];
+	return stream == STREAMED_SOUND_RADIO_MP3_PLAYER ? QuestMusic::Length() :
+		stream < TOTAL_STREAMED_SOUNDS ? gTrackLengths[stream] : 0;
 }
 bool8 cSampleManager::IsStreamPlaying(uint8 stream)
 {
+	if(stream == 0 && gCustomMusic) return QuestMusic::Playing();
 	return stream < MAX_STREAMS && platform::audioIsStreamPlaying(stream);
 }
-void cSampleManager::Service(void) {}
+void cSampleManager::Service(void) { QuestMusic::Service(); nNumMP3s = QuestMusic::Available() ? 1 : 0; }
 
 bool8
 cSampleManager::InitialiseSampleBanks(void)

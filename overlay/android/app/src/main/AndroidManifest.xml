@@ -38,6 +38,12 @@
 			android:exported="true"
 			android:grantUriPermissions="false" />
 
+        <!-- Shell-only importer. It exposes upload staging and a single board
+             export, never arbitrary game files or saves. -->
+        <provider android:name=".MusicProvider"
+            android:authorities="${applicationId}.music"
+            android:exported="true" android:grantUriPermissions="false" />
+
 		<!-- Declare supported devices so Horizon OS exposes full Quest 2/Pro/3/3S
 		     capabilities (including 80Hz, 90Hz, and 120Hz display refresh rates). -->
 		<meta-data

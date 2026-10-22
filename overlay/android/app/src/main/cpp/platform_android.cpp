@@ -1,6 +1,7 @@
 #include "platform_android.h"
 
 #include <android/native_activity.h>
+#include <android/asset_manager.h>
 #include <dirent.h>
 #include <jni.h>
 #include <pthread.h>
@@ -23,6 +24,7 @@ namespace platform {
 static char gStorageRoot[512] = "";
 static char gGameDataRoot[512] = "";
 static JavaVM *gJavaVm = nullptr;
+static AAssetManager *gAssets = nullptr;
 static jclass gMediaPlayerClass = nullptr;
 
 struct MediaPlayerMethods {
@@ -186,6 +188,18 @@ setStorageRoot(const char *path)
 	snprintf(gStorageRoot, sizeof(gStorageRoot), "%s", path);
 	snprintf(gGameDataRoot, sizeof(gGameDataRoot), "%s/gamedata", path);
 	mkdir(gGameDataRoot, 0770);
+    // Bundled defaults are refreshed with the APK; personal placements are a
+    // separate file under gamedata and are never overwritten by updates.
+    if(gAssets) if(AAsset *asset=AAssetManager_open(gAssets,"radio_board_defaults.ini",AASSET_MODE_BUFFER)) {
+        std::string path=std::string(gStorageRoot)+"/radio_board_defaults.ini";
+        if(FILE *file=fopen((path+".tmp").c_str(),"wb")) {
+            size_t size=(size_t)AAsset_getLength(asset);
+            bool ok=fwrite(AAsset_getBuffer(asset),1,size,file)==size;
+            if(fclose(file)!=0) ok=false;
+            if(ok) rename((path+".tmp").c_str(),path.c_str());
+        }
+        AAsset_close(asset);
+    }
 	LOGI("storage root: %s", gStorageRoot);
 	LOGI("game data root: %s", gGameDataRoot);
 }
@@ -196,6 +210,7 @@ setNativeActivity(ANativeActivity *activity)
 	if(activity == nullptr)
 		return;
 	gJavaVm = activity->vm;
+	gAssets = activity->assetManager;
 	bool attached = false;
 	JNIEnv *env = getEnv(&attached);
 	if(env == nullptr)
@@ -553,6 +568,42 @@ convertImaAdpcmWav(const std::string &source, const std::string &destination)
 		return ImaWavConversion::Failed;
 	}
 	return ImaWavConversion::Converted;
+}
+
+// Metadata only: MediaMetadataRetriever does not decode the song into RAM.
+uint32_t
+audioProbeDuration(const char *path)
+{
+    bool attached=false; JNIEnv *env=getEnv(&attached);
+    if(!env) return 0;
+    uint32_t duration=0;
+    jclass cls=env->FindClass("android/media/MediaMetadataRetriever");
+    if(cls && !checkJavaException(env,"music metadata class")) {
+        jmethodID ctor=env->GetMethodID(cls,"<init>","()V");
+        jmethodID source=env->GetMethodID(cls,"setDataSource","(Ljava/lang/String;)V");
+        jmethodID extract=env->GetMethodID(cls,"extractMetadata","(I)Ljava/lang/String;");
+        jmethodID release=env->GetMethodID(cls,"release","()V");
+        jobject retriever=env->NewObject(cls,ctor);
+        jstring value=env->NewStringUTF(path);
+        if(retriever && value && !checkJavaException(env,"music metadata ctor")) {
+            env->CallVoidMethod(retriever,source,value);
+            if(!checkJavaException(env,"music metadata source")) {
+                jstring text=(jstring)env->CallObjectMethod(retriever,extract,9);
+                if(!checkJavaException(env,"music metadata duration") && text) {
+                    const char *chars=env->GetStringUTFChars(text,nullptr);
+                    if(chars) { long long ms=strtoll(chars,nullptr,10); if(ms>0 && ms<2147483647LL) duration=(uint32_t)ms; env->ReleaseStringUTFChars(text,chars); }
+                    env->DeleteLocalRef(text);
+                }
+            }
+            env->CallVoidMethod(retriever,release);
+            checkJavaException(env,"music metadata release");
+        }
+        if(value) env->DeleteLocalRef(value);
+        if(retriever) env->DeleteLocalRef(retriever);
+        env->DeleteLocalRef(cls);
+    }
+    checkJavaException(env,"music metadata");
+    releaseEnv(attached); return duration;
 }
 
 bool

@@ -52,6 +52,7 @@ bool resolveGamePathCaseInsensitive(char *buffer, size_t bufferSize, const char 
 // Android MediaPlayer bridge used by the streamed-audio half of the native
 // audio backend.  SFX are mixed through AAudio; long MP3/ADF tracks stay in the
 // platform decoder so radio and cutscenes do not consume game-thread time.
+uint32_t audioProbeDuration(const char *absolutePath);
 bool audioLoadStream(int stream, const char *absolutePath, int positionMs,
 	bool loop, bool autoStart);
 void audioPlayStream(int stream);

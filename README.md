@@ -120,6 +120,13 @@ Modified upstream re3 files are distributed as patches, not as a second copy
 of the re3 repository. The only bundled runtime art is the credited MIT-licensed VR
 hand asset under `overlay/gamefiles/models/vrhands/`.
 
+## Custom music and radio board
+
+Import your own music with `IMPORT_MUSIC.bat` or `IMPORT_MUSIC.sh`. The adjustable
+vehicle-mounted radio board provides station, volume and custom-track controls.
+See [Custom radio](overlay/docs/CUSTOM_RADIO.md) for formats, limits, calibration,
+placement sharing, and the Python/ADB/ffprobe prerequisites.
+
 ## Required external source
 
 The exact patch base comes from the public upstream re3 project:
@@ -128,7 +135,7 @@ The exact patch base comes from the public upstream re3 project:
 
 The tested public `master` commit is
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly scripts never modify
-that checkout: they copy it to a new directory, apply all sixteen patches in
+that checkout: they copy it to a new directory, apply all patches in
 `patches/` in filename order, and add the port overlay and bundled librw fork.
 No private repository is required or referenced.
 
