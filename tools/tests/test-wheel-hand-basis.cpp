@@ -46,14 +46,17 @@ int main(){
             RenderVrTrackedHand(0);
             Near(rendered.p,anchor.p,"left wrist stays on its calibrated anchor");
             Near(rendered.f,-normal,"left fingers face the corrected wheel hemisphere");
-            Near(rendered.u,-anchor.r,"left palm axis follows the steered rim");
-            Near(rendered.r,anchor.u,"left lateral axis follows the wheel without reflection");
+            Near(rendered.u,anchor.r,"left palm roll keeps the thumb upright");
+            Near(rendered.r,-anchor.u,"left lateral axis follows the wheel without reflection");
             Require(DotProduct(CrossProduct(rendered.u,rendered.f),rendered.r)>0.999f,
                 "left mesh basis must not be mirrored");
+            const Basis left=rendered;
             RenderVrTrackedHand(1);
             Near(rendered.f,normal,"right finger direction is unchanged");
             Near(rendered.u,anchor.r,"right palm direction is unchanged");
             Near(rendered.r,anchor.u,"right lateral direction is unchanged");
+            Near(left.u,rendered.u,"both palms share the same radial roll convention");
+            Near(left.r,-rendered.r,"opposing finger directions retain an unreflected lateral pair");
             Near(anchor.f,normal,"visual correction never changes the steering anchor");
             car=false;
             RenderVrTrackedHand(0);

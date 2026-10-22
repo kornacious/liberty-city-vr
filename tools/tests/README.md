@@ -283,7 +283,7 @@ The graphics menu layout suite covers OFF, ON and MINIMAL labels.
 
 `test-wheel-hand-basis.ps1 -StageRoot <assembled-source>` extracts the actual
 tracked-hand render basis after the IK override. It checks the left car grip's
-finger direction and absence of reflection over a tilted wheel's steering range,
+finger direction, upright palm roll and absence of reflection over a tilted wheel's steering range,
 with both floating and IK-owned hands, and checks that the right hand, bike grip,
 released hand and interaction anchor retain their existing behavior. It requires
 no game assets; the final visual fit still needs a headset check.
