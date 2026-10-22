@@ -233,3 +233,16 @@ regain, failed synchronization (including positive `XR_SESSION_NOT_FOCUSED`),
 inactive actions, frame-start failures and raw crouch-edge clearing.
 It also checks that unavailable hand poses cannot turn neutralized input into
 a physical weapon drop or synthetic trigger-release action.
+
+`test-minimal-profiler.cpp` checks the production head-space panel fit against
+both eyes' four frustum planes, including asymmetric FOVs, eye offsets, canted
+views, narrow FOVs that require scaling, and invalid views. Run with a C++17
+compiler and the OpenXR headers, for example:
+
+```sh
+c++ -std=c++17 -I/path/to/openxr/include -Ioverlay/android/app/src/main/cpp \
+  tools/tests/test-minimal-profiler.cpp -o /tmp/test-minimal-profiler
+/tmp/test-minimal-profiler
+```
+
+The graphics menu layout suite covers OFF, ON and MINIMAL labels.

@@ -66,6 +66,7 @@ enum {
 	VR_DEBUG_WIDTH = 512,
 	VR_DEBUG_HEIGHT = 437,
 	VR_FPS_HEIGHT = 128,
+	VR_MINIMAL_HEIGHT = 64,
 	VR_MENU_WIDTH = 1024,
 	VR_MENU_HEIGHT = 768,
 	VR_CHEAT_ITEMS_PER_PAGE = 14,
@@ -108,6 +109,8 @@ static bool gDebugVisible;
 static uint8 gDebugPixels[VR_DEBUG_WIDTH*VR_DEBUG_HEIGHT*4];
 static uint8 gVrMenuPixels[VR_MENU_WIDTH*VR_MENU_HEIGHT*4];
 static int gDebugFps;
+// Keep legacy ShowProfiler=1 as the full diagnostic view.
+static int gProfilerDisplayMode; // 0: off, 1: full, 2: minimal
 static double gDebugPreviousFrameMs;
 static float gDebugSmoothedFrameMs;
 static bool gTouchRecenterShortcutDown;
@@ -1294,8 +1297,9 @@ LoadVrSettings(void)
 	LoadPersistentBodyIKSettings();
 	// Remembered across launches so a build handed over for testing can
 	// come up already showing it. Off for everyone else.
-	QuestProfilerSetEnabled(GetPrivateProfileIntA("VR", "ShowProfiler",
-		0, ".\\vr_settings.ini") != 0);
+	gProfilerDisplayMode = clamp((int)(int32)GetPrivateProfileIntA("VR",
+		"ShowProfiler", 0, ".\\vr_settings.ini"), 0, 2);
+	QuestProfilerSetEnabled(gProfilerDisplayMode == 1);
 	gSpatialAaMode = GetPrivateProfileIntA("VR", "AntiAliasing", 1,
 		".\\vr_settings.ini") != 0;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
@@ -2817,9 +2821,10 @@ VrDebugUpdate(const PadInput &in)
 				gViceCityColorEnabled = !gViceCityColorEnabled;
 				SaveViceCityColor();
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_PROFILER){
-				QuestProfilerSetEnabled(!QuestProfilerIsEnabled());
-				SaveVrInteger("ShowProfiler",
-					QuestProfilerIsEnabled() ? 1 : 0);
+				const int direction = decreasePulse ? -1 : 1;
+				gProfilerDisplayMode = (gProfilerDisplayMode+direction+3)%3;
+				QuestProfilerSetEnabled(gProfilerDisplayMode == 1);
+				SaveVrInteger("ShowProfiler", gProfilerDisplayMode);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_CPU_PERFORMANCE){
 				if(xrvk::isPerformanceModeSupported()){
 					const int direction = decreasePulse ? -1 : 1;
@@ -3768,7 +3773,8 @@ DrawQuestGraphicsPage(void)
 		"COLOR FILTER  < %s >", gViceCityColorEnabled ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_PROFILER], sizeof(rows[0]),
 		"* PERFORMANCE PROFILER (FPS)  < %s >",
-		QuestProfilerIsEnabled() ? "ON" : "OFF");
+		gProfilerDisplayMode == 2 ? "MINIMAL" :
+		gProfilerDisplayMode == 1 ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_CPU_PERFORMANCE], sizeof(rows[0]),
 		"CPU PERFORMANCE < %s > ACTIVE %s",
 		QuestCpuPerformanceModeName(gQuestCpuPerformanceMode),
@@ -4905,11 +4911,13 @@ DrawCutsceneCameraAnchorNotice(void)
 }
 
 // Fills the same 1024x768 menu surface as desktop. Compact diagnostics use
-// 512x128 for the FPS line and 512x437 for the full profiler.
+// 512x64 for minimal FPS/frame time, 512x128 for the legacy FPS line,
+// and 512x437 for the full profiler.
 const unsigned char *
 VrDebugPixels(int *width, int *height)
 {
-	const bool profilerVisible = QuestProfilerIsEnabled();
+	const bool minimalProfiler = gProfilerDisplayMode == 2;
+	const bool profilerVisible = QuestProfilerIsEnabled() || minimalProfiler;
 	const bool anchorCalibration =
 		androidgame::VrCutsceneCameraAnchorCalibrationActive();
 	const bool anchorNotice = !gVrMenuVisible && !anchorCalibration &&
@@ -4926,7 +4934,8 @@ VrDebugPixels(int *width, int *height)
 	}
 	*width = gVrMenuVisible ? VR_MENU_WIDTH : VR_DEBUG_WIDTH;
 	*height = gVrMenuVisible ? VR_MENU_HEIGHT :
-		(profilerVisible ? VR_DEBUG_HEIGHT : VR_FPS_HEIGHT);
+		(minimalProfiler ? VR_MINIMAL_HEIGHT :
+		 profilerVisible ? VR_DEBUG_HEIGHT : VR_FPS_HEIGHT);
 	if(!gDebugVisible && !gVrMenuVisible && !profilerVisible)
 		return nil;
 
@@ -5006,6 +5015,15 @@ VrDebugPixels(int *width, int *height)
 		sprintf(value, "OPENXR FPS:%d", gDebugFps);
 		DrawDebugText(value, VR_DEBUG_WIDTH/2, 10, 3,
 			255, 230, 64);
+		return gDebugPixels;
+	}
+
+	if(minimalProfiler){
+		snprintf(value, sizeof(value), "FPS:%.1f",
+			gDebugSmoothedFrameMs > 0.0f ? 1000.0f/gDebugSmoothedFrameMs : 0.0f);
+		DrawDebugText(value, VR_DEBUG_WIDTH/2, 8, 3, 100, 230, 120);
+		snprintf(value, sizeof(value), "FRAME:%.2f MS", gDebugSmoothedFrameMs);
+		DrawDebugText(value, VR_DEBUG_WIDTH/2, 36, 3, 100, 230, 120);
 		return gDebugPixels;
 	}
 

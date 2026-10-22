@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
+#include "minimal_profiler_layout.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -3157,8 +3158,22 @@ renderFrame(void)
 					debugLayer.size.width*
 					(float)g.debugContentHeight/
 					(float)g.debugContentWidth;
-				layers[layerCount++] =
-					(const XrCompositionLayerBaseHeader *)&debugLayer;
+				bool overlayFits = true;
+				if(!fullMenu && g.debugContentHeight == 64){
+					// Query in the same head space as this layer, at its display time.
+					XrView headViews[2] = { { XR_TYPE_VIEW }, { XR_TYPE_VIEW } };
+					XrViewState headState = { XR_TYPE_VIEW_STATE };
+					uint32_t headCount = 0;
+					locateInfo.space = g.viewSpace;
+					overlayFits = XR_SUCCEEDED(xrLocateViews(g.session,
+						&locateInfo, &headState, 2, &headCount, headViews)) &&
+						headCount == 2 &&
+						(headState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) &&
+						FitMinimalProfiler(headViews, debugLayer);
+				}
+				if(overlayFits)
+					layers[layerCount++] =
+						(const XrCompositionLayerBaseHeader *)&debugLayer;
 			}
 		}
 	}

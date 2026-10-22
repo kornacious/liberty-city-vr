@@ -24,7 +24,7 @@ namespace VrCullViz {static bool active;static int calls;inline bool IsActive(){
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
 namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}
-static bool QuestProfilerIsEnabled(){return true;}
+static int gProfilerDisplayMode=1;
 struct Rect {int left,top,right,bottom;};
 struct Text {std::string text;Rect bounds;};
 struct Row {std::string text;int y,scale;bool selected;};
@@ -66,7 +66,7 @@ static void Verify(){
 }
 int main(){
  for(int scenario=0;scenario<4;scenario++)for(int selected=0;selected<VR_GRAPHICS_ITEM_COUNT;selected++){
-  Clear();gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
+  Clear();gProfilerDisplayMode=scenario%3;gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
   xrvk::status.fallbackReason=scenario==3?1:0;xrvk::status.previousFallbackReason=scenario>=2?1:0;VrCullViz::active=scenario==2;
   DrawQuestGraphicsPage();Verify();
  }

@@ -2,6 +2,9 @@
 
 ## 0.5.6
 
+- Added a minimal performance overlay with FPS above frame time, fitted to the
+  upper right of both eyes' visible area. Minimal mode avoids full profiling overhead.
+
 - Fixed mission selection falsely reporting "MISSION NOT SAFE RIGHT NOW" for
   background main-script threads, and preserved those threads during switches.
 - Kept VR random traffic on the distant spawn ring in every direction and
