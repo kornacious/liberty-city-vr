@@ -3695,6 +3695,28 @@ GetTrackedHandAimRay(int hand, CVector *origin, CVector *direction)
 }
 
 bool
+GetTrackedIndexTip(int hand, CVector *tip)
+{
+    if(!tip || hand<0 || hand>=VR_HAND_COUNT || !AreTrackedHandsEnabled() || !gPoseValid[hand] ||
+       IsTrackedWeaponHeld(hand) || IsTrackedDetonatorActive(hand) ||
+       IsImmersiveSteeringHandleGrabbed(hand) || IsImmersiveBikeHandleGrabbed(hand)) return false;
+    CMatrix matrix; float grip=0,trigger=0;
+    if(!GetTrackedVisualHandMatrix(hand,&matrix,&grip,&trigger)) return false;
+    // Match RenderVrTrackedHand's basis and optional body-IK wrist exactly.
+    CVector up=matrix.GetRight()*(hand==1?1.f:-1.f),origin,forward;
+    if(!GetTrackedVisualHandAimRay(hand,&origin,&forward)) forward=matrix.GetUp();
+    if(forward.MagnitudeSqr()<.0001f) return false;
+    forward.Normalise(); up-=forward*DotProduct(up,forward);
+    if(up.MagnitudeSqr()<.0001f) up=matrix.GetRight()*(hand==1?1.f:-1.f);
+    up.Normalise(); CVector right=CrossProduct(up,forward); right.Normalise();
+    if(DotProduct(right,matrix.GetForward())<0) right*= -1.f;
+    CVector position=matrix.GetPosition();
+    if(VrBodyIK::WeaponOwnershipActive() &&
+       VrBodyIK::GetRigidWeaponHandBasis(hand,&position,&right,&up,&forward) && hand==0) up*= -1.f;
+    return VRHandModel::IndexTip(hand,position,right,up,forward,grip,trigger,tip);
+}
+
+bool
 GetTrackedVisualHandAimRay(int hand, CVector *origin, CVector *direction)
 {
 	if(!origin || !direction)

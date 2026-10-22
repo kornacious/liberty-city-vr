@@ -146,6 +146,7 @@ bool GetTrackedHandAimRay(int hand, CVector *origin, CVector *direction);
 #ifdef GTA_VR_WEAPONS
 bool GetTrackedVisualHandMatrix(int hand, CMatrix *handMatrix,
 	float *grip = nil, float *trigger = nil);
+bool GetTrackedIndexTip(int hand, CVector *tip);
 // Replaces only an active two-handed weapon's support-hand presentation pose
 // with the exact weapon support socket. Unlike GetTrackedVisualHandMatrix(),
 // this does not apply wheel or steering presentation offsets.

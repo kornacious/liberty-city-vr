@@ -17,6 +17,24 @@ static constexpr Button Buttons[]={
     {370,202,500,244,"RESCAN"}
 };
 inline int Hit(float x,float y) { for(int i=0;i<8;++i) if(x>=Buttons[i].left && x<=Buttons[i].right && y>=Buttons[i].top && y<=Buttons[i].bottom) return i; return -1; }
+// Metres in the panel basis. Approach from the front, press once, then
+// withdraw 3 cm before another press (including sliding to another button).
+struct Touch {
+    bool armed=false;
+    void Reset() { armed=false; }
+    int Update(float ox,float oy,float oz,float width,int &hover) {
+        hover=-1;
+        if(!std::isfinite(ox) || !std::isfinite(oy) || !std::isfinite(oz) || !std::isfinite(width) || width<=0) { Reset(); return -1; }
+        if(oz>=.03f) armed=true;
+        if(oz<-.025f) { Reset(); return -1; }
+        if(oz>.07f) return -1;
+        hover=Hit(256+ox*512/width,128-oy*512/width);
+        if(oz>.008f || !armed) return -1;
+        // Contact anywhere on the glass consumes this poke; sliding cannot click.
+        armed=false;
+        return hover;
+    }
+};
 // Ray already expressed in the panel basis, normal towards its viewer.
 inline bool Intersect(float ox,float oy,float oz,float dx,float dy,float dz,float width,float &x,float &y) {
     if(!std::isfinite(oz) || !std::isfinite(dz) || oz<=0 || dz>=-0.0001f || width<=0) return false;

@@ -39,6 +39,9 @@ const char *labels[]={"RIGHT","FORWARD","UP","PITCH","YAW","ROLL","SIZE"};
 Placement global,model,bundledGlobal,bundledModel,draft;
 bool loaded=false, visible=true, edit=false, modelTarget=false, interacting=false, xDown=false;
 bool triggerDown[2]={true,true};
+bool touchMode=false;
+RadioBoard::Touch touch[2];
+CVehicle *touchVehicle=nil;
 int modelId=-1, hover=-1;
 double xSince=0;
 char notice[96]="HOLD X, POINT, THEN CLICK TRIGGER";
@@ -70,9 +73,13 @@ void Load() {
         defaults=std::string(platform::storageRoot())+"/radio_board_defaults.ini";
         global=Read(personal,-1); bundledGlobal=Read(defaults,-1);
         visible=GetPrivateProfileIntA("RadioBoard","Visible",1,personal.c_str())!=0;
+        touchMode=GetPrivateProfileIntA("RadioBoard","InteractionMode",0,personal.c_str())==1;
+        if(touchMode) snprintf(notice,sizeof(notice),"TOUCH BUTTONS WITH YOUR INDEX FINGER");
         loaded=true;
     }
-    int id=Vehicle()?Vehicle()->GetModelIndex():-1;
+    CVehicle *current=Vehicle();
+    if(current!=touchVehicle) { for(auto &t:touch) t.Reset(); touchVehicle=current; }
+    int id=current?current->GetModelIndex():-1;
     if(id!=modelId) {
         if(edit) CloseEditor();
         modelId=id; model=Read(personal,id); bundledModel=id<0?Placement():Read(defaults,id);
@@ -169,6 +176,7 @@ void Text(const Plane &p,const char *text,float cx,float y,float scale,int r,int
 const char *MenuStatus() { return notice; }
 void CloseEditor() { edit=false; }
 bool Interacting() { return interacting; }
+bool TouchEnabled() { Plane p; return BuildPlane(p) && touchMode; }
 bool Update(bool blocked) {
     Load(); const auto &input=androidgame::GetPadInput();
     double now=Now(); bool tap=false;
@@ -176,12 +184,22 @@ bool Update(bool blocked) {
     bool x=available && input.x;
     if(x && !xDown) xSince=now;
     if(!x && xDown && available && now-xSince<.30) tap=true;
-    interacting=x && now-xSince>=.30;
+    interacting=!touchMode && x && now-xSince>=.30;
     xDown=x; hover=-1;
+    bool activated=false;
     for(int hand=0;hand<2;++hand) {
         bool trigger=(hand?input.rightTrigger:input.leftTrigger)>=.55f;
         const auto &aim=input.aimPose[hand];
-        if(interacting && aim.valid && !OculusVR::IsTrackedWeaponHeld(hand)) {
+        if(touchMode) {
+            CVector tip;
+            if(available && OculusVR::GetTrackedIndexTip(hand,&tip)) {
+                CVector delta=tip-plane.origin; int near=-1;
+                int press=touch[hand].Update(DotProduct(delta,plane.right),DotProduct(delta,plane.up),
+                    DotProduct(delta,plane.normal),plane.width,near);
+                if(near>=0) { hover=near; interacting=true; }
+                if(press>=0 && !activated) { Activate(press); activated=true; }
+            } else touch[hand].Reset();
+        } else if(interacting && aim.valid && !OculusVR::IsTrackedWeaponHeld(hand)) {
             float right[3],up[3],forward[3],origin[3];
             if(rw::vulkan::playPoseToFirstPersonWorld(aim.position,aim.orientation,right,up,forward,origin)) {
                 CVector delta=CVector(origin[0],origin[1],origin[2])-plane.origin;
@@ -207,6 +225,8 @@ bool Update(bool blocked) {
 void SuppressDriving(CControllerState *state) { if(interacting && state) state->Clear(); }
 void MenuRow(int row,char *text,int length) {
     Load(); Placement p=edit?draft:TargetPlacement();
+    if(row==1) { snprintf(text,length,"INTERACTION  < %s >",touchMode?"TOUCH":"LASER POINTER"); return; }
+    if(row>1) --row;
     if(row==0) snprintf(text,length,"RADIO BOARD  < %s >",visible?"VISIBLE":"HIDDEN");
     else if(row==1) snprintf(text,length,"EDIT  < %s >",modelTarget?(modelId>=0?GetVrVehicleModelName(modelId):"ENTER VEHICLE"):"GLOBAL");
     else if(row>=2 && row<=8) snprintf(text,length,"%s  < %+d %s >",labels[row-2],p.v[row-2],row<5?"MM":row<8?"DEG":"%");
@@ -217,6 +237,15 @@ void MenuRow(int row,char *text,int length) {
 }
 void MenuAction(int row,int direction) {
     Load();
+    if(row==1) {
+        bool next=!touchMode;
+        if(WritePrivateProfileStringA("RadioBoard","InteractionMode",next?"1":"0",personal.c_str())) {
+            touchMode=next; for(auto &t:touch) t.Reset(); interacting=false;
+            snprintf(notice,sizeof(notice),"%s",touchMode?"TOUCH BUTTONS WITH YOUR INDEX FINGER":"HOLD X, POINT, THEN CLICK TRIGGER");
+        } else snprintf(notice,sizeof(notice),"INTERACTION SETTING SAVE FAILED");
+        return;
+    }
+    if(row>1) --row;
     if(row==0) { visible=!visible; WritePrivateProfileStringA("RadioBoard","Visible",visible?"1":"0",personal.c_str()); }
     else if(row==1) { CloseEditor(); modelTarget=!modelTarget; }
     else if(row>=2 && row<=8) {
@@ -253,7 +282,7 @@ void Render() {
     Text(p,volume,184,204,1,150,190,180);
     Text(p,edit?"PLACEMENT PREVIEW - SAVE OR CANCEL":notice,184,228,1,210,210,190);
     RwIm3DVertex rays[4]{}; int rayCount=0;
-    if(interacting) for(int hand=0;hand<2;++hand) {
+    if(interacting && !touchMode) for(int hand=0;hand<2;++hand) {
         const auto &aim=androidgame::GetPadInput().aimPose[hand];
         if(!aim.valid || OculusVR::IsTrackedWeaponHeld(hand)) continue;
         float right[3],up[3],forward[3],origin[3];

@@ -105,12 +105,21 @@ Police vehicles keep the engine's police-radio restrictions.
 
 - **Tap X** to change station. With a visible board this is a short press
   released within 0.3 seconds; the ordinary press edge remains when hidden.
-- **Hold X** for at least 0.3 seconds to interact with the board.
-- Point either free controller at a button, then press its trigger. A highlight
+- In **VR Settings > Radio and Custom Music > Interaction**, choose
+  **LASER POINTER** (default) or **TOUCH**. This preference is saved immediately
+  and applies to all vehicle models.
+- In laser mode, **hold X** for at least 0.3 seconds to interact with the board.
+  Point either free controller at a button, then press its trigger. A highlight
   identifies the target; hovering never activates it. A trigger already held
   for driving must be released and pressed again to click.
-- While interacting, driving inputs and firing are captured. Release X to
-  resume driving. A controller holding a tracked weapon cannot click the board.
+- In touch mode, reach toward a button with either virtual index finger and
+  touch its face. X and the trigger are not required. Withdraw the finger at
+  least 3 cm to press again; holding contact or sliding does not repeat a press.
+  Touch follows the animated finger, so release the trigger to extend it.
+  A hand holding a weapon or gripping the wheel/handlebars cannot touch buttons.
+- While interacting, driving inputs and firing are captured. Release X in
+  laser mode, or move your fingers away from the buttons in touch mode, to
+  resume driving. Keep virtual hands enabled for touch interaction.
 - Use STATION -/+, music volume -/+, PREVIOUS, PAUSE/PLAY, NEXT and RESCAN.
   Track controls only act on the custom station; station cycling includes OFF.
 - PREVIOUS restarts a song after three seconds; another press near its beginning

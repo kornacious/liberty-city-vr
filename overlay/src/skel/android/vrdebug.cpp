@@ -2230,7 +2230,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_RAGDOLL: return VR_RAGDOLL_ITEM_COUNT;
 	case VR_MENU_PAGE_DEFORMATION: return VR_DEFORMATION_ITEM_COUNT;
 	case VR_MENU_PAGE_MODEL_ASSETS: return VR_MODEL_ASSETS_ITEM_COUNT;
-	case VR_MENU_PAGE_RADIO: return 15;
+	case VR_MENU_PAGE_RADIO: return QuestRadio::MenuRows;
 	case VR_MENU_PAGE_VEHICLE: return VR_VEHICLE_ITEM_COUNT;
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return Max(1,
@@ -2348,7 +2348,7 @@ IsMenuItemVisible(int page, int item)
 static bool
 CurrentMenuValueRepeats(void)
 {
-	if(gVrMenuPage == VR_MENU_PAGE_RADIO) return gVrRadioSelection >= 2 && gVrRadioSelection <= 8;
+	if(gVrMenuPage == VR_MENU_PAGE_RADIO) return gVrRadioSelection >= QuestRadio::FirstPlacementRow && gVrRadioSelection <= QuestRadio::LastPlacementRow;
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION)
 		return VrWeaponCalibrationMenu::ValueItem(
 			gVrCalibrationGroup, gVrCalibrationSelection) >= 0;
@@ -3356,7 +3356,7 @@ VrDebugUpdate(const PadInput &in)
 				break;
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_RADIO && (positivePulse || decreasePulse)){
-            if(gVrRadioSelection == 14) { QuestRadio::CloseEditor(); gVrMenuPage = VR_MENU_PAGE_SETTINGS; }
+            if(gVrRadioSelection == QuestRadio::BackRow) { QuestRadio::CloseEditor(); gVrMenuPage = VR_MENU_PAGE_SETTINGS; }
             else QuestRadio::MenuAction(gVrRadioSelection, (decreasePulse ? -1 : 1)*repeatMagnitude);
 		}else if(gVrMenuPage == VR_MENU_PAGE_VEHICLE &&
 		         (positivePulse || decreasePulse)){
@@ -4556,9 +4556,9 @@ static void
 DrawQuestRadioPage(void)
 {
     BeginFullVrMenuPage("RADIO AND CUSTOM MUSIC");
-    for(int row=0;row<15;++row) {
+    for(int row=0;row<QuestRadio::MenuRows;++row) {
         char text[112]; QuestRadio::MenuRow(row,text,sizeof(text));
-        DrawFullVrMenuRow(text,158+row*30,2,row==gVrRadioSelection,true);
+        DrawFullVrMenuRow(text,158+row*28,2,row==gVrRadioSelection,true);
     }
     DrawVrMenuText(QuestMusic::Status(),VR_MENU_WIDTH/2,626,2,110,230,170);
     DrawVrMenuText(QuestRadio::MenuStatus(),VR_MENU_WIDTH/2,654,2,240,178,48);

@@ -21,6 +21,11 @@ audio backend. It covers both directions, custom music availability, Radio Off,
 station wrapping, pending X-button taps, rapid selections and police vehicles.
 Listening to playback still requires headset verification.
 
+`test-radio-touch.ps1` exercises production input and menu functions for the
+saved laser/touch setting, fingertip contact, release hysteresis, both hands,
+tracking/menu/weapon transitions, driving capture and the original laser input.
+The fake poses do not establish physical reach or headset appearance.
+
 `test-cd-directory.ps1 -StageRoot <assembled-tree>` compiles the production
 archive directory with assertions disabled, as in the APK. It adds 4,096 entries
 from initial capacities 0, 1 and 128, verifies all sector ranges/image selectors,

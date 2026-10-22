@@ -26,7 +26,7 @@ namespace androidgame {
 struct PadInput { struct Pose {float position[3],orientation[4];bool valid=false;}; Pose aimPose[2]; bool x=false; float leftTrigger=0,rightTrigger=0; } input;
 const PadInput &GetPadInput(){return input;}
 }
-namespace OculusVR { bool weapon=false; bool IsTrackedWeaponHeld(int){return weapon;} }
+namespace OculusVR { bool weapon=false; bool IsTrackedWeaponHeld(int){return weapon;} bool GetTrackedIndexTip(int,CVector*){return false;} }
 namespace rw { namespace vulkan {
 bool playPoseToFirstPersonWorld(const float *pos,const float*,float*,float*,float *forward,float *origin){memcpy(origin,pos,12);forward[0]=forward[1]=0;forward[2]=-1;return true;}
 } }
@@ -34,6 +34,7 @@ struct CControllerState { int acceleration=255; void Clear(){acceleration=0;} };
 namespace QuestRadio {
 struct Plane{CVector origin,right={1,0,0},up={0,1,0},normal={0,0,1};float width=.4f;};
 bool available=true,vehicle=true,interacting=false,xDown=false,triggerDown[2]={true,true};
+bool touchMode=false; RadioBoard::Touch touch[2];
 int hover=-1,activations=0,last=-1;double now=0,xSince=0;
 void Load(){} bool BuildPlane(Plane &){return available;} bool Vehicle(){return vehicle;} double Now(){return now;}
 void Activate(int hit){++activations;last=hit;}

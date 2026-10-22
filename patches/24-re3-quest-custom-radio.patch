@@ -11,7 +11,17 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  #ifdef USE_OUR_VERSIONING
  #include "GitSHA1.h"
  #endif
-@@ -2600,6 +2603,8 @@
+@@ -2430,7 +2433,8 @@
+ 	   CWorld::Players[CWorld::PlayerInFocus].m_bInRemoteMode ||
+ 	   (FindPlayerVehicle() &&
+ 	    !OculusVR::IsImmersiveDrivingActive() &&
+-	    !VrBodyIK::WeaponOwnershipActive()))
++	    !VrBodyIK::WeaponOwnershipActive() &&
++	    !QuestRadio::TouchEnabled()))
+ 		return;
+ 	CPed *player = FindPlayerPed();
+ 	if(!player || !player->m_rwObject || player->DyingOrDead())
+@@ -2600,6 +2604,8 @@
  	CRenderer::RenderFirstPersonVehicle();
  #if defined(RW_VULKAN) && defined(__ANDROID__)
  #ifdef GTA_VR_WEAPONS

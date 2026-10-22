@@ -50,6 +50,7 @@ struct HandMesh
 {
 	bool attempted;
 	bool loaded;
+	size_t indexTip=0;
 	std::vector<HandVertex> vertices;
 	std::vector<RwImVertexIndex> indices;
 	std::vector<RwIm3DVertex> renderVertices;
@@ -149,6 +150,12 @@ LoadHand(int hand)
 		return false;
 	}
 	mesh.loaded = true;
+	// Pose 1 closes the other fingers but leaves the index extended. Its most
+	// distal surface vertex is the touch point, shared by every animated pose.
+	mesh.indexTip=0;
+	for(size_t i=1; i<mesh.vertices.size(); ++i)
+		if(mesh.vertices[i].position[1].x>mesh.vertices[mesh.indexTip].position[1].x)
+			mesh.indexTip=i;
 	return true;
 }
 
@@ -220,6 +227,25 @@ Shutdown(void)
 		std::vector<RwImVertexIndex>().swap(mesh.indices);
 		std::vector<RwIm3DVertex>().swap(mesh.renderVertices);
 	}
+}
+
+bool
+IndexTip(int hand, const CVector &position, const CVector &right,
+    const CVector &up, const CVector &forward, float grip, float trigger, CVector *tip)
+{
+    if(!tip || hand<0 || hand>=HAND_COUNT) return false;
+    grip=Clamp01(grip); trigger=Clamp01(trigger);
+    if(LoadHand(hand) && LoadAlbedo()) {
+        const HandMesh &mesh=gHands[hand];
+        const CVector local=InterpolatePose(mesh.vertices[mesh.indexTip].position,grip,trigger);
+        *tip=position+forward*(local.x-.055f)+right*local.z-up*local.y;
+    } else {
+        // Same two index segments as the procedural fallback in main.cpp.
+        const float a=.10f+trigger*1.05f,b=.18f+trigger*2.00f;
+        *tip=position+forward*.090f-up*.005f+right*.030f+
+            (forward*cosf(a)-up*sinf(a))*.045f+(forward*cosf(b)-up*sinf(b))*.033f;
+    }
+    return true;
 }
 
 bool
