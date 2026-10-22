@@ -282,8 +282,11 @@ c++ -std=c++17 -I/path/to/openxr/include -Ioverlay/android/app/src/main/cpp \
 The graphics menu layout suite covers OFF, ON and MINIMAL labels.
 
 `test-wheel-hand-basis.ps1 -StageRoot <assembled-source>` extracts the actual
-tracked-hand render basis after the IK override. It checks the left car grip's
-finger direction, upright palm roll and absence of reflection over a tilted wheel's steering range,
-with both floating and IK-owned hands, and checks that the right hand, bike grip,
-released hand and interaction anchor retain their existing behavior. It requires
+tracked-hand render basis after the IK override and the production controller
+conversion. It checks that grabbing the left car grip preserves the free hand's
+finger, palm and thumb directions across independent wrist and wheel rotations,
+with both floating and IK-owned hands. The wheel-locked wrist, right hand and
+bike grip keep their existing behavior. The converted meshes share local
+geometry and rely on the controller conversion's handedness signs; a positive
+basis determinant alone cannot establish correct anatomy. These checks require
 no game assets; the final visual fit still needs a headset check.

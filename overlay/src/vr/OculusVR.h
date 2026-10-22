@@ -146,6 +146,10 @@ bool GetTrackedHandAimRay(int hand, CVector *origin, CVector *direction);
 #ifdef GTA_VR_WEAPONS
 bool GetTrackedVisualHandMatrix(int hand, CMatrix *handMatrix,
 	float *grip = nil, float *trigger = nil);
+// Left car grip mesh orientation from the controller; leaves the rim position
+// and steering constraint untouched. False for other hands/interactions.
+bool GetCarWheelHandVisualBasis(int hand, CVector *right, CVector *up,
+	CVector *forward);
 bool GetTrackedIndexTip(int hand, CVector *tip);
 // Replaces only an active two-handed weapon's support-hand presentation pose
 // with the exact weapon support socket. Unlike GetTrackedVisualHandMatrix(),

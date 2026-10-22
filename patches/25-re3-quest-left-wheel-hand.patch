@@ -1,22 +1,14 @@
 diff --git a/src/core/main.cpp b/src/core/main.cpp
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
-@@ -1736,6 +1736,18 @@ RenderVrTrackedHand(int hand)
+@@ -1736,6 +1736,10 @@ RenderVrTrackedHand(int hand)
  		if(hand == 0 && OculusVR::IsImmersiveSteeringHandleGrabbed(hand))
  			right *= -1.0f;
  	}
-+	if(hand == 0 && OculusVR::IsImmersiveCarDrivingActive() &&
-+	   OculusVR::IsImmersiveSteeringHandleGrabbed(hand)){
-+		// Reverse the left finger axis around the rim and correct its palm
-+		// roll: retaining the legacy negative palm axis leaves the thumb down.
-+		// Rebuild the lateral axis to keep the mesh unreflected. Apply after
-+		// the IK override so floating and body-owned hands agree.
-+		// This is visual only: the wheel anchor and steering ray stay intact.
-+		forward *= -1.0f;
-+		up *= -1.0f;
-+		right = CrossProduct(up, forward);
-+		right.Normalise();
-+	}
++	// Keep the wheel-locked position, but orient the left mesh exactly as
++	// the free controller hand, including the authored handedness signs.
++	// Apply after IK so its wrist basis cannot replace this conversion.
++	OculusVR::GetCarWheelHandVisualBasis(hand, &right, &up, &forward);
  	const bool holdingDetonator = OculusVR::IsTrackedDetonatorActive(hand);
  	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
  	if(holdingDetonator ||

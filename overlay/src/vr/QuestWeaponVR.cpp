@@ -3607,6 +3607,27 @@ ApplyTrackedWeaponSupportHandLock(int hand, CMatrix *handMatrix,
 }
 
 bool
+GetCarWheelHandVisualBasis(int hand, CVector *right, CVector *up,
+	CVector *forward)
+{
+	if(hand != 0 || !right || !up || !forward || !IsImmersiveCarDrivingActive() ||
+	   !IsImmersiveSteeringHandleGrabbed(hand))
+		return false;
+	// The rim is a position/steering constraint, not a controller quaternion.
+	// Use the same authored mesh conversion as the free tracked hand. The
+	// converted assets rely on its handedness signs; imposing an orthonormal
+	// wheel basis here turns the left mesh into the wrong anatomical hand.
+	CVector unusedPosition, trackedRight, trackedUp, trackedForward;
+	if(!BuildLegacyTrackedWeaponHandBasis(
+	   hand, &unusedPosition, &trackedRight, &trackedUp, &trackedForward))
+		return false;
+	*right = trackedRight;
+	*up = trackedUp;
+	*forward = trackedForward;
+	return true;
+}
+
+bool
 GetTrackedHandMatrix(int hand, CMatrix *matrix, float *grip, float *trigger)
 {
 	if(!matrix || hand < 0 || hand >= VR_HAND_COUNT || !gPoseValid[hand])
