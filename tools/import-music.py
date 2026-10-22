@@ -7,6 +7,7 @@ APK's restricted provider, atomic commits and SHA-256 transfer verification.
 import argparse
 import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -23,7 +24,34 @@ URI = 'content://com.libertyvr.quest.music'
 
 
 def run(args, **kwargs):
-    return subprocess.run(args, check=True, **kwargs)
+    try:
+        return subprocess.run(args, check=True, **kwargs)
+    except FileNotFoundError as error:
+        raise RuntimeError(f'Cannot launch {args[0]!r}: executable not found') from error
+
+
+def find_adb(requested=None):
+    """Prefer an explicit override/PATH, then SDKs used by the local builder."""
+    if requested:
+        found = shutil.which(requested)
+        if found:
+            return found
+        raise RuntimeError(f'ADB not found at {requested!r}. Check --adb and supply the full path to adb.')
+    found = shutil.which('adb')
+    if found:
+        return found
+    roots = [pathlib.Path(os.environ[key]) for key in ('ANDROID_HOME', 'ANDROID_SDK_ROOT') if os.environ.get(key)]
+    if sys.platform == 'win32':
+        if os.environ.get('LOCALAPPDATA'):
+            roots.append(pathlib.Path(os.environ['LOCALAPPDATA']) / 'Android' / 'Sdk')
+        roots.append(pathlib.Path('C:/LCVRBuild/.android-sdk'))
+    executable = 'adb.exe' if sys.platform == 'win32' else 'adb'
+    for root in roots:
+        candidate = root / 'platform-tools' / executable
+        if candidate.is_file():
+            return str(candidate.resolve())
+    raise RuntimeError('ADB was not found. Install Android Platform Tools, set ANDROID_HOME/ANDROID_SDK_ROOT, '
+                       'or pass --adb "FULL_PATH_TO_ADB" (for example C:\\LCVRBuild\\.android-sdk\\platform-tools\\adb.exe).')
 
 
 def digest(path):
@@ -100,7 +128,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('files', nargs='*', type=pathlib.Path, help='Files or flat music directories')
     parser.add_argument('--serial')
-    parser.add_argument('--adb', default='adb')
+    parser.add_argument('--adb', help='ADB executable; defaults to PATH, Android SDK locations, or the Windows build SDK')
     parser.add_argument('--ffprobe', default='ffprobe')
     parser.add_argument('--export-board', type=pathlib.Path, help='Download the placement exported in the Radio settings page')
     parser.add_argument('--dry-run', action='store_true', help='Validate locally; no ADB or headset required')
@@ -113,6 +141,7 @@ def main(argv=None):
             paths.append(item.resolve())
     if not paths and not args.export_board:
         parser.error('Select audio files/a directory or --export-board')
+    adb_path = None if args.dry_run else find_adb(args.adb)
     accepted, rejected, seen = [], 0, set()
     if paths and not shutil.which(args.ffprobe):
         raise RuntimeError('ffprobe is required for validation. Install FFmpeg or specify --ffprobe')
@@ -136,7 +165,7 @@ def main(argv=None):
         return 1 if rejected else 0
     if paths and not accepted:
         raise RuntimeError('No valid music to import')
-    adb = choose_device(args.adb, args.serial)
+    adb = choose_device(adb_path, args.serial)
     if args.export_board:
         if args.export_board.exists():
             raise RuntimeError('Export destination already exists; choose a new filename')

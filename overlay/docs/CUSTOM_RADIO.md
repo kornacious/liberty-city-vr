@@ -9,14 +9,25 @@ Uninstalling the app removes its music, settings and game data; keep originals.
 
 Install the updated APK first. Enable Quest USB debugging, accept the headset's
 ADB authorization prompt, and install Python 3, Android Platform Tools (`adb`)
-and FFmpeg (`ffprobe`). Both tools must be on PATH, or pass their full paths
-with `--adb` and `--ffprobe`.
+and FFmpeg (`ffprobe`). The importer finds ADB on PATH, in the SDK selected by
+`ANDROID_HOME`/`ANDROID_SDK_ROOT`, or (on Windows) in the standard Android SDK
+location and `C:\LCVRBuild\.android-sdk` used by the build script. FFprobe must
+be on PATH. You can override either tool with `--adb` and `--ffprobe`.
 
 Windows:
 
 ```bat
 IMPORT_MUSIC.bat "C:\Music\Driving"
 ```
+
+If ADB is installed elsewhere, supply its full path:
+
+```bat
+IMPORT_MUSIC.bat --adb "C:\My SDK\platform-tools\adb.exe" "C:\Music\Driving"
+```
+
+An error after all `VALID` lines saying `[WinError 2]` in older importers means
+ADB could not be launched. Update the importer or use `--adb` as above.
 
 Linux/macOS with Python and platform tools available:
 
