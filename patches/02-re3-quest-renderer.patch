@@ -876,7 +876,7 @@ index 3446f620..f1ac9c9c 100644
  
  #ifdef PS2_HUD
  #define MONEY_X 100.0f
-@@ -321,6 +360,466 @@ void CHud::SetVehicleName(wchar *name)
+@@ -321,6 +360,473 @@ void CHud::SetVehicleName(wchar *name)
  	m_pVehicleName = name;
  }
  
@@ -922,7 +922,7 @@ index 3446f620..f1ac9c9c 100644
 +// panel runs exactly this code into a texture of its own, before the frame
 +// opens its render pass.
 +static void
-+DrawStatusContents(void)
++DrawStatusContents(bool wristPanel = false)
 +{
 +	CPlayerPed *playerPed = FindPlayerPed();
 +	if (playerPed == nil)
@@ -1036,7 +1036,12 @@ index 3446f620..f1ac9c9c 100644
 +
 +	AsciiToUnicode("]", sPrintIcon);
 +	
-+	float fStarsX = SCREEN_SCALE_FROM_RIGHT(STARS_X);
++	// Heading glyphs extend 32*scaleX to the right of their origin.
++	// Align the wrist row's rightmost glyph with health/money, keeping all
++	// six stars inside the status texture instead of the flat HUD's margin.
++	float fStarsX = wristPanel ?
++		SCREEN_SCALE_FROM_RIGHT(HEALTH_X + 32.0f*0.8f) :
++		SCREEN_SCALE_FROM_RIGHT(STARS_X);
 +
 +	for (int i = 0; i < 6; i++) {
 +		CFont::SetColor(CRGBA(0, 0, 0, 255));
@@ -1123,7 +1128,7 @@ index 3446f620..f1ac9c9c 100644
 +	RwRenderStateSet(rwRENDERSTATECULLMODE, (void*)rwCULLMODECULLNONE);
 +	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
 +	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
-+	DrawStatusContents();
++	DrawStatusContents(true);
 +	CFont::DrawFonts();
 +}
 +
@@ -1138,7 +1143,9 @@ index 3446f620..f1ac9c9c 100644
 +	const float left = SCREEN_SCALE_FROM_RIGHT(292.0f);
 +	const float right = SCREEN_SCALE_FROM_RIGHT(96.0f);
 +	const float top = SCREEN_SCALE_Y(30.0f);
-+	const float bottom = SCREEN_SCALE_Y(106.0f);
++	// The star row starts at 87; heading glyphs are 20*1.35 high,
++	// followed by a two-pixel shadow. Leave padding below the whole glyph.
++	const float bottom = SCREEN_SCALE_Y(120.0f);
 +	const float width = right-left;
 +	const float height = bottom-top;
 +	RwRaster *panel = (RwRaster*)androidgame::BeginVrWristPanel(
