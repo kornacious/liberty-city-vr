@@ -470,6 +470,18 @@ static int gVrWaterSelection;
 static int gVrWeaponsSelection;
 static int gVrHudSelection;
 static int gVrWristRadarSelection;
+static bool gVrWristCalibrationTurbo;
+static bool gVrWristCalibrationTurboDown;
+
+static int
+WrapWristAngle(int angle)
+{
+	// Stored in tenths of a degree; retain either endpoint until crossed.
+	while(angle > 1800) angle -= 3600;
+	while(angle < -1800) angle += 3600;
+	return angle;
+}
+
 // Which panel the calibration page is editing: the row that opened it decides.
 static int gVrWristPanelEdit;
 static int gVrTrafficSelection;
@@ -2724,6 +2736,10 @@ VrDebugUpdate(const PadInput &in)
 	   in.y && !gVrCalibrationTurboDown)
 		gVrCalibrationTurbo = !gVrCalibrationTurbo;
 	gVrCalibrationTurboDown = in.y;
+	if(gVrMenuVisible && gVrMenuPage == VR_MENU_PAGE_WRIST_RADAR &&
+	   in.y && !gVrWristCalibrationTurboDown)
+		gVrWristCalibrationTurbo = !gVrWristCalibrationTurbo;
+	gVrWristCalibrationTurboDown = in.y;
 	if(!gVrMenuVisible || gVrMenuPage != VR_MENU_PAGE_RADIO) QuestRadio::CloseEditor();
 	if(gVrMenuVisible){
 		if(gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION &&
@@ -3245,6 +3261,7 @@ VrDebugUpdate(const PadInput &in)
 		         (positivePulse || decreasePulse)){
 			const int direction = decreasePulse ? -1 : 1;
 			const int step = direction*repeatMagnitude;
+			const int placementStep = direction*(gVrWristCalibrationTurbo ? 100 : 5);
 			const int panel = gVrWristPanelEdit;
 			const int side = gWristPanelUnderside[panel] ?
 				WRIST_SIDE_INNER : WRIST_SIDE_OUTER;
@@ -3276,32 +3293,32 @@ VrDebugUpdate(const PadInput &in)
 				break;
 			case VR_WRIST_ALONG:
 				gWristAlong[panel][slot] = Min(Max(
-					gWristAlong[panel][slot]+step, -300), 300);
+					gWristAlong[panel][slot]+placementStep, -300), 300);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_ACROSS:
 				gWristAcross[panel][slot] = Min(Max(
-					gWristAcross[panel][slot]+step, -300), 300);
+					gWristAcross[panel][slot]+placementStep, -300), 300);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_LIFT:
 				gWristLift[panel][slot] = Min(Max(
-					gWristLift[panel][slot]+step, -300), 300);
+					gWristLift[panel][slot]+placementStep, -300), 300);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_PITCH:
-				gWristPitch[panel][slot] = Min(Max(
-					gWristPitch[panel][slot]+step, -1800), 1800);
+				gWristPitch[panel][slot] = WrapWristAngle(
+					gWristPitch[panel][slot]+placementStep);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_YAW:
-				gWristYaw[panel][slot] = Min(Max(
-					gWristYaw[panel][slot]+step, -1800), 1800);
+				gWristYaw[panel][slot] = WrapWristAngle(
+					gWristYaw[panel][slot]+placementStep);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_ROLL:
-				gWristRoll[panel][slot] = Min(Max(
-					gWristRoll[panel][slot]+step, -1800), 1800);
+				gWristRoll[panel][slot] = WrapWristAngle(
+					gWristRoll[panel][slot]+placementStep);
 				SaveWristPanels();
 				break;
 			case VR_WRIST_COLOUR_RED:
@@ -4372,8 +4389,9 @@ DrawQuestWristRadarPage(void)
 	char heading[96];
 	snprintf(heading, sizeof(heading), "WRIST %s - %s SIDE - %s",
 		panelName, sideName, kWristContextName[context]);
-	BeginFullVrMenuPage(heading,
-		"CALIBRATE THE LEFT HAND - THE RIGHT ONE MIRRORS IT");
+	BeginFullVrMenuPage(heading, gVrWristCalibrationTurbo ?
+		"Y: STEP 10 CM / DEG - LEFT HAND EDITS MIRROR TO RIGHT" :
+		"Y: STEP 0.5 CM / DEG - LEFT HAND EDITS MIRROR TO RIGHT");
 	char rows[VR_WRIST_ITEM_COUNT][112];
 	snprintf(rows[VR_WRIST_CONTEXT], sizeof(rows[0]),
 		"CALIBRATING FOR  < %s%s >", kWristContextName[context],
