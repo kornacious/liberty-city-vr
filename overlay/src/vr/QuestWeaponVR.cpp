@@ -2577,6 +2577,28 @@ ResetInteraction()
 	gScopeCandidateSince = gScopeReleaseSince = 0;
 }
 
+static void
+ResetKnockdownInteraction()
+{
+	// Return both hands to inventory holsters, not catchable thrown props.
+	// Inventory/ammunition and loadout assignments are intentionally untouched.
+	ResetInteraction();
+	for(int hand = 0; hand < VR_HAND_COUNT; hand++){
+		// Holding grip through the fall must not count as a fresh holster grab.
+		gGripLatched[hand] = gGrip[hand] >= 0.45f;
+		gPreviousPoseTime[hand] = 0;
+		gHandVelocity[hand] = CVector(0,0,0);
+		gTriggerPressed[hand] = false;
+		gTriggerJustPressed[hand] = false;
+		gTriggerJustReleased[hand] = false;
+	}
+	gActiveFire = false;
+	gActiveFireHand = -1;
+	gActiveFireWeaponType = -1;
+	gActiveThrowable = false;
+	gBodyForwardValid = false;
+}
+
 } // namespace
 
 bool
@@ -2589,6 +2611,9 @@ ApplyTouchInput(CControllerState *state)
 	UpdatePoses(input);
 	const bool menu = androidgame::VrMenuConsumesInput();
 	const bool gameplay = IsGameplayAvailable();
+	const bool knockedDown = androidgame::VrKnockdownPresentationActive();
+	if(knockedDown)
+		ResetKnockdownInteraction();
 	const bool shortcutModifier =
 		input.leftGrip >= 0.75f && input.rightGrip >= 0.75f &&
 		gHeldSlot[0] < 0 && gHeldSlot[1] < 0 &&
@@ -2622,8 +2647,7 @@ ApplyTouchInput(CControllerState *state)
 		UpdateHolsterInput(vehicleCapturedHands);
 	else if(gWeaponCalibrationPreview && gameplay)
 		UpdateWeaponCalibrationSupportPreview();
-	// Preserve held slots while the fall/get-up presentation suspends input.
-	else if(!gameplay && !androidgame::VrKnockdownPresentationActive())
+	else if(!gameplay && !knockedDown)
 		ResetInteraction();
 	// A draw or holster can change which firing path owns B during this frame.
 	if(inVehicle)

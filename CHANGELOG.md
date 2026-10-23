@@ -4,7 +4,10 @@
 
 - Added a head-anchored knockdown/get-up view with gentle automatic turning,
   floor/surface protection and smooth recovery. Tracked hands, weapons and
-  aiming aids hide until recovery completes, preserving held weapon slots.
+  aiming aids hide until head-height/tilt recovery completes. Knockdowns return
+  held weapons to their holsters and require a fresh grip to draw them again.
+  Recovery follows voluntary turning; the final yaw correction cannot keep
+  hands hidden or resume upper-body IK before the head pose is ready.
   Locomotion's Knockdown View defaults to Level Horizon; Immersive Tilt adds
   bounded pitch and roll while retaining physical head tracking.
 

@@ -55,7 +55,7 @@ BodyIKGameplayContext(void)
 	CPed *player = FindPlayerPed();
 	if(player == nil || player->m_fHealth <= 0.0f ||
 	   CWorld::Players[CWorld::PlayerInFocus].m_WBState != WBSTATE_PLAYING ||
-	   VrRagdoll::Owns(player))
+	   VrRagdoll::Owns(player) || androidgame::VrKnockdownPresentationActive())
 		return false;
 
 	// These animations own the entire skeleton. Pinning the torso to the HMD

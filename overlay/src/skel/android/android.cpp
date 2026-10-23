@@ -122,7 +122,7 @@ androidgame::VrKnockdownPresentationActive(void)
 		!player->DyingOrDead() && !FrontEndMenuManager.m_bMenuActive &&
 		!CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing() &&
 		!TheCamera.m_WideScreenOn &&
-		(PlayerKnockedDown(player) || gKnockdownView.active);
+		(PlayerKnockedDown(player) || gKnockdownView.OwnsBody());
 }
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
@@ -1760,6 +1760,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(knockdownContext){
 			CVector animatedHead, animatedForward;
 			const bool down = PlayerKnockedDown(player);
+			const bool gettingUp = player->GetPedState() == PED_GETUP;
 			bool posed = down && GetAnimatedPedHeadPose(player,
 				&animatedHead, &animatedForward);
 			if(down && !posed && player->m_pFrames[PED_HEAD]){
@@ -1822,13 +1823,17 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 					}
 				}
 			}
+			// Return heading while the authored get-up still owns the skeleton,
+			// instead of waiting until the player can already turn and walk.
+			if(gettingUp)
+				targetYaw = VrKnockdownView::Wrap(normalYaw-knockdownBaseYaw);
 			if(postPhysics && (!knockdownFrameValid ||
 			   knockdownFrame != CTimer::GetFrameCounter())){
 				knockdownFrame = CTimer::GetFrameCounter();
 				knockdownFrameValid = true;
 				gKnockdownView.Update(down && posed,
 					CTimer::GetIsPaused() ? 0.0f : CTimer::GetTimeStep()/50.0f,
-					targetOffset, targetYaw, targetPitch, targetRoll);
+					targetOffset, targetYaw, targetPitch, targetRoll, gettingUp);
 			}
 			if(gKnockdownView.active){
 				head += gKnockdownView.offset;
