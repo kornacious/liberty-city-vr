@@ -2,7 +2,7 @@ diff --git a/src/renderer/Sprite.cpp b/src/renderer/Sprite.cpp
 index 1e03e80..ecaa23f 100644
 --- a/src/renderer/Sprite.cpp
 +++ b/src/renderer/Sprite.cpp
-@@ -10,6 +10,35 @@
+@@ -10,6 +10,40 @@
  #include "Frontend.h"
  #endif
  
@@ -27,8 +27,13 @@ index 1e03e80..ecaa23f 100644
 +#if defined(RW_VULKAN) && defined(__ANDROID__)
 +	if(QuestWorldBillboardsEnabled()){
 +		const RwV2d *window = RwCameraGetViewWindow(Scene.camera);
++		const RwMatrix *camera = RwFrameGetLTM(RwCameraGetFrame(Scene.camera));
++		const float worldUp[3] = { -camera->right.z, camera->up.z, camera->at.z };
++		const float worldEast[3] = { -camera->right.x, camera->up.x, camera->at.x };
++		// RenderWare right points left; the helper uses camera right/up/forward.
++		// World axes keep texture orientation independent of headset roll.
 +		QuestBillboard::FaceViewer(vertices, count, x, y,
-+			SCREEN_WIDTH, SCREEN_HEIGHT, window->x, window->y);
++			SCREEN_WIDTH, SCREEN_HEIGHT, window->x, window->y, worldUp, worldEast);
 +	}
 +#else
 +	(void)vertices; (void)count; (void)x; (void)y;
@@ -270,3 +275,30 @@ index 1e03e80..ecaa23f 100644
  	nSpriteBufferIndex++;
  	if(nSpriteBufferIndex >= SPRITEBUFFERSIZE)
  		FlushSpriteBuffer();
+diff --git a/src/renderer/Clouds.cpp b/src/renderer/Clouds.cpp
+index 53d79b2..4c85996 100644
+--- a/src/renderer/Clouds.cpp
++++ b/src/renderer/Clouds.cpp
+@@ -18,6 +18,7 @@
+ #include "GameRenderCommand.h"
+ 
+ extern bool gVrFirstPersonActive;
++namespace androidgame { bool VrShouldUseTheaterMode(void); }
+ 
+ namespace
+ {
+@@ -172,6 +173,14 @@ CRGBA CClouds::ms_colourBottom;
+ static void
+ UpdateCloudCameraRoll(const CVector &up, const CVector &forward)
+ {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// Quest world sprites now use a world-up basis in FaceQuestWorldSprite.
++	// Keep authored cloud rotation, without applying camera roll twice.
++	if(!androidgame::VrShouldUseTheaterMode()){
++		CClouds::ms_cameraRoll = 0.0f;
++		return;
++	}
++#endif
+ 	CVector right = CrossProduct(up, forward);
+ 	if(right.MagnitudeSqr() <= 0.000001f)
+ 		return;

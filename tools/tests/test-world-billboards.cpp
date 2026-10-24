@@ -7,6 +7,8 @@
 struct Vertex { float x, y, z, w, u, v; };
 struct V { double x, y, z; };
 static V sub(V a, V b) { return {a.x-b.x,a.y-b.y,a.z-b.z}; }
+static V add(V a, V b) { return {a.x+b.x,a.y+b.y,a.z+b.z}; }
+static V scale(V a, double s) { return {a.x*s,a.y*s,a.z*s}; }
 static double dot(V a, V b) { return a.x*b.x+a.y*b.y+a.z*b.z; }
 static double length(V a) { return std::sqrt(dot(a,a)); }
 static V cross(V a, V b) { return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x}; }
@@ -23,6 +25,48 @@ static V unproject(Vertex v, float width, float height, float vx, float vy)
 }
 int main()
 {
+    // Hold the source and its texture fixed in world space while changing
+    // the camera's yaw, pitch and roll. Compare UV-labelled corners in WORLD
+    // space, so a head-locked card cannot pass by merely facing the viewer.
+    int rollCases=0;
+    for(bool pole : {false,true}){
+        V reference[4] = {};
+        bool first=true;
+        for(double yaw : {0.0,-0.3,0.3})
+        for(double pitch : {0.0,-0.3,0.3})
+        for(double roll : {0.0,-1.2,-0.6,0.6,1.2,3.141592653589793}){
+            if(pole && (yaw!=0 || pitch!=0)) continue;
+            const V source=pole ? V{0,10,0} : V{4,2,10};
+            const V r0=pole ? V{1,0,0} : V{std::cos(yaw),0,-std::sin(yaw)};
+            const V u0=pole ? V{0,0,-1} : V{std::sin(yaw)*std::sin(pitch),std::cos(pitch),std::cos(yaw)*std::sin(pitch)};
+            const V f=pole ? V{0,1,0} : V{std::sin(yaw)*std::cos(pitch),-std::sin(pitch),std::cos(yaw)*std::cos(pitch)};
+            const V r=add(scale(r0,std::cos(roll)),scale(u0,std::sin(roll)));
+            const V u=sub(scale(u0,std::cos(roll)),scale(r0,std::sin(roll)));
+            const float depth=float(dot(source,f));
+            const float cx=500+500*float(dot(source,r))/depth;
+            const float cy=500-500*float(dot(source,u))/depth;
+            const float up[3]={float(r.y),float(u.y),float(f.y)};
+            const float east[3]={float(r.x),float(u.x),float(f.x)};
+            Vertex quad[4];
+            const int sx[4]={-1,-1,1,1}, sy[4]={1,-1,-1,1};
+            for(int i=0;i<4;++i){
+                const float dx=0.4f*sx[i], dy=0.6f*sy[i];
+                const float x=std::cos(0.7f)*dx-std::sin(0.7f)*dy;
+                const float y=std::sin(0.7f)*dx+std::cos(0.7f)*dy;
+                quad[i]={cx+x*500/depth,cy-y*500/depth,0.99f,depth,float(i&1),float(i>>1)};
+            }
+            QuestBillboard::FaceViewer(quad,4,cx,cy,1000,1000,1,1,up,east);
+            for(int i=0;i<4;++i){
+                const V p=unproject(quad[i],1000,1000,1,1);
+                const V world=add(add(scale(r,p.x),scale(u,p.y)),scale(f,p.z));
+                if(first) reference[i]=world;
+                require(length(sub(world,reference[i]))<0.0001,"texture corner stays fixed in world space under head roll/yaw/pitch");
+            }
+            first=false;
+            ++rollCases;
+        }
+    }
+    std::printf("PASS: %d world-orientation cases including upside-down head roll and zenith fallback.\n",rollCases);
     int cases=0;
     for(float aspect : {0.9f, 1.0f, 1.777777f})
     for(float tangent : {0.7f, 1.2f})

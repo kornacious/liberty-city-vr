@@ -19,12 +19,19 @@ with individual camera depths for the existing Vulkan Im2D reconstruction.
 Negative screen Z marks these world vertices so shallow corners retain their
 real depth instead of being clamped to the two-metre HUD plane. CPU viewport
 clipping/culling is bypassed for these quads; the two eye projections clip the
-result. Mono theater rendering and screen-space UI retain their original path.
+result. The quad's right/up axes come from world-up expressed in the actual
+render camera frame. At the zenith/nadir, world-east supplies a fixed fallback.
+This prevents the artwork from rotating with head roll while preserving authored
+particle rotation. Legacy cloud camera-roll compensation is zero in immersive
+mode to avoid applying it twice. Mono theater rendering and screen-space UI
+retain their original path.
 
 `tools/tests/test-world-billboards.ps1 -StageRoot <assembled-tree>` checks all
 six integration points and runs 1,800 geometric cases for oblique rays, sprite
 rotation, aspect ratios, near/far depth and buffered/direct submissions. It
-also checks large quads crossing the camera plane. These are geometry checks;
+also checks large quads crossing the camera plane and 60 world-space texture
+orientation cases across camera yaw/pitch/roll, including upside-down head poses
+and the zenith fallback. These are geometry checks;
 headset appearance still needs visual verification.
 
 ## The PS2 alpha rule fixes depth fringes
