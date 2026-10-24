@@ -2,6 +2,10 @@
 
 ## 0.5.6
 
+- Fixed planes disappearing when turning away from the original camera view in
+  VR. Their big-building visibility path now uses the shared VR visibility
+  policy before the existing stereo culling; mono/theater behavior is preserved.
+
 - Fixed mission meter labels (including damage and spook) inheriting unrelated
   font settings when the clock is hidden. Labels now establish their own font
   and right alignment to remain beside the meter as its fill changes.

@@ -1,0 +1,14 @@
+diff --git a/src/renderer/Renderer.cpp b/src/renderer/Renderer.cpp
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -903,6 +903,9 @@ CRenderer::SetupBigBuildingVisibility(CEntity *ent)
+ 		// Draw like normal
+ 	} else if (mi->GetModelType() == MITYPE_VEHICLE)
+-		return ent->IsVisible() ? VIS_VISIBLE : VIS_INVISIBLE;
++		// Planes live in the big-building list. IsVisible() also tests the
++		// legacy mono frustum, which must not reject the shared VR list.
++		return ent->m_rwObject != nil && ent->bIsVisible &&
++			!IsEntityOutsideCurrentView(ent) ? VIS_VISIBLE : VIS_INVISIBLE;
+ 
+ 	float dist = (ms_vecCameraPosition-ent->GetPosition()).Magnitude();
+ 	CSimpleModelInfo *nonLOD = mi->GetRelatedModel();

@@ -4,6 +4,12 @@ These tests compile production helpers or extract production functions into
 small native adapters. They check code behavior; they do not launch the game,
 replace game data or establish headset appearance/FPS.
 
+`test-plane-visibility.ps1 -StageRoot <assembled-tree>` compiles the actual
+big-building vehicle branch and shared visibility helper in VR and non-VR
+configurations. It checks planes outside the mono view remain eligible during
+the shared VR scan, while unloaded/hidden planes and mono/theater clipping
+retain their previous behavior. Headset appearance requires an in-game check.
+
 `python3 tools/tests/test-loading-artwork.py <assembled-tree>` uses a C++17
 compiler (`--cxx` selects it; `--cxx msvc` discovers the Windows toolchain) to
 exercise the production splash loader, artwork fit, `DoFade` and Vulkan
