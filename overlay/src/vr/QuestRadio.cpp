@@ -1,6 +1,8 @@
 #include "common.h"
 #if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
 #include "QuestRadio.h"
+#include "VehiclePlacement.h"
+#include "ModelSets.h"
 #include "RadioBoardLayout.h"
 #include "QuestMusic.h"
 #include "android.h"
@@ -42,7 +44,7 @@ bool triggerDown[2]={true,true};
 bool touchMode=false;
 RadioBoard::Touch touch[2];
 CVehicle *touchVehicle=nil;
-int modelId=-1, hover=-1;
+int modelId=-1, hover=-1, placementSet=-1;
 double xSince=0;
 char notice[96]="HOLD X, POINT, THEN CLICK TRIGGER";
 std::string personal,defaults;
@@ -80,17 +82,41 @@ void Load() {
     CVehicle *current=Vehicle();
     if(current!=touchVehicle) { for(auto &t:touch) t.Reset(); touchVehicle=current; }
     int id=current?current->GetModelIndex():-1;
-    if(id!=modelId) {
+    int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+    if(id!=modelId || set!=placementSet) {
+        placementSet=set;
         if(edit) CloseEditor();
         modelId=id; model=Read(personal,id); bundledModel=id<0?Placement():Read(defaults,id);
     }
 }
-Placement Resolved() { return RadioBoard::Resolve(model,global,bundledModel,bundledGlobal); }
+const char *packKeys[]={"RadioX","RadioY","RadioZ","RadioPitch","RadioYaw","RadioRoll","RadioSize"};
+int PlacementSet() { return (int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
+Placement Resolved() {
+    Placement p=RadioBoard::Resolve(model,global,bundledModel,bundledGlobal);
+    if(modelId>=0) for(int i=0;i<7;++i) {
+        float scale=i<3?.1f:i==5?-1.f:1.f;
+        float value=VehiclePlacement::runtime().value(PlacementSet(),modelId,packKeys[i],p.v[i]*scale);
+        p.v[i]=(int)roundf(value/scale);
+    }
+    return p;
+}
 Placement TargetPlacement() { return modelTarget ? Resolved() : (global.owned?global:bundledGlobal); }
 void BeginEdit() { if(!edit) { draft=TargetPlacement(); edit=true; } }
 void SavePlacement(bool own=true) {
     draft.owned=own;
     if(modelTarget && modelId<0) { snprintf(notice,sizeof(notice),"ENTER A VEHICLE FIRST"); return; }
+    if(modelTarget) {
+        auto &store=VehiclePlacement::runtime(); auto next=store.personal;
+        auto &entry=next.entries[VehiclePlacement::section(PlacementSet(),modelId)];
+        for(int i=0;i<7;++i) {
+            if(own) entry[packKeys[i]]=draft.v[i]*(i<3?.1f:i==5?-1.f:1.f);
+            else entry.erase(packKeys[i]);
+        }
+        std::string error;
+        if(!next.save("vehicle_placements.personal.ini",error)) { snprintf(notice,sizeof(notice),"SAVE FAILED"); return; }
+        store.personal=next;
+        if(own) { edit=false; snprintf(notice,sizeof(notice),"PLACEMENT SAVED"); return; }
+    }
     // Preserve other personal sections, then rename the completed replacement.
     std::string temp=personal+".tmp";
     FILE *in=fopen(personal.c_str(),"rb"),*out=fopen(temp.c_str(),"wb");
@@ -105,19 +131,21 @@ void SavePlacement(bool own=true) {
     } else { remove(temp.c_str()); snprintf(notice,sizeof(notice),"SAVE FAILED"); }
 }
 struct Plane { CVector origin,right,up,normal; float width; };
-void Rotate(CVector &a,CVector &b,int deg) { float t=deg*0.01745329252f; CVector old=a; a=a*cosf(t)+b*sinf(t); b=b*cosf(t)-old*sinf(t); }
 bool BuildPlane(Plane &p) {
     Load(); CVehicle *v=Vehicle();
     if(!v || !visible || !gVrFirstPersonActive || OculusVR::IsQuestVehicleThirdPerson() ||
        FindPlayerPed()->DyingOrDead() || CCutsceneMgr::IsRunning() || CCutsceneMgr::IsCutsceneProcessing() || androidgame::VrCutsceneCameraActor()!=nil ||
        FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bGameNotLoaded || TheCamera.m_WideScreenOn) return false;
     auto info=(CVehicleModelInfo*)CModelInfo::GetModelInfo(v->GetModelIndex()); if(!info) return false;
-    CVector seat=info->GetFrontSeatPosn(); if(!v->IsBoat()) seat.x=-seat.x;
+    CVector seat=info->GetFrontSeatPosn();
     Placement place=edit?draft:Resolved();
-    seat+=CVector(place.v[0]*.001f,place.v[1]*.001f,place.v[2]*.001f);
-    p.origin=v->GetPosition()+Multiply3x3(v->GetMatrix(),seat);
-    p.right=v->GetRight(); p.up=v->GetUp(); p.normal=v->GetForward()*-1;
-    Rotate(p.up,p.normal,place.v[3]); Rotate(p.normal,p.right,place.v[4]); Rotate(p.right,p.up,place.v[5]);
+    auto b=VehiclePlacement::radio(VehiclePlacement::Vec(seat.x,seat.y,seat.z),v->IsBoat(),
+        VehiclePlacement::Vec(place.v[0]*.1f,place.v[1]*.1f,place.v[2]*.1f),
+        VehiclePlacement::Vec(place.v[3],place.v[4],-place.v[5]));
+    p.origin=v->GetPosition()+Multiply3x3(v->GetMatrix(),CVector(b.position.x,b.position.y,b.position.z));
+    p.right=Multiply3x3(v->GetMatrix(),CVector(b.right.x,b.right.y,b.right.z));
+    p.up=Multiply3x3(v->GetMatrix(),CVector(b.up.x,b.up.y,b.up.z));
+    p.normal=Multiply3x3(v->GetMatrix(),CVector(-b.forward.x,-b.forward.y,-b.forward.z));
     p.width=.40f*place.v[6]/100.f; return true;
 }
 void Station(int direction) {

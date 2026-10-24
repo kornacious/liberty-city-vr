@@ -12,6 +12,45 @@ static void near(Vec a, Vec b) {
 }
 int main() {
     try {
+        // Radio keeps its seat-relative frame independent of wheel/dashboard/steering.
+        auto radioValues = legacyDefaults(0, 95, false);
+        auto rb = radio(Vec(1, 2, 3), false, radioValues);
+        near(rb.position, Vec(-.65f, 2.6f, 3.3f));
+        near(radio(Vec(1, 2, 3), true, radioValues).position, Vec(1.35f, 2.6f, 3.3f));
+        Vec radioRight(1, 0, 0), u(0, 0, 1), n(0, -1, 0);
+        auto oldRotate = [](Vec &a, Vec &b, float degrees) {
+            float t = degrees * .01745329252f;
+            Vec old = a;
+            a = a * std::cos(t) + b * std::sin(t);
+            b = b * std::cos(t) - old * std::sin(t);
+        };
+        oldRotate(u, n, 23);
+        oldRotate(n, radioRight, -37);
+        oldRotate(radioRight, u, 51);
+        auto turned = radio(Vec(), false, Vec(), Vec(23, -37, -51));
+        near(turned.right, radioRight);
+        near(turned.up, u);
+        near(turned.forward, n * (-1));
+        editor::Legacy oldRadio, oldDefaults;
+        oldDefaults.entries["RadioBoard"]["Version"] = 1;
+        oldDefaults.entries["Global"] = {{"Enabled", 1}, {"Xmm", 450}, {"RollDeg", 22}};
+        oldRadio.entries["RadioBoard"]["Version"] = 1;
+        oldRadio.entries["Global"] = {{"Enabled", 1}, {"Xmm", 500}};
+        oldRadio.entries["Vehicle.95"] = {{"Enabled", 1}, {"Xmm", 600}, {"RollDeg", 31}};
+        oldRadio.radio(95, radioValues, oldDefaults);
+        check(radioValues["RadioX"] == 60 && radioValues["RadioRoll"] == -31,
+              "radio model precedence and units");
+        oldRadio.radio(96, radioValues, oldDefaults);
+        check(radioValues["RadioX"] == 50, "radio global fallback");
+        oldRadio.entries["Global"]["Enabled"] = 0;
+        oldRadio.radio(96, radioValues, oldDefaults);
+        check(radioValues["RadioX"] == 45 && radioValues["RadioRoll"] == -22, "radio bundled fallback");
+        Pack radioPack;
+        std::string radioError;
+        radioPack.entries["xbox:95"] = {
+            {"RadioX", 35}, {"RadioPitch", 45}, {"RadioRoll", -180}, {"RadioSize", 125}};
+        std::istringstream radioInput(radioPack.text());
+        check(radioPack.parse(radioInput, radioError), "radio pack roundtrip");
         Store s;
         auto key = section(2, 95);
         s.bundled.entries[key]["WheelX"] = 1;

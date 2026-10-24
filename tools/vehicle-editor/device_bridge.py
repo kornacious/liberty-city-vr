@@ -27,11 +27,11 @@ def limits(key):
         return 8, 40
     if key in ('WheelVisible', 'DashFollowWheel'):
         return 0, 1
-    if re.fullmatch(r'(Dash|Map|Status|Clock|Ammo)Size', key):
+    if re.fullmatch(r'(Dash|Map|Status|Clock|Ammo|Radio)Size', key):
         return 40, 250
-    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo)(X|Y|Z)', key):
+    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio)(X|Y|Z)', key):
         return -200, 200
-    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo)(Pitch|Yaw|Roll)', key):
+    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio)(Pitch|Yaw|Roll)', key):
         return (-90, 90) if key.startswith('Wheel') else (-180, 180)
     if re.fullmatch(r'(Default)?Seat(Height|Distance)', key):
         return (-200, 250) if key.endswith('Height') else (-200, 200)
@@ -148,7 +148,7 @@ class Device:
             raise BridgeError('Close Liberty City VR on the headset before transfer')
 
     def read(self, name):
-        path = f'{ROOT}/{name}'
+        path = f'{ROOT}/../{name}' if name == 'radio_board_defaults.ini' else f'{ROOT}/{name}'
         p = self.run('shell', f'if [ -f {path} ]; then echo PRESENT; else echo ABSENT; fi')
         if p.stdout.strip() == b'ABSENT':
             return None
@@ -222,14 +222,14 @@ def main(argv=None):
         if a.action == 'import':
             # Stage all reads and validation before replacing any local file.
             staged = {}
-            for name in [*FILES.values(), 'vr_settings.ini']:
+            for name in [*FILES.values(), 'vr_settings.ini', 'radio_board.ini', 'radio_board_defaults.ini']:
                 content = d.read(name)
-                if content is not None and name != 'vr_settings.ini':
+                if content is not None and name in FILES.values():
                     parse(content.decode('utf-8-sig'))
                 staged[name] = content
             baseline.mkdir(parents=True, exist_ok=True)
             for name, content in staged.items():
-                if name != 'vr_settings.ini':
+                if name in FILES.values():
                     content = content or EMPTY.encode()
                 else:
                     content = content or b''

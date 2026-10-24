@@ -116,9 +116,9 @@ inline bool limits(const std::string &key, float &lo, float &hi) {
         lo = 40;
         hi = 250;
         return key == "DashSize" || key == "MapSize" || key == "StatusSize" || key == "ClockSize" ||
-               key == "AmmoSize";
+               key == "AmmoSize" || key == "RadioSize";
     }
-    static const char *prefix[] = {"Wheel", "Dash", "Map", "Status", "Clock", "Ammo"};
+    static const char *prefix[] = {"Wheel", "Dash", "Map", "Status", "Clock", "Ammo", "Radio"};
     for (auto p : prefix) {
         std::string k = p;
         if (key == k + "Pitch" || key == k + "Yaw" || key == k + "Roll") {
@@ -386,7 +386,24 @@ inline Values legacyDefaults(int set, int model, bool boat) {
         v[p + "Size"] = panels[i][3];
         v[p + "Pitch"] = v[p + "Yaw"] = v[p + "Roll"] = 0;
     }
+    v["RadioX"] = 35;
+    v["RadioY"] = 60;
+    v["RadioZ"] = 30;
+    v["RadioPitch"] = v["RadioYaw"] = v["RadioRoll"] = 0;
+    v["RadioSize"] = 100;
     return v;
+}
+inline Basis radio(Vec seat, bool boat, Vec offset, Vec angles) {
+    Basis b;
+    if (!boat)
+        seat.x = -seat.x;
+    b.position = seat + offset * .01f;
+    b.turn(angles.x, angles.y, angles.z);
+    return b;
+}
+inline Basis radio(Vec seat, bool boat, const Values &v) {
+    return radio(seat, boat, Vec(v.at("RadioX"), v.at("RadioY"), v.at("RadioZ")),
+                 Vec(v.at("RadioPitch"), v.at("RadioYaw"), v.at("RadioRoll")));
 }
 inline Values resolve(const Store &s, int set, int model, Values fallback) {
     for (auto &v : fallback)

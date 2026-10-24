@@ -289,6 +289,31 @@ struct Legacy {
                 entries[s][VehiclePlacement::trim(line.substr(0, p))] = n;
         }
     }
+    void radio(int model, VehiclePlacement::Values &v, const Legacy &defaults) const {
+        // Preserve the old whole-placement precedence, then convert mm and opposite roll sign.
+        std::string target = "Global";
+        const Legacy *source = &defaults;
+        const std::string vehicle = "Vehicle." + std::to_string(model);
+        if (value(vehicle, "Enabled", 0) == 1) {
+            source = this;
+            target = vehicle;
+        } else if (value("Global", "Enabled", 0) == 1)
+            source = this;
+        else if (defaults.value(vehicle, "Enabled", 0) == 1)
+            target = vehicle;
+        if (source->value("RadioBoard", "Version", 0) != 1)
+            return;
+        const char *keys[] = {"Xmm", "Ymm", "Zmm", "PitchDeg", "YawDeg", "RollDeg", "ScalePercent"};
+        const char *fields[] = {"RadioX",   "RadioY",    "RadioZ",   "RadioPitch",
+                                "RadioYaw", "RadioRoll", "RadioSize"};
+        const float fallback[] = {350, 600, 300, 0, 0, 0, 100};
+        for (int i = 0; i < 7; ++i) {
+            float scale = i < 3 ? .1f : i == 5 ? -1.f : 1.f, lo, hi;
+            VehiclePlacement::limits(fields[i], lo, hi);
+            v[fields[i]] =
+                std::max(lo, std::min(hi, source->value(target, keys[i], fallback[i]) * scale));
+        }
+    }
     float value(const std::string &s, const std::string &k, float fallback) const {
         auto a = entries.find(s);
         if (a == entries.end())

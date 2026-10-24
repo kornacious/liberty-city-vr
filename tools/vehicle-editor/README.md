@@ -1,7 +1,7 @@
 # Liberty City Vehicle Placement Editor
 
 Standalone, non-VR Windows/Linux editor for GTA III virtual wheels and the
-map, status, clock and ammo dashboard panels. It reads your local game assets
+map, status, clock, ammo and radio/music dashboard panels. It reads your local game assets
 directly; no game process, headset or converted/exported models are required.
 No game data is distributed with the tool or uploaded by it.
 
@@ -54,11 +54,15 @@ personal settings. Never put original game files in this workspace or a release.
 3. Choose personal overrides or template/release defaults. Template editing
    previews that layer without personal overrides masking it. Field labels show
    their source; Reset removes the active layer's field and reveals the layer below.
-4. Select the wheel, dashboard group or an individual panel. Sliders, numeric
+4. Select the wheel, dashboard group, an individual HUD panel or the radio/music player. Sliders, numeric
    entry and move/rotation gizmos update the 3D preview. Size is uniform; wheel
    size is its radius. Units are centimetres, degrees and percent.
 5. Use **Driver view**, **Exterior**, mouse look/orbit/pan/dolly and WASD. The field
    of view and preview eye height are camera controls, not saved placement values.
+   Camera position, orientation and orbit mode persist when switching vehicle/modelset;
+   only the Driver view and Exterior buttons reset the view. Separate pan and
+   look/orbit sensitivity sliders adjust mouse speed (default orbit speed is halved).
+   A background color picker and Reset steering button are available.
    The seated head animation is approximated by the adjustable eye-above-seat
    value; final viewpoint, reach and comfort need a headset check.
 6. Newly authored layouts default to a dashboard fixed in vehicle space.
@@ -86,7 +90,16 @@ ambiguous shared fallback values until explicit entries are authored.
 The editor and port share `overlay/src/vr/VehiclePlacement.h`: shipped car/boat
 defaults, pack parsing, layer resolution, wheel transforms, and panel rotations.
 The port retains its legacy category/model calibration controls and wrist HUD.
-Per-model wheel/seat and in-vehicle panel edits write the personal placement pack.
+Per-model wheel/seat, radio and in-vehicle panel edits write the personal placement pack.
+The radio stays independently anchored to the driver seat, unaffected by wheel steering
+or dashboard group transforms. RadioX/Y/Z use centimetres from that seat; RadioPitch,
+RadioYaw and RadioRoll follow the shared intrinsic rotation order; RadioSize is percent.
+Existing radio_board.ini and radio_board_defaults.ini remain compatibility fallbacks
+(their millimetres and opposite roll direction are converted during import).
+Device import reads both radio fallback files too. Local Import legacy INI recognizes
+these filenames; import the defaults and personal files separately when needed.
+In-headset per-model radio saves target the shared personal pack; global radio edits
+retain the legacy global fallback. Reset removes personal radio fields to reveal templates.
 
 Files under the game's `gamedata` directory:
 

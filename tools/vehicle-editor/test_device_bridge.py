@@ -14,7 +14,7 @@ spec.loader.exec_module(b)
 
 class PackTests(unittest.TestCase):
     def test_validation_and_roundtrip(self):
-        entries = {'xbox:95': {'WheelX': 2, 'DashFollowWheel': 0, 'MapPitch': 33}}
+        entries = {'xbox:95': {'WheelX': 2, 'DashFollowWheel': 0, 'MapPitch': 33, 'RadioX': 35, 'RadioRoll': -180, 'RadioSize': 125}}
         self.assertEqual(b.parse(b.serialize(entries)), entries)
         for text in ('[Placement]\nVersion=2', '[Placement]\nVersion=1\n[xbox:95]\nWheelX=nan',
                      '[Placement]\nVersion=1\n[xbox:95]\nWheelVisible=.3',

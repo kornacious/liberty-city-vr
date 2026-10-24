@@ -20,11 +20,14 @@ static std::vector<rw::TexDictionary *> dictionaries;
 static rw::TexDictionary *genericDictionaries[3] = {};
 static std::string genericHashes[3];
 static Assets assets;
-static Legacy legacy;
+static Legacy legacy, radioLegacy, radioDefaults;
 static Store store;
 static Pack *editing = &store.personal;
 static int layer = 0, set = 0, selected = -1, element = 0, operation = 0;
 static Vec seat, eye;
+static bool cameraInitialized = false;
+static float panSensitivity = 1.f, rotationSensitivity = .5f;
+static float background[3] = {37.f / 255, 43.f / 255, 53.f / 255};
 static float yaw = 0, pitch = 0, fov = 80, steering = 0, eyeAboveSeat = 0.68f;
 static bool extras[6] = {}, dirty = false, showHud = true, showWheel = true, orbit = false,
             closeRequested = false;
@@ -147,6 +150,7 @@ static Values values() {
         return {};
     auto &v = assets.vehicles[selected];
     auto result = legacy.resolve(set, v);
+    radioLegacy.radio(v.id, result, radioDefaults);
     auto name = section(set, v.id);
     if (!layer)
         result = VehiclePlacement::resolve(store, set, v.id, result);
@@ -214,6 +218,7 @@ static void driver() {
     eye.z += eyeAboveSeat + p["SeatHeight"] * .01f;
     yaw = pitch = 0;
     orbit = false;
+    cameraInitialized = true;
 }
 static void loadModel() {
     clearModel();
@@ -328,7 +333,8 @@ static void loadModel() {
             }
         }
         fingerprintNow = editor::fingerprint(hashes) + genericHashes[set];
-        driver();
+        if (!cameraInitialized)
+            driver();
         message = std::string("Geometry: ") +
                   (source == 0   ? "Classic"
                    : source == 1 ? "Modern"
@@ -444,6 +450,8 @@ static void openWorkspace() {
         store = next;
         editing = layer ? &store.templates : &store.personal;
         legacy.load(fs::path(workPath) / "vr_settings.ini");
+        radioLegacy.load(fs::path(workPath) / "radio_board.ini");
+        radioDefaults.load(fs::path(workPath) / "radio_board_defaults.ini");
         dirty = false;
         readReviews();
         history.clear();
@@ -588,16 +596,19 @@ static void renderPlacement() {
         auto d = dashboard(w, v);
         static const float widths[] = {.115f, .130f, .055f, .070f};
         const char *text[] = {"N  +  MAP", "100  $000500", "12:30", "17 / 120"};
-        for (int n = 0; n < 4; n++) {
-            Basis p = panel(d, v, n);
-            float width =
-                      widths[n] * v[std::string(panelName(n)) + "Size"] * .01f * v["DashSize"] * .01f,
-                  height = width * (n == 0 ? 1 : .42f);
+        for (int n = 0; n < 5; n++) {
+            Basis p = n == 4 ? radio(seat, assets.vehicles[selected].boat(), v) : panel(d, v, n);
+            float width = n == 4 ? .40f * v["RadioSize"] * .01f
+                                 : widths[n] * v[std::string(panelName(n)) + "Size"] * .01f *
+                                       v["DashSize"] * .01f,
+                  height = width * (n == 0   ? 1
+                                    : n == 4 ? .5f
+                                             : .42f);
             quad(p.position - p.right * (width / 2) + p.up * (height / 2),
                  p.position + p.right * (width / 2) + p.up * (height / 2),
                  p.position + p.right * (width / 2) - p.up * (height / 2),
                  p.position - p.right * (width / 2) - p.up * (height / 2), rw::makeRGBA(8, 20, 23, 230));
-            panelText(p, width, height, text[n]);
+            panelText(p, width, height, n == 4 ? "RADIO   MUSIC   <<  >  >>" : text[n]);
         }
     }
     rw::SetRenderState(rw::ZWRITEENABLE, 1);
@@ -721,7 +732,14 @@ static void gizmo() {
         return;
     auto v = values();
     auto w = wheel(seat, assets.vehicles[selected].boat(), v), d = dashboard(w, v);
-    Basis b = element == 0 ? w : element == 1 ? d : panel(d, v, element - 2);
+    Basis radioParent;
+    radioParent.position = seat;
+    if (!assets.vehicles[selected].boat())
+        radioParent.position.x = -seat.x;
+    Basis b = element == 0   ? w
+              : element == 1 ? d
+              : element == 6 ? radio(seat, assets.vehicles[selected].boat(), v)
+                             : panel(d, v, element - 2);
     float m[16] = {
         b.right.x,    b.right.y,    b.right.z,    0, b.up.x,       b.up.y,       b.up.z,       0,
         -b.forward.x, -b.forward.y, -b.forward.z, 0, b.position.x, b.position.y, b.position.z, 1};
@@ -743,12 +761,16 @@ static void gizmo() {
                 setValue("WheelY", p.y);
                 setValue("WheelZ", p.z);
             } else {
-                Basis parent = element == 1 ? (v["DashFollowWheel"] ? w : Basis()) : d;
+                Basis parent = element == 1   ? (v["DashFollowWheel"] ? w : Basis())
+                               : element == 6 ? radioParent
+                                              : d;
                 Vec delta = p - parent.position;
-                float scale = element == 1 ? 1 : v["DashSize"] * .01f;
+                float scale = element == 1 || element == 6 ? 1 : v["DashSize"] * .01f;
                 p = Vec(dot(delta, parent.right), dot(delta, parent.forward), dot(delta, parent.up)) *
                     (100 / scale);
-                std::string prefix = element == 1 ? "Dash" : panelName(element - 2);
+                std::string prefix = element == 1   ? "Dash"
+                                     : element == 6 ? "Radio"
+                                                    : panelName(element - 2);
                 setValue(prefix + "X", p.x);
                 setValue(prefix + "Y", p.y);
                 setValue(prefix + "Z", p.z);
@@ -757,13 +779,17 @@ static void gizmo() {
             // Extract intrinsic X/Z/Y (right/up/forward) Euler angles in parent space.
             Basis parent = element == 0   ? Basis()
                            : element == 1 ? (v["DashFollowWheel"] ? w : Basis())
+                           : element == 6 ? radioParent
                                           : d;
             Basis rotated;
             rotated.right = Vec(m[0], m[1], m[2]);
             rotated.forward = Vec(-m[8], -m[9], -m[10]);
             rotated.up = Vec(m[4], m[5], m[6]);
             auto angles = relativeAngles(rotated, parent);
-            std::string prefix = element == 0 ? "Wheel" : element == 1 ? "Dash" : panelName(element - 2);
+            std::string prefix = element == 0   ? "Wheel"
+                                 : element == 1 ? "Dash"
+                                 : element == 6 ? "Radio"
+                                                : panelName(element - 2);
             setValue(prefix + "Pitch", angles.x);
             setValue(prefix + "Yaw", angles.y);
             setValue(prefix + "Roll", angles.z);
@@ -846,7 +872,12 @@ static void ui() {
             try {
                 if (!*workPath || !fs::exists(importPath))
                     throw std::runtime_error("Choose an existing legacy INI and a workspace.");
-                auto destination = fs::absolute(fs::path(workPath) / "vr_settings.ini");
+                auto sourceName = lower(fs::path(importPath).filename().string());
+                auto destination =
+                    fs::absolute(fs::path(workPath) / (sourceName == "radio_board.ini" ||
+                                                               sourceName == "radio_board_defaults.ini"
+                                                           ? sourceName
+                                                           : "vr_settings.ini"));
                 auto source = fs::absolute(importPath);
                 if (source != destination) {
                     if (fs::exists(destination))
@@ -854,7 +885,9 @@ static void ui() {
                                       fs::copy_options::overwrite_existing);
                     fs::copy_file(source, destination, fs::copy_options::overwrite_existing);
                 }
-                legacy.load(destination);
+                legacy.load(fs::path(workPath) / "vr_settings.ini");
+                radioLegacy.load(fs::path(workPath) / "radio_board.ini");
+                radioDefaults.load(fs::path(workPath) / "radio_board_defaults.ini");
                 reviews.clear();
                 history.clear();
                 dirty = true;
@@ -962,8 +995,9 @@ static void ui() {
     if (selected >= 0 && clump && !fingerprintNow.empty() && assets.available[set] &&
         assets.vehicles[selected].supported()) {
         auto v = values();
-        const char *elements[] = {"Virtual wheel", "Dashboard group", "Map", "Status", "Clock", "Ammo"};
-        ImGui::Combo("Element", &element, elements, 6);
+        const char *elements[] = {"Virtual wheel", "Dashboard group",     "Map", "Status", "Clock",
+                                  "Ammo",          "Radio / music player"};
+        ImGui::Combo("Element", &element, elements, 7);
         const char *operations[] = {"Move gizmo", "Rotate gizmo"};
         ImGui::Combo("Gizmo", &operation, operations, 2);
         ImGui::PushItemWidth(160);
@@ -995,7 +1029,7 @@ static void ui() {
             }
             transformFields("Dash", v, true);
         } else
-            transformFields(panelName(element - 2), v, true);
+            transformFields(element == 6 ? "Radio" : panelName(element - 2), v, true);
         if (ImGui::Button("Create fixed dashboard at wheel")) {
             remember();
             auto w = wheel(seat, assets.vehicles[selected].boat(), v);
@@ -1026,12 +1060,17 @@ static void ui() {
         orbit = true;
     }
     ImGui::Checkbox("Orbit around vehicle", &orbit);
+    ImGui::SliderFloat("Pan sensitivity", &panSensitivity, .1f, 3.f, "%.2fx");
+    ImGui::SliderFloat("Look / orbit sensitivity", &rotationSensitivity, .1f, 3.f, "%.2fx");
+    ImGui::ColorEdit3("Background", background);
     ImGui::SliderFloat("Field of view", &fov, 35, 115);
     ImGui::SliderFloat("Eye above seat (preview)", &eyeAboveSeat, .3f, 1.f);
     ImGui::TextWrapped(
         "Neutral eye height approximates the seated head animation. Final comfort/reach requires a "
         "headset check. Right drag: look/orbit. Middle drag: pan. Wheel: dolly. WASD: move.");
     ImGui::SliderFloat("Steering preview", &steering, -80, 80);
+    if (ImGui::Button("Reset steering"))
+        steering = 0;
     ImGui::Checkbox("Preview HUD", &showHud);
     ImGui::SameLine();
     ImGui::Checkbox("Preview wheel", &showWheel);
@@ -1147,15 +1186,21 @@ static void draw(float dt) {
     Vec right = unit(cross(forward, Vec(0, 0, 1))), up = cross(right, forward);
     if (!io.WantCaptureMouse && !ImGuizmo::IsUsing()) {
         if (io.MouseDown[1]) {
-            yaw -= io.MouseDelta.x * .005f;
-            pitch = std::max(-1.5f, std::min(1.5f, pitch - io.MouseDelta.y * .005f));
+            yaw -= io.MouseDelta.x * .005f * rotationSensitivity;
+            pitch =
+                std::max(-1.5f, std::min(1.5f, pitch - io.MouseDelta.y * .005f * rotationSensitivity));
+            forward =
+                Vec(std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), std::sin(pitch));
+            right = unit(cross(forward, Vec(0, 0, 1)));
+            up = cross(right, forward);
             if (orbit) {
                 float radius = std::max(1.f, std::sqrt(dot(eye, eye)));
                 eye = forward * (-radius);
             }
         }
         if (io.MouseDown[2])
-            eye = eye + right * (-io.MouseDelta.x * .005f) + up * (io.MouseDelta.y * .005f);
+            eye = eye + right * (-io.MouseDelta.x * .005f * panSensitivity) +
+                  up * (io.MouseDelta.y * .005f * panSensitivity);
         eye = eye + forward * (io.MouseWheel * .15f);
     }
     if (!io.WantCaptureKeyboard) {
@@ -1180,7 +1225,8 @@ static void draw(float dt) {
     float h = std::tan(fov * .00872664626f);
     rw::V2d vw = {h, h * sk::globals.height / std::max(1.f, (float)sk::globals.width)};
     camera->setViewWindow(&vw);
-    auto clear = rw::makeRGBA(37, 43, 53, 255);
+    auto clear = rw::makeRGBA((int)(background[0] * 255), (int)(background[1] * 255),
+                              (int)(background[2] * 255), 255);
     camera->clear(&clear, rw::Camera::CLEARIMAGE | rw::Camera::CLEARZ);
     camera->beginUpdate();
     renderModel();
