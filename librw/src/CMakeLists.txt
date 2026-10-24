@@ -40,6 +40,20 @@ add_library(librw
     uvanim.cpp
     world.cpp
 
+    # Core plugin registries reference all platforms. These files also provide
+    # their inactive-backend stubs when building the desktop OpenGL tools.
+    d3d12/d3d12device.cpp
+    d3d12/d3d12im.cpp
+    d3d12/d3d12pipe.cpp
+    d3d12/d3d12raster.cpp
+    vulkan/vkdevice.cpp
+    vulkan/vkim.cpp
+    vulkan/vkmatfx.cpp
+    vulkan/vkpipe.cpp
+    vulkan/vkraster.cpp
+    vulkan/vkskin.cpp
+    vulkan/vkstate.cpp
+
     d3d/d3d8.cpp
     d3d/d3d8matfx.cpp
     d3d/d3d8render.cpp

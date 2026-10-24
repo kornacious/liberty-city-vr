@@ -21,6 +21,7 @@
 #include "PlayerInfo.h"
 #include "QuestProfiler.h"
 #include "crossplatform.h"
+#include "VehiclePlacement.h"
 #endif
 
 namespace {
@@ -784,6 +785,7 @@ BuildWristPanelPlane(int panel, int hand, float plane[16], float centreX,
 			}
 			const float scale =
 				kWristPanelMetres[panel]*sizeScale/widthPixels;
+			VehiclePlacement::panelAxes(right,up,normal,pitchDeg,yawDeg,rollDeg);
 			memset(plane, 0, sizeof(float)*16);
 			for(int axis = 0; axis < 3; axis++){
 				plane[axis] = right[axis]*scale;

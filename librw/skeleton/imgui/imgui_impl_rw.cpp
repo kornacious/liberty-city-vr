@@ -121,6 +121,16 @@ ImGui_ImplRW_Init(void)
 void
 ImGui_ImplRW_Shutdown(void)
 {
+	if(g_FontTexture){
+		g_FontTexture->destroy();
+		g_FontTexture = nil;
+		ImGui::GetIO().Fonts->TexID = nil;
+	}
+	if(g_vertbuf){
+		rwFree(g_vertbuf);
+		g_vertbuf = nil;
+		g_vertbufSize = 0;
+	}
 }
 
 static bool

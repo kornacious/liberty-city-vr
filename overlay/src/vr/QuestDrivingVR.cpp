@@ -17,6 +17,7 @@
 #include "ModelInfo.h"
 #include "ModelIndices.h"
 #include "ModelSets.h"
+#include "VehiclePlacement.h"
 #include "Pad.h"
 #include "PlayerInfo.h"
 #include "PlayerPed.h"
@@ -146,6 +147,10 @@ struct BikeLeanCalibration
 };
 
 static bool gSettingsLoaded;
+static int PlacementSet() { return (int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
+static float PlacementValue(int model, const char *key, float fallback) {
+	return VehiclePlacement::runtime().value(PlacementSet(), model, key, fallback);
+}
 static int gCarDrivingType;
 static int gBikeDrivingType;
 static int gBoatDrivingType;
@@ -766,57 +771,28 @@ GetCategoryCalibration(CVehicle *vehicle)
 		&gVehicleCategoryCalibration[category] : nil;
 }
 
-struct BuiltInVehicleCategoryDefaults
-{
-	ModelSets::eModelSet modelSet;
-	int category;
-	int value[10];
-};
-
-static const BuiltInVehicleCategoryDefaults gBuiltInVehicleCategoryDefaults[] = {
-	{ ModelSets::MODEL_SET_XBOX, VR_VEHICLE_CATEGORY_CAR,
-		{ 0,0, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_CLASSIC, VR_VEHICLE_CATEGORY_CAR,
-		{ 0,0, -1,4,8, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_CLASSIC, VR_VEHICLE_CATEGORY_BIKE,
-		{ 0,0, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_CLASSIC, VR_VEHICLE_CATEGORY_BOAT,
-		{ 0,15, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_CLASSIC, VR_VEHICLE_CATEGORY_HELI,
-		{ 0,15, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_MODERN, VR_VEHICLE_CATEGORY_CAR,
-		{ 0,5, 0,0,0, 17,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_MODERN, VR_VEHICLE_CATEGORY_BIKE,
-		{ 0,0, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_MODERN, VR_VEHICLE_CATEGORY_BOAT,
-		{ 0,10, 0,0,0, 18,0, 0,0,0 } },
-	{ ModelSets::MODEL_SET_MODERN, VR_VEHICLE_CATEGORY_HELI,
-		{ 0,10, 0,0,0, 18,0, 0,0,0 } },
-};
-
+// Shipped defaults live in the portable placement module, shared with the editor.
 static void
 GetDefaultCategoryCalibration(ModelSets::eModelSet modelSet, int category,
-	VehicleCategoryCalibration *calibration)
+    VehicleCategoryCalibration *calibration)
 {
-	if(!calibration) return;
-	*calibration = VehicleCategoryCalibration();
-	for(int i = 0; i < (int)ARRAY_SIZE(gBuiltInVehicleCategoryDefaults); i++){
-		const BuiltInVehicleCategoryDefaults &entry =
-			gBuiltInVehicleCategoryDefaults[i];
-		if(entry.modelSet != modelSet || entry.category != category)
-			continue;
-		calibration->seatDistanceCm = entry.value[0];
-		calibration->seatHeightCm = entry.value[1];
-		calibration->wheelCenterXCm = entry.value[2];
-		calibration->wheelCenterYCm = entry.value[3];
-		calibration->wheelCenterZCm = entry.value[4];
-		calibration->carWheelRadiusCm = entry.value[5];
-		calibration->wheelRadiusCm = entry.value[6];
-		calibration->carWheelPitchHalfDeg = entry.value[7];
-		calibration->carWheelYawHalfDeg = entry.value[8];
-		calibration->carWheelRollHalfDeg = entry.value[9];
-		return;
-	}
+    if(!calibration) return;
+    *calibration=VehicleCategoryCalibration();
+    if(category==VR_VEHICLE_CATEGORY_BIKE){
+        calibration->seatHeightCm=modelSet==ModelSets::MODEL_SET_XBOX?15:0;
+        return;
+    }
+    const VehiclePlacement::Values v=VehiclePlacement::legacyDefaults((int)modelSet,-1,
+        category==VR_VEHICLE_CATEGORY_BOAT || category==VR_VEHICLE_CATEGORY_HELI);
+    calibration->seatDistanceCm=(int)v.at("SeatDistance");
+    calibration->seatHeightCm=(int)v.at("SeatHeight");
+    calibration->wheelCenterXCm=(int)v.at("WheelX");
+    calibration->wheelCenterYCm=(int)v.at("WheelY");
+    calibration->wheelCenterZCm=(int)v.at("WheelZ");
+    calibration->carWheelRadiusCm=(int)v.at("WheelRadius");
+    calibration->carWheelPitchHalfDeg=(int)(v.at("WheelPitch")*2);
+    calibration->carWheelYawHalfDeg=(int)(v.at("WheelYaw")*2);
+    calibration->carWheelRollHalfDeg=(int)(v.at("WheelRoll")*2);
 }
 
 static bool
@@ -933,59 +909,26 @@ SaveCategoryCalibrationValue(int category, const char *suffix, int value)
 	WritePrivateProfileStringA("VR", key, text, kSettingsPath);
 }
 
-struct BuiltInVehicleViewDefaults
-{
-	int model;
-	ModelSets::eModelSet modelSet;
-	int value[11];
-};
-
-static const BuiltInVehicleViewDefaults gBuiltInVehicleViewDefaults[] = {
-	{ MI_STINGER, ModelSets::MODEL_SET_MODERN,
-		{ 8,5, 0,19,9, 21,0, -42,0,0, 0 } },
-	{ MI_INFERNUS, ModelSets::MODEL_SET_MODERN,
-		{ 0,0, 1,-5,4, 0,0, -36,0,0, 0 } },
-	{ MI_BANSHEE, ModelSets::MODEL_SET_MODERN,
-		{ 0,6, 0,2,12, 18,0, -50,0,0, 0 } },
-	// Helm, tuned in the headset. The two model sets put the console at
-	// different heights, so the wheel centre and rake differ; the model's
-	// own wheel is hidden because the one the port draws replaces it.
-	{ MI_SPEEDER, ModelSets::MODEL_SET_CLASSIC,
-		{ 0,0, 3,4,12, 14,0, -22,0,0, 0 } },
-	{ MI_SPEEDER, ModelSets::MODEL_SET_MODERN,
-		{ 0,0, 3,4,9, 16,0, -26,6,0, 0 } },
-};
-
 static VehicleViewCalibration
 GetDefaultViewCalibration(int model)
 {
-	VehicleViewCalibration calibration;
-	calibration.seatDistanceCm = 0;
-	calibration.defaultSeatHeightCm = 0;
-	const ModelSets::eModelSet set = ModelSets::GetActiveForCategory(
-		ModelSets::MODEL_CATEGORY_VEHICLES);
-	const BuiltInVehicleViewDefaults *found = nil;
-	for(int pass = 0; pass < 2 && !found; pass++){
-		const ModelSets::eModelSet wanted = pass == 0 ? set :
-			ModelSets::MODEL_SET_CLASSIC;
-		for(int i = 0; i < (int)ARRAY_SIZE(gBuiltInVehicleViewDefaults); i++)
-			if(gBuiltInVehicleViewDefaults[i].model == model &&
-			   gBuiltInVehicleViewDefaults[i].modelSet == wanted){
-				found = &gBuiltInVehicleViewDefaults[i];
-				break;
-			}
-		if(set == ModelSets::MODEL_SET_CLASSIC) break;
-	}
-	if(found){
-		const int *v = found->value;
-		calibration.seatDistanceCm=v[0]; calibration.seatHeightCm=v[1];
-		calibration.wheelCenterXCm=v[2]; calibration.wheelCenterYCm=v[3];
-		calibration.wheelCenterZCm=v[4]; calibration.carWheelRadiusCm=v[5];
-		calibration.wheelRadiusCm=v[6]; calibration.carWheelPitchHalfDeg=v[7];
-		calibration.carWheelYawHalfDeg=v[8]; calibration.carWheelRollHalfDeg=v[9];
-		calibration.carWheelVisibilityOverride=v[10];
-	}
-	return calibration;
+    VehicleViewCalibration out;
+    const int set=PlacementSet();
+    CVehicleModelInfo *info=(CVehicleModelInfo*)CModelInfo::GetModelInfo(model);
+    const bool boat=info && info->m_vehicleType==VEHICLE_TYPE_BOAT;
+    const VehiclePlacement::Values base=VehiclePlacement::legacyDefaults(set,-1,boat);
+    const VehiclePlacement::Values v=VehiclePlacement::legacyDefaults(set,model,boat);
+    out.seatDistanceCm=(int)(v.at("SeatDistance")-base.at("SeatDistance"));
+    out.seatHeightCm=(int)(v.at("SeatHeight")-base.at("SeatHeight"));
+    out.wheelCenterXCm=(int)(v.at("WheelX")-base.at("WheelX"));
+    out.wheelCenterYCm=(int)(v.at("WheelY")-base.at("WheelY"));
+    out.wheelCenterZCm=(int)(v.at("WheelZ")-base.at("WheelZ"));
+    out.carWheelRadiusCm=v.at("WheelRadius")==base.at("WheelRadius")?0:(int)v.at("WheelRadius");
+    out.carWheelPitchHalfDeg=(int)((v.at("WheelPitch")-base.at("WheelPitch"))*2);
+    out.carWheelYawHalfDeg=(int)((v.at("WheelYaw")-base.at("WheelYaw"))*2);
+    out.carWheelRollHalfDeg=(int)((v.at("WheelRoll")-base.at("WheelRoll"))*2);
+    out.carWheelVisibilityOverride=v.at("WheelVisible")==0?0:-1;
+    return out;
 }
 
 static int
@@ -1003,6 +946,36 @@ ReadViewValue(int model, const char *name, int fallback)
 	return fallback;
 }
 
+static void
+RefreshViewPlacement(int model,VehicleViewCalibration &calibration)
+{
+	VehicleCategoryCalibration *category=GetCategoryCalibration(FindPlayerVehicle());
+	VehiclePlacement::Store &store=VehiclePlacement::runtime();
+	const std::string section=VehiclePlacement::section(PlacementSet(),model);
+	if(!store.personal.entries.count(section) && !store.templates.entries.count(section) && !store.bundled.entries.count(section))return;
+	if(category){
+		int *fields[]={&calibration.wheelCenterXCm,&calibration.wheelCenterYCm,&calibration.wheelCenterZCm,
+			&calibration.carWheelPitchHalfDeg,&calibration.carWheelYawHalfDeg,&calibration.carWheelRollHalfDeg,
+			&calibration.seatHeightCm,&calibration.seatDistanceCm};
+		const int base[]={category->wheelCenterXCm,category->wheelCenterYCm,category->wheelCenterZCm,
+			category->carWheelPitchHalfDeg,category->carWheelYawHalfDeg,category->carWheelRollHalfDeg,
+			category->seatHeightCm,category->seatDistanceCm};
+		const char *keys[]={"WheelX","WheelY","WheelZ","WheelPitch","WheelYaw","WheelRoll","SeatHeight","SeatDistance"};
+		for(int i=0;i<8;i++){float scale=i>=3&&i<=5?.5f:1.f;
+			int source=0;float value=store.value(PlacementSet(),model,keys[i],0,&source);
+			if(source)*fields[i]=(int)roundf(value/scale)-base[i];}
+		int source=0;float value=store.value(PlacementSet(),model,"WheelRadius",0,&source);
+		if(source)calibration.carWheelRadiusCm=(int)roundf(value);
+		value=store.value(PlacementSet(),model,"WheelVisible",0,&source);
+		if(source)calibration.carWheelVisibilityOverride=value==0?0:-1;
+		CVehicle *active=FindPlayerVehicle();const int type=active&&active->IsBoat()?VR_DEFAULT_VIEW_BOAT:VR_DEFAULT_VIEW_CAR;
+		calibration.defaultSeatHeightCm=(int)roundf(PlacementValue(model,"DefaultSeatHeight",
+			(float)(gDefaultVehicleViewOffset[type].seatHeightCm+calibration.defaultSeatHeightCm)))-gDefaultVehicleViewOffset[type].seatHeightCm;
+		calibration.defaultSeatDistanceCm=(int)roundf(PlacementValue(model,"DefaultSeatDistance",
+			(float)(gDefaultVehicleViewOffset[type].seatDistanceCm+calibration.defaultSeatDistanceCm)))-gDefaultVehicleViewOffset[type].seatDistanceCm;
+	}
+}
+
 static VehicleViewCalibration *
 GetViewCalibration(int model)
 {
@@ -1010,8 +983,10 @@ GetViewCalibration(int model)
 		return nil;
 	VehicleViewCalibration &calibration =
 		gVehicleViewCalibration[model-MI_FIRST_VEHICLE];
-	if(calibration.valid)
+	if(calibration.valid){
+		RefreshViewPlacement(model,calibration);
 		return &calibration;
+	}
 	const VehicleViewCalibration defaults = GetDefaultViewCalibration(model);
 	calibration.seatDistanceCm = clamp(ReadViewValue(model,
 		"SeatDistanceCm", defaults.seatDistanceCm), -100, 100);
@@ -1048,6 +1023,7 @@ GetViewCalibration(int model)
 		 VR_CAR_WHEEL_MAX_ROTATION_HALF_DEG);
 	calibration.carWheelVisibilityOverride = ReadViewValue(model,
 		"VirtualWheelVisibility", defaults.carWheelVisibilityOverride) == 0 ? 0 : -1;
+	RefreshViewPlacement(model,calibration);
 	calibration.valid = true;
 	return &calibration;
 }
@@ -1055,6 +1031,31 @@ GetViewCalibration(int model)
 static void
 SaveViewCalibrationValue(int model, const char *name, int value)
 {
+	// New edits have an explicit modelset and contain effective (category + model)
+	// values. Legacy INI settings remain an untouched compatibility fallback.
+	VehicleCategoryCalibration *category = GetCategoryCalibration(FindPlayerVehicle());
+	const char *field = nil; float effective = (float)value;
+	if(!strcmp(name,"WheelCenterXCm")){field="WheelX";effective+=category?category->wheelCenterXCm:0;}
+	if(!strcmp(name,"WheelCenterYCm")){field="WheelY";effective+=category?category->wheelCenterYCm:0;}
+	if(!strcmp(name,"WheelCenterZCm")){field="WheelZ";effective+=category?category->wheelCenterZCm:0;}
+	if(!strcmp(name,"WheelRadiusV2Cm")){field="WheelRadius";if(!value)effective=category?category->carWheelRadiusCm:18;}
+	if(!strcmp(name,"WheelPitchHalfDeg")){field="WheelPitch";effective=(value+(category?category->carWheelPitchHalfDeg:0))*.5f;}
+	if(!strcmp(name,"WheelYawHalfDeg")){field="WheelYaw";effective=(value+(category?category->carWheelYawHalfDeg:0))*.5f;}
+	if(!strcmp(name,"WheelRollHalfDeg")){field="WheelRoll";effective=(value+(category?category->carWheelRollHalfDeg:0))*.5f;}
+	if(!strcmp(name,"SeatHeightCm")){field="SeatHeight";effective+=category?category->seatHeightCm:0;}
+	if(!strcmp(name,"SeatDistanceCm")){field="SeatDistance";effective+=category?category->seatDistanceCm:0;}
+	CVehicle *activeVehicle=FindPlayerVehicle();
+	const int defaultType=activeVehicle && activeVehicle->IsBoat()?VR_DEFAULT_VIEW_BOAT:VR_DEFAULT_VIEW_CAR;
+	if(!strcmp(name,"DefaultSeatHeightCm")){field="DefaultSeatHeight";effective+=gDefaultVehicleViewOffset[defaultType].seatHeightCm;}
+	if(!strcmp(name,"DefaultSeatDistanceCm")){field="DefaultSeatDistance";effective+=gDefaultVehicleViewOffset[defaultType].seatDistanceCm;}
+	if(!strcmp(name,"VirtualWheelVisibility")){field="WheelVisible";effective=value==0?0.f:1.f;}
+	if(field){
+		float lo,hi;
+		if(VehiclePlacement::limits(field,lo,hi))effective=std::max(lo,std::min(hi,effective));
+		if(!VehiclePlacement::savePersonal(PlacementSet(),model,field,effective))
+			LOGE("Vehicle placement: personal pack could not be saved; prior file preserved");
+		return;
+	}
 	char section[64], text[32];
 	sprintf(section, ModelSets::GetActiveForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
@@ -1262,32 +1263,6 @@ BuildCarWheelPose(CVehicle *car, CarWheelPose *pose)
 		CModelInfo::GetModelInfo(car->GetModelIndex());
 	if(!model)
 		return false;
-	CVector local = model->GetFrontSeatPosn();
-	// CPed seats a driver by the same rule: a car stores the passenger side
-	// and has to be mirrored, a boat already stores the helm side. Mirroring
-	// a boat too put the wheel across the deck from the seat.
-	if(!car->IsBoat())
-		local.x = -local.x;
-	local.y += 0.33f;
-	local.z += 0.30f;
-	CVector controlCenterOffset;
-	GetVehicleControlAdjustment(car, &controlCenterOffset, nil);
-	local += controlCenterOffset;
-	pose->center = car->GetPosition()+Multiply3x3(car->GetMatrix(), local);
-	pose->normal = car->GetForward();
-	pose->right = car->GetRight();
-	if(pose->normal.MagnitudeSqr() < 0.0001f ||
-	   pose->right.MagnitudeSqr() < 0.0001f)
-		return false;
-	pose->normal.Normalise();
-	pose->right -= pose->normal*DotProduct(pose->right, pose->normal);
-	if(pose->right.MagnitudeSqr() < 0.0001f)
-		return false;
-	pose->right.Normalise();
-	pose->up = CrossProduct(pose->right, pose->normal);
-	if(pose->up.MagnitudeSqr() < 0.0001f)
-		return false;
-	pose->up.Normalise();
 	VehicleCategoryCalibration *category = GetCategoryCalibration(car);
 	VehicleViewCalibration *view = GetViewCalibration(car->GetModelIndex());
 	const int pitchHalfDeg = clamp(
@@ -1305,34 +1280,28 @@ BuildCarWheelPose(CVehicle *car, CarWheelPose *pose)
 		(view ? view->carWheelRollHalfDeg : 0),
 		-VR_CAR_WHEEL_MAX_ROTATION_HALF_DEG,
 		 VR_CAR_WHEEL_MAX_ROTATION_HALF_DEG);
-	const float pitch = DEGTORAD((float)pitchHalfDeg/2.0f);
-	const float yaw = DEGTORAD((float)yawHalfDeg/2.0f);
-	const float roll = DEGTORAD((float)rollHalfDeg/2.0f);
-	if(pitch != 0.0f){
-		pose->normal = RotateAroundAxis(pose->normal, pose->right, pitch);
-		pose->up = RotateAroundAxis(pose->up, pose->right, pitch);
-	}
-	if(yaw != 0.0f){
-		pose->right = RotateAroundAxis(pose->right, pose->up, yaw);
-		pose->normal = RotateAroundAxis(pose->normal, pose->up, yaw);
-	}
-	if(roll != 0.0f){
-		pose->right = RotateAroundAxis(pose->right, pose->normal, roll);
-		pose->up = RotateAroundAxis(pose->up, pose->normal, roll);
-	}
-	pose->normal.Normalise();
-	pose->right -= pose->normal*DotProduct(pose->right, pose->normal);
-	if(pose->right.MagnitudeSqr() < 0.0001f)
-		return false;
-	pose->right.Normalise();
-	pose->up = CrossProduct(pose->right, pose->normal);
-	pose->up.Normalise();
 	int radiusCm = category ? category->carWheelRadiusCm :
 		VR_CAR_WHEEL_DEFAULT_RADIUS_CM;
 	if(view && view->carWheelRadiusCm != 0)
 		radiusCm = view->carWheelRadiusCm;
 	pose->radius = (float)clamp(radiusCm,
 		VR_CAR_WHEEL_MIN_RADIUS_CM, VR_CAR_WHEEL_MAX_RADIUS_CM)/100.0f;
+	VehiclePlacement::WheelSpec values;
+	values.offset=VehiclePlacement::Vec(
+		(float)((category?category->wheelCenterXCm:0)+(view?view->wheelCenterXCm:0)),
+		(float)((category?category->wheelCenterYCm:0)+(view?view->wheelCenterYCm:0)),
+		(float)((category?category->wheelCenterZCm:0)+(view?view->wheelCenterZCm:0)));
+	values.angles=VehiclePlacement::Vec(pitchHalfDeg*.5f,yawHalfDeg*.5f,rollHalfDeg*.5f);
+	values.radius=pose->radius*100.f;
+	values=VehiclePlacement::resolveWheel(VehiclePlacement::runtime(),PlacementSet(),car->GetModelIndex(),values);
+	CVector seat=model->GetFrontSeatPosn();
+	VehiclePlacement::Basis shared=VehiclePlacement::wheel(VehiclePlacement::Vec(seat.x,seat.y,seat.z),car->IsBoat(),values);
+	CVector p(shared.position.x,shared.position.y,shared.position.z);
+	pose->center=car->GetPosition()+Multiply3x3(car->GetMatrix(),p);
+	pose->right=Multiply3x3(car->GetMatrix(),CVector(shared.right.x,shared.right.y,shared.right.z));
+	pose->normal=Multiply3x3(car->GetMatrix(),CVector(shared.forward.x,shared.forward.y,shared.forward.z));
+	pose->up=Multiply3x3(car->GetMatrix(),CVector(shared.up.x,shared.up.y,shared.up.z));
+	pose->radius=values.radius*.01f;
 	return true;
 }
 
@@ -2603,6 +2572,23 @@ GetQuestVehicleHudAnchor(CMatrix *matrix)
 	matrix->GetRight().Normalise();
 	matrix->GetUp().Normalise();
 	matrix->GetForward().Normalise();
+	// A fixed dashboard is authored in vehicle space; linked dashboards retain
+	// the neutral wheel basis and never receive physical steering rotation.
+	const int model=vehicle->GetModelIndex();
+	VehiclePlacement::DashboardSpec v=VehiclePlacement::resolveDashboard(VehiclePlacement::runtime(),PlacementSet(),model);
+	VehiclePlacement::Basis b;
+	if(v.followWheel){
+		CVector delta=matrix->GetPosition()-vehicle->GetPosition();
+		b.position=VehiclePlacement::Vec(DotProduct(delta,vehicle->GetRight()),DotProduct(delta,vehicle->GetForward()),DotProduct(delta,vehicle->GetUp()));
+		b.right=VehiclePlacement::Vec(DotProduct(matrix->GetRight(),vehicle->GetRight()),DotProduct(matrix->GetRight(),vehicle->GetForward()),DotProduct(matrix->GetRight(),vehicle->GetUp()));
+		b.forward=VehiclePlacement::Vec(DotProduct(matrix->GetForward(),vehicle->GetRight()),DotProduct(matrix->GetForward(),vehicle->GetForward()),DotProduct(matrix->GetForward(),vehicle->GetUp()));
+		b.up=VehiclePlacement::cross(b.right,b.forward);
+	}
+	b=VehiclePlacement::dashboard(b,v);
+	matrix->GetPosition()=vehicle->GetPosition()+Multiply3x3(vehicle->GetMatrix(),CVector(b.position.x,b.position.y,b.position.z));
+	matrix->GetRight()=Multiply3x3(vehicle->GetMatrix(),CVector(b.right.x,b.right.y,b.right.z));
+	matrix->GetForward()=Multiply3x3(vehicle->GetMatrix(),CVector(b.forward.x,b.forward.y,b.forward.z));
+	matrix->GetUp()=Multiply3x3(vehicle->GetMatrix(),CVector(b.up.x,b.up.y,b.up.z));
 	return true;
 }
 bool IsImmersiveCarDrivingActive() { return IsImmersiveCarActive(); }
@@ -3213,7 +3199,8 @@ bool ShouldRenderQuestImmersiveCarWheel()
 		GetViewCalibration(vehicle->GetModelIndex()) : nil;
 	return gImmersiveCarWheelVisible[
 		(vehicle && vehicle->IsBoat()) ? 1 : 0] &&
-		(!calibration || calibration->carWheelVisibilityOverride != 0);
+		(!vehicle || PlacementValue(vehicle->GetModelIndex(),"WheelVisible",
+			!calibration || calibration->carWheelVisibilityOverride != 0 ? 1.f:0.f)!=0);
 }
 
 void ToggleQuestImmersiveCarWheelVisible()
@@ -3626,23 +3613,22 @@ ApplyQuestVehicleViewOffset(CMatrix *eyeCamera)
 			gDefaultVehicleViewOffset[type];
 		VehicleViewCalibration *model =
 			GetViewCalibration(vehicle->GetModelIndex());
-		eyeCamera->GetPosition().z +=
-			(float)(offset.seatHeightCm+
-			 (model ? model->defaultSeatHeightCm : 0))/100.0f;
+		eyeCamera->GetPosition().z += PlacementValue(vehicle->GetModelIndex(),"DefaultSeatHeight",
+			(float)(offset.seatHeightCm+(model?model->defaultSeatHeightCm:0)))/100.f;
 		eyeCamera->GetPosition() += vehicle->GetForward()*
-			((float)(offset.seatDistanceCm+
-			 (model ? model->defaultSeatDistanceCm : 0))/100.0f);
+			(PlacementValue(vehicle->GetModelIndex(),"DefaultSeatDistance",
+			(float)(offset.seatDistanceCm+(model?model->defaultSeatDistanceCm:0)))/100.f);
 		return;
 	}
 	VehicleCategoryCalibration *category = GetCategoryCalibration(vehicle);
 	VehicleViewCalibration *calibration =
 		GetViewCalibration(vehicle->GetModelIndex());
 	if(category && calibration){
-		eyeCamera->GetPosition().z +=
-			(float)(category->seatHeightCm+calibration->seatHeightCm)/100.0f;
+		eyeCamera->GetPosition().z += PlacementValue(vehicle->GetModelIndex(),"SeatHeight",
+			(float)(category->seatHeightCm+calibration->seatHeightCm))/100.f;
 		eyeCamera->GetPosition() += vehicle->GetForward()*
-			((float)(category->seatDistanceCm+
-			 calibration->seatDistanceCm)/100.0f);
+			(PlacementValue(vehicle->GetModelIndex(),"SeatDistance",
+			(float)(category->seatDistanceCm+calibration->seatDistanceCm))/100.f);
 	}
 }
 

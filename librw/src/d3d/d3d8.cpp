@@ -764,7 +764,7 @@ readNativeTexture(Stream *stream)
 	// A backend with no D3D device cannot sample a PLATFORM_D3D8 raster, so
 	// everything -- palettised, compressed, raw -- goes through an Image and
 	// comes out as a raster of the current platform.
-	if(rw::platform == PLATFORM_VULKAN){
+	if(rw::platform == PLATFORM_VULKAN || rw::platform == PLATFORM_GL3){
 		tex->raster = readAsImageAnyFormat(stream, width, height, depth,
 			format|type, numLevels, compression, hasAlpha);
 		return tex;

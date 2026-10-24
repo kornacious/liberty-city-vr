@@ -228,7 +228,9 @@ struct Im2DVertex
 // endFrame closes it and submits. Everything the game draws in between goes to
 // both eyes in a single pass.
 // ---------------------------------------------------------------------------
+#ifdef RW_VULKAN
 bool32 beginFrame(VkImage colourImage, VkImageView colourView);
+#endif
 void endFrame(void);
 
 // Native profiler support.  GPU time is measured by two Vulkan timestamp

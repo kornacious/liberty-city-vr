@@ -942,7 +942,11 @@ rasterToImage(Raster *raster)
 	for(y = 0; y < image->height; y++){
 		uint8 *imgrow = imgpixels;
 		uint8 *rasrow = pixels;
-		for(x = 0; x < image->width; x++){
+		// Palette pixels are byte indices; RGBA conversion belongs only to
+		// true-colour rasters. Converting indices reads beyond the last row.
+		if(pallength)
+			memcpy(imgrow, rasrow, image->width);
+		else for(x = 0; x < image->width; x++){
 			conv(imgrow, rasrow);
 			imgrow += image->bpp;
 			rasrow += natras->bpp;

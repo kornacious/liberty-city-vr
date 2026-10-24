@@ -24,6 +24,7 @@
 #include "IniFile.h"
 #include "Population.h"
 #include "ModelSets.h"
+#include "VehiclePlacement.h"
 #include "CarCtrl.h"
 #include "vulkan/rwvk.h"
 #include "Pools.h"
@@ -2309,6 +2310,9 @@ IsMenuItemVisible(int page, int item)
 		case VR_WRIST_ALONG:
 		case VR_WRIST_ACROSS:
 		case VR_WRIST_LIFT:
+		case VR_WRIST_PITCH:
+		case VR_WRIST_YAW:
+		case VR_WRIST_ROLL:
 		case VR_WRIST_SIZE:
 		case VR_WRIST_RESET:
 		case VR_WRIST_BACK:
@@ -3270,12 +3274,39 @@ VrDebugUpdate(const PadInput &in)
 			const int context = gVrWristContextEdit;
 			const int slot = WRIST_SLOT(context, side);
 			const int otherSlot = WRIST_SLOT(context, other);
+			CVehicle *placementVehicle=FindPlayerVehicle();
+			bool placementHandled=false;
+			if(context!=WRIST_CONTEXT_DEFAULT && placementVehicle &&
+			   context==ActiveWristContext() && (placementVehicle->IsCar() || placementVehicle->IsBoat())){
+				const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+				const int model=placementVehicle->GetModelIndex();
+				const std::string prefix=VehiclePlacement::panelName(panel);
+				const char *suffix=nil;float fallback=0,increment=placementStep*.1f;
+				switch(gVrWristRadarSelection){
+				case VR_WRIST_ACROSS:suffix="X";fallback=gWristAcross[panel][slot]*.1f;break;
+				case VR_WRIST_ALONG:suffix="Y";fallback=gWristAlong[panel][slot]*.1f;break;
+				case VR_WRIST_LIFT:suffix="Z";fallback=gWristLift[panel][slot]*.1f;break;
+				case VR_WRIST_PITCH:suffix="Pitch";break;
+				case VR_WRIST_YAW:suffix="Yaw";break;
+				case VR_WRIST_ROLL:suffix="Roll";break;
+				case VR_WRIST_SIZE:suffix="Size";fallback=gWristSize[panel][slot];increment=step;break;
+				case VR_WRIST_RESET:{
+					VehiclePlacement::Store &s=VehiclePlacement::runtime();VehiclePlacement::Pack next=s.personal;
+					auto &entry=next.entries[VehiclePlacement::section(set,model)];
+					const char *keys[]={"X","Y","Z","Pitch","Yaw","Roll","Size"};for(auto key:keys)entry.erase(prefix+key);
+					std::string error;if(next.save("vehicle_placements.personal.ini",error))s.personal=next;
+					placementHandled=true;break;}
+				}
+				if(suffix){std::string key=prefix+suffix;float lo,hi;VehiclePlacement::limits(key,lo,hi);
+					float value=VehiclePlacement::runtime().value(set,model,key,fallback);
+					VehiclePlacement::savePersonal(set,model,key,std::max(lo,std::min(hi,value+increment)));placementHandled=true;}
+			}
 			// Any placement change claims the context being edited; the two
 			// rows above it belong to the panel itself and do not.
 			if(gVrWristRadarSelection > VR_WRIST_HAND &&
 			   gVrWristRadarSelection < VR_WRIST_BACK)
 				OwnWristContext(panel, context);
-			switch(gVrWristRadarSelection){
+			if(!placementHandled) switch(gVrWristRadarSelection){
 			case VR_WRIST_CONTEXT:
 				gVrWristContextEdit =
 					(gVrWristContextEdit+WRIST_CONTEXT_COUNT+
@@ -4386,6 +4417,15 @@ DrawQuestWristRadarPage(void)
 	const char *panelName = WristPanelName(panel);
 	const int context = gVrWristContextEdit;
 	const int slot = WRIST_SLOT(context, side);
+	float display[7]={gWristAlong[panel][slot]*.1f,gWristAcross[panel][slot]*.1f,gWristLift[panel][slot]*.1f,
+		gWristPitch[panel][slot]*.1f,gWristYaw[panel][slot]*.1f,gWristRoll[panel][slot]*.1f,(float)gWristSize[panel][slot]};
+	CVehicle *vehicle=FindPlayerVehicle();
+	if(context!=WRIST_CONTEXT_DEFAULT && vehicle && context==ActiveWristContext()){
+		const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+		const std::string prefix=VehiclePlacement::panelName(panel);
+		const char *suffix[]={"Y","X","Z","Pitch","Yaw","Roll","Size"};
+		for(int i=0;i<7;i++)display[i]=VehiclePlacement::runtime().value(set,vehicle->GetModelIndex(),prefix+suffix[i],i>=3&&i<=5?0:display[i]);
+	}
 	char heading[96];
 	snprintf(heading, sizeof(heading), "WRIST %s - %s SIDE - %s",
 		panelName, sideName, kWristContextName[context]);
@@ -4406,20 +4446,20 @@ DrawQuestWristRadarPage(void)
 		gWristPanelHand[panel] ? "RIGHT" : "LEFT");
 	snprintf(rows[VR_WRIST_ALONG], sizeof(rows[0]),
 		"ALONG THE ARM  < %+.1f CM >",
-		(float)gWristAlong[panel][slot]*0.1f);
+		display[0]);
 	snprintf(rows[VR_WRIST_ACROSS], sizeof(rows[0]),
 		"ACROSS THE WRIST  < %+.1f CM >",
-		(float)gWristAcross[panel][slot]*0.1f);
+		display[1]);
 	snprintf(rows[VR_WRIST_LIFT], sizeof(rows[0]),
-		"OFF THE WRIST  < %+.1f CM >", (float)gWristLift[panel][slot]*0.1f);
+		"OFF THE WRIST  < %+.1f CM >", display[2]);
 	snprintf(rows[VR_WRIST_PITCH], sizeof(rows[0]),
-		"TILT  < %+.1f DEG >", (float)gWristPitch[panel][slot]*0.1f);
+		"TILT  < %+.1f DEG >", display[3]);
 	snprintf(rows[VR_WRIST_YAW], sizeof(rows[0]),
-		"TURN  < %+.1f DEG >", (float)gWristYaw[panel][slot]*0.1f);
+		"TURN  < %+.1f DEG >", display[4]);
 	snprintf(rows[VR_WRIST_ROLL], sizeof(rows[0]),
-		"SPIN  < %+.1f DEG >", (float)gWristRoll[panel][slot]*0.1f);
+		"SPIN  < %+.1f DEG >", display[5]);
 	snprintf(rows[VR_WRIST_SIZE], sizeof(rows[0]),
-		"SIZE  < %d%% >", gWristSize[panel][slot]);
+		"SIZE  < %.0f%% >", display[6]);
 	static const char *const colourName[3] = { "RED", "GREEN", "BLUE" };
 	for(int channel = 0; channel < 3; channel++)
 		snprintf(rows[VR_WRIST_COLOUR_RED+channel], sizeof(rows[0]),
@@ -4431,7 +4471,7 @@ DrawQuestWristRadarPage(void)
 		snprintf(rows[VR_WRIST_RESET], sizeof(rows[0]),
 			"RESET %s SIDE", sideName);
 	else
-		strcpy(rows[VR_WRIST_RESET], "GO BACK TO THE ON FOOT PLACEMENT");
+		strcpy(rows[VR_WRIST_RESET], "RESET PERSONAL PLACEMENT TO TEMPLATE");
 	strcpy(rows[VR_WRIST_BACK], "BACK TO HUD SETTINGS");
 	int visibleRow = 0;
 	for(int item = 0; item < VR_WRIST_ITEM_COUNT; item++){
@@ -5666,6 +5706,21 @@ VrGetWristPanelCalibration(int panel, float *alongCm, float *acrossCm,
 	if(yawDeg) *yawDeg = (float)gWristYaw[panel][slot]*0.1f;
 	if(rollDeg) *rollDeg = (float)gWristRoll[panel][slot]*0.1f;
 	if(scale) *scale = (float)gWristSize[panel][slot]/100.0f;
+	CVehicle *vehicle=FindPlayerVehicle();
+	if(vehicle && (vehicle->IsCar() || vehicle->IsBoat())){
+		const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+		const int model=vehicle->GetModelIndex();
+		const std::string p=VehiclePlacement::panelName(panel);
+		const VehiclePlacement::Store &s=VehiclePlacement::runtime();
+		const float group=s.value(set,model,"DashSize",100.f)*.01f;
+		if(acrossCm)*acrossCm=s.value(set,model,p+"X",*acrossCm)*group;
+		if(alongCm)*alongCm=s.value(set,model,p+"Y",*alongCm)*group;
+		if(liftCm)*liftCm=s.value(set,model,p+"Z",*liftCm)*group;
+		if(pitchDeg)*pitchDeg=s.value(set,model,p+"Pitch",0);
+		if(yawDeg)*yawDeg=s.value(set,model,p+"Yaw",0);
+		if(rollDeg)*rollDeg=s.value(set,model,p+"Roll",0);
+		if(scale)*scale=s.value(set,model,p+"Size",*scale*100.f)*.01f*group;
+	}
 }
 
 bool

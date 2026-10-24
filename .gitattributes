@@ -6,3 +6,5 @@ patches/*.patch whitespace=-space-before-tab
 *.uxrh -text
 overlay/android/diagnostics/asan-wrap.sh text eol=lf
 .githooks/* text eol=lf
+BUILD_VEHICLE_EDITOR.sh text eol=lf
+tools/vehicle-editor/build.sh text eol=lf

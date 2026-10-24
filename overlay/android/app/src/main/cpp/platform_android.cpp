@@ -201,6 +201,19 @@ setStorageRoot(const char *path)
         AAsset_close(asset);
     }
 	LOGI("storage root: %s", gStorageRoot);
+	// A release's placement baseline refreshes independently of replaceable
+	// templates and personal overrides. Only this APK-owned filename is touched.
+	if(gAssets) if(AAsset *asset=AAssetManager_open(gAssets,"vehicle_placements.bundled.ini",AASSET_MODE_BUFFER)){
+		std::string destination=std::string(gGameDataRoot)+"/vehicle_placements.bundled.ini";
+		std::string temporary=destination+".apk-tmp";
+		if(FILE *file=fopen(temporary.c_str(),"wb")){
+			size_t size=(size_t)AAsset_getLength(asset);
+			bool ok=fwrite(AAsset_getBuffer(asset),1,size,file)==size;
+			if(fclose(file)!=0)ok=false;
+			if(ok)rename(temporary.c_str(),destination.c_str());
+		}
+		AAsset_close(asset);
+	}
 	LOGI("game data root: %s", gGameDataRoot);
 }
 

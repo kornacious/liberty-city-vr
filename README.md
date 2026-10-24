@@ -129,6 +129,15 @@ vehicle-mounted radio board provides station, volume and custom-track controls.
 See [Custom radio](overlay/docs/CUSTOM_RADIO.md) for formats, limits, calibration,
 placement sharing, and the Python/ADB/ffprobe prerequisites.
 
+## Desktop vehicle placement editor
+
+Use `BUILD_VEHICLE_EDITOR.bat -Package` on Windows or
+`sh BUILD_VEHICLE_EDITOR.sh` on Linux to build the standalone non-VR editor.
+It reads your local GTA III models, edits virtual wheel and dashboard-panel
+placements per vehicle/modelset, and exports or transfers template and personal
+packs to a Quest 3. See the [editor guide](tools/vehicle-editor/README.md) for
+dependencies, import/deployment, and preview limitations.
+
 ## Required external source
 
 The exact patch base comes from the public upstream re3 project:
