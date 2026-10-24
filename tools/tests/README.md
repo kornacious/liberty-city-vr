@@ -12,6 +12,13 @@ aspect ratio, maximal fit without cropping, centered black bars, all 256
 opacities, solid camera fades, scope reset, and twelve framebuffer sizes.
 GPU rendering and compositor presentation still require headset verification.
 
+`test-mission-counter-layout.ps1 -StageRoot <assembled-tree>` executes the
+production mission counter drawing block with recorded font and rectangle
+calls. It covers numeric and bar counters, every fill percentage from 0 to 100,
+appearance flashing and inherited alignment/background/font settings when the
+clock and timer are absent. It verifies right-anchored labels and fixed meter
+bounds; actual glyph rendering still requires headset verification.
+
 Windows tests require Visual Studio 2022 or Build Tools with the Desktop
 development with C++ workload. Run from a disposable source-kit copy because
 some extraction runners write temporary `.inc` files beside the test source.
@@ -61,7 +68,7 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 48 suites against that tree or the kit's production helpers. Each suite
+runs 52 suites against that tree or the kit's production helpers. Each suite
 runs in a separate process. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or

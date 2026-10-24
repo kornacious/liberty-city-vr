@@ -2,6 +2,10 @@
 
 ## 0.5.6
 
+- Fixed mission meter labels (including damage and spook) inheriting unrelated
+  font settings when the clock is hidden. Labels now establish their own font
+  and right alignment to remain beside the meter as its fill changes.
+
 - Added a head-anchored knockdown/get-up view with gentle automatic turning,
   floor/surface protection and smooth recovery. Tracked hands, weapons and
   aiming aids hide until head-height/tilt recovery completes. Knockdowns return
