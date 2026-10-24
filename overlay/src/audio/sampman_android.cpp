@@ -6,6 +6,8 @@
 #include "AudioManager.h"
 #include "MusicManager.h"
 #include "QuestMusic.h"
+#include "QuestAudio.h"
+#include "QuestHrtf.h"
 #include "platform_android.h"
 
 #include <aaudio/AAudio.h>
@@ -45,6 +47,10 @@ struct AndroidChannel {
 	float minDistance = 25.0f;
 	float maxDistance = 100.0f;
 	float distanceGain = 1.0f;
+	QuestHrtf::Filter filter;
+	bool spatial = true;
+	bool sourceEnded = false;
+	uint32 tailFrames = 0;
 	double cursor = 0.0;
 	uint32 revision = 0;
 	bool valid = false;
@@ -52,6 +58,9 @@ struct AndroidChannel {
 };
 
 static AndroidChannel gChannels[MAXCHANNELS + MAX2DCHANNELS];
+// Only the AAudio callback touches convolution history. Control updates never
+// copy it back or reset it while a burst is in flight.
+static QuestHrtf::History gHrtfHistory[MAXCHANNELS + MAX2DCHANNELS];
 static std::mutex gMixerMutex;
 static AAudioStream *gOutputStream = nullptr;
 static uint8 *gRawSamples = nullptr;
@@ -79,6 +88,7 @@ updateSpatialization(AndroidChannel &channel)
 	// Keep that gain separate so movement/range changes never compound a fade.
 	channel.distanceGain = 0.0f;
 	channel.pan = 63;
+	channel.filter.active = false;
 	if(!std::isfinite(channel.x) || !std::isfinite(channel.y) ||
 	   !std::isfinite(channel.z) || !std::isfinite(channel.minDistance) ||
 	   !std::isfinite(channel.maxDistance) || channel.maxDistance <= 0.0f)
@@ -97,10 +107,12 @@ updateSpatialization(AndroidChannel &channel)
 	// Pan by direction, independently of the attenuation radius. Frontend
 	// stereo pairs use positions at +/-1000 with a 100000-unit radius: dividing
 	// by that radius collapses both halves to the centre and blends their phase.
-	// Match the PC listener's +Y forward, +Z up orientation (+X is right).
+	// Synthetic frontend positions encode pan directly. World listener X is
+	// LEFT-positive, as in TranslateEntity; HRTFs handle its handedness below.
 	const float normal = distance > 0.01 ?
 		float(std::max(-1.0, std::min(1.0, channel.x / distance))) : 0.0f;
 	channel.pan = uint32(std::max(0.0f, std::min(127.0f, 63.0f + normal * 64.0f)));
+	QuestHrtf::Build(channel.filter, channel.x, channel.y, channel.z, channel.spatial);
 }
 
 static aaudio_data_callback_result_t
@@ -120,9 +132,13 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 		memcpy(channels, gChannels, sizeof(channels));
 	}
 
-	for(AndroidChannel &channel : channels){
+	for(size_t channelIndex = 0; channelIndex < ARRAY_SIZE(channels); ++channelIndex){
+		AndroidChannel &channel = channels[channelIndex];
 		if(!channel.playing || !channel.valid || channel.frameCount == 0)
 			continue;
+		QuestHrtf::History &history = gHrtfHistory[channelIndex];
+		if(history.revision != channel.revision)
+			history.Reset(channel.revision, channel.filter);
 
 		const int16_t *samples = reinterpret_cast<const int16_t *>(
 			gRawSamples + gAndroidSampleTable[channel.sample].nOffset);
@@ -141,18 +157,24 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 
 		for(int32 frame = 0; frame < numFrames; ++frame){
 			uint32 index = uint32(channel.cursor);
-			if(index >= loopEnd){
+			if(!channel.sourceEnded && index >= loopEnd){
 				if(channel.loopCount == 1){
-					channel.playing = false;
-					break;
+					channel.sourceEnded = true;
+					channel.tailFrames = channel.filter.active ? QuestHrtf::Taps : 0;
+					if(channel.tailFrames == 0){
+						channel.playing = false;
+						break;
+					}
 				}
-				if(channel.loopCount > 1)
-					channel.loopCount--;
-				channel.cursor = double(loopStart) +
-					(channel.cursor - double(loopEnd));
-				index = uint32(channel.cursor);
-				if(index >= channel.frameCount)
-					index = loopStart;
+				else{
+					if(channel.loopCount > 1)
+						channel.loopCount--;
+					channel.cursor = double(loopStart) +
+						(channel.cursor - double(loopEnd));
+					index = uint32(channel.cursor);
+					if(index >= channel.frameCount)
+						index = loopStart;
+				}
 			}
 
 			// SDT effects use many rates (some frontend sounds are only 6 kHz).
@@ -160,18 +182,29 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 			// each value for several output frames, which adds strong images to
 			// low-rate sounds on the headset's 48 kHz output. Keep the cursor in
 			// source frames so game-requested pitch and duration stay unchanged.
-			uint32 next = index + 1;
-			if(next >= loopEnd)
-				next = channel.loopCount != 1 && loopStart < loopEnd ? loopStart : index;
-			const double fraction = channel.cursor - double(index);
-			const float sample = float(samples[index] +
-				(samples[next] - samples[index]) * fraction);
-			const int left = int(sample * volume * leftPan);
-			const int right = int(sample * volume * rightPan);
+			float sample = 0.0f;
+			if(!channel.sourceEnded){
+				uint32 next = index + 1;
+				if(next >= loopEnd)
+					next = channel.loopCount != 1 && loopStart < loopEnd ? loopStart : index;
+				const double fraction = channel.cursor - double(index);
+				sample = float(samples[index] +
+					(samples[next] - samples[index]) * fraction);
+			}
+			float leftSample = sample * leftPan, rightSample = sample * rightPan;
+			if(channel.filter.active)
+				history.Process(sample, channel.filter, leftSample, rightSample);
+			const int left = int(leftSample * volume);
+			const int right = int(rightSample * volume);
 			output[frame * 2] = int16_t(clampSample(output[frame * 2] + left));
 			output[frame * 2 + 1] =
 				int16_t(clampSample(output[frame * 2 + 1] + right));
-			channel.cursor += step;
+			if(!channel.sourceEnded)
+				channel.cursor += step;
+			else if(--channel.tailFrames == 0){
+				channel.playing = false;
+				break;
+			}
 		}
 	}
 
@@ -188,6 +221,8 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 			live.cursor = mixed.cursor;
 			live.loopCount = mixed.loopCount;
 			live.playing = mixed.playing;
+			live.sourceEnded = mixed.sourceEnded;
+			live.tailFrames = mixed.tailFrames;
 		}
 	}
 	return AAUDIO_CALLBACK_RESULT_CONTINUE;
@@ -202,6 +237,9 @@ openOutput()
 	AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
 	AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
 	AAudioStreamBuilder_setChannelCount(builder, 2);
+	// The embedded HRIRs are resampled to this output rate. Android handles
+	// conversion to the hardware rate; source effects retain their own rates.
+	AAudioStreamBuilder_setSampleRate(builder, 48000);
 	AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
 	AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_SHARED);
 	AAudioStreamBuilder_setDataCallback(builder, audioCallback, nullptr);
@@ -213,6 +251,12 @@ openOutput()
 		return false;
 	}
 	gOutputRate = AAudioStream_getSampleRate(gOutputStream);
+	if(gOutputRate != 48000){
+		LOGE("AAudio returned an incompatible HRTF rate: %d", gOutputRate);
+		AAudioStream_close(gOutputStream);
+		gOutputStream = nullptr;
+		return false;
+	}
 	result = AAudioStream_requestStart(gOutputStream);
 	if(result != AAUDIO_OK){
 		LOGE("AAudio start failed: %s", AAudio_convertResultToText(result));
@@ -296,6 +340,16 @@ applyStreamVolume(uint8 stream)
 }
 
 } // namespace
+
+void
+QuestAudio::SetChannel2D(unsigned int channel, bool is2D)
+{
+	if(channel >= MAXCHANNELS) return;
+	std::lock_guard<std::mutex> lock(gMixerMutex);
+	AndroidChannel &out = gChannels[channel];
+	out.spatial = !is2D;
+	updateSpatialization(out);
+}
 
 cSampleManager::cSampleManager(void)
 {
@@ -469,6 +523,7 @@ cSampleManager::InitialiseChannel(uint32 channel, uint32 sfx, uint8 bank)
 	out.baseFrequency = sample.nFrequency > 0 ? sample.nFrequency : DIGITALRATE;
 	out.frequency = out.baseFrequency;
 	out.valid = true;
+	out.spatial = channel < MAXCHANNELS;
 	return true;
 }
 
@@ -552,6 +607,8 @@ void cSampleManager::StartChannel(uint32 channel)
 	std::lock_guard<std::mutex> lock(gMixerMutex);
 	if(gChannels[channel].valid){
 		gChannels[channel].cursor = 0.0;
+		gChannels[channel].sourceEnded = false;
+		gChannels[channel].tailFrames = 0;
 		gChannels[channel].playing = true;
 		gChannels[channel].revision++;
 	}

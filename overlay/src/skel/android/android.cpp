@@ -27,6 +27,8 @@
 #include "Camera.h"
 #include "Timecycle.h"
 #include "DMAudio.h"
+#include "QuestAudio.h"
+#include "QuestAudioListener.h"
 #include "MemoryMgr.h"
 #include "Lists.h"	// CPtrList, needed by PlayerInfo.h
 #include "PlayerInfo.h"
@@ -1992,6 +1994,53 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		gVrOnFootBodyAnchorValid = false;
 		rw::vulkan::setFirstPersonAnchor(nil, 0.0f, 0, 0);
 	}
+}
+
+static QuestAudio::Listener gAudioListener;
+static CVector gAudioListenerPosition;
+
+void
+QuestAudio::UpdateListener()
+{
+	// Audio is serviced after simulation but before render camera setup.
+	// Refresh the anchor only: do not replace TheCamera's simulation matrix,
+	// rebase render hands, or run the post-physics rendering side effects here.
+	VrUpdateFirstPersonAnchor(false);
+	float left[3], up[3], forward[3], position[3];
+	if(!rw::vulkan::getFirstPersonViewFrame(left, up, forward, position)){
+		// Theater/third-person fallback follows the game view. Derive LEFT
+		// from the view axes rather than relying on the historical GetRight
+		// naming or on a matrix previously overwritten by render setup.
+		const CVector &f = TheCamera.GetForward();
+		const CVector &u = TheCamera.GetUp();
+		CVector l = CrossProduct(u, f);
+		l.Normalise();
+		const CVector &p = TheCamera.GetPosition();
+		left[0] = l.x; left[1] = l.y; left[2] = l.z;
+		forward[0] = f.x; forward[1] = f.y; forward[2] = f.z;
+		up[0] = u.x; up[1] = u.y; up[2] = u.z;
+		position[0] = p.x; position[1] = p.y; position[2] = p.z;
+	}
+	memcpy(gAudioListener.left, left, sizeof(left));
+	memcpy(gAudioListener.forward, forward, sizeof(forward));
+	memcpy(gAudioListener.up, up, sizeof(up));
+	memcpy(gAudioListener.position, position, sizeof(position));
+	gAudioListenerPosition = CVector(position[0], position[1], position[2]);
+}
+
+const CVector &
+QuestAudio::ListenerPosition()
+{
+	return gAudioListenerPosition;
+}
+
+void
+QuestAudio::TranslateEntity(const CVector &world, CVector &local)
+{
+	const float position[3] = {world.x, world.y, world.z};
+	float translated[3];
+	gAudioListener.Translate(position, translated);
+	local = CVector(translated[0], translated[1], translated[2]);
 }
 
 // XINPUT is off on this platform, so CPad routes through CapturePad. This is

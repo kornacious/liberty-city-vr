@@ -1,5 +1,13 @@
 # Host regression tests
 
+`test-android-audio.ps1` covers the production Android callback and controls,
+headset frame composition, and measured binaural filters. It checks front/rear
+separation, world-coordinate ear ordering, elevation, independent head/body
+rotation, tilted cockpit and room translation, HRIR tails, channel reuse,
+callback partitioning, smoothing and spherical seams, alongside the existing
+attenuation, resampling, looping and frontend stereo checks. Perceived
+localization and real-time performance still require the headset.
+
 These tests compile production helpers or extract production functions into
 small native adapters. They check code behavior; they do not launch the game,
 replace game data or establish headset appearance/FPS.

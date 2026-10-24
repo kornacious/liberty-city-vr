@@ -1,5 +1,11 @@
 # Third-party notices
 
+- **MIT KEMAR HRTF measurements** — Copyright 1994 MIT Media Laboratory;
+  measured by Bill Gardner and Keith Martin. The measurements are available
+  without use restrictions with author attribution. The embedded, resampled
+  diffuse-field responses and their reproducible source/permission details
+  are documented in [SPATIAL_AUDIO.md](overlay/docs/SPATIAL_AUDIO.md).
+
 - **librw** — MIT License, copyright aap. The `librw/` directory is a fork;
   its original license is preserved at `librw/LICENSE`. The Vulkan backend
   (`librw/src/vulkan/`) was written for this project.

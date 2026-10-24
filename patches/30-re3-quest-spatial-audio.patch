@@ -1,0 +1,142 @@
+diff --git a/src/audio/AudioManager.cpp b/src/audio/AudioManager.cpp
+--- a/src/audio/AudioManager.cpp
++++ b/src/audio/AudioManager.cpp
+@@ -1,7 +1,15 @@
+ #include "common.h"
+ 
+ #include "AudioManager.h"
++#ifdef AUDIO_ANDROID
++#include "QuestAudio.h"
++#endif
+ #include "audio_enums.h"
++#ifdef AUDIO_ANDROID
++#define QUEST_AUDIO_POSITION QuestAudio::ListenerPosition()
++#else
++#define QUEST_AUDIO_POSITION TheCamera.GetPosition()
++#endif
+ 
+ #include "AudioScriptObject.h"
+ #include "MusicManager.h"
+@@ -119,6 +127,9 @@
+ 		m_bTimerJustReset = FALSE;
+ 	}
+ 	if (m_bIsInitialised) {
++#ifdef AUDIO_ANDROID
++		QuestAudio::UpdateListener();
++#endif
+ 		m_bWasPaused = m_bIsPaused;
+ 		m_bIsPaused = CTimer::GetIsUserPaused();
+ #ifdef AUDIO_REFLECTIONS
+@@ -586,7 +597,11 @@
+ void
+ cAudioManager::TranslateEntity(Const CVector *in, CVector *out)
+ {
++#ifdef AUDIO_ANDROID
++	QuestAudio::TranslateEntity(*in, *out);
++#else
+ 	*out = MultiplyInverse(TheCamera.GetMatrix(), *in);
++#endif
+ }
+ 
+ int32
+@@ -765,7 +780,7 @@
+ 	CEntity *ent;
+ 
+ 	if (m_FrameCounter % 8 == 0) {
+-		camPos = TheCamera.GetPosition();
++		camPos = QUEST_AUDIO_POSITION;
+ 		m_avecReflectionsPos[0] = camPos;
+ 		m_avecReflectionsPos[0].y += 50.0f;
+ 		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[0], colpoint, ent, true, false, false, true, false, true, true))
+@@ -773,7 +788,7 @@
+ 		else
+ 			m_afReflectionsDistances[0] = 50.0f;
+ 	} else if ((m_FrameCounter + 1) % 8 == 0) {
+-		camPos = TheCamera.GetPosition();
++		camPos = QUEST_AUDIO_POSITION;
+ 		m_avecReflectionsPos[1] = camPos;
+ 		m_avecReflectionsPos[1].y -= 50.0f;
+ 		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[1], colpoint, ent, true, false, false, true, false, true, true))
+@@ -781,7 +796,7 @@
+ 		else
+ 			m_afReflectionsDistances[1] = 50.0f;
+ 	} else if ((m_FrameCounter + 2) % 8 == 0) {
+-		camPos = TheCamera.GetPosition();
++		camPos = QUEST_AUDIO_POSITION;
+ 		m_avecReflectionsPos[2] = camPos;
+ 		m_avecReflectionsPos[2].x -= 50.0f;
+ 		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[2], colpoint, ent, true, false, false, true, false, true, true))
+@@ -789,7 +804,7 @@
+ 		else
+ 			m_afReflectionsDistances[2] = 50.0f;
+ 	} else if ((m_FrameCounter + 3) % 8 == 0) {
+-		camPos = TheCamera.GetPosition();
++		camPos = QUEST_AUDIO_POSITION;
+ 		m_avecReflectionsPos[3] = camPos;
+ 		m_avecReflectionsPos[3].x += 50.0f;
+ 		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[3], colpoint, ent, true, false, false, true, false, true, true))
+@@ -797,7 +812,7 @@
+ 		else
+ 			m_afReflectionsDistances[3] = 50.0f;
+ 	} else if ((m_FrameCounter + 4) % 8 == 0) {
+-		camPos = TheCamera.GetPosition();
++		camPos = QUEST_AUDIO_POSITION;
+ 		m_avecReflectionsPos[4] = camPos;
+ 		m_avecReflectionsPos[4].z += 50.0f;
+ 		if (CWorld::ProcessVerticalLine(camPos, m_avecReflectionsPos[4].z, colpoint, ent, true, false, false, false, true, false, nil))
+@@ -847,7 +862,7 @@
+ 						sample.m_fDistance = Sqrt(GetDistanceSquared(sample.m_vecPos));
+ 						if (sample.m_nSampleIndex >= SAMPLEBANK_PED_START && sample.m_nSampleIndex <= SAMPLEBANK_PED_END) { // check if it's ped comment
+ 							uint8 vol;
+-							if (CWorld::GetIsLineOfSightClear(TheCamera.GetPosition(), sample.m_vecPos, true, false, false, false, false, false))
++							if (CWorld::GetIsLineOfSightClear(QUEST_AUDIO_POSITION, sample.m_vecPos, true, false, false, false, false, false))
+ 								vol = PED_COMMENT_VOLUME;
+ 							else
+ 								vol = PED_COMMENT_VOLUME_BEHIND_WALL;
+@@ -1099,6 +1114,9 @@
+ 							SampleManager.InitialiseChannel(j, m_asActiveSamples[j].m_nSampleIndex, m_asActiveSamples[j].m_nBankIndex);
+ #else
+ 						if (SampleManager.InitialiseChannel(j, m_asActiveSamples[j].m_nSampleIndex, m_asActiveSamples[j].m_nBankIndex)) {
++#endif
++#ifdef AUDIO_ANDROID
++							QuestAudio::SetChannel2D(j, m_asActiveSamples[j].m_bIs2D);
+ #endif
+ #ifdef USE_TIME_SCALE_FOR_AUDIO
+ 							SampleManager.SetChannelFrequency(j, m_asActiveSamples[j].m_nFrequency * timeScale);
+diff --git a/src/audio/AudioLogic.cpp b/src/audio/AudioLogic.cpp
+--- a/src/audio/AudioLogic.cpp
++++ b/src/audio/AudioLogic.cpp
+@@ -1,7 +1,15 @@
+ #include "common.h"
+ 
+ #include "AudioManager.h"
++#ifdef AUDIO_ANDROID
++#include "QuestAudio.h"
++#endif
+ #include "audio_enums.h"
++#ifdef AUDIO_ANDROID
++#define QUEST_AUDIO_POSITION QuestAudio::ListenerPosition()
++#else
++#define QUEST_AUDIO_POSITION TheCamera.GetPosition()
++#endif
+ 
+ #include "Automobile.h"
+ #include "Boat.h"
+@@ -428,7 +436,7 @@
+ float
+ cAudioManager::GetDistanceSquared(const CVector &v)
+ {
+-	const CVector &c = TheCamera.GetPosition();
++	const CVector &c = QUEST_AUDIO_POSITION;
+ 	return sq(v.x - c.x) + sq(v.y - c.y) + sq((v.z - c.z) * 0.2f);
+ }
+ 
+@@ -3860,7 +3868,7 @@
+ 				Vol = PED_COMMENT_VOLUME;
+ 				break;
+ 			default:
+-				if (CWorld::GetIsLineOfSightClear(TheCamera.GetPosition(), m_sQueueSample.m_vecPos, true, false, false, false, false, false))
++				if (CWorld::GetIsLineOfSightClear(QUEST_AUDIO_POSITION, m_sQueueSample.m_vecPos, true, false, false, false, false, false))
+ 					Vol = PED_COMMENT_VOLUME;
+ 				else
+ 					Vol = PED_COMMENT_VOLUME_BEHIND_WALL;
