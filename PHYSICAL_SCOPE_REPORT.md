@@ -20,7 +20,8 @@ produce a separate image through the lens.
   each eye. This avoids a second stereo scene submission.
 - The optical camera follows the authoritative firing ray. Its field of
   view accounts for the lens size and distance to the nearest aligned eye,
-  giving 2.5x magnification relative to the lens's apparent angular size.
+  giving the selected magnification (initially 2.5x) relative to the lens's
+  apparent angular size.
 - A cached geometry fit locates a compact rear-facing cap above the bore,
   preferring the rear of equal-height caps. The fit uses the actual triangle
   plane, allowing a small angle between the cap and calibrated firing ray.
@@ -68,3 +69,41 @@ test. Installation and compilation do not establish those results. The scope
 shares the main scene's streamed objects and draw distance; it does not request
 additional distant world streaming. Its extra render work is limited to active
 physical aiming, but a headset performance measurement is still needed.
+
+## Right-thumbstick zoom — 2026-10-24
+
+While aiming with `3D PHYSICAL`, hold the right controller's thumbstick up to
+zoom in or down to zoom out. Magnification changes continuously from **1x to
+8x**, starts at **2.5x**, and remains at the selected value when the rifle is
+lowered or the scope mode changes during the current game session. It is not
+written to disk.
+
+The vertical stick has a 0.25 deadzone and proportional speed up to two zoom
+units per second. The update uses frame elapsed time, capped at 100 ms to avoid
+a jump after a stall. It runs after scope activation is updated, is blocked
+by menus/unavailable gameplay/knockdown, and consumes only the vertical legacy
+camera axis while physical aiming is active. Horizontal stick turning and
+the existing `2D OVERLAY` zoom behaviour are preserved. The lens projection
+accepts the wider field of view needed by a large, close optic at 1x.
+
+The physical-scope fixture additionally exercises the production input handler
+and zoom calculation, covering up/down direction, proportional input,
+deadzone, limits, stalled/invalid elapsed time, 30/72/90/120 FPS equivalence,
+input consumption, blocked input and retention outside physical aiming.
+
+The focused scope tests and full arm64 debug APK build passed. The broader
+current-source run passed 47 suites and failed six: `cheat-menu`,
+`graphics-menu-layout`, `quest-melee`, `held-weapon-frame`, `ragdoll-menu`, and
+`vehicle-seat-recenter`. All six failures were reproduced against an unchanged
+HEAD snapshot with the same missing fixture declarations, unused-function
+warning, extraction failure or outdated anchor signature. They are pre-existing
+fixture failures and were not counted as passes. Eight reference-only suites
+remain excluded. Logs are under `.cache/scope-zoom-validation-20261024/` and
+`.cache/scope-zoom-baseline-checks-20261024/`.
+
+The resulting APK at
+`.cache/scope-zoom-apk-20261024/android/app/build/outputs/apk/debug/app-debug.apk`
+was installed successfully with `install -r` on verified Quest 3 serial
+`personal Quest 3 device`, preserving app data. The user confirmed the previous physical
+scope's appearance and behaviour; the new thumbstick speed and range still
+need their in-headset check.

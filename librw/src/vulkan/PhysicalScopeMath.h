@@ -36,7 +36,7 @@ inline bool projection(float out[16], const float fold[16],
     const float position[3], const float right[3], const float up[3],
     const float forward[3], float verticalFov, float aspect)
 {
-	if(!isfinite(verticalFov) || verticalFov < 0.001f || verticalFov > 1.5f ||
+	if(!isfinite(verticalFov) || verticalFov < 0.001f || verticalFov > 3.0f ||
 	   !isfinite(aspect) || aspect < 0.1f) return false;
 	float p[3], r[3], u[3], f[3];
 	for(int i = 0; i < 3; i++){

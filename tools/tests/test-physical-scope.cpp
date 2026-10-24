@@ -5,6 +5,7 @@
 #include <limits>
 #include "../../librw/src/vulkan/PhysicalScopeMath.h"
 #include "../../overlay/src/vr/QuestScopeLens.h"
+#include "../../overlay/src/vr/QuestScopeZoom.h"
 
 using uint32 = uint32_t;
 using bool32 = int;
@@ -67,6 +68,15 @@ static void setPhysicalScopeWanted(bool32 value) { wanted = value != 0; }
 } }
 #include "physical-scope-zoom.inc"
 
+struct CControllerState { int RightStickX, RightStickY; };
+namespace androidgame { struct PadInput { float rightStickY; }; }
+static const int SCOPE_AIM_3D_PHYSICAL = 2;
+static int gScopeHand, gScopeAimMode, gScopeWeaponType;
+static float gPhysicalScopeZoom = QuestScopeZoom::Default;
+static float frameSeconds;
+namespace CTimer { static float GetTimeStepNonClippedInSeconds() { return frameSeconds; } }
+#include "physical-scope-input.inc"
+
 static void near(float a, float b) { assert(fabsf(a-b) < 0.0001f); }
 static void project(const float m[16], const float p[3], float out[3])
 {
@@ -102,6 +112,8 @@ static void testProjection()
 	assert(!PhysicalScopeMath::projection(m,identity,p,r,u,f,fov,0));
 	float bad[3]={std::numeric_limits<float>::quiet_NaN(),0,0};
 	assert(!PhysicalScopeMath::projection(m,identity,p,r,u,bad,fov,aspect));
+	// Low magnification and a large lens close to the eye can exceed 90 deg.
+	assert(PhysicalScopeMath::projection(m,identity,p,r,u,f,2.1f,aspect));
 }
 struct Triangle { uint16_t v[3]; };
 static void cap(std::vector<QuestScopeLens::Vec> &v, std::vector<Triangle> &t,
@@ -189,8 +201,57 @@ static void testModes()
 	active=false; near(VrScopeZoomFactor(),1); assert(!wanted); // lowering clears request
 	active=true; weapon=8; near(VrScopeZoomFactor(),1); assert(!wanted);
 }
+static void testThumbstickZoom()
+{
+	for(int fps : {30,72,90,120}){
+		float zoom = QuestScopeZoom::Default;
+		for(int i=0;i<fps;i++) zoom=QuestScopeZoom::Step(zoom,1.0f,1.0f/(float)fps);
+		near(zoom,4.5f);
+		for(int i=0;i<fps;i++) zoom=QuestScopeZoom::Step(zoom,-1.0f,1.0f/(float)fps);
+		near(zoom,QuestScopeZoom::Default);
+	}
+	near(QuestScopeZoom::Step(2.5f,0.25f,0.1f),2.5f);
+	near(QuestScopeZoom::Step(2.5f,-0.25f,0.1f),2.5f);
+	near(QuestScopeZoom::Step(2.5f,0.625f,0.1f),2.6f);
+	near(QuestScopeZoom::Step(2.5f,1.0f,10.0f),2.7f);
+	near(QuestScopeZoom::Step(2.5f,1.0f,0.0f),2.5f);
+	near(QuestScopeZoom::Step(2.5f,1.0f,-0.1f),2.5f);
+	near(QuestScopeZoom::Step(2.5f,std::numeric_limits<float>::quiet_NaN(),0.1f),2.5f);
+	near(QuestScopeZoom::Step(8.0f,1.0f,0.1f),8.0f);
+	near(QuestScopeZoom::Step(1.0f,-1.0f,0.1f),1.0f);
+
+	CControllerState pad={64,-128};
+	androidgame::PadInput input={1.0f};
+	gScopeHand=1; gScopeAimMode=2; gScopeWeaponType=7; frameSeconds=0.1f;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==0 && pad.RightStickX==64);
+	// Menus, pauses and knockdown pass blocked=true. Never steal their stick.
+	pad.RightStickY=-128;
+	UpdatePhysicalScopeZoom(&pad,input,true);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==-128);
+	gScopeHand=-1;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==-128);
+	gScopeHand=0; gScopeAimMode=1;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==-128);
+	gScopeAimMode=0;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==-128);
+	gScopeAimMode=2; gScopeWeaponType=8;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.7f); assert(pad.RightStickY==-128);
+	gScopeWeaponType=7; input.rightStickY=-1.0f;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,2.5f); assert(pad.RightStickY==0);
+	gPhysicalScopeZoom=1.0f; pad.RightStickY=128;
+	UpdatePhysicalScopeZoom(&pad,input,false);
+	near(gPhysicalScopeZoom,1.0f); assert(pad.RightStickY==0);
+}
+
 int main()
 {
 	testProjection(); testLens(); testCaptureReplay(); testModes();
-	puts("Physical scope: projection, room-scale, roll, cap fitting, draw replay/exclusions and modes passed.");
+	testThumbstickZoom();
+	puts("Physical scope: projection, cap fitting, draw replay, modes and right-thumbstick zoom passed.");
 }

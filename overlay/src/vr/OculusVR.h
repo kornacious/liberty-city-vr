@@ -71,6 +71,7 @@ bool IsTrackedScopeActive();
 bool IsTrackedScopeActiveForHand(int hand);
 bool IsTrackedScopeOverlayActive();
 bool IsTrackedScopeOverlayActiveForHand(int hand);
+float GetTrackedPhysicalScopeZoom();
 int GetTrackedScopeWeaponType();
 int GetQuestScopeAimMode();
 void CycleQuestScopeAimMode(int direction);

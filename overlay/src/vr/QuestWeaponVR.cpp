@@ -21,6 +21,7 @@
 #include "WeaponInfo.h"
 #include "WeaponType.h"
 #include "QuestWeaponGrip.h"
+#include "QuestScopeZoom.h"
 #include "QuestWeaponFactoryDefaults.h"
 #include "VrWeaponCalibrationMenu.h"
 #include "World.h"
@@ -388,6 +389,7 @@ static MeleeStrike gMeleeStrike[VR_HAND_COUNT];
 static MeleeMotion gMeleeMotion[VR_HAND_COUNT];
 
 static int gScopeHand = -1;
+static float gPhysicalScopeZoom = QuestScopeZoom::Default;
 static int gScopeWeaponType = -1;
 static int gScopeCandidateHand = -1;
 static int gScopeCandidateType = -1;
@@ -2551,6 +2553,20 @@ UpdateScope()
 }
 
 static void
+UpdatePhysicalScopeZoom(CControllerState *state, const androidgame::PadInput &input,
+    bool blocked)
+{
+	if(blocked || gScopeHand < 0 || gScopeAimMode != SCOPE_AIM_3D_PHYSICAL ||
+	   gScopeWeaponType != WEAPONTYPE_SNIPERRIFLE)
+		return;
+	gPhysicalScopeZoom = QuestScopeZoom::Step(gPhysicalScopeZoom, input.rightStickY,
+		CTimer::GetTimeStepNonClippedInSeconds());
+	// The vertical axis belongs to the optic while aiming, even at a zoom
+	// limit. It must not also move the legacy camera or native sniper zoom.
+	state->RightStickY = 0;
+}
+
+static void
 ResetInteraction()
 {
 	ClearAttachedMissionWeaponState();
@@ -2658,6 +2674,7 @@ ApplyTouchInput(CControllerState *state)
 		(gHeldSlot[0] >= 0 || gHeldSlot[1] >= 0);
 	UpdateMelee();
 	UpdateScope();
+	UpdatePhysicalScopeZoom(state, input, !gameplay || menu || knockedDown);
 
 	// CapturePad has to map triggers to classic acceleration/brake for vehicles.
 	// On foot those same states must not become a second animation-driven shot:
@@ -2778,6 +2795,7 @@ bool IsTrackedScopeActive() { return gScopeHand >= 0 && gScopeAimMode != SCOPE_A
 bool IsTrackedScopeActiveForHand(int hand) { return gScopeHand == hand && gScopeAimMode != SCOPE_AIM_OFF; }
 bool IsTrackedScopeOverlayActive() { return IsTrackedScopeActive() && gScopeAimMode == SCOPE_AIM_2D_OVERLAY; }
 bool IsTrackedScopeOverlayActiveForHand(int hand) { return IsTrackedScopeActiveForHand(hand) && gScopeAimMode == SCOPE_AIM_2D_OVERLAY; }
+float GetTrackedPhysicalScopeZoom() { return gPhysicalScopeZoom; }
 int GetTrackedScopeWeaponType() { return gScopeWeaponType; }
 
 int GetQuestScopeAimMode() { LoadSettings(); return gScopeAimMode; }

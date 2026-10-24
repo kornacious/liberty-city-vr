@@ -86,7 +86,8 @@ RenderQuestPhysicalScope(int hand, const CMatrix &weapon, RpAtomic *atomic)
 				// The reticle centre follows the bullet ray, including the
 				// muzzle's offset from the optical housing. A small texture
 				// still gives real magnification; no crop of the eye image.
-				const float fov = 2.0f*atanf(halfHeight/(eyeDistance*2.5f));
+				const float zoom = OculusVR::GetTrackedPhysicalScopeZoom();
+				const float fov = 2.0f*atanf(halfHeight/(eyeDistance*zoom));
 				rw::vulkan::setPhysicalScopeFrame(&muzzle.x, &cameraRight.x,
 					&cameraUp.x, &bore.x, fov, halfWidth/halfHeight);
 				image = rw::vulkan::getPhysicalScopeRaster();

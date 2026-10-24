@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $device = [IO.File]::ReadAllText((Join-Path $KitRoot 'librw/src/vulkan/vkdevice.cpp'))
 $debug = [IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/skel/android/vrdebug.cpp'))
+$weapons = [IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/vr/QuestWeaponVR.cpp'))
 function Extract([string]$source, [string]$pattern) {
     $match = [regex]::Match($source, $pattern)
     if (-not $match.Success) { throw "Cannot extract production scope code: $pattern" }
@@ -17,4 +18,6 @@ $code += "`n" + (Extract $device '(?ms)^static void\r?\nreplayScopeDraws\(.*?^\}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'physical-scope-production.inc'), $code)
 $zoom = Extract $debug '(?ms)^float\r?\nVrScopeZoomFactor\(void\).*?^\}'
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'physical-scope-zoom.inc'), $zoom)
+$inputCode = Extract $weapons '(?ms)^static void\r?\nUpdatePhysicalScopeZoom\(.*?^\}'
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'physical-scope-input.inc'), $inputCode)
 & (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-physical-scope.cpp')
