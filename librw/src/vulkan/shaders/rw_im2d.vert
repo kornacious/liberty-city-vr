@@ -43,7 +43,8 @@ void main()
 	// placed somewhere else -- the wrist minimap rides on that.
 	vec4 plane = push.model * vec4(inPosition.xy, 0.0, 1.0);
 	float panel = scene.im2dParams.x;
-	float depth = max(inPosition.w, panel);
+	bool worldBillboard = inPosition.z < 0.0;
+	float depth = worldBillboard ? inPosition.w : max(inPosition.w, panel);
 	vec3 eye = scene.im2dParams.yzw;
 	vec3 world = eye + (plane.xyz - eye) * (depth/panel);
 	gl_Position = scene.viewProj[gl_ViewIndex] * vec4(world, 1.0);
@@ -66,5 +67,5 @@ void main()
 	fragTexCoord = inTexCoord;
 	// HUD/fonts arrive at the near plane and are clamped to the head-locked
 	// panel. Coronas, headlights and particles retain their real camera depth.
-	fragWorldSprite = inPosition.w > panel+0.01 ? 1.0 : 0.0;
+	fragWorldSprite = worldBillboard || inPosition.w > panel+0.01 ? 1.0 : 0.0;
 }

@@ -3,6 +3,30 @@
 Things about this port's renderer that cost real time to work out, kept so the
 next person does not spend that time again.
 
+## World sprites must face the viewing ray
+
+The moon, coronas and particle effects share the six world-sprite routines in
+`Sprite.cpp`. Their original quads are parallel to the camera view plane.
+Reconstructing that plane in stereo makes an off-centre sprite oblique to the
+viewer: turning the head past the moon or a lamp halo reveals a tilted or
+flattened card. This is separate from distant geometry's far-plane clipping
+and distance-fog fixes.
+
+`QuestBillboard.h` rotates each complete quad towards its own centre's viewing
+ray in camera space, preserving the source position, physical dimensions,
+texture coordinates and authored in-plane rotation. It reprojects the corners
+with individual camera depths for the existing Vulkan Im2D reconstruction.
+Negative screen Z marks these world vertices so shallow corners retain their
+real depth instead of being clamped to the two-metre HUD plane. CPU viewport
+clipping/culling is bypassed for these quads; the two eye projections clip the
+result. Mono theater rendering and screen-space UI retain their original path.
+
+`tools/tests/test-world-billboards.ps1 -StageRoot <assembled-tree>` checks all
+six integration points and runs 1,800 geometric cases for oblique rays, sprite
+rotation, aspect ratios, near/far depth and buffered/direct submissions. It
+also checks large quads crossing the camera plane. These are geometry checks;
+headset appearance still needs visual verification.
+
 ## The PS2 alpha rule fixes depth fringes
 
 The Quest Graphics menu exposes this as an optional effect, OFF by default
