@@ -12,7 +12,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$installerVersion = "0.5.6-models-lcv-1"
+$installerVersion = "0.7.0-models-lcv-1"
 $profileDirectory = $Profile.ToLowerInvariant()
 $profileRequiredFiles = @("models/gta3.img", "models/gta3.dir", "BUILD_INFO.txt")
 $profileHashFiles = @("models/gta3.img", "models/gta3.dir")

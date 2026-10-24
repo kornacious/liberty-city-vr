@@ -22,7 +22,7 @@ SERIAL=""
 LOG_PATH="${TMPDIR:-/tmp}/LibertyCityVR-Install-Modern-Models.log"
 NON_INTERACTIVE=0
 
-INSTALLER_VERSION="0.5.6-models-lcv-1"
+INSTALLER_VERSION="0.7.0-models-lcv-1"
 PACKAGE_NAME="com.libertyvr.quest"
 REMOTE_MODELSETS="/sdcard/Android/data/${PACKAGE_NAME}/files/gamedata/modelsets"
 STAGING_REMOTE=""

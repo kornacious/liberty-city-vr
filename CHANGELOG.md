@@ -1,6 +1,40 @@
 # Changelog
 
-## 0.5.6
+The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
+port from GTA Vice City to GTA III; 0.7.0 covers subsequent additions and fixes.
+
+## 0.7.0
+
+Features and fixes added after the 0.6.0 GTA III port baseline.
+
+### GTA III integration, controls and reliability
+
+- Added full-body IK and articulated GTA III-style hands, including support for
+  non-skinned PC models, room-scale tracking, vehicle entry and cutscene cameras.
+- Improved weapon grips, bore-centered firing and aiming, factory calibration
+  profiles and calibration controls. Added a saved pistol trigger mode and
+  restored native firearm cadence.
+- Added physical scope magnification, eyepiece alignment and right-thumbstick zoom.
+- Added saved laser or fingertip touch interaction for the vehicle radio board,
+  and corrected station retuning and custom music uploads.
+- Corrected left-hand steering-wheel orientation and tracked hand continuity.
+- Added fine and turbo HUD alignment steps and fixed wrist wanted-star clipping.
+- Added transactional mission autosaves with backup recovery while preserving
+  all eight manual save slots.
+- Fixed texture/archive loading crashes, archive directory capacity, save-load
+  streaming hangs and Vulkan texture descriptor lifetime.
+- Added Android 3D audio distance attenuation, low-rate resampling fixes and
+  stereo IMA ADPCM playback for GTA III radio and ambient streams.
+- Normalized timers, vehicle controls, physics settling, doors, destruction and
+  gameplay schedules against elapsed game time.
+- Neutralized tracked controller input after OpenXR focus loss.
+- Corrected world sprite facing and texture stability during head roll.
+- Fixed startup at refresh rates other than 72 Hz and declared supported Quest
+  devices for 80, 90 and 120 Hz refresh-rate options.
+- Corrected Xbox asset initialization, collisions and companion wheel textures.
+- Added opt-in vehicle capture/input replay and restored host regression coverage.
+
+### Additional features and fixes
 
 - Fixed planes disappearing when turning away from the original camera view in
   VR. Their big-building visibility path now uses the shared VR visibility
@@ -49,6 +83,13 @@
 - Made the cyan loading artwork and its black surround fade as one layer,
   revealing the scene uniformly without double-darkening beneath the image.
 - Added the optional Xbox assets profile to the model downloader and asset menu.
+
+## 0.6.0
+
+Ported the established Vice City VR 0.5.6 foundation from GTA Vice City to
+GTA III/re3 for Meta Quest. This is the Liberty City VR port baseline; the
+features below were inherited from that foundation.
+
 - Restored vehicle drive-by gun controls: left grip + B left, right grip + B right.
 - Added explosion reactions for existing ragdolls and bounded late activation of nearby corpses.
 
@@ -110,7 +151,8 @@
   install a new APK without repeatedly downloading the source kit. Local edits,
   saved data and optional asset overlays are preserved.
 
-- Retained the 0.5.5.1 rendering, mip-worker and settings-cache optimizations.
+- Retained the Vice City VR 0.5.5.1 rendering, mip-worker and settings-cache
+  optimizations carried forward in its 0.5.6 foundation.
 - Updated source-only build documentation, portable test inputs and release
   inventory checks. The culling inspector remains in source behind the explicit
   developer-tools build option; normal player builds omit its diagnostic path.

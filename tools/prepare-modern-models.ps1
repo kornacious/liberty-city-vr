@@ -25,7 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$wizardVersion = "0.5.6-lcv-1"
+$wizardVersion = "0.7.0-lcv-1"
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $builder = Join-Path $PSScriptRoot "modelsets\build-modern-modelset.ps1"

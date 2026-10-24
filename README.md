@@ -46,14 +46,16 @@ population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version: **v0.5.6**.
+Current source-kit version: **v0.7.0**.
 
-This release adds articulated ragdolls with car and wall contact, optional
-vehicle body deformation, clearer menus and fixes for tracked weapon aiming,
-melee, vehicle entry and seat centering. Existing graphics and calibration
-preferences are preserved. See [the changelog](CHANGELOG.md) for the
-0.5.6 feature summary and [performance notes](PERFORMANCE.md) for the retained rendering
-optimizations.
+The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
+foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
+added to Liberty City VR after the 0.6.0 port baseline, including full-body IK
+and weapon calibration improvements, physical scopes, custom music and the
+vehicle radio board, safer autosaves, and rendering, audio and gameplay fixes.
+Existing graphics and calibration preferences are preserved. See
+[the changelog](CHANGELOG.md) for the release history and
+[performance notes](PERFORMANCE.md) for the inherited rendering optimizations.
 
 It intentionally contains **no APK, complete re3 source tree, original game
 files, saves, logs or third-party Modern model packs**. Every user builds their

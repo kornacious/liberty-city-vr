@@ -21,7 +21,7 @@ ACCEPT_DOWNLOADS=0
 NON_INTERACTIVE=0
 LOG_PATH="${TMPDIR:-/tmp}/LibertyCityVR-Prepare-Modern-Models.log"
 
-WIZARD_VERSION="0.5.6-lcv-1"
+WIZARD_VERSION="0.7.0-lcv-1"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILDER="$REPO_ROOT/tools/modelsets/build-modern-modelset.sh"

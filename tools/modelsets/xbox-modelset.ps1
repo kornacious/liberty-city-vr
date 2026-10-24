@@ -1,5 +1,5 @@
 # Shared format and cache checks for Liberty City VR Xbox profile.
-$XboxBuilderVersion = "0.5.6-xbox-lcv-1"
+$XboxBuilderVersion = "0.7.0-xbox-lcv-1"
 
 function Get-XboxHash([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()

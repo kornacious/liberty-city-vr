@@ -1,7 +1,8 @@
 # 0.5.5.1 performance maintenance
 
-This is the historical 0.5.5.1 maintenance record. Its optimizations are retained
-in 0.5.6; current player defaults are documented in
+This is the historical Vice City VR 0.5.5.1 maintenance record. Its optimizations
+were inherited through Vice City VR 0.5.6 into the Liberty City VR 0.6.0 port
+baseline and are retained in 0.7.0; current player defaults are documented in
 [QUEST_PORT.md](overlay/docs/QUEST_PORT.md).
 
 This release addresses costs introduced after 0.5.2 that could remain even with

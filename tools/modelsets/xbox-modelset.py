@@ -15,7 +15,7 @@ import urllib.request
 import uuid
 
 TOOLS = Path(__file__).resolve().parent
-BUILDER_VERSION = '0.5.6-xbox-lcv-1'
+BUILDER_VERSION = '0.7.0-xbox-lcv-1'
 
 KNOWN_VEHICLES = {
     'landstal','idaho','stinger','linerun','peren','sentinel','patriot','firetruk',
