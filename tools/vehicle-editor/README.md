@@ -60,9 +60,13 @@ personal settings. Never put original game files in this workspace or a release.
 5. Use **Driver view**, **Exterior**, mouse look/orbit/pan/dolly and WASD. The field
    of view and preview eye height are camera controls, not saved placement values.
    Camera position, orientation and orbit mode persist when switching vehicle/modelset;
-   only the Driver view and Exterior buttons reset the view. Separate pan and
+   Driver view and Exterior reset the view manually. Enable **Auto reset camera on
+   vehicle / modelset change** above Orbit to return to the driver view on selection. Separate pan and
    look/orbit sensitivity sliders adjust mouse speed (default orbit speed is halved).
-   A background color picker and Reset steering button are available.
+   A background color picker and Reset steering button are available. X and Y
+   inversion toggles affect look/orbit and pan independently. Enable VSync to
+   synchronize presentation with the display; the FPS limit accepts 0 (unlimited)
+   or 1–1000. With both enabled, the slower constraint determines the frame rate.
    The seated head animation is approximated by the adjustable eye-above-seat
    value; final viewpoint, reach and comfort need a headset check.
 6. Newly authored layouts default to a dashboard fixed in vehicle space.
@@ -84,6 +88,26 @@ not run gameplay, controller interaction or a live minimap. Imported vehicle
 HUD settings from before `VehicleHudAnchorVersion=1` use the same migrated
 dashboard defaults as the game. Classic/Xbox legacy wheel settings remain
 ambiguous shared fallback values until explicit entries are authored.
+
+## Application preferences
+
+`vehicle-editor.ini` is created beside the executable, independently of vehicle
+placement packs. It remembers the game-data folder, workspace, Python/ADB paths,
+camera pose, orbit/auto-reset/inversion settings, mouse sensitivities, FOV,
+preview eye height, background, preview visibility and editing selections,
+VSync and FPS limit. Game/workspace paths are saved as absolute paths; command
+line `--game` and `--workspace` values override saved paths for that launch.
+Normal launches automatically read assets from the remembered game folder.
+
+Settings save after a short pause in changes and on exit; **Save application
+settings** saves immediately. The previous file is retained as `.bak`. Keep the
+portable editor in a writable folder; write failures appear below the save
+button. Invalid/unsupported settings are preserved until you explicitly save
+replacement preferences. Window/panel layout is stored separately beside the
+executable in `vehicle-editor-ui.ini`. These files contain local paths and should
+stay local, outside source control and release archives. Keep these INIs when
+replacing the executable to retain preferences. Automated `--smoke` runs do not
+save application preferences.
 
 ## Placement packs and port behavior
 

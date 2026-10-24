@@ -1,5 +1,6 @@
 #include "Assets.h"
 #include "History.h"
+#include "Preferences.h"
 #include <iostream>
 #include <stdexcept>
 using namespace VehiclePlacement;
@@ -51,6 +52,32 @@ int main() {
             {"RadioX", 35}, {"RadioPitch", 45}, {"RadioRoll", -180}, {"RadioSize", 125}};
         std::istringstream radioInput(radioPack.text());
         check(radioPack.parse(radioInput, radioError), "radio pack roundtrip");
+        editor::Preferences prefs;
+        prefs.paths["GameFolder"] = "D:/GTA III = local; assets";
+        prefs.paths["WorkspaceFolder"] = "/home/player/placements";
+        prefs.set("InvertX", 1);
+        prefs.set("FPSLimit", 144);
+        prefs.set("VSync", 0);
+        prefs.set("AutoResetCamera", 1);
+        prefs.set("CameraX", -5.25f);
+        editor::Preferences loaded;
+        std::string prefError;
+        std::istringstream prefInput(prefs.text());
+        check(loaded.parse(prefInput, prefError) && loaded.text() == prefs.text(),
+              "application preferences roundtrip");
+        for (auto invalid :
+             {"[Application]\nVersion=2\n", "[Application]\nVersion=1\nFPSLimit=-1\n",
+              "[Application]\nVersion=1\nInvertY=.5\n", "[Application]\nVersion=1\nPanSensitivity=nan\n",
+              "[Application]\nVersion=1\nFPSLimit=1001\n"}) {
+            auto before = loaded.text();
+            std::istringstream input(invalid);
+            check(!loaded.parse(input, prefError) && loaded.text() == before,
+                  "invalid application settings preserve current state");
+        }
+        std::istringstream partial("[Application]\nVersion=1\nFPSLimit=60\n");
+        check(loaded.parse(partial, prefError) && loaded.get("FPSLimit") == 60 &&
+                  loaded.get("RotationSensitivity") == .5f,
+              "partial application settings inherit defaults");
         Store s;
         auto key = section(2, 95);
         s.bundled.entries[key]["WheelX"] = 1;
@@ -238,6 +265,16 @@ int main() {
               "redo invalidates modified review");
         history.capture(doc, reviewed);
         check(!history.redo(doc, reviewed), "branching edit clears redo");
+        auto prefFile = root / "vehicle-editor.ini";
+        check(prefs.save(prefFile, prefError), "application settings save");
+        prefs.set("FPSLimit", 30);
+        check(prefs.save(prefFile, prefError) && loaded.load(prefFile, prefError) &&
+                  loaded.get("FPSLimit") == 30,
+              "application settings file reload");
+        check(loaded.load(root / "vehicle-editor.ini.bak", prefError) && loaded.get("FPSLimit") == 144,
+              "application settings backup preserves prior preferences");
+        editor::fs::remove(prefFile);
+        editor::fs::remove(root / "vehicle-editor.ini.bak");
         editor::fs::remove(root / "pack.ini");
         editor::fs::remove(root / "pack.ini.bak");
         editor::fs::remove(root / "legacy.ini");

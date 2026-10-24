@@ -1,5 +1,7 @@
 #include "Assets.h"
+#include "FrameLimiter.h"
 #include "History.h"
+#include "Preferences.h"
 #include "Process.h"
 #include "imgui/ImGuizmo.h"
 #include <chrono>
@@ -25,7 +27,13 @@ static Store store;
 static Pack *editing = &store.personal;
 static int layer = 0, set = 0, selected = -1, element = 0, operation = 0;
 static Vec seat, eye;
-static bool cameraInitialized = false;
+static bool cameraInitialized = false, autoResetCamera = false, vsync = true, invertX = false,
+            invertY = false;
+static int fpsLimit = 0;
+static fs::path preferencesPath;
+static std::string imguiSettingsPath, preferencesError, savedPreferences, observedPreferences;
+static bool preferencesWritable = true;
+static auto preferencesChangedAt = std::chrono::steady_clock::now();
 static float panSensitivity = 1.f, rotationSensitivity = .5f;
 static float background[3] = {37.f / 255, 43.f / 255, 53.f / 255};
 static float yaw = 0, pitch = 0, fov = 80, steering = 0, eyeAboveSeat = 0.68f;
@@ -56,6 +64,101 @@ static bool modelWheels = true;
 static bool smokeAll = false;
 static int smokeIndex = 0, smokeFailures = 0;
 
+static Preferences capturePreferences() {
+    Preferences p;
+    p.paths["GameFolder"] = gamePath;
+    p.paths["WorkspaceFolder"] = workPath;
+    p.paths["Python"] = pythonPath;
+    p.paths["ADB"] = adbPath;
+    for (auto key : {"GameFolder", "WorkspaceFolder"})
+        if (!p.paths[key].empty()) {
+            std::error_code error;
+            auto path = fs::absolute(fs::u8path(p.paths[key]), error);
+            if (!error)
+                p.paths[key] = path.lexically_normal().string();
+        }
+    p.set("AutoResetCamera", autoResetCamera);
+    p.set("Orbit", orbit);
+    p.set("VSync", vsync);
+    p.set("FPSLimit", fpsLimit);
+    p.set("InvertX", invertX);
+    p.set("InvertY", invertY);
+    p.set("PanSensitivity", panSensitivity);
+    p.set("RotationSensitivity", rotationSensitivity);
+    p.set("FieldOfView", fov);
+    p.set("EyeAboveSeat", eyeAboveSeat);
+    p.set("BackgroundR", background[0]);
+    p.set("BackgroundG", background[1]);
+    p.set("BackgroundB", background[2]);
+    p.set("PreviewHUD", showHud);
+    p.set("PreviewWheel", showWheel);
+    p.set("Modelset", set);
+    p.set("EditLayer", layer);
+    p.set("Element", element);
+    p.set("Gizmo", operation);
+    p.set("CameraInitialized", cameraInitialized);
+    p.set("CameraX", eye.x);
+    p.set("CameraY", eye.y);
+    p.set("CameraZ", eye.z);
+    p.set("CameraYaw", yaw);
+    p.set("CameraPitch", pitch);
+    return p;
+}
+static void applyPreferences(const Preferences &p) {
+    if (!p.paths.at("GameFolder").empty())
+        std::snprintf(gamePath, sizeof(gamePath), "%s", p.paths.at("GameFolder").c_str());
+    if (!p.paths.at("WorkspaceFolder").empty())
+        std::snprintf(workPath, sizeof(workPath), "%s", p.paths.at("WorkspaceFolder").c_str());
+    if (!p.paths.at("Python").empty())
+        std::snprintf(pythonPath, sizeof(pythonPath), "%s", p.paths.at("Python").c_str());
+    if (!p.paths.at("ADB").empty())
+        std::snprintf(adbPath, sizeof(adbPath), "%s", p.paths.at("ADB").c_str());
+    autoResetCamera = (bool)p.get("AutoResetCamera");
+    orbit = (bool)p.get("Orbit");
+    vsync = (bool)p.get("VSync");
+    fpsLimit = (int)p.get("FPSLimit");
+    invertX = (bool)p.get("InvertX");
+    invertY = (bool)p.get("InvertY");
+    panSensitivity = (float)p.get("PanSensitivity");
+    rotationSensitivity = (float)p.get("RotationSensitivity");
+    fov = (float)p.get("FieldOfView");
+    eyeAboveSeat = (float)p.get("EyeAboveSeat");
+    background[0] = (float)p.get("BackgroundR");
+    background[1] = (float)p.get("BackgroundG");
+    background[2] = (float)p.get("BackgroundB");
+    showHud = (bool)p.get("PreviewHUD");
+    showWheel = (bool)p.get("PreviewWheel");
+    set = (int)p.get("Modelset");
+    layer = (int)p.get("EditLayer");
+    element = (int)p.get("Element");
+    operation = (int)p.get("Gizmo");
+    cameraInitialized = (bool)p.get("CameraInitialized");
+    eye.x = (float)p.get("CameraX");
+    eye.y = (float)p.get("CameraY");
+    eye.z = (float)p.get("CameraZ");
+    yaw = (float)p.get("CameraYaw");
+    pitch = (float)p.get("CameraPitch");
+    editing = layer ? &store.templates : &store.personal;
+}
+static void savePreferences(bool force = false) {
+    if (smokeFrames || preferencesPath.empty() || (!preferencesWritable && !force))
+        return;
+    auto p = capturePreferences();
+    auto text = p.text();
+    auto now = std::chrono::steady_clock::now();
+    if (text != observedPreferences) {
+        observedPreferences = text;
+        preferencesChangedAt = now;
+    }
+    if (text == savedPreferences ||
+        (!force && now - preferencesChangedAt < std::chrono::milliseconds(500)))
+        return;
+    if (p.save(preferencesPath, preferencesError)) {
+        savedPreferences = text;
+        preferencesWritable = true;
+    } else
+        preferencesWritable = false;
+}
 static const char *node(rw::Frame *f) {
     return (const char *)f + nodeOffset;
 }
@@ -333,7 +436,7 @@ static void loadModel() {
             }
         }
         fingerprintNow = editor::fingerprint(hashes) + genericHashes[set];
-        if (!cameraInitialized)
+        if (!cameraInitialized || autoResetCamera)
             driver();
         message = std::string("Geometry: ") +
                   (source == 0   ? "Classic"
@@ -1059,7 +1162,15 @@ static void ui() {
         pitch = -.2f;
         orbit = true;
     }
+    ImGui::Checkbox("Auto reset camera on vehicle / modelset change", &autoResetCamera);
     ImGui::Checkbox("Orbit around vehicle", &orbit);
+    ImGui::Checkbox("Invert mouse X", &invertX);
+    ImGui::SameLine();
+    ImGui::Checkbox("Invert mouse Y", &invertY);
+    ImGui::Checkbox("VSync", &vsync);
+    if (ImGui::InputInt("FPS cap (0=off)", &fpsLimit))
+        fpsLimit = std::max(0, std::min(1000, fpsLimit));
+    ImGui::Text("Preview: %.1f FPS", ImGui::GetIO().Framerate);
     ImGui::SliderFloat("Pan sensitivity", &panSensitivity, .1f, 3.f, "%.2fx");
     ImGui::SliderFloat("Look / orbit sensitivity", &rotationSensitivity, .1f, 3.f, "%.2fx");
     ImGui::ColorEdit3("Background", background);
@@ -1071,6 +1182,10 @@ static void ui() {
     ImGui::SliderFloat("Steering preview", &steering, -80, 80);
     if (ImGui::Button("Reset steering"))
         steering = 0;
+    if (ImGui::Button("Save application settings"))
+        savePreferences(true);
+    if (!preferencesError.empty())
+        ImGui::TextWrapped("%s", preferencesError.c_str());
     ImGui::Checkbox("Preview HUD", &showHud);
     ImGui::SameLine();
     ImGui::Checkbox("Preview wheel", &showWheel);
@@ -1184,11 +1299,12 @@ static void draw(float dt) {
     auto &io = ImGui::GetIO();
     Vec forward(std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), std::sin(pitch));
     Vec right = unit(cross(forward, Vec(0, 0, 1))), up = cross(right, forward);
+    float mouseX = io.MouseDelta.x * (invertX ? -1.f : 1.f),
+          mouseY = io.MouseDelta.y * (invertY ? -1.f : 1.f);
     if (!io.WantCaptureMouse && !ImGuizmo::IsUsing()) {
         if (io.MouseDown[1]) {
-            yaw -= io.MouseDelta.x * .005f * rotationSensitivity;
-            pitch =
-                std::max(-1.5f, std::min(1.5f, pitch - io.MouseDelta.y * .005f * rotationSensitivity));
+            yaw -= mouseX * .005f * rotationSensitivity;
+            pitch = std::max(-1.5f, std::min(1.5f, pitch - mouseY * .005f * rotationSensitivity));
             forward =
                 Vec(std::sin(yaw) * std::cos(pitch), std::cos(yaw) * std::cos(pitch), std::sin(pitch));
             right = unit(cross(forward, Vec(0, 0, 1)));
@@ -1199,8 +1315,8 @@ static void draw(float dt) {
             }
         }
         if (io.MouseDown[2])
-            eye = eye + right * (-io.MouseDelta.x * .005f * panSensitivity) +
-                  up * (io.MouseDelta.y * .005f * panSensitivity);
+            eye = eye + right * (-mouseX * .005f * panSensitivity) +
+                  up * (mouseY * .005f * panSensitivity);
         eye = eye + forward * (io.MouseWheel * .15f);
     }
     if (!io.WantCaptureKeyboard) {
@@ -1235,7 +1351,8 @@ static void draw(float dt) {
     gizmo();
     ImGui::Render();
     camera->endUpdate();
-    camera->showRaster(0);
+    camera->showRaster(vsync ? rw::Raster::FLIPWAITVSYNCH : 0);
+    savePreferences();
     if (smokeAll) {
         int total = (int)assets.vehicles.size() * 3;
         while (smokeIndex < total) {
@@ -1265,7 +1382,22 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
         globals.windowtitle = "Liberty City VR - Vehicle Placement Editor";
         globals.width = 1440;
         globals.height = 1000;
-        auto executableFolder = fs::absolute(args.argv[0]).parent_path();
+        auto executable = fs::absolute(args.argv[0]);
+#ifdef _WIN32
+        wchar_t module[32768];
+        DWORD length = GetModuleFileNameW(nullptr, module, 32768);
+        if (length && length < 32768)
+            executable = fs::path(std::wstring(module, length));
+#else
+        std::error_code executableError;
+        auto module = fs::read_symlink("/proc/self/exe", executableError);
+        if (!executableError)
+            executable = module;
+#endif
+        auto executableFolder = executable.parent_path();
+        preferencesPath = executableFolder / "vehicle-editor.ini";
+        imguiSettingsPath = (executableFolder / "vehicle-editor-ui.ini").string();
+        ImGui::GetIO().IniFilename = imguiSettingsPath.c_str();
         helperPath = (executableFolder / "device_bridge.py").string();
         if (!fs::exists(helperPath))
             helperPath = "tools/vehicle-editor/device_bridge.py";
@@ -1294,6 +1426,14 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
             std::snprintf(adbPath, sizeof(adbPath), "%s",
                           "C:/LCVRBuild/.android-sdk/platform-tools/adb.exe");
 #endif
+        if (fs::exists(preferencesPath)) {
+            Preferences p;
+            if (p.load(preferencesPath, preferencesError)) {
+                applyPreferences(p);
+                savedPreferences = p.text();
+            } else
+                preferencesWritable = false;
+        }
         for (int i = 1; i < args.argc; i++) {
             std::string a = args.argv[i];
             if (a == "--game" && i + 1 < args.argc)
@@ -1373,7 +1513,10 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
     }
     ImGuiEventHandler(event, param);
     if (event == IDLE) {
+        auto frameStart = std::chrono::steady_clock::now();
         draw(*(float *)param);
+        if (fpsLimit > 0 && !smokeFrames && !globals.quit)
+            editor::waitForFrame(frameStart, fpsLimit);
         return EVENTPROCESSED;
     }
     if (event == RESIZE && camera) {
@@ -1392,6 +1535,8 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
         return EVENTPROCESSED;
     }
     if (event == RWTERMINATE) {
+        if (preferencesWritable)
+            savePreferences(true);
         clearModel();
         for (auto d : genericDictionaries)
             if (d)
