@@ -45,7 +45,7 @@ meshes, textures, or extracted vertex data are included in the change.
 
 Local validation (2026-10-21): 121 grip checks and 52,268 held-frame checks
 passed. The final debug APK built successfully and installed with `adb
-install -r` on verified Quest 3 `personal Quest 3 device`. The broader source regression
+install -r` on the personal Quest 3 device. The broader source regression
 run passed 20 suites before stopping at the unchanged graphics-menu fixture:
 MSVC C4505 (`QuestMenuPageColour` unused) is treated as an error there. The
 remaining suites in that runner did not run; this is not a full-suite pass.
@@ -58,8 +58,8 @@ control fails specifically at the hand-relative mesh-top assertion. The initial
 121 checks validated positions and missed this orientation error. The corrected
 APK also builds successfully; final finger contact still needs headset feedback.
 
-The follow-up APK installed successfully with adb install -r on verified Quest 3
-personal Quest 3 device, preserving existing application data.
+The follow-up APK installed successfully with adb install -r on the personal
+Quest 3 device, preserving existing application data.
 
 Rocket launcher muzzle correction (2026-10-21): the original approximate native
 muzzle `(-0.070, 0.040, 0.750)` was about 7 cm radially off the tube centreline.

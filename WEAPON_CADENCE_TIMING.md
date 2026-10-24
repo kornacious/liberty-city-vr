@@ -111,7 +111,7 @@ both hands and both firing contexts, release/repress and switching back to
 single shot. A second native test extracts the settings functions and Weapons
 page renderer to check defaults, persistence, menu mapping and all nine rows.
 All 43 supported suites passed, including 61,696 firing checks and 70 settings/
-menu checks. The APK built and installed successfully on Quest 3
-`personal Quest 3 device`. An unrelated unfinished Vulkan workspace edit failed to compile;
+menu checks. The APK built and installed successfully on the personal Quest 3
+device. An unrelated unfinished Vulkan workspace edit failed to compile;
 the disposable APK assembly used the committed `vkdevice.cpp` instead, leaving
 that workspace edit untouched. In-headset menu appearance remains a manual check.

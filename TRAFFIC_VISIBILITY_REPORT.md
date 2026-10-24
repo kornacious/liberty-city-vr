@@ -44,8 +44,8 @@ reported appearances were caused by population rather than model rendering.
   function warning is treated as an error; `ragdoll-menu` cannot extract that
   function. Both failures match the prior baseline; the tested menu source hash
   is identical. They are not passes.
-- Verified device `personal Quest 3 device` reports `Quest 3`; installing this task's APK
-  with `adb -s personal Quest 3 device install -r` returned `Success`. No game assets or
+- Verified the personal Quest 3 device reports `Quest 3`; installing this task's APK
+  with `adb install -r` returned `Success`. No game assets or
   saves were transferred or erased.
 
 Build, assembly and regression logs are in the ignored `.cache` directory with

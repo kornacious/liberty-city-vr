@@ -5,3 +5,4 @@ patches/*.patch whitespace=-space-before-tab
 *.png -text
 *.uxrh -text
 overlay/android/diagnostics/asan-wrap.sh text eol=lf
+.githooks/* text eol=lf

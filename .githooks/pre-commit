@@ -1,0 +1,7 @@
+#!/bin/sh
+repo_root=$(git rev-parse --show-toplevel) || exit 1
+python_path=$(git config --local --get privacy.python) || {
+    echo 'Install privacy hooks with: python tools/privacy_guard.py install-hooks' >&2
+    exit 1
+}
+exec "$python_path" "$repo_root/tools/privacy_guard.py" staged

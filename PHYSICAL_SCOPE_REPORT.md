@@ -103,7 +103,7 @@ remain excluded. Logs are under `.cache/scope-zoom-validation-20261024/` and
 
 The resulting APK at
 `.cache/scope-zoom-apk-20261024/android/app/build/outputs/apk/debug/app-debug.apk`
-was installed successfully with `install -r` on verified Quest 3 serial
-`personal Quest 3 device`, preserving app data. The user confirmed the previous physical
+was installed successfully with `install -r` on the personal Quest 3 device,
+preserving app data. The user confirmed the previous physical
 scope's appearance and behaviour; the new thumbstick speed and range still
 need their in-headset check.
