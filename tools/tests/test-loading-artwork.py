@@ -61,6 +61,21 @@ bool fullscreen=false,loadingArtwork=false;
 int splashDraws=0, solidDraws=0, lastAlpha=0;
 float displayAspect=16.f/9.f;
 int textureWidth=512,textureHeight=256,barDraws=0;
+using RwUInt32=unsigned;
+enum {rwRENDERSTATESRCBLEND,rwRENDERSTATEDESTBLEND,rwRENDERSTATEVERTEXALPHAENABLE};
+enum {rwBLENDSRCALPHA=1,rwBLENDINVSRCALPHA=2,rwBLENDONE=3};
+#define TRUE 1
+RwUInt32 renderStates[]={rwBLENDSRCALPHA,rwBLENDINVSRCALPHA,0};
+void RwRenderStateGet(int state,RwUInt32* value){*value=renderStates[state];}
+void RwRenderStateSet(int state,void* value){renderStates[state]=(RwUInt32)(size_t)value;}
+float backdropPixel=0.6f,artworkPixel=0.6f;
+float Blend(float colour,float destination,int alpha){
+ if(!renderStates[rwRENDERSTATEVERTEXALPHAENABLE])return colour;
+ float a=alpha/255.f;
+ float src=renderStates[rwRENDERSTATESRCBLEND]==rwBLENDONE?1.f:a;
+ float dst=renderStates[rwRENDERSTATEDESTBLEND]==rwBLENDONE?1.f:1.f-a;
+ return colour*src+destination*dst;
+}
 struct RwRaster {};
 struct RwTexture {};
 struct RwTexDictionary {};
@@ -87,10 +102,14 @@ struct CSprite2d {
   assert(std::strcmp(name,"splash1")==0);static RwTexture t;m_pTexture=&t;
  }
  static void DrawRect(const CRect& rect,const CRGBA& colour){
+  // Production DrawRect selects vertex-alpha blending from its opacity.
+  renderStates[rwRENDERSTATEVERTEXALPHAENABLE]=colour.a!=255;
   if(fullscreen){
    assert(rect.left==0 && rect.top==0 && rect.right==SCREEN_WIDTH && rect.bottom==SCREEN_HEIGHT);
    assert(colour.r==0 && colour.g==0 && colour.b==0);
    assert(colour.a==CDraw::FadeValue);++barDraws;
+   backdropPixel=Blend(0.f,backdropPixel,colour.a);
+   artworkPixel=Blend(0.f,artworkPixel,colour.a);
   }
  }
  void Draw(const CRect& rect,const CRGBA& colour,const CRGBA&,const CRGBA&,const CRGBA&){
@@ -103,6 +122,10 @@ struct CSprite2d {
  assert(std::abs(rect.left+rect.right-SCREEN_WIDTH)<0.001f);
  assert(std::abs(rect.top+rect.bottom-SCREEN_HEIGHT)<0.001f);
  assert(colour.r==255 && colour.g==255 && colour.b==255);
+ artworkPixel=Blend(0.25f,artworkPixel,colour.a);
+ float a=colour.a/255.f;
+ assert(std::abs(backdropPixel-0.6f*(1.f-a))<0.00001f);
+ assert(std::abs(artworkPixel-(0.25f*a+0.6f*(1.f-a)))<0.00001f);
  ++splashDraws; lastAlpha=colour.a;
  }
 };
@@ -245,18 +268,24 @@ int main(){
   TheCamera.m_FadeTargetIsSplashScreen=isSplash;
   for(int alpha=0;alpha<=255;++alpha){
    CDraw::FadeValue=alpha; splashDraws=solidDraws=barDraws=0; lastAlpha=-1;
+   backdropPixel=artworkPixel=0.6f;
+   RwUInt32 oldSrc=shape&1?rwBLENDONE:rwBLENDSRCALPHA;
+   RwUInt32 oldDst=shape&2?rwBLENDONE:rwBLENDINVSRCALPHA;
+   renderStates[0]=oldSrc;renderStates[1]=oldDst;renderStates[2]=0;
    // Cutscene bars and reduced brightness cannot distort the fitted image.
    TheCamera.m_WideScreenOn=true; CMenuManager::m_PrefsBrightness=180;
    DoFade();
    assert(!fullscreen && !loadingArtwork);
    assert(splashDraws==(isSplash && alpha>0));
    assert(barDraws==splashDraws);
+   assert(renderStates[0]==oldSrc && renderStates[1]==oldDst);
+   if(isSplash && alpha>0)assert(renderStates[2]==1);
    assert(solidDraws==(!isSplash && alpha>0));
    if(alpha>0) assert(lastAlpha==alpha);
   }
  }
  }
- puts("PASS: 10240 production fade cases, 48 screen corners and cyan texture selection/cache: native aspect, maximal fit, no cropping, black bars, opacity and state reset");
+ puts("PASS: 10240 production fade cases, 48 screen corners and cyan texture selection/cache: native aspect, no cropping, artwork/background group opacity, blend-state restoration and scope reset");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='liberty-loading-') as tmp:

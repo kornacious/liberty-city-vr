@@ -1,7 +1,7 @@
 diff --git a/src/core/main.cpp b/src/core/main.cpp
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
-@@ -317,6 +317,36 @@
+@@ -317,6 +317,49 @@
  #endif
  }
 
@@ -25,20 +25,33 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
 +		width *= aspect/displayAspect;
 +	const float x = (SCREEN_WIDTH - width)*0.5f;
 +	const float y = (SCREEN_HEIGHT - height)*0.5f;
++	RwUInt32 srcBlend, dstBlend, vertexAlpha;
++	RwRenderStateGet(rwRENDERSTATESRCBLEND, &srcBlend);
++	RwRenderStateGet(rwRENDERSTATEDESTBLEND, &dstBlend);
++	RwRenderStateGet(rwRENDERSTATEVERTEXALPHAENABLE, &vertexAlpha);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 +	rw::vulkan::setImmediate2DFullscreen(true, SCREEN_WIDTH, SCREEN_HEIGHT);
 +	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT),
 +		CRGBA(0, 0, 0, colour.a));
 +	rw::vulkan::setImmediate2DFullscreen(false, 0, 0);
++	// The backdrop already attenuated the world by (1-alpha). Add the
++	// artwork contribution without attenuating it again: one group fade.
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
 +	rw::vulkan::setImmediate2DLoadingArtwork(true);
 +	splash->Draw(CRect(x, y, x + width, y + height), colour, colour, colour, colour);
 +	rw::vulkan::setImmediate2DLoadingArtwork(false);
++	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)(size_t)srcBlend);
++	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)(size_t)dstBlend);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)(size_t)vertexAlpha);
 +}
 +#endif
 +
  void
  DoFade(void)
  {
-@@ -355,6 +385,14 @@
+@@ -355,6 +398,14 @@
  	}
 
  	if(CDraw::FadeValue != 0 || CMenuManager::m_PrefsBrightness < 256){
@@ -53,7 +66,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  		CSprite2d *splash = LoadSplash(nil);
 
  		CRGBA fadeColor;
-@@ -414,7 +452,11 @@
+@@ -414,7 +465,11 @@
  			fadeColor.g = 255;
  			fadeColor.b = 255;
  			fadeColor.a = CDraw::FadeValue;
@@ -65,7 +78,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  		}
  	}
  }
-@@ -681,6 +723,10 @@
+@@ -681,6 +736,10 @@
 
  	if(name == nil)
  		return &splash;
@@ -76,7 +89,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  	if(splashTxdId == -1)
  		splashTxdId = CTxdStore::AddTxdSlot("splash");
 
-@@ -794,7 +840,11 @@
+@@ -794,7 +853,11 @@
  		CFont::InitPerFrame();
  		DefinedState();
  		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
@@ -88,7 +101,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
 
  		if(str1){
  			NumberOfChunksLoaded += 1;
-@@ -863,7 +913,11 @@
+@@ -863,7 +926,11 @@
  	CFont::InitPerFrame();
  	DefinedState();
  	col = CRGBA(255, 255, 255, 255);

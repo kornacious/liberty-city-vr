@@ -10,6 +10,9 @@ exercise the production splash loader, artwork fit, `DoFade` and Vulkan
 fullscreen transform. It checks cyan texture selection/cache reuse, native
 aspect ratio, maximal fit without cropping, centered black bars, all 256
 opacities, solid camera fades, scope reset, and twelve framebuffer sizes.
+Pixel compositing checks verify that the artwork and black surround reveal the
+world at the same rate, without applying the fade twice beneath the image,
+and that inherited blend factors and vertex-alpha state are restored.
 It also runs 2,430 projections using the production vertex shader's projection
 logic and shared-plane builder, checking binocular convergence under asymmetric
 eye frustums, head yaw/roll and translation, constant physical size, no clipping

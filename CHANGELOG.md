@@ -42,6 +42,8 @@
 - Fixed loading artwork appearing independently in each eye and skewing with
   head movement. The fade now uses one shared stereo plane at the theater
   screen's size and distance, independent of the HUD safe-area scale.
+- Made the cyan loading artwork and its black surround fade as one layer,
+  revealing the scene uniformly without double-darkening beneath the image.
 - Added the optional Xbox assets profile to the model downloader and asset menu.
 - Restored vehicle drive-by gun controls: left grip + B left, right grip + B right.
 - Added explosion reactions for existing ragdolls and bounded late activation of nearby corpses.
