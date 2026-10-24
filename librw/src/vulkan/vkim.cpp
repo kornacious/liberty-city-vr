@@ -12,6 +12,7 @@
 #include "../rwengine.h"
 #include "rwvk.h"
 #include "rwvkimpl.h"
+#include "vkloading.h"
 
 #define PLUGIN_ID ID_DRIVER
 
@@ -41,7 +42,8 @@ struct Im3DState
 static bool32 gImmediate2DStrictDepth;
 static bool32 gImmediate2DFullscreen;
 static float32 gFullscreenWidth, gFullscreenHeight;
-static float32 gImmediate2DDisplayAspect = 16.0f/9.0f;
+static bool32 gImmediate2DLoadingArtwork;
+static float32 gLoadingScreenPlane[16];
 
 // Triangle fans never reach the device.
 //
@@ -133,6 +135,8 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 		memcpy(push.model, gvk.im2dTransformActive, sizeof(push.model));
 	else
 		multiplyMatrix(push.model, gvk.worldToPlay, model);
+	if(shader == SHADER_IM2D && gImmediate2DLoadingArtwork)
+		memcpy(push.model, gLoadingScreenPlane, sizeof(push.model));
 	if(shader == SHADER_IM2D && gImmediate2DFullscreen){
 		identity(push.model);
 		push.model[0] = 2.0f/gFullscreenWidth;
@@ -148,9 +152,10 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 	}
 	push.materialColour[0] = push.materialColour[1] =
 	push.materialColour[2] = push.materialColour[3] = 1.0f;
-	// The wrist minimap and full-screen loading artwork use a direct
-	// pixels-to-clip matrix instead of the interface plane in the world.
+	// Flat targets/backdrops use clip coordinates. Loading artwork is a shared
+	// plane projected by each eye, with a near-depth override in the shader.
 	push.surfaceProps[0] =
+		shader == SHADER_IM2D && gImmediate2DLoadingArtwork ? 3.0f :
 		shader == SHADER_IM2D &&
 		(gvk.wristPanelOffscreen || gImmediate2DFullscreen) ? 2.0f : 1.0f;
 	push.surfaceProps[1] = 0.0f;	// immediate geometry is never lit
@@ -268,7 +273,7 @@ uploadIm2DVertices(const Im2DVertex *source, int32 count,
 	// The wrist minimap is exempt in both directions: its own target has no
 	// safe area, and the quad on the arm carries a transform of its own that
 	// a remap around the panel centre would drag off the wrist.
-	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended || gImmediate2DFullscreen ||
+	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended || gImmediate2DFullscreen || gImmediate2DLoadingArtwork ||
 	   (fabsf(gIm2DSafeAreaScaleX-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaScaleY-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaOffsetX) < 0.0001f &&
@@ -434,16 +439,15 @@ setImmediate2DFullscreen(bool32 enabled, float32 width, float32 height)
 }
 
 void
-setImmediate2DDisplayAspect(float32 aspect)
+setLoadingScreenPlane(const float32 transform[16], float32 width, float32 height, bool32 theater)
 {
-	if(aspect > 0.0f)
-		gImmediate2DDisplayAspect = aspect;
+	buildLoadingScreenPlane(gLoadingScreenPlane, transform, width, height, theater != 0);
 }
 
-float32
-getImmediate2DDisplayAspect(void)
+void
+setImmediate2DLoadingArtwork(bool32 enabled)
 {
-	return gImmediate2DDisplayAspect;
+	gImmediate2DLoadingArtwork = enabled;
 }
 
 bool32

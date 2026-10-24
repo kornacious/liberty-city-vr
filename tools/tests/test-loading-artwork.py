@@ -19,6 +19,11 @@ im = (args.stage_root / 'vendor/librw/src/vulkan/vkim.cpp').read_text()
 transform_start = im.index('if(shader == SHADER_IM2D && gImmediate2DFullscreen){')
 transform_end = im.index('\n\t}', transform_start) + 3
 transform = im[transform_start:transform_end]
+vertex = (args.stage_root / 'vendor/librw/src/vulkan/shaders/rw_im2d.vert').read_text()
+projection = vertex[vertex.index('\tgl_Position = scene.viewProj'):vertex.index('\tfragColour =')]
+# GLSL swizzle syntax has no C++ equivalent; keep the projection/branch logic.
+projection = projection.replace('plane.xy', 'vec2(plane.x, plane.y)')
+plane_header = (args.stage_root / 'vendor/librw/src/vulkan/vkloading.h').read_text().replace('#pragma once', '')
 fade = source[source.index('void\nDoFade(void)'):source.index('\nbool\nRwGrabScreen(')]
 adapter = r'''
 #include <algorithm>
@@ -30,8 +35,9 @@ adapter = r'''
 #define __ANDROID__
 #define FIX_BUGS
 #define nil nullptr
-#define SCREEN_WIDTH 1832.0f
-#define SCREEN_HEIGHT 1920.0f
+float screenWidth=1832.f,screenHeight=1920.f;
+#define SCREEN_WIDTH screenWidth
+#define SCREEN_HEIGHT screenHeight
 #define SCREEN_SCALE_Y(x) (x)
 #define FADE_IN 1
 #define FADE_OUT 0
@@ -51,7 +57,7 @@ struct { bool m_FadeTargetIsSplashScreen=false,m_WideScreenOn=false;
  float m_ScreenReductionPercentage=0;
  void Fade(float,int){} void ProcessFade(){} void ProcessMusicFade(){} void SetFadeColour(int,int,int){}
 } TheCamera;
-bool fullscreen=false;
+bool fullscreen=false,loadingArtwork=false;
 int splashDraws=0, solidDraws=0, lastAlpha=0;
 float displayAspect=16.f/9.f;
 int textureWidth=512,textureHeight=256,barDraws=0;
@@ -62,7 +68,9 @@ RwRaster* RwTextureGetRaster(RwTexture*){static RwRaster r;return &r;}
 int RwRasterGetWidth(RwRaster*){return textureWidth;}
 int RwRasterGetHeight(RwRaster*){return textureHeight;}
 namespace rw { namespace vulkan {
-float getImmediate2DDisplayAspect(){return displayAspect;}
+void setImmediate2DLoadingArtwork(bool enable){
+ assert(!fullscreen);loadingArtwork=enable;
+}
 void setScreenFade(int r,int g,int b,int a){
  assert(r==CDraw::FadeRed && g==CDraw::FadeGreen && b==CDraw::FadeBlue);
  ++solidDraws; lastAlpha=a;
@@ -86,7 +94,7 @@ struct CSprite2d {
   }
  }
  void Draw(const CRect& rect,const CRGBA& colour,const CRGBA&,const CRGBA&,const CRGBA&){
- assert(fullscreen && rect.left>=0 && rect.top>=0);
+ assert(loadingArtwork && !fullscreen && rect.left>=0 && rect.top>=0);
  assert(rect.right<=SCREEN_WIDTH && rect.bottom<=SCREEN_HEIGHT);
  float w=rect.right-rect.left,h=rect.bottom-rect.top;
  float nativeAspect=textureWidth>0 && textureHeight>0 ? float(textureWidth)/textureHeight : 2.f;
@@ -120,7 +128,91 @@ CSprite2d* LoadSplash(const char*);
 '''
 matrix = r'''
 #include <cstring>
-struct { float model[16]; } push;
+struct vec2 {float x,y;vec2(float x,float y):x(x),y(y){}};
+struct vec3 {float x,y,z;};
+struct vec4 {
+ float x=0,y=0,z=0,w=0;
+ vec4()=default;
+ vec4(vec3 v,float w):x(v.x),y(v.y),z(v.z),w(w){}
+ vec4(vec2 v,float z,float w):x(v.x),y(v.y),z(z),w(w){}
+};
+struct Matrix {
+ float m[16]={};
+ vec4 operator*(const vec4& v)const{
+  vec4 r;float *p=&r.x;const float *q=&v.x;
+  for(int row=0;row<4;row++)for(int col=0;col<4;col++)p[row]+=m[col*4+row]*q[col];
+  return r;
+ }
+};
+struct { float model[16]; vec4 surfaceProps; } push;
+struct {Matrix viewProj[2];} scene;
+vec4 gl_Position;
+int gl_ViewIndex;
+float max(float a,double b){return std::max(a,float(b));}
+void ProjectArtwork(vec3 world,vec4 plane){
+ vec4 inPosition;inPosition.z=0.25f;
+''' + projection + r'''
+}
+void CheckStereo(){
+ int cases=0;
+ for(float yaw : {-2.f,-1.f,0.f,1.f,2.f})
+ for(float roll : {-0.4f,0.f,0.4f})
+ for(float translation : {-0.4f,0.f,0.4f}) {
+  float c=std::cos(yaw),s=std::sin(yaw),cr=std::cos(roll),sr=std::sin(roll);
+  // Orthonormal head basis: yaw followed by roll. X/Y are shared by both eyes.
+  float basis[3][3]={{c*cr,sr,-s*cr},{-c*sr,cr,s*sr},{s,0,c}};
+  for(float width : {1024.f,1832.f,2560.f}) {
+   float height=1920.f,source[16]={},output[16];source[15]=1;
+   for(int i=0;i<3;i++) {
+    source[i]=basis[0][i]*4.f/width;
+    source[4+i]=basis[1][i]*-3.f/height;
+    source[12+i]=(i==0?translation:0.f)-basis[2][i]*2.f-
+      source[i]*width*0.5f-source[4+i]*height*0.5f;
+   }
+   rw::vulkan::buildLoadingScreenPlane(output,source,width,height,false);
+   float xLen=0,yLen=0;
+   for(int i=0;i<3;i++){
+    xLen+=output[i]*output[i];yLen+=output[4+i]*output[4+i];
+    float centre=output[12+i]+output[i]*width*0.5f+output[4+i]*height*0.5f;
+    assert(std::abs(centre-((i==0?translation:0.f)-basis[2][i]*2.f))<0.00001f);
+   }
+   assert(std::abs(std::sqrt(xLen)*width-2.56f)<0.00001f);
+   assert(std::abs(std::sqrt(yLen)*height-1.44f)<0.00001f);
+   float theater[16];rw::vulkan::buildLoadingScreenPlane(theater,source,width,height,true);
+   assert(std::memcmp(theater,source,sizeof(source))==0);
+   for(float u : {0.f,0.5f,1.f})for(float v : {0.f,0.5f,1.f}){
+    vec3 world;
+    float *wp=&world.x;
+    for(int i=0;i<3;i++)wp[i]=output[12+i]+output[i]*width*u+output[4+i]*height*v;
+    float firstNdc=0;
+    for(int eye=0;eye<2;eye++){
+     const float eyeX=eye==0?-0.032f:0.032f;
+     const float offset=eye==0?-0.18f:0.18f;
+     Matrix &m=scene.viewProj[eye];std::memset(m.m,0,sizeof(m.m));
+     for(int i=0;i<3;i++){
+      m.m[i*4]=basis[0][i]+offset*basis[2][i];
+      m.m[i*4+1]=-basis[1][i];
+      m.m[i*4+3]=-basis[2][i];
+     }
+     m.m[12]=-translation*(basis[0][0]+offset*basis[2][0])-eyeX;
+     m.m[13]=translation*basis[1][0];m.m[15]=translation*basis[2][0];
+     gl_ViewIndex=eye;push.surfaceProps.x=3;push.surfaceProps.z=0;
+     vec4 plane(world,1.f);ProjectArtwork(world,plane);
+     assert(std::abs(gl_Position.w-2.f)<0.00001f);
+     float ndc=gl_Position.x/gl_Position.w;
+     float reconstructedX=ndc*2.f+2.f*offset+eyeX;
+     assert(std::abs(reconstructedX-(u-0.5f)*2.56f)<0.00001f);
+     assert(std::abs(gl_Position.y/gl_Position.w-(v-0.5f)*0.72f)<0.00001f);
+     assert(std::abs(gl_Position.z/gl_Position.w-0.00001f)<0.000001f);
+     assert(std::abs(ndc)<=1.f); // both eye frustums contain the whole plane
+     if(eye==0)firstNdc=ndc;else assert(std::abs(ndc-firstNdc)>0.1f);
+     ++cases;
+    }
+   }
+  }
+ }
+ printf("PASS: %d stereo projections: shared plane, asymmetric eyes, yaw/roll/translation, stable size, no clipping and overlay depth\n",cases);
+}
 void identity(float* m){std::memset(m,0,16*sizeof(float));m[0]=m[5]=m[10]=m[15]=1;}
 void CheckCoverage(float width,float height){
  const int SHADER_IM2D=1, shader=1;
@@ -137,15 +229,16 @@ void CheckCoverage(float width,float height){
 '''
 checks = r''' 
 int main(){
+ CheckStereo();
  for(const char* name : {"loadsc0","mainsc1","mainsc2","splash2","splash3","loadsc24"})
   assert(LoadSplash(name)==&splash);
  assert(textureLoads==1); // different requests retain the same cached cyan texture
  assert(LoadSplash(nullptr)==&splash && textureLoads==1);
  for(float w : {1024.f,1832.f,2064.f,2560.f})
   for(float h : {1024.f,1920.f,2208.f}) CheckCoverage(w,h);
- for(float aspect : {16.f/9.f,1832.f/1920.f,1.f,4.f/3.f,2.4f})
+ for(float width : {1024.f,1832.f,2064.f,2560.f,3200.f})
  for(int shape : {0,1,2,3}) {
- displayAspect=aspect;
+ screenWidth=width;
  textureWidth=shape==0 ? 512 : shape==1 ? 256 : shape==2 ? 1024 : 0;
  textureHeight=shape==0 ? 256 : shape==1 ? 512 : shape==2 ? 1024 : 0;
  for(bool isSplash : {false,true}) {
@@ -155,7 +248,7 @@ int main(){
    // Cutscene bars and reduced brightness cannot distort the fitted image.
    TheCamera.m_WideScreenOn=true; CMenuManager::m_PrefsBrightness=180;
    DoFade();
-   assert(!fullscreen);
+   assert(!fullscreen && !loadingArtwork);
    assert(splashDraws==(isSplash && alpha>0));
    assert(barDraws==splashDraws);
    assert(solidDraws==(!isSplash && alpha>0));
@@ -169,7 +262,7 @@ int main(){
 with tempfile.TemporaryDirectory(prefix='liberty-loading-') as tmp:
     cpp = pathlib.Path(tmp) / 'loading.cpp'
     exe = pathlib.Path(tmp) / 'loading-test'
-    cpp.write_text(adapter + loader + helper + fade + matrix + checks)
+    cpp.write_text(plane_header + adapter + loader + helper + fade + matrix + checks)
     if args.cxx == 'msvc':
         vswhere = pathlib.Path(os.environ['ProgramFiles(x86)']) / 'Microsoft Visual Studio/Installer/vswhere.exe'
         install = subprocess.check_output([str(vswhere), '-latest', '-products', '*', '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'], text=True).strip()

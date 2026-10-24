@@ -302,10 +302,9 @@ void setImmediate2DStrictDepth(bool32 enabled);
 // Scope loading artwork to the complete eye images, using game screen pixels.
 // Disable immediately after drawing so normal HUD geometry keeps its VR plane.
 void setImmediate2DFullscreen(bool32 enabled, float32 width, float32 height);
-// Physical display aspect, independent of the portrait swapchain storage.
-// Use the theater quad ratio or the eye projection's tangent-space ratio.
-void setImmediate2DDisplayAspect(float32 aspect);
-float32 getImmediate2DDisplayAspect(void);
+// A single head-centred loading plane, shared by the two eye projections.
+void setLoadingScreenPlane(const float32 transform[16], float32 width, float32 height, bool32 theater);
+void setImmediate2DLoadingArtwork(bool32 enabled);
 bool32 getImmediate2DStrictDepth(void);
 
 // Mid-eye pose in play space this frame: position plus yaw about the vertical

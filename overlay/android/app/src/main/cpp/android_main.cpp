@@ -349,19 +349,17 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		xrvk::setDebugOverlay(pixels, width, height);
 	}
 
-	// Loading artwork fills the eye images rather than the cinema quad.
-	// Capture this before Step: initialisation can enter PLAYING_GAME inside it.
+	// Loading keeps the immersive projection for the world revealed by its
+	// shared overlay plane. Latch before Step, which can enter PLAYING_GAME.
 	const bool loadingFrame = gGameState == GS_INIT_PLAYING_GAME ||
 		FrontEndMenuManager.m_bWantToRestart;
 	const bool theaterBefore = !loadingFrame && androidgame::VrShouldUseTheaterMode();
 	xrvk::setTheaterMode(theaterBefore);
-	// Artwork is fitted against the display, not the portrait texture storage.
-	// Latch this with the submission mode: Step can change game state mid-frame.
-	rw::vulkan::setImmediate2DDisplayAspect(theaterBefore ?
-		androidgame::VrTheaterAspectRatio() : fabsf(viewProj[0][5]/viewProj[0][0]));
 	if(theaterBefore){
 		float theaterViewProj[16], theaterIm2D[16], theaterDistance;
 		makeTheaterMatrices(theaterViewProj, theaterIm2D, &theaterDistance);
+		rw::vulkan::setLoadingScreenPlane(theaterIm2D,
+			(float)RsGlobal.width, (float)RsGlobal.height, true);
 		const float origin[3] = { 0.0f, 0.0f, 0.0f };
 		const float identityQuat[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		rw::vulkan::setStereoViewProjection(
@@ -371,6 +369,8 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		rw::vulkan::setHeadPose(origin, 0.0f, identityQuat);
 		rw::vulkan::clearFirstPersonEyePoses();
 	}else{
+		rw::vulkan::setLoadingScreenPlane(im2dWorld,
+			(float)RsGlobal.width, (float)RsGlobal.height, false);
 		rw::vulkan::setStereoViewProjection(viewProj[0], viewProj[1]);
 		rw::vulkan::setSgsrHorizontalFovDegrees(eyeFovDeg);
 		rw::vulkan::setIm2DTransform(im2dWorld, im2dDistance, headPos);

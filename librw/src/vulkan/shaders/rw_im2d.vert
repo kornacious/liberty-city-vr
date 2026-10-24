@@ -47,16 +47,20 @@ void main()
 	vec3 eye = scene.im2dParams.yzw;
 	vec3 world = eye + (plane.xyz - eye) * (depth/panel);
 	gl_Position = scene.viewProj[gl_ViewIndex] * vec4(world, 1.0);
-	// Wrist minimap and full-screen loading artwork: the model slot carries
+	// Wrist minimap and featureless full-screen backdrops: the model carries
 	// a screen-pixels-to-clip matrix. Both multiview layers receive the same
 	// flat image, independent of the HUD plane or camera projection.
-	if(push.surfaceProps.x > 1.5)
+	if(push.surfaceProps.x > 1.5 && push.surfaceProps.x < 2.5)
 		gl_Position = vec4(plane.xy, 0.5, 1.0);
+	// Loading artwork retains the common plane and each eye's projection.
+	// Override depth only, so scene geometry cannot occlude this overlay.
+	if(push.surfaceProps.x > 2.5)
+		gl_Position.z = 0.00001 * gl_Position.w;
 	// Radar-only depth masking must sit in front of the already-rendered
 	// cockpit/world. Preserve the tiny RenderWare screen-Z difference between
 	// the outside-circle mask and the textured tiles: strict LESS depends on
 	// that bias to reject the tiles only where the mask was written.
-	if(push.surfaceProps.z > 0.5)
+	else if(push.surfaceProps.z > 0.5)
 		gl_Position.z = max(inPosition.z, 0.00001) * gl_Position.w;
 	fragColour = inColour * push.materialColour;
 	fragTexCoord = inTexCoord;

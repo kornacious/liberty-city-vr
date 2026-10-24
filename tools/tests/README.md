@@ -10,6 +10,10 @@ exercise the production splash loader, artwork fit, `DoFade` and Vulkan
 fullscreen transform. It checks cyan texture selection/cache reuse, native
 aspect ratio, maximal fit without cropping, centered black bars, all 256
 opacities, solid camera fades, scope reset, and twelve framebuffer sizes.
+It also runs 2,430 projections using the production vertex shader's projection
+logic and shared-plane builder, checking binocular convergence under asymmetric
+eye frustums, head yaw/roll and translation, constant physical size, no clipping
+and foreground overlay depth. These checks do not establish headset appearance.
 GPU rendering and compositor presentation still require headset verification.
 
 `test-mission-counter-layout.ps1 -StageRoot <assembled-tree>` executes the

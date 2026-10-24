@@ -1,7 +1,7 @@
 diff --git a/src/core/main.cpp b/src/core/main.cpp
 --- a/src/core/main.cpp
 +++ b/src/core/main.cpp
-@@ -317,6 +317,34 @@
+@@ -317,6 +317,36 @@
  #endif
  }
 
@@ -17,7 +17,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
 +		if(raster && RwRasterGetWidth(raster) > 0 && RwRasterGetHeight(raster) > 0)
 +			aspect = (float)RwRasterGetWidth(raster)/RwRasterGetHeight(raster);
 +	}
-+	const float displayAspect = rw::vulkan::getImmediate2DDisplayAspect();
++	const float displayAspect = 16.0f/9.0f;
 +	float width = SCREEN_WIDTH, height = SCREEN_HEIGHT;
 +	if(aspect > displayAspect)
 +		height *= displayAspect/aspect;
@@ -28,15 +28,17 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
 +	rw::vulkan::setImmediate2DFullscreen(true, SCREEN_WIDTH, SCREEN_HEIGHT);
 +	CSprite2d::DrawRect(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT),
 +		CRGBA(0, 0, 0, colour.a));
-+	splash->Draw(CRect(x, y, x + width, y + height), colour, colour, colour, colour);
 +	rw::vulkan::setImmediate2DFullscreen(false, 0, 0);
++	rw::vulkan::setImmediate2DLoadingArtwork(true);
++	splash->Draw(CRect(x, y, x + width, y + height), colour, colour, colour, colour);
++	rw::vulkan::setImmediate2DLoadingArtwork(false);
 +}
 +#endif
 +
  void
  DoFade(void)
  {
-@@ -355,6 +383,14 @@
+@@ -355,6 +385,14 @@
  	}
 
  	if(CDraw::FadeValue != 0 || CMenuManager::m_PrefsBrightness < 256){
@@ -51,7 +53,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  		CSprite2d *splash = LoadSplash(nil);
 
  		CRGBA fadeColor;
-@@ -414,7 +450,11 @@
+@@ -414,7 +452,11 @@
  			fadeColor.g = 255;
  			fadeColor.b = 255;
  			fadeColor.a = CDraw::FadeValue;
@@ -63,7 +65,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  		}
  	}
  }
-@@ -681,6 +721,10 @@
+@@ -681,6 +723,10 @@
 
  	if(name == nil)
  		return &splash;
@@ -74,7 +76,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
  	if(splashTxdId == -1)
  		splashTxdId = CTxdStore::AddTxdSlot("splash");
 
-@@ -794,7 +838,11 @@
+@@ -794,7 +840,11 @@
  		CFont::InitPerFrame();
  		DefinedState();
  		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
@@ -86,7 +88,7 @@ diff --git a/src/core/main.cpp b/src/core/main.cpp
 
  		if(str1){
  			NumberOfChunksLoaded += 1;
-@@ -863,7 +911,11 @@
+@@ -863,7 +913,11 @@
  	CFont::InitPerFrame();
  	DefinedState();
  	col = CRGBA(255, 255, 255, 255);
