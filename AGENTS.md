@@ -1,22 +1,5 @@
 # Project Scope & Target Guidelines
 
-## Mandatory Scope Rule
-- **Target Project:** Any user request, task, feature implementation, bug fix, or code modification is ALWAYS and EXCLUSIVELY for **`liberty-city-vr-quest`** (`D:\Projects\GTAVR\liberty-city-vr-quest`).
-- **Never Target `vice-city-vr-quest`:** Never treat `vice-city-vr-quest` as the project to be fixed or developed.
-
-## Strict Restrictions on `vice-city-vr-quest`
-- **Read-Only Porting Reference:** `vice-city-vr-quest` (`D:\Projects\GTAVR\vice-city-vr-quest`) is strictly an external reference repository used ONLY for inspecting implementations, reverse engineering, and porting algorithms/features over to `liberty-city-vr-quest`.
-- **DO NOT MODIFY:** Under no circumstances should any files in `vice-city-vr-quest` be edited, created, moved, or deleted.
-- **DO NOT COMMIT:** Never stage (`git add`) or commit (`git commit`) changes in `vice-city-vr-quest`.
-- Any existing untracked or modified files in `vice-city-vr-quest` must be left untouched.
-
-## Execution Rules for All Tasks
-1. **Always Verify Target Directory:** Before modifying or creating any code, verify that the active file or directory is inside `liberty-city-vr-quest` (`D:\Projects\GTAVR\liberty-city-vr-quest`).
-2. **Porting Workflow:** When porting a feature from `vice-city-vr-quest` to `liberty-city-vr-quest`:
-   - Read / inspect the code in `vice-city-vr-quest`.
-   - Apply, adapt, and test the ported code ONLY inside `liberty-city-vr-quest`.
-   - Verify build and commit ONLY in `liberty-city-vr-quest`.
-
 ## Cloud Tasks and Local-Only Game Data
 - Original game data files must remain local to the user's computer. Never upload, commit, transfer, or fetch them into a cloud environment, including private repositories or cloud environment snapshots.
 - At task start, identify whether execution is local or cloud and check whether the requested work requires actual game data. Recheck if a dependency on that data is discovered later.
@@ -31,3 +14,11 @@
 - Always specify the verified device serial for deployment. If multiple eligible headsets are connected and no target is specified, ask which one to use before installing.
 - Preserve existing game data and saves. Do not uninstall the application or erase its data to work around an installation failure; report the failure instead. Transfer game assets only when the requested task requires it and only through the local workflow.
 - Instruction-only or documentation-only tasks do not require an APK build or deployment. Explicit task-specific instructions to skip installation take precedence over this default deployment rule.
+
+## Personal Quest 3 Device Privacy (Mandatory)
+- The user's personal Quest 3 serial number and any other unique personal device identifiers are private. Never publish, commit, upload, or disclose them to collaborators, other agents, external services, or anyone working on this project, including in a private repository.
+- Use **"personal Quest 3 device"** in test results, build/deployment reports, chat responses, documentation, commit messages, pull requests, issues, screenshots, and shared logs. Never include an actual identifier or a partially masked identifier.
+- Device identifiers may be used only locally when required to select the verified deployment target. Keep the actual value in a local variable and suppress or sanitize command echo, tool output, errors, and captured logs before they enter a chat, agent context, or shareable artifact. Do not paste identifiers into tool-call arguments or command text visible in the conversation. Do not expose raw `adb devices -l` output; capture it locally and report only sanitized device/model/status information.
+- Before staging, committing, or pushing, inspect the staged content and proposed commit message for device identifiers and raw ADB output. Sanitize any findings before proceeding. Keep any local identifier lists or unredacted diagnostic files outside version control and external services.
+- When auditing existing leaks, match identifiers locally and report only counts and sanitized locations. Never reproduce the identifier in findings, cleanup scripts committed to Git, replacement lists uploaded to a service, or cleanup commit messages.
+- These privacy requirements apply to every contributor and automated agent. They take precedence over reporting examples that would otherwise expose a device serial or identifier; deployment must still select the verified target locally.
