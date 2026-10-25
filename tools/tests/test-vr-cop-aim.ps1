@@ -15,6 +15,11 @@ function Extract-Production([string]$relative,[string]$pattern) {
 $held=Extract-Production 'src\vr\QuestWeaponVR.cpp' '(?ms)^bool\s+GetHeldTrackedWeaponAim\(CVector \*source, CVector \*direction\)\s*\{.*?^\}'
 $parts.Add('namespace OculusVR {' + "`r`n" + $held + "`r`n}")
 $parts.Add((Extract-Production 'src\peds\Ped.cpp' '(?ms)^CPed \*\s+CPed::CheckForAimedGun\(void\)\s*\{.*?^\}'))
+$parts.Add((Extract-Production 'src\peds\Ped.cpp' '(?ms)^void\s+CPed::ReactToTrackedGun\(void\)\s*\{.*?^\}'))
+$control = Extract-Production 'src\peds\Ped.cpp' '(?ms)^void\s+CPed::ProcessControl\(void\)\s*\{.*?^\}'
+if ($control -notmatch 'ReactToTrackedGun\(\);') { throw 'Ped control does not deliver tracked gun reactions.' }
+$scan = Extract-Production 'src\peds\Ped.cpp' '(?ms)^uint32\s+CPed::ScanForThreats\(void\)\s*\{.*?^\}'
+if ($scan -match 'CheckForAimedGun') { throw 'Silent aim must not be treated as gunfire.' }
 $parts.Add((Extract-Production 'src\peds\PedAI.cpp' '(?ms)^void\s+CPed::ReactToPointGun\(CEntity \*entWithGun\)\s*\{.*?^\}'))
 $parts.Add((Extract-Production 'src\peds\CopPed.cpp' '(?ms)^void\s+CCopPed::ScanForCrimes\(void\)\s*\{.*?^\}'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vr-cop-aim-production.inc'),($parts -join "`r`n"),[Text.UTF8Encoding]::new($false))

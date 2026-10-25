@@ -109,25 +109,6 @@ index 4f4a344..2927409 100644
  	CWorld::Remove(this);
  	CRadar::ClearBlipForEntity(BLIP_CHAR, CPools::GetPedPool()->GetIndex(this));
  	if (InVehicle()){
-@@ -745,6 +762,18 @@ CPed::ScanForThreats(void)
- 			m_threatEntity->RegisterReference((CEntity **) &m_threatEntity);
- 			return CPedType::GetFlag(shooter->m_nPedType);
- 		}
-+#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
-+		// Aimed at rather than shot at. Everyone treats that as a gun
-+		// going off nearby, which is what the reaction was written for:
-+		// CCivilianPed sorts out who runs and who draws, and a gang
-+		// member draws.
-+		CPed *aiming = CheckForAimedGun();
-+		if (aiming) {
-+			m_threatEntity = aiming;
-+			m_threatEntity->RegisterReference((CEntity**)&m_threatEntity);
-+			return PED_FLAG_GUN;
-+		}
-+#endif
- 	}
- 
- 	CPed *deadPed;
 @@ -1396,7 +1425,16 @@ CPed::CalculateNewVelocity(void)
  		|| FindPlayerPed() != this || !CanStrafeOrMouseControl())
  		return;
@@ -195,6 +176,15 @@ index 4f4a344..2927409 100644
  							if ((m_nStoredMoveState == PEDMOVE_RUN || m_nStoredMoveState == PEDMOVE_SPRINT) && m_vecDamageNormal.z < 0.3f) {
  								CAnimBlendAssociation *runAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_RUN);
  								if (!runAssoc)
+@@ -2702,5 +2702,8 @@ CPed::ProcessControl(void)
+ 			}
+ #endif
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++			ReactToTrackedGun();
++#endif
+ 			ProcessObjective();
+ 			if (!bIsAimingGun) {
+ 				if (bIsRestoringGun)
 @@ -2747,9 +2811,13 @@ CPed::ProcessControl(void)
  					if (!pad->ArePlayerControlsDisabled()) {
  						int vehAnim = m_pVehicleAnim->animId;
@@ -348,12 +338,27 @@ index 4f4a344..2927409 100644
  }
  #endif
  
-@@ -8561,3 +8697,52 @@ CPed::Load(uint8*& buf)
+@@ -8561,3 +8697,67 @@ CPed::Load(uint8*& buf)
  #undef CopyFromBuf
  #undef CopyToBuf
  #endif
 +
 +#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++void
++CPed::ReactToTrackedGun(void)
++{
++	// Physical aim has no legacy lock-on target or PED_AIM_GUN state.
++	// Deliver the original reaction independently of gunshots/fear flags.
++	// Cops retain the wanted-level and disabled-cop guards in ScanForCrimes.
++	if (IsPlayer() || m_nPedType == PEDTYPE_COP || !IsPedInControl() ||
++		CharCreatedBy == MISSION_CHAR ||
++		((CTimer::GetFrameCounter() + (uint8)m_randomSeed) & 3) != 0)
++		return;
++	CPed *aiming = CheckForAimedGun();
++	if (aiming)
++		ReactToPointGun(aiming);
++}
++
 +// A gun pointed at you is a threat before it goes off, and in VR that is
 +// most of what pointing one is for: the barrel goes wherever the hand
 +// goes, and the scan above only hears shots, so a ped could be lined up
@@ -422,12 +427,13 @@ index 067ccdd..f153fd4 100644
  	void Say(uint16 audio);
  	void SetLookFlag(CEntity *target, bool keepTryingToLook);
  	void SetLookFlag(float direction, bool keepTryingToLook);
-@@ -548,6 +549,9 @@ public:
+@@ -548,6 +549,10 @@ public:
  	void ApplyHeadShot(eWeaponType weaponType, CVector pos, bool evenOnPlayer);
  	void RemoveBodyPart(PedNode nodeId, int8 direction);
  	bool OurPedCanSeeThisOne(CEntity *target);
 +#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
 +	CPed *CheckForAimedGun(void);
++	void ReactToTrackedGun(void);
 +#endif
  	void Avoid(void);
  	void Attack(void);

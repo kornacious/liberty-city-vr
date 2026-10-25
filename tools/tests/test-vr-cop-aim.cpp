@@ -55,7 +55,8 @@ struct CPed:CEntity {
  void ClearLeader(){m_leader=nil;} bool IsGangMember()const{return m_nPedType==PEDTYPE_GANG7;}
  void RegisterThreatWithGangPeds(CPed*){} void SetWaitState(int state,int*){m_nWaitState=state;}
  void Say(int){} void SetMoveState(int){} void SetDuck(int){++duckCalls;}
- CPed*CheckForAimedGun(); void ReactToPointGun(CEntity*);
+ unsigned m_randomSeed=0;
+ void ReactToTrackedGun(); CPed*CheckForAimedGun(); void ReactToPointGun(CEntity*);
 };
 struct CPlayerPed:CPed {
  CWanted wanted,*m_pWanted=&wanted; CVehicle*m_pMyVehicle=nil; CWeapon inventory[TOTAL_WEAPON_SLOTS];
@@ -64,7 +65,7 @@ struct CPlayerPed:CPed {
  void SetWantedLevelNoDrop(int n){m_pWanted->SetWantedLevelNoDrop(n);}
 };
 struct CCopPed:CPed {
- bool m_bIsDisabledCop=false,m_bZoneDisabled=false,m_bIsInPursuit=false; unsigned m_randomSeed=0; CVehicle*m_pMyVehicle=nil;
+ bool m_bIsDisabledCop=false,m_bZoneDisabled=false,m_bIsInPursuit=false; CVehicle*m_pMyVehicle=nil;
  void ScanForCrimes();
 };
 static CPlayerPed *gPlayer=nil; static CVehicle*gVehicle=nil; static unsigned gFrame=1000;
@@ -133,6 +134,32 @@ int main(){
  Reset(player,cop);OculusVR::heldSlots[0]=-1;OculusVR::heldSlots[1]=1;cop.ScanForCrimes();Check(player.wanted.level==2,"left-hand tracked gun is detected");
  Reset(player,cop);cop.bCrouchWhenShooting=true;cop.ScanForCrimes();Check(player.wanted.level==2&&cop.duckCalls==1,"native cover response still runs");
  Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;cop.ReactToPointGun(&player);Check(cop.m_nWaitState==WAITSTATE_PLAYANIM_HANDSUP&&player.wanted.level==0,"native civilian reaction is unchanged");
+ // Exercise the production silent-aim delivery and native civilian response,
+ // without a gunshot, trigger press, lock-on target or gun-fear flag.
+ Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;cop.ReactToTrackedGun();
+ Check(cop.m_nWaitState==WAITSTATE_PLAYANIM_HANDSUP&&cop.m_pLookTarget==&player,"silent tracked aim invokes native hands-up reaction");
+ Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;cop.stats.m_flags=STAT_GUN_PANIC;cop.ReactToTrackedGun();
+ Check(cop.m_nWaitState==WAITSTATE_PLAYANIM_HANDSCOWER,"panic civilian cowers at silent aim");
+ for(int guard=0;guard<10;guard++){
+  Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;
+  if(guard==0)cop.CharCreatedBy=MISSION_CHAR;
+  if(guard==1)cop.control=false;
+  if(guard==2)cop.playerFlag=true;
+  if(guard==3)cop.m_leader=&player;
+  if(guard==4)cop.visible=false;
+  if(guard==5)OculusVR::heldSlots[0]=-1;
+  if(guard==6)OculusVR::mockDirection=CVector(1,0,0);
+  if(guard==7)cop.forward=CVector(0,1,0);
+  if(guard==8)cop.pos=CVector(0,16,1);
+  if(guard==9)cop.m_nPedType=PEDTYPE_COP;
+  cop.ReactToTrackedGun();
+  Check(cop.m_nWaitState==-1&&player.wanted.level==0,"silent aim preserves native protections, range, visibility and separate police scan");
+ }
+ Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;OculusVR::heldSlots[0]=-1;OculusVR::heldSlots[1]=1;cop.ReactToTrackedGun();
+ Check(cop.m_nWaitState==WAITSTATE_PLAYANIM_HANDSUP,"left-hand silent aim invokes civilian reaction");
+ Reset(player,cop);cop.m_nPedType=PEDTYPE_CIV;cop.ReactToTrackedGun();int civilianLos=cop.losCalls;
+ cop.ReactToTrackedGun();Check(cop.m_nWaitState==WAITSTATE_PLAYANIM_HANDSUP,"continued aim retains native wait state");
+ ++gFrame;cop.ReactToTrackedGun();Check(cop.losCalls==civilianLos+1,"civilian sight checks are staggered across four frames");
  // The ray calculation is shared once per frame; each cop is staggered to
  // one of four frames. Occluded targets keep the wanted level at zero.
  Reset(player,cop);unsigned los=0,expectedLos=0,tracked=0;
