@@ -173,6 +173,9 @@ For future release defaults, copy an exported template pack to
 `overlay/android/app/src/main/assets/vehicle_placements.bundled.ini` before
 building the APK. The APK refreshes only its bundled baseline. Installed
 templates, personal settings, game data and saves remain separate.
+The current release baseline includes manually calibrated Classic and Xbox
+wheel/radio entries. Fields without authored overrides, including Xbox Speeder,
+continue to use the existing fallback; Modern retains its previous defaults.
 
 ## Device import and deployment
 
