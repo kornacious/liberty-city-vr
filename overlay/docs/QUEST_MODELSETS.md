@@ -75,6 +75,15 @@ After installation, select the Xbox preset or the desired category mix in
 `VR MENU > SETTINGS > MODEL ASSETS`, then fully restart. The installer preserves
 saved profile choices; installing files does not select the profile.
 
+Builder 0.7.1 selects the main `Fixed Xbox Vehicles` folder rather than merging
+optional variants. When its police dictionary identifies Vice City liveries,
+ambulance, Enforcer, fire truck, police car and police helicopter use matching
+base GTA III geometry and textures. These are Classic fallbacks until compatible
+GTA III Xbox replacements are supplied. The Predator keeps its supplied model;
+opaque C888 textures ignore their unused alpha byte during compression.
+Older generated profiles must be rebuilt with the updated compressor. The
+preparation wizard rejects older builder versions instead of reusing them.
+
 ## Modern preparation limitations
 
 The old two-pack automatic Modern workflow is no longer implemented by the

@@ -1,5 +1,5 @@
 # Shared format and cache checks for Liberty City VR Xbox profile.
-$XboxBuilderVersion = "0.7.0-xbox-lcv-1"
+$XboxBuilderVersion = "0.7.1-xbox-lcv-1"
 
 function Get-XboxHash([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -39,6 +39,7 @@ function Test-XboxOverlay([string]$Root) {
         if (-not (Test-Path -LiteralPath $infoFile -PathType Leaf)) { return $false }
         $info = [IO.File]::ReadAllLines($infoFile)
         if ($info -cnotcontains "Profile=XBOX") { return $false }
+        if ($info -cnotcontains "BuilderVersion=$XboxBuilderVersion") { return $false }
         $img = Join-Path $Root "models/gta3.img"
         $dir = Join-Path $Root "models/gta3.dir"
         if (-not (Test-Path -LiteralPath $img -PathType Leaf) -or (Get-Item -LiteralPath $img).Length -le 0) { return $false }

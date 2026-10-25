@@ -219,7 +219,10 @@ static std::vector<u8> convertStruct(const u8 *d, u32 size, const char *txdName,
 	std::vector<u8> rgba((size_t)w*h*4);
 	for(size_t i=0;i<(size_t)w*h;i++){
 		rgba[i*4+0]=p[i*4+2]; rgba[i*4+1]=p[i*4+1];
-		rgba[i*4+2]=p[i*4+0]; rgba[i*4+3]=p[i*4+3];
+		rgba[i*4+2]=p[i*4+0];
+		// X8R8G8B8 (C888) has an unused fourth byte, not transparency.
+		// Some vehicle packs leave arbitrary values there (notably Predator).
+		rgba[i*4+3]=(rasterFormat&0x0F00)==0x0600 ? 255 : p[i*4+3];
 	}
 	bool hasAlpha=false;
 	for(size_t i=0;i<(size_t)w*h;i++) if(rgba[i*4+3]!=255){ hasAlpha=true; break; }

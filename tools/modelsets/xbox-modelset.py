@@ -15,7 +15,31 @@ import urllib.request
 import uuid
 
 TOOLS = Path(__file__).resolve().parent
-BUILDER_VERSION = '0.7.0-xbox-lcv-1'
+BUILDER_VERSION = '0.7.1-xbox-lcv-1'
+
+
+def compatible_source_files(source):
+    # This distributed pack also contains optional replacements. Do not flatten
+    # them over the main set, or mix their geometry with unrelated dictionaries.
+    main = source / 'Fixed Xbox Vehicles'
+    if main.is_dir():
+        source = main
+    files = sorted((p for p in source.rglob('*') if p.suffix.lower() in ('.dff', '.txd')))
+    police = next((p for p in files if p.name.lower() == 'police.txd'), None)
+    foreign = police is not None and b'policemiami' in police.read_bytes().lower()
+    fallback = {'ambulan', 'enforcer', 'firetruk', 'police', 'chopper'} if foreign else set()
+    selected = {}
+    for file in files:
+        if file.stem.lower() in fallback:
+            continue
+        name = file.name.lower()
+        if name in selected:
+            raise ValueError(f'Ambiguous Xbox source entry: {name}; select one model folder.')
+        selected[name] = file
+    if fallback:
+        print('Vice City emergency liveries detected; using base GTA III geometry and textures for: '
+              + ', '.join(sorted(fallback)))
+    return list(selected.values())
 
 KNOWN_VEHICLES = {
     'landstal','idaho','stinger','linerun','peren','sentinel','patriot','firetruk',
@@ -74,7 +98,7 @@ def valid_overlay(root):
         if not info_file.is_file():
             return False
         lines = set(info_file.read_text(encoding='utf-8', errors='ignore').splitlines())
-        if 'Profile=XBOX' not in lines:
+        if 'Profile=XBOX' not in lines or f'BuilderVersion={BUILDER_VERSION}' not in lines:
             return False
         if not (root / 'models/gta3.img').is_file() or not (root / 'models/gta3.dir').is_file():
             return False
@@ -128,7 +152,7 @@ def build(source, output, force=False, compressor=None):
         (stage / 'models').mkdir(parents=True, exist_ok=True)
 
         # Collect all .dff and .txd files
-        source_files = list(source.rglob('*.[dD][fF][fF]')) + list(source.rglob('*.[tT][xX][dD]'))
+        source_files = compatible_source_files(source)
         if not source_files:
             raise ValueError(f'No .dff or .txd files found in {source}')
 

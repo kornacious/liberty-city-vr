@@ -11,6 +11,8 @@ Set-StrictMode -Version 2.0
 . (Join-Path $PSScriptRoot "xbox-modelset.ps1")
 
 $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
+$mainSource = Join-Path $sourceRoot 'Fixed Xbox Vehicles'
+if (Test-Path -LiteralPath $mainSource -PathType Container) { $sourceRoot = $mainSource }
 $outRoot = [IO.Path]::GetFullPath($Out).TrimEnd('\', '/')
 
 if ([IO.Path]::GetFileName($outRoot) -cne "xbox") {
@@ -66,9 +68,21 @@ try {
         throw "No .dff or .txd model files found in source folder: $sourceRoot"
     }
 
+    # The common conversion pack contains Vice City emergency liveries. Keep
+    # both halves of these vehicles in the base game to preserve matching UVs.
+    $policeTxd = $allFiles | Where-Object Name -ieq 'police.txd' | Select-Object -First 1
+    $fallback = @()
+    if ($policeTxd -and [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($policeTxd.FullName)).ToLowerInvariant().Contains('policemiami')) {
+        $fallback = @('ambulan', 'enforcer', 'firetruk', 'police', 'chopper')
+        Write-Host "Vice City emergency liveries detected; using base GTA III geometry and textures for: $($fallback -join ', ')"
+    }
+    $seen = @{}
     # Copy files to work folder with lowercase names
     foreach ($file in $allFiles) {
+        if ($fallback -contains $file.BaseName.ToLowerInvariant()) { continue }
         $lowerName = $file.Name.ToLowerInvariant()
+        if ($seen.ContainsKey($lowerName)) { throw "Ambiguous Xbox source entry: $lowerName; select one model folder." }
+        $seen[$lowerName] = $true
         # Handle wheels separately if placed in generic
         if ($lowerName -eq "wheels.dff" -or $lowerName -eq "wheels.txd") {
             Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $stage "models/generic/$lowerName") -Force
