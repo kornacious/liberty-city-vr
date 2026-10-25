@@ -86,7 +86,8 @@ struct Position {
 };
 struct CMatrix { Position GetPosition() const { return {}; } };
 static CMatrix gGripMatrix[2];
-static bool BuildHolsterMatrix(int,CMatrix *) { return false; }
+static int gHeldCopy[2] = {0,1};
+static bool BuildHolsterMatrix(int,CMatrix *,int = -1) { return false; }
 static void ClearSupportForHand(int) {}
 static void StartDroppedWeapon(int,int) { ++dropped; }
 #include "xr-focus-input-production.inc"

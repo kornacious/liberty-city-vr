@@ -28,6 +28,10 @@ static void LoadSettings(){if(loaded)return;
 }
 static void CycleQuestScopeAimMode(int){gScopeAimMode=(gScopeAimMode+1)%3;}
 static void ResetManualReloadState(int &state){state=0;}
+static int dualType=0;static bool dualValue=false;
+static int GetQuestCalibrationWeaponType(int){return dualType;}
+static bool IsQuestDualWieldEligible(int t){return t==2||t==3;}
+static bool IsQuestDualWieldEnabled(int){return dualValue;}
 static const char *GetQuestScopeAimModeName(){return "OFF";}
 #include "pistol-fire-settings.inc"
 }
@@ -39,6 +43,7 @@ struct Row {std::string text;int y,scale;bool selected;};
 static std::vector<Row> capturedRows;
 static void BeginFullVrMenuPage(const char*,const char*){capturedRows.clear();}
 static void DrawFullVrMenuRow(const char *text,int y,int scale,bool selected){capturedRows.push_back({text,y,scale,selected});}
+static const char *GetVrWeaponName(int t){return t==2?"PISTOL":t==3?"UZI":"UNARMED";}
 #include "pistol-fire-menu-draw.inc"
 int main(){
     Require(!OculusVR::IsQuestPistolHoldToRepeatEnabled(),"missing setting defaults to individual trigger pulls");
@@ -65,5 +70,10 @@ int main(){
     Require(writes==2&&saved.size()==1,"pistol toggle cannot overwrite other settings");
     Require(QuestWeaponSettingForWeaponItem(VR_WEAPONS_SCOPE_AIM)==4&&QuestWeaponSettingForWeaponItem(VR_WEAPONS_GRIP_LOCK)==5,"existing setting identities remain stable");
     Require(QuestWeaponSettingForWeaponItem(VR_WEAPONS_CALIBRATION)==-1&&QuestWeaponSettingForWeaponItem(VR_WEAPONS_BACK)==-1,"navigation capturedRows stay outside settings range");
+    for(int type:{0,2,3,4})for(bool on:{false,true}) {
+        OculusVR::dualType=type;OculusVR::dualValue=on;DrawQuestWeaponsPage();
+        const auto &row=capturedRows[VR_WEAPONS_DUAL_WIELD].text;
+        Require(row.find(type==2||type==3?(on?"ON":"OFF"):"UNAVAILABLE")!=std::string::npos,"dual option reflects eligible weapon and saved mode");
+    }
     std::printf("Pistol setting and menu: %d checks passed.\n",checks);
 }

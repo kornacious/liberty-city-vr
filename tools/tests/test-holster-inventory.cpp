@@ -6,6 +6,7 @@
 #define GTA_VR_WEAPONS
 #define nil nullptr
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+enum { VR_HAND_COUNT = 2 };
 enum { HOLSTER_WAIST_LEFT, HOLSTER_WAIST_RIGHT, HOLSTER_CHEST_LEFT,
     HOLSTER_CHEST_RIGHT, HOLSTER_CHEST_CENTRE, HOLSTER_BACK_LEFT,
     HOLSTER_BACK_RIGHT, HOLSTER_POINT_COUNT };
@@ -25,6 +26,7 @@ const char *GetVrWeaponName(int type) {
 struct CHud { static void SetHelpMessage(const char *, bool) {} };
 struct Text { const char *Get(const char *s) { return s; } } TheText;
 int gHolsterPointSlot[HOLSTER_POINT_COUNT] = {-1,-1,-1,-1,2,-1,-1};
+bool gDualWieldPistol = false, gDualWieldSmg = false;
 const char *kSettingsPath = "test";
 void LoadSettings() {}
 char savedKey[64], savedValue[16];
@@ -32,6 +34,14 @@ void WritePrivateProfileStringA(const char *, const char *key, const char *value
     std::snprintf(savedKey,sizeof(savedKey),"%s",key);
     std::snprintf(savedValue,sizeof(savedValue),"%s",value);
 }
+struct ManualReloadState {};
+struct DroppedWeapon { int slot=-1,copy=1; };
+int gHeldSlot[2]={-1,-1},gHeldCopy[2]={0,1},gHolsterSelection[2]={-1,-1};
+int gWeaponRenderSlot[2]={-1,-1},gWeaponContactSlot[2]={-1,-1};
+ManualReloadState gManualReloadState[2];
+DroppedWeapon gDropped[2];
+void ClearSupportForHand(int) {}
+namespace QuestDualWield { void Reset(int) {} }
 #include "holster-inventory-production.inc"
 void Check(bool ok, const char *message) {
     if (!ok) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); }
@@ -94,5 +104,41 @@ int main() {
     Check(gHolsterPointSlot[4]==-1,"centre stays empty when both throwables are assigned elsewhere");
     CycleQuestHolsterPointSlot(4,-1);
     Check(gHolsterPointSlot[4]==-1,"centre stays empty in reverse when both throwables are assigned");
+    for(int slot : {(int)WEAPONSLOT_HANDGUN,(int)WEAPONSLOT_SUBMACHINEGUN}) {
+        for(int &point:gHolsterPointSlot) point=-1;
+        gDualWieldPistol=gDualWieldSmg=true;
+        gHolsterPointSlot[0]=slot;
+        for(int attempt=0;attempt<30&&gHolsterPointSlot[1]!=slot;attempt++) CycleQuestHolsterPointSlot(1,1);
+        Check(gHolsterPointSlot[1]==slot,"enabled sidearm can occupy opposite-side holsters");
+        gHeldSlot[0]=slot;gHeldSlot[1]=-1;gHeldCopy[0]=0;gHeldCopy[1]=1;
+        Check(CopyInUse(slot,0)&&!CopyInUse(slot,1),"drawing one copy leaves the opposite holster available");
+        gHeldSlot[1]=slot;
+        Check(CopyInUse(slot,0)&&CopyInUse(slot,1),"two hands can own distinct copies of the same slot");
+        gHeldSlot[0]=gHeldSlot[1]=-1;
+        gHolsterPointSlot[2]=-1;
+        for(int attempt=0;attempt<30;attempt++) {
+            CycleQuestHolsterPointSlot(2,1);
+            Check(gHolsterPointSlot[2]!=slot,"cannot assign a third sidearm on the same side");
+        }
+        // Persisted settings are validated as well as interactive selection.
+        gHolsterPointSlot[2]=slot;NormalizeDualWieldHolsters();
+        Check(gHolsterPointSlot[0]==slot&&gHolsterPointSlot[1]==slot&&gHolsterPointSlot[2]==-1,"load normalization retains one copy per side");
+        gHeldSlot[0]=gHeldSlot[1]=slot;
+        gDropped[0].slot=slot;gDropped[0].copy=0;
+        const int type=slot==WEAPONSLOT_HANDGUN?WEAPONTYPE_COLT45:WEAPONTYPE_UZI;
+        ToggleQuestDualWield(type);
+        Check(!IsQuestDualWieldEnabled(type),"toggle disables only selected sidearm type");
+        Check(gHeldSlot[0]==-1&&gHeldSlot[1]==slot&&gDropped[0].slot==-1,"disabling releases the secondary held or dropped copy");
+        Check(gHolsterPointSlot[0]==slot&&gHolsterPointSlot[1]==-1,"disabling clears the duplicate assignment");
+        Check(std::strcmp(savedKey,"HolsterWaistRightSlot")==0&&std::strcmp(savedValue,"-1")==0,"duplicate clearing persists EMPTY");
+    }
+    for(int type=WEAPONTYPE_UNARMED;type<WEAPONTYPE_TOTALWEAPONS;type++) {
+        const bool eligible=type==WEAPONTYPE_COLT45||type==WEAPONTYPE_UZI;
+        Check(IsQuestDualWieldEligible(type)==eligible,"dual wield eligibility is limited to pistol and SMG");
+        if(!eligible) {
+            ToggleQuestDualWield(type);
+            Check(!IsQuestDualWieldEnabled(type),"unsupported weapons cannot enable dual wield");
+        }
+    }
     std::puts("Holster inventory: all twelve weapons, cheat, ownership and loadout cycling passed.");
 }

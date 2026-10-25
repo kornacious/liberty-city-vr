@@ -34,6 +34,18 @@ The Weapons page laser switch disables all weapon lasers, including saved ON
 overrides. Enable it to use the individual weapon choices again.
 The centre chest holster cycles through Molotov, grenade and EMPTY; EMPTY is
 saved and leaves that holster unused after restarting.
+
+Pistol and SMG each have a saved **Dual Wield** switch, off by default. The
+Weapons page edits the right-hand weapon (or the available held/current weapon);
+Weapon Calibration lets you choose the hand to edit. The switch shows
+UNAVAILABLE for other weapons. Enable it, then assign the same sidearm to one
+left and one right point in Holster Loadout. Disabling it keeps the first
+assignment and saves the duplicate as EMPTY, releasing the second copy if held.
+Each copy keeps its own magazine, reload timer and firing cooldown through
+hand transfers and holstering. Both use the inventory ammunition total; rounds
+loaded in the other gun cannot be used to reload this one. A new second copy
+starts empty and uses the normal timed or physical reload.
+
 Grip style now has a per-hand key, with compatibility fallback for older files.
 Installing this update does not replace existing INI calibrations or saves.
 

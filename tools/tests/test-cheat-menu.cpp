@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
+#include "../../overlay/src/vr/QuestRadio.h"
+namespace QuestRadio { void CloseEditor() {} }
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
 template<class T> static T Min(T a, T b) { return a < b ? a : b; }
@@ -23,6 +25,8 @@ static int GetQuestVehicleCalibrationItemForRow(int row) { return row; }
 static int GetQuestHolsterPointCount() { return 3; }
 static void SetQuestVehicleCalibrationPreview(bool) {}
 static int GetQuestCalibrationWeaponType(int){return 0;}
+static bool IsQuestDualWieldEligible(int){return false;}
+static bool IsQuestDualWieldEnabled(int){return false;}
 static int GetQuestCalibrationValue(int,int,int){return 360;}
 static int GetQuestWeaponLaserOverride(int){return -1;}
 }
@@ -208,12 +212,12 @@ int main()
 	Check(MenuRepeatPulse(true, down, repeatAt, holdStart, 9020.0, false), "fresh trigger tap works");
 	gVrMenuPage=VR_MENU_PAGE_CALIBRATION;
 	gVrCalibrationGroup=-1;
-	Check(CurrentMenuItemCount()==15,"calibration root fits grouped controls and actions");
+	Check(CurrentMenuItemCount()==VrWeaponCalibrationMenu::ROW_COUNT,"calibration root fits grouped controls and actions");
 	for(int row=0;row<CurrentMenuItemCount();++row){
 		gVrCalibrationSelection=row;
 		Check(!CurrentMenuValueRepeats(),"root calibration actions never repeat while held");
 		DrawQuestWeaponCalibrationPage();CheckDrawSelection(row);
-		Check(rows.size()==15,"root renders exactly its selectable rows");
+		Check(rows.size()==VrWeaponCalibrationMenu::ROW_COUNT,"root renders exactly its selectable rows");
 		Check(title.size()*6*4<968,"longest weapon heading fits panel");
 		for(const auto &drawn:rows)Check(drawn.text.size()*6*2<850,"calibration row fits highlight width");
 	}

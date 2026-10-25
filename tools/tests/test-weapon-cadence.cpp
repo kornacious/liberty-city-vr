@@ -5,11 +5,12 @@
 #include <limits>
 #include "ragdoll-test-vector.h"
 #include "weapon-cadence-types.inc"
-#include "weapon-cadence-clock.inc"
+#include "../../overlay/src/vr/QuestWeaponTiming.h"
 using uint32=uint32_t;using int32=int32_t;using uint8=uint8_t;
 #define AEHANDLE_IS_OK(a) ((a)>=0)
 #define debug(...) ((void)0)
 template<class T>T Max(T a,T b){return std::max(a,b);}
+template<class T>T Min(T a,T b){return std::min(a,b);}
 static int checks;
 static void Require(bool b,const char *m){++checks;if(!b){std::fprintf(stderr,"FAIL: %s\n",m);std::exit(1);}}
 static uint32 testNow=1000,previous=1000;
@@ -59,11 +60,14 @@ bool CWeapon::Fire(CEntity *shooter,CVector *){
 }
 #include "weapon-cadence-update.inc"
 static bool pressed[2],edge[2],aimValid[2],manual=false,reloadRequest=false,manualAvailable=false;
-static bool pistolHoldToRepeat=false;
+static bool pistolHoldToRepeat=false, dualEnabled=false;
+static int copies[2]={0,1};
 static int held[2];
 static bool vrWaitForTriggerRelease[2];
 
 namespace OculusVR {
+static bool IsQuestDualWieldEnabled(int t){return dualEnabled && (t==WEAPONTYPE_COLT45 || t==WEAPONTYPE_UZI);}
+static int GetHeldWeaponCopy(int hand){return copies[hand];}
 static bool IsQuestPistolHoldToRepeatEnabled(){return pistolHoldToRepeat;}
 static int GetHeldWeaponSlot(int h){return held[h];}
 static int GetVrWeaponTypeForSlot(int s){return s;}
@@ -80,11 +84,13 @@ static bool ConsumeManualReloadRequest(int,int,int){bool r=reloadRequest;reloadR
 static void BeginTrackedWeaponFire(int,int,CVector,CVector){}
 static void EndTrackedWeaponFire(){}
 }
+#include "../../overlay/src/vr/QuestDualWield.h"
 void CPlayerPed::OnFoot(){
     const uint32 vrNow=testNow;
     for(int hand=0;hand<2;hand++){
         const int heldSlot=held[hand];if(heldSlot<1)continue;
         CWeapon &vrHeldWeapon=weapons[heldSlot];const eWeaponType vrWeaponType=vrHeldWeapon.m_eWeaponType;
+        QuestDualWield::Scope magazine(vrHeldWeapon,OculusVR::IsQuestDualWieldEnabled(vrWeaponType),copies[hand],this,manual,vrNow,m_audioEntityId);
 #include "weapon-cadence-player.inc"
 }
 void CPlayerPed::InCar(){
@@ -92,8 +98,10 @@ void CPlayerPed::InCar(){
 #include "weapon-cadence-car.inc"
 }
 static void Reset(eWeaponType type,int span=3,int capacity=10000){
+    dualEnabled=false;copies[0]=0;copies[1]=1;
     testNow=previous=1000;manual=reloadRequest=manualAvailable=fireFailure=pistolHoldToRepeat=false;
     for(int i=0;i<WEAPONTYPE_TOTALWEAPONS;i++){
+        QuestDualWield::Reset(i);
         QuestWeaponTiming::ForWeapon<WEAPONTYPE_TOTALWEAPONS>(i)={};infos[i]={};shots[i].clear();
         fixturePlayer.weapons[i]={};fixturePlayer.weapons[i].m_eWeaponType=static_cast<eWeaponType>(i);
     }
@@ -107,7 +115,7 @@ static void Reset(eWeaponType type,int span=3,int capacity=10000){
 static void Tick(uint32 t,bool car=false){
     previous=testNow;testNow=t;
     for(int i=0;i<WEAPONTYPE_TOTALWEAPONS;i++)
-        if(!(manual&&fixturePlayer.weapons[i].m_nAmmoInClip==0))fixturePlayer.weapons[i].Update(-1);
+        if(!OculusVR::IsQuestDualWieldEnabled(i) && !(manual&&fixturePlayer.weapons[i].m_nAmmoInClip==0))fixturePlayer.weapons[i].Update(-1);
     if(car)fixturePlayer.InCar();else fixturePlayer.OnFoot();
     edge[0]=edge[1]=false;
 }
@@ -178,6 +186,40 @@ int main(){
         Require(shots[WEAPONTYPE_COLT45].size()==n+1,"pistol mode allows next individual trigger pull");
         pistolHoldToRepeat=false;Tick(3500,car);
         Require(shots[WEAPONTYPE_COLT45].size()==n+1,"switching to single shot stops held-trigger repeats");
+    }
+    // Both identical guns run the production Fire/Reload path against one total.
+    for(auto type:{WEAPONTYPE_COLT45,WEAPONTYPE_UZI})for(bool car:{false,true}){
+        Reset(type,3,10);dualEnabled=true;pistolHoldToRepeat=true;
+        held[0]=held[1]=type;pressed[0]=edge[0]=true;
+        auto &inventory=fixturePlayer.weapons[type];inventory.m_nAmmoTotal=100;
+        // Allocate the second magazine through the native reload timer.
+        pressed[0]=pressed[1]=false;Tick(1000,car);Tick(1801,car);
+        Require(inventory.m_nAmmoInClip==10 && QuestDualWield::ForType(type).secondary.m_nAmmoInClip==10,"two magazines reload independently");
+        Require(inventory.m_nAmmoTotal==100,"loading another magazine never changes total ammunition");
+        pressed[0]=pressed[1]=edge[0]=edge[1]=true;Tick(1900,car);
+        Require(shots[type].size()==2,"identical guns can fire simultaneously without sharing cooldown");
+        Require(inventory.m_nAmmoInClip==9 && QuestDualWield::ForType(type).secondary.m_nAmmoInClip==9 && inventory.m_nAmmoTotal==98,"each trigger consumes its own clip and the shared total once");
+        pressed[1]=false;Tick(2000,car);
+        Require(inventory.m_nAmmoInClip==9 && QuestDualWield::ForType(type).secondary.m_nAmmoInClip<9,"firing left preserves the right magazine");
+        const int leftClip=QuestDualWield::ForType(type).secondary.m_nAmmoInClip;
+        // A handoff must carry both magazine and firing clock with the copy.
+        held[0]=-1;copies[1]=0;pressed[0]=false;pressed[1]=true;Tick(2001,car);
+        Require(QuestDualWield::ForType(type).secondary.m_nAmmoInClip==leftClip,"handoff cannot reset the secondary firing cooldown");
+        held[1]=-1;Tick(2400,car);held[0]=type;copies[0]=0;pressed[0]=false;Tick(2500,car);
+        Require(QuestDualWield::ForType(type).secondary.m_nAmmoInClip==leftClip,"holstering and drawing preserves that copy's magazine");
+    }
+    for(auto type:{WEAPONTYPE_COLT45,WEAPONTYPE_UZI}){
+        Reset(type,3,5);dualEnabled=true;manual=true;
+        held[0]=held[1]=type;pressed[0]=pressed[1]=false;
+        auto &inventory=fixturePlayer.weapons[type];inventory.m_nAmmoTotal=8;
+        Tick(1000);Require(QuestDualWield::ForType(type).secondary.m_nAmmoInClip==0,"manual mode does not auto-fill the second clip");
+        reloadRequest=true;Tick(1010);
+        Require(QuestDualWield::ForType(type).secondary.m_nAmmoInClip==3 && inventory.m_nAmmoInClip==5 && inventory.m_nAmmoTotal==8,"reload uses only reserve outside the other loaded magazine");
+        pressed[0]=false;Tick(1020);pressed[0]=edge[0]=true;Tick(1030);
+        Require(inventory.m_nAmmoInClip==5 && inventory.m_nAmmoTotal==7,"manual secondary fire preserves primary rounds");
+        // Inventory scripts reducing ammo cannot leave duplicated loaded rounds.
+        inventory.m_nAmmoTotal=2;Tick(1040);
+        Require(inventory.m_nAmmoInClip+QuestDualWield::ForType(type).secondary.m_nAmmoInClip<=2,"inventory ammo reductions clamp both clips to the pool");
     }
     QuestWeaponTiming::Cadence wrap;wrap.Update(UINT32_MAX-10,true);wrap.Fired(100);wrap.Update(9,true);
     Require(!wrap.Due()&&std::abs(wrap.remainingMs-80)<0.001,"timer wrap preserves cooldown");

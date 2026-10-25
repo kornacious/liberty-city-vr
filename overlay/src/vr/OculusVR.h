@@ -97,7 +97,7 @@ bool GetManualReloadMagazineMatrix(int weaponHand, CMatrix *matrix,
 	int *weaponType = nil, bool *held = nil);
 void SetWeaponHolsterMask(uint32 mask);
 bool ConsumeWeaponHolsterSelection(int hand, int *slot);
-bool GetWeaponHolsterMatrix(int slot, CMatrix *matrix);
+bool GetWeaponHolsterMatrix(int slot, CMatrix *matrix, int copy = -1);
 bool IsPhysicalGunType(int weaponType);
 bool IsPhysicalMeleeType(int weaponType);
 bool IsPhysicalThrowableType(int weaponType);
@@ -107,6 +107,10 @@ bool IsPhysicalWeaponInteractionActive();
 bool IsQuestFirstPersonOnFoot();
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);
+int GetHeldWeaponCopy(int hand);
+bool IsQuestDualWieldEligible(int weaponType);
+bool IsQuestDualWieldEnabled(int weaponType);
+void ToggleQuestDualWield(int weaponType);
 int GetVrWeaponTypeForSlot(int slot);
 const char *GetVrHolsterSlotName(int slot);
 bool IsVrWeaponSlotOwned(int slot);
@@ -119,7 +123,7 @@ void SetTrackedWeaponRenderMatrix(int hand, int slot, int weaponType,
 	const CMatrix *matrix,
 	const CMatrix *contactMatrix = nil);
 int GetDroppedWeaponSlot(int hand);
-bool GetDroppedWeaponMatrix(int slot, CMatrix *matrix);
+bool GetDroppedWeaponMatrix(int slot, CMatrix *matrix, int copy = -1);
 void GetTrackedWeaponOffset(float *offsetX, float *offsetY, float *offsetZ);
 void GetTrackedWeaponRotation(float *rotationX, float *rotationY, float *rotationZ);
 void GetTrackedWeaponOffsetForType(int hand, int weaponType, float *offsetX, float *offsetY, float *offsetZ);

@@ -21,6 +21,7 @@
 #include "WeaponInfo.h"
 #include "WeaponType.h"
 #include "QuestWeaponGrip.h"
+#include "QuestDualWield.h"
 #include "QuestScopeZoom.h"
 #include "QuestWeaponFactoryDefaults.h"
 #include "VrWeaponCalibrationMenu.h"
@@ -243,6 +244,7 @@ static const BuiltInSupportGripDefaults gBuiltInSupportGripDefaults[] = {
 struct DroppedWeapon
 {
 	int slot;
+	int copy = 1;
 	CMatrix matrix;
 	CVector velocity;
 	CVector angularAxis;
@@ -324,6 +326,7 @@ static int gHolsterPointSlot[HOLSTER_POINT_COUNT] = {
 	WEAPONSLOT_RIFLE
 };
 static int gHeldSlot[VR_HAND_COUNT] = { -1, -1 };
+static int gHeldCopy[VR_HAND_COUNT] = { 0, 1 };
 static int gHolsterSelection[VR_HAND_COUNT] = { -1, -1 };
 // Scripted mounted-gun sequences attach Tommy to another entity instead of
 // putting him in a normal vehicle seat. Mirror the script-owned gun into the
@@ -356,6 +359,7 @@ struct WeaponLaserOverride {
 static WeaponLaserOverride gWeaponLaserOverrides[2][WEAPONTYPE_TOTALWEAPONS];
 static bool gManualReload;
 static bool gPistolHoldToRepeat;
+static bool gDualWieldPistol, gDualWieldSmg;
 enum eScopeAimMode {
 	SCOPE_AIM_OFF = 0,
 	SCOPE_AIM_2D_OVERLAY = 1,
@@ -457,6 +461,29 @@ IsGameplayAvailable()
 }
 
 static void
+NormalizeDualWieldHolsters()
+{
+	static const char *keys[HOLSTER_POINT_COUNT] = {
+		"HolsterWaistLeftSlot", "HolsterWaistRightSlot", "HolsterChestLeftSlot",
+		"HolsterChestRightSlot", "HolsterChestCentreSlot", "HolsterBackLeftSlot", "HolsterBackRightSlot"
+	};
+	for(int point = 0; point < HOLSTER_POINT_COUNT; point++){
+		const int slot = gHolsterPointSlot[point];
+		if(slot != WEAPONSLOT_HANDGUN && slot != WEAPONSLOT_SUBMACHINEGUN) continue;
+		const bool dual = slot == WEAPONSLOT_HANDGUN ? gDualWieldPistol : gDualWieldSmg;
+		const bool left = point == HOLSTER_WAIST_LEFT || point == HOLSTER_CHEST_LEFT || point == HOLSTER_BACK_LEFT;
+		for(int other = 0; other < point; other++){
+			const bool otherLeft = other == HOLSTER_WAIST_LEFT || other == HOLSTER_CHEST_LEFT || other == HOLSTER_BACK_LEFT;
+			if(gHolsterPointSlot[other] == slot && (!dual || left == otherLeft)){
+				gHolsterPointSlot[point] = -1;
+				WritePrivateProfileStringA("VR", keys[point], "-1", kSettingsPath);
+				break;
+			}
+		}
+	}
+}
+
+static void
 LoadSettings()
 {
 	if(gSettingsLoaded)
@@ -472,6 +499,8 @@ LoadSettings()
 		kSettingsPath) != 0;
 	gPistolHoldToRepeat = GetPrivateProfileIntA("VR", "PistolHoldToRepeat", 0,
 		kSettingsPath) != 0;
+	gDualWieldPistol = GetPrivateProfileIntA("VR", "DualWieldPistol", 0, kSettingsPath) != 0;
+	gDualWieldSmg = GetPrivateProfileIntA("VR", "DualWieldSmg", 0, kSettingsPath) != 0;
 	const int storedScope = (int)(int32)GetPrivateProfileIntA("VR", "PhysicalScopeAim", 1,
 		kSettingsPath);
 	if(storedScope >= 0 && storedScope < SCOPE_AIM_MODE_COUNT)
@@ -495,6 +524,7 @@ LoadSettings()
 		if(stored >= -1 && stored < TOTAL_WEAPON_SLOTS)
 			gHolsterPointSlot[point] = stored;
 	}
+	NormalizeDualWieldHolsters();
 	// Keep the centre dedicated to throwables, including a saved empty point.
 	if(gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != -1 &&
 	   gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != WEAPONSLOT_GRENADE)
@@ -1083,10 +1113,35 @@ GetBodyFrame(CVector *origin, CVector *right, CVector *up,
 }
 
 static int
-FindHolsterPoint(int slot)
+HolsterCopy(int point)
+{
+	return point == HOLSTER_WAIST_LEFT || point == HOLSTER_CHEST_LEFT ||
+		point == HOLSTER_BACK_LEFT ? 0 : 1;
+}
+
+static bool
+DualWieldSlot(int slot)
+{
+	return (slot == WEAPONSLOT_HANDGUN && gDualWieldPistol) ||
+		(slot == WEAPONSLOT_SUBMACHINEGUN && gDualWieldSmg);
+}
+
+static bool
+CopyInUse(int slot, int copy)
+{
+	for(int hand = 0; hand < VR_HAND_COUNT; hand++)
+		if((gHeldSlot[hand] == slot && (!DualWieldSlot(slot) || gHeldCopy[hand] == copy)) ||
+		   (gDropped[hand].slot == slot && (!DualWieldSlot(slot) || gDropped[hand].copy == copy)))
+			return true;
+	return false;
+}
+
+static int
+FindHolsterPoint(int slot, int copy = -1)
 {
 	for(int point = 0; point < HOLSTER_POINT_COUNT; point++)
-		if(gHolsterPointSlot[point] == slot)
+		if(gHolsterPointSlot[point] == slot &&
+		   (copy < 0 || !DualWieldSlot(slot) || HolsterCopy(point) == copy))
 			return point;
 	if(slot == WEAPONSLOT_SNIPER){
 		if(!OculusVR::IsVrWeaponSlotOwned(WEAPONSLOT_RIFLE))
@@ -1365,7 +1420,7 @@ BuildCanonicalSupportFrame(const CVector &forwardCandidate,
 }
 
 static bool
-BuildHolsterMatrix(int slot, CMatrix *matrix)
+BuildHolsterMatrix(int slot, CMatrix *matrix, int copy = -1)
 {
 	if(!matrix || slot <= WEAPONSLOT_UNARMED ||
 	   slot >= TOTAL_WEAPON_SLOTS ||
@@ -1373,7 +1428,7 @@ BuildHolsterMatrix(int slot, CMatrix *matrix)
 	    (!IsImmersiveDrivingActive() ||
 	     !IsImmersiveVehicleSidearm(GetVrWeaponTypeForSlot(slot)))))
 		return false;
-	const int point = FindHolsterPoint(slot);
+	const int point = FindHolsterPoint(slot, copy);
 	if(point < 0)
 		return false;
 	static const float lateral[HOLSTER_POINT_COUNT] = {
@@ -1506,10 +1561,11 @@ BuildTwoHandRotation(int primary, int weaponType, CVector *pivot,
 }
 
 static void
-GiveWeaponToHand(int hand, int slot)
+GiveWeaponToHand(int hand, int slot, int copy = -1)
 {
 	ClearSupportForHand(hand);
 	gHeldSlot[hand] = slot;
+	gHeldCopy[hand] = copy < 0 ? hand : copy;
 	gHolsterSelection[hand] = slot;
 	gWeaponRenderSlot[hand] = -1;
 	gWeaponContactSlot[hand] = -1;
@@ -1552,6 +1608,7 @@ StartDroppedWeapon(int hand, int slot)
 		return;
 	DroppedWeapon dropped;
 	dropped.slot = slot;
+	dropped.copy = gHeldCopy[hand];
 	dropped.startTime = CTimer::GetTimeInMillisecondsNonClipped();
 	if(gWeaponRenderSlot[hand] == slot)
 		dropped.matrix = gWeaponRenderMatrix[hand];
@@ -1602,12 +1659,13 @@ IsMagazineHandInUse(int hand)
 }
 
 static bool
-BuildManualReloadSpotMatrix(int slot, CMatrix *matrix)
+BuildManualReloadSpotMatrix(int slot, CMatrix *matrix, int weaponHand)
 {
 	if(!matrix)
 		return false;
 	CMatrix holster;
-	const bool assigned = BuildHolsterMatrix(slot, &holster);
+	const int copy = gHeldCopy[weaponHand];
+	const bool assigned = BuildHolsterMatrix(slot, &holster, copy);
 	CVector origin, right, up, forward;
 	if(!GetBodyFrame(&origin, &right, &up, &forward))
 		return false;
@@ -1695,7 +1753,7 @@ UpdateManualReloadInput(bool blocked)
 		CMatrix heldMatrix, spotMatrix;
 		CVector socketPosition;
 		if(!BuildManualReloadHeldMatrix(magazineHand, &heldMatrix) ||
-		   !BuildManualReloadSpotMatrix(reload.slot, &spotMatrix) ||
+		   !BuildManualReloadSpotMatrix(reload.slot, &spotMatrix, weaponHand) ||
 		   !BuildManualReloadSocketPosition(weaponHand, &socketPosition))
 			continue;
 		if((heldMatrix.GetPosition()-spotMatrix.GetPosition()).Magnitude() >=
@@ -1728,7 +1786,7 @@ UpdateManualReloadInput(bool blocked)
 					continue;
 				CMatrix spotMatrix;
 				if(!BuildManualReloadSpotMatrix(reload.slot,
-				   &spotMatrix))
+				   &spotMatrix, weaponHand))
 					continue;
 				const float distance =
 					(gGripMatrix[hand].GetPosition()-
@@ -1965,7 +2023,7 @@ UpdateHolsterInput(uint32 blockedHands)
 			const int slot = gHeldSlot[primary];
 			gHeldSlot[primary] = -1;
 			gSupportHand[primary] = -1;
-			GiveWeaponToHand(support, slot);
+			GiveWeaponToHand(support, slot, gHeldCopy[primary]);
 		}
 	}
 
@@ -2011,7 +2069,7 @@ UpdateHolsterInput(uint32 blockedHands)
 		const int slot = gHeldSlot[source];
 		ClearSupportForHand(source);
 		gHeldSlot[source] = -1;
-		GiveWeaponToHand(receiver, slot);
+		GiveWeaponToHand(receiver, slot, gHeldCopy[source]);
 		gGripLatched[receiver] = true;
 	}
 
@@ -2029,8 +2087,9 @@ UpdateHolsterInput(uint32 blockedHands)
 			    dropped.GetPosition()).Magnitude() > 0.22f)
 				continue;
 			const int slot = gDropped[source].slot;
+			const int copy = gDropped[source].copy;
 			gDropped[source] = DroppedWeapon();
-			GiveWeaponToHand(receiver, slot);
+			GiveWeaponToHand(receiver, slot, copy);
 			gWeaponRenderMatrix[receiver] = dropped;
 			gWeaponRenderSlot[receiver] = slot;
 			gGripLatched[receiver] = true;
@@ -2058,7 +2117,7 @@ UpdateHolsterInput(uint32 blockedHands)
 			const int slot = gHeldSlot[hand];
 			CMatrix holster;
 			const bool returnToHolster = gPoseValid[hand] &&
-				BuildHolsterMatrix(slot, &holster) &&
+				BuildHolsterMatrix(slot, &holster, gHeldCopy[hand]) &&
 				(gGripMatrix[hand].GetPosition()-holster.GetPosition()).Magnitude()
 					<= 0.24f;
 			if(gGripLock && !returnToHolster)
@@ -2073,30 +2132,24 @@ UpdateHolsterInput(uint32 blockedHands)
 		   gGrip[hand] >= 0.65f && !gGripLatched[hand]){
 			float closestDistance = 1000.0f;
 			int closestSlot = -1;
-			for(int slot = WEAPONSLOT_MELEE;
-			    slot < TOTAL_WEAPON_SLOTS; slot++){
-				if((gWeaponHolsterMask & (1u << slot)) == 0)
-					continue;
-				bool alreadyUsed = false;
-				for(int other = 0; other < VR_HAND_COUNT; other++)
-					if(gHeldSlot[other] == slot ||
-					   gDropped[other].slot == slot)
-						alreadyUsed = true;
-				if(alreadyUsed)
-					continue;
-				CMatrix holster;
-				if(!BuildHolsterMatrix(slot, &holster))
-					continue;
-				const float distance =
-					(gGripMatrix[hand].GetPosition()-
-					 holster.GetPosition()).Magnitude();
-				if(distance < closestDistance){
-					closestDistance = distance;
-					closestSlot = slot;
+			int closestCopy = hand;
+			for(int slot = WEAPONSLOT_MELEE; slot < TOTAL_WEAPON_SLOTS; slot++){
+				if((gWeaponHolsterMask & (1u << slot)) == 0) continue;
+				for(int index = 0; index < (DualWieldSlot(slot) ? 2 : 1); index++){
+					const int copy = DualWieldSlot(slot) ? index : 1;
+					if(CopyInUse(slot, copy)) continue;
+					CMatrix holster;
+					if(!BuildHolsterMatrix(slot, &holster, copy)) continue;
+					const float distance = (gGripMatrix[hand].GetPosition()-holster.GetPosition()).Magnitude();
+					if(distance < closestDistance){
+						closestDistance = distance;
+						closestSlot = slot;
+						closestCopy = copy;
+					}
 				}
 			}
 			if(closestSlot >= 0 && closestDistance <= 0.27f){
-				GiveWeaponToHand(hand, closestSlot);
+				GiveWeaponToHand(hand, closestSlot, closestCopy);
 				gGripLatched[hand] = true;
 			}
 		}
@@ -3001,7 +3054,7 @@ GetManualReloadMagazineMatrix(int weaponHand, CMatrix *matrix,
 	const bool magazineHeld = reload.magazineHand >= 0;
 	const bool ready = magazineHeld ?
 		BuildManualReloadHeldMatrix(reload.magazineHand, matrix) :
-		BuildManualReloadSpotMatrix(reload.slot, matrix);
+		BuildManualReloadSpotMatrix(reload.slot, matrix, weaponHand);
 	if(!ready)
 		return false;
 	if(weaponType)
@@ -3039,16 +3092,15 @@ ConsumeWeaponHolsterSelection(int hand, int *slot)
 }
 
 bool
-GetWeaponHolsterMatrix(int slot, CMatrix *matrix)
+GetWeaponHolsterMatrix(int slot, CMatrix *matrix, int copy)
 {
 	if(!AreTrackedHandsEnabled() ||
 	   (FindPlayerVehicle() && !IsImmersiveDrivingActive()) ||
 	   (gWeaponHolsterMask & (1u << slot)) == 0)
 		return false;
-	for(int hand = 0; hand < VR_HAND_COUNT; hand++)
-		if(gHeldSlot[hand] == slot || gDropped[hand].slot == slot)
-			return false;
-	return BuildHolsterMatrix(slot, matrix);
+	if(copy < 0) copy = 1;
+	if(CopyInUse(slot, copy)) return false;
+	return BuildHolsterMatrix(slot, matrix, copy);
 }
 
 bool IsPhysicalGunType(int weaponType) { return IsPhysicalGun(weaponType); }
@@ -3063,6 +3115,7 @@ bool IsTrackedWeaponHeld(int hand)
 		gHeldSlot[hand] >= 0 &&
 		(!FindPlayerVehicle() || IsImmersiveDrivingActive());
 }
+int GetHeldWeaponCopy(int hand) { return hand >= 0 && hand < VR_HAND_COUNT ? gHeldCopy[hand] : 1; }
 int GetHeldWeaponSlot(int hand) { return hand >= 0 && hand < VR_HAND_COUNT ? gHeldSlot[hand] : -1; }
 
 void
@@ -3121,9 +3174,9 @@ RestrictQuestVehicleWeaponsToSidearms()
 			mask |= 1u << slot;
 	}
 	for(int hand = 0; hand < VR_HAND_COUNT; hand++){
-		if(gHeldSlot[hand] >= 0)
+		if(gHeldSlot[hand] >= 0 && !DualWieldSlot(gHeldSlot[hand]))
 			mask &= ~(1u << gHeldSlot[hand]);
-		if(gDropped[hand].slot >= 0)
+		if(gDropped[hand].slot >= 0 && !DualWieldSlot(gDropped[hand].slot))
 			mask &= ~(1u << gDropped[hand].slot);
 	}
 	gWeaponHolsterMask = mask;
@@ -3161,10 +3214,11 @@ SetTrackedWeaponRenderMatrix(int hand, int slot, int weaponType,
 int GetDroppedWeaponSlot(int hand) { return hand >= 0 && hand < VR_HAND_COUNT ? gDropped[hand].slot : -1; }
 
 bool
-GetDroppedWeaponMatrix(int slot, CMatrix *matrix)
+GetDroppedWeaponMatrix(int slot, CMatrix *matrix, int copy)
 {
 	for(int hand = 0; hand < VR_HAND_COUNT; hand++)
-		if(gDropped[hand].slot == slot){
+		if(gDropped[hand].slot == slot &&
+		   (copy < 0 || !DualWieldSlot(slot) || gDropped[hand].copy == copy)){
 			if(BuildDroppedMatrix(hand, matrix))
 				return true;
 			gDropped[hand] = DroppedWeapon();
@@ -3933,6 +3987,43 @@ GetQuestCalibrationWeaponType(int hand)
 		WEAPONTYPE_UNARMED;
 }
 
+bool IsQuestDualWieldEligible(int type)
+{
+	return type == WEAPONTYPE_COLT45 || type == WEAPONTYPE_UZI;
+}
+
+bool IsQuestDualWieldEnabled(int type)
+{
+	LoadSettings();
+	return type == WEAPONTYPE_COLT45 ? gDualWieldPistol :
+		type == WEAPONTYPE_UZI ? gDualWieldSmg : false;
+}
+
+void ToggleQuestDualWield(int type)
+{
+	LoadSettings();
+	if(!IsQuestDualWieldEligible(type)) return;
+	bool &enabled = type == WEAPONTYPE_COLT45 ? gDualWieldPistol : gDualWieldSmg;
+	enabled = !enabled;
+	QuestDualWield::Reset(type);
+	WritePrivateProfileStringA("VR", type == WEAPONTYPE_COLT45 ? "DualWieldPistol" : "DualWieldSmg",
+		enabled ? "1" : "0", kSettingsPath);
+	if(enabled) return;
+	const int slot = type == WEAPONTYPE_COLT45 ? WEAPONSLOT_HANDGUN : WEAPONSLOT_SUBMACHINEGUN;
+	NormalizeDualWieldHolsters();
+	// Keep the native inventory copy; release any second held/dropped copy.
+	for(int hand = 0; hand < VR_HAND_COUNT; hand++){
+		if(gHeldSlot[hand] == slot && gHeldCopy[hand] == 0){
+			ClearSupportForHand(hand);
+			gHeldSlot[hand] = gHolsterSelection[hand] = -1;
+			gWeaponRenderSlot[hand] = gWeaponContactSlot[hand] = -1;
+			gManualReloadState[hand] = ManualReloadState();
+		}
+		if(gDropped[hand].slot == slot && gDropped[hand].copy == 0)
+			gDropped[hand] = DroppedWeapon();
+	}
+}
+
 static int *
 QuestCalibrationValue(WeaponCalibration *calibration, int item,
 	int *minimum, int *maximum)
@@ -4203,7 +4294,8 @@ CycleQuestHolsterPointSlot(int point, int direction)
 		if(candidate >= 0)
 			for(int other = 0; other < HOLSTER_POINT_COUNT; other++)
 				if(other != point &&
-				   gHolsterPointSlot[other] == candidate)
+				   gHolsterPointSlot[other] == candidate &&
+				   (!DualWieldSlot(candidate) || HolsterCopy(other) == HolsterCopy(point)))
 					used = true;
 		if(!used){
 			gHolsterPointSlot[point] = candidate;
@@ -4231,6 +4323,8 @@ PrepareForGameShutdown()
 {
 	ReleaseAllVrHolsterWeapons();
 	InvalidateQuestWeaponLaserOverrides();
+	QuestDualWield::Reset(WEAPONTYPE_COLT45);
+	QuestDualWield::Reset(WEAPONTYPE_UZI);
 	for(int hand = 0; hand < VR_HAND_COUNT; hand++){
 		gPoseValid[hand] = false;
 		gGrip[hand] = 0.0f;

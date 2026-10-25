@@ -720,6 +720,7 @@ enum eVrWeaponsMenuItem {
 	VR_WEAPONS_PISTOL_FIRE,
 	VR_WEAPONS_SCOPE_AIM,
 	VR_WEAPONS_GRIP_LOCK,
+	VR_WEAPONS_DUAL_WIELD,
 	VR_WEAPONS_CALIBRATION,
 	VR_WEAPONS_BACK,
 	VR_WEAPONS_ITEM_COUNT
@@ -2947,7 +2948,9 @@ VrDebugUpdate(const PadInput &in)
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_WEAPONS &&
 		         (positivePulse || decreasePulse)){
-			if(gVrWeaponsSelection == VR_WEAPONS_SCOPE_AIM){
+			if(gVrWeaponsSelection == VR_WEAPONS_DUAL_WIELD){
+				OculusVR::ToggleQuestDualWield(OculusVR::GetQuestCalibrationWeaponType(1));
+			}else if(gVrWeaponsSelection == VR_WEAPONS_SCOPE_AIM){
 				OculusVR::CycleQuestScopeAimMode(decreasePulse ? -1 : 1);
 			}else{
 				const int weaponSetting =
@@ -3698,6 +3701,8 @@ VrDebugUpdate(const PadInput &in)
 					decreasePulse ? -1 : 1);
 			else if(row == LASER)
 				OculusVR::CycleQuestWeaponLaserOverride(weaponType, decreasePulse ? -1 : 1);
+			else if(row == DUAL_WIELD)
+				OculusVR::ToggleQuestDualWield(weaponType);
 			else if(positivePulse){
 				if(row == SAVE_DEFAULT){
 					OculusVR::SaveQuestCalibrationDefault(gVrCalibrationHand, weaponType);
@@ -4011,10 +4016,15 @@ DrawQuestWeaponsPage(void)
 				OculusVR::GetQuestWeaponSetting(setting) ? "ON" : "OFF");
 		}
 	}
+	const int dualType = OculusVR::GetQuestCalibrationWeaponType(1);
+	snprintf(rows[VR_WEAPONS_DUAL_WIELD], sizeof(rows[0]), "DUAL WIELD %s  < %s >",
+		OculusVR::IsQuestDualWieldEligible(dualType) ? GetVrWeaponName(dualType) : "",
+		OculusVR::IsQuestDualWieldEligible(dualType) ?
+			(OculusVR::IsQuestDualWieldEnabled(dualType) ? "ON" : "OFF") : "UNAVAILABLE");
 	strcpy(rows[VR_WEAPONS_CALIBRATION], "WEAPON CALIBRATION  < OPEN >");
 	strcpy(rows[VR_WEAPONS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_WEAPONS_ITEM_COUNT; item++)
-		DrawFullVrMenuRow(rows[item], 170+item*55, 3,
+		DrawFullVrMenuRow(rows[item], 170+item*49, 3,
 			item == gVrWeaponsSelection);
 }
 
@@ -4797,6 +4807,10 @@ DrawQuestWeaponCalibrationPage(void)
 		else if(rowIndex == LASER){
 			const int laser = OculusVR::GetQuestWeaponLaserOverride(weaponType);
 			snprintf(row, sizeof(row), "LASER SIGHT  < %s >", laser < 0 ? "FOLLOW WEAPONS PAGE" : laser ? "ON" : "OFF");
+		}else if(rowIndex == DUAL_WIELD){
+			snprintf(row, sizeof(row), "DUAL WIELD  < %s >",
+				OculusVR::IsQuestDualWieldEligible(weaponType) ?
+					(OculusVR::IsQuestDualWieldEnabled(weaponType) ? "ON" : "OFF") : "UNAVAILABLE");
 		}else if(rowIndex == SAVE_DEFAULT) strcpy(row, "SAVE AS DEFAULT");
 		else if(rowIndex == RESTORE_DEFAULT) strcpy(row, "RESTORE DEFAULT");
 		else if(rowIndex == COPY_HAND)

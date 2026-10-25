@@ -17,6 +17,13 @@ foreach ($pattern in @(
     '(?ms)^static bool\r?\nIsPhysicalMelee\(.*?^\}',
     '(?ms)^static bool\r?\nIsPhysicalThrowable\(.*?^\}',
     '(?m)^bool IsPhysicalWeaponType[^\r\n]+',
+    '(?ms)^static void\r?\nNormalizeDualWieldHolsters\(.*?^\}',
+    '(?ms)^static int\r?\nHolsterCopy\(.*?^\}',
+    '(?ms)^static bool\r?\nDualWieldSlot\(.*?^\}',
+    '(?ms)^static bool\r?\nCopyInUse\(.*?^\}',
+    '(?ms)^bool IsQuestDualWieldEligible\(.*?^\}',
+    '(?ms)^bool IsQuestDualWieldEnabled\(.*?^\}',
+    '(?ms)^void ToggleQuestDualWield\(.*?^\}',
     '(?ms)^void\r?\nCycleQuestHolsterPointSlot\(.*?^\}'
 )) {
     $match = [regex]::Match($quest, $pattern)
