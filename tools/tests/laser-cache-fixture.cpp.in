@@ -62,18 +62,23 @@ int main()
 	gWeaponLaser = true;
 	assert(IsTrackedWeaponLaserEnabledForType(weapon));
 	assert(profileReads == 1);
-	gWeaponLaser = false;
 	CycleQuestWeaponLaserOverride(weapon, 1);
 	assert(profileWrites == 1 && profile[classic] == 0);
 	assert(!IsTrackedWeaponLaserEnabledForType(weapon));
 	CycleQuestWeaponLaserOverride(weapon, 1);
 	assert(profile[classic] == 1 && IsTrackedWeaponLaserEnabledForType(weapon));
 	CycleQuestWeaponLaserOverride(weapon, 1);
-	assert(profile[classic] == -1 && !IsTrackedWeaponLaserEnabledForType(weapon));
+	assert(profile[classic] == -1 && IsTrackedWeaponLaserEnabledForType(weapon));
 	assert(profileReads == 1);
 	CycleQuestWeaponLaserOverride(weapon, -1);
 	assert(profile[classic] == 1 && IsTrackedWeaponLaserEnabledForType(weapon));
 	assert(profileReads == 1);
+	// A saved ON override must not bypass the Weapons page OFF switch.
+	gWeaponLaser = false;
+	assert(GetQuestWeaponLaserOverride(weapon) == 1);
+	assert(!IsTrackedWeaponLaserEnabledForType(weapon));
+	gWeaponLaser = true;
+	assert(IsTrackedWeaponLaserEnabledForType(weapon));
 
 	profile[modern] = 0;
 	ModelSets::active = ModelSets::MODEL_SET_MODERN;
@@ -89,6 +94,11 @@ int main()
 	CycleQuestWeaponLaserOverride(weapon, 1);
 	assert(profile[modern] == 1);
 	assert(IsTrackedWeaponLaserEnabledForType(weapon));
+	gWeaponLaser = false;
+	assert(!IsTrackedWeaponLaserEnabledForType(weapon));
+	ModelSets::active = ModelSets::MODEL_SET_CLASSIC;
+	assert(!IsTrackedWeaponLaserEnabledForType(weapon));
+	gWeaponLaser = true;
 	ModelSets::active = ModelSets::MODEL_SET_CLASSIC;
 	assert(IsTrackedWeaponLaserEnabledForType(weapon));
 	assert(profileReads == 2);

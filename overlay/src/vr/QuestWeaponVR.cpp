@@ -495,8 +495,9 @@ LoadSettings()
 		if(stored >= -1 && stored < TOTAL_WEAPON_SLOTS)
 			gHolsterPointSlot[point] = stored;
 	}
-	// Keep the centre dedicated to throwables while allowing either inventory item.
-	if(gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != WEAPONSLOT_GRENADE)
+	// Keep the centre dedicated to throwables, including a saved empty point.
+	if(gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != -1 &&
+	   gHolsterPointSlot[HOLSTER_CHEST_CENTRE] != WEAPONSLOT_GRENADE)
 		gHolsterPointSlot[HOLSTER_CHEST_CENTRE] = WEAPONSLOT_PROJECTILE;
 	gSettingsLoaded = true;
 }
@@ -2764,15 +2765,14 @@ InvalidateQuestWeaponLaserOverrides()
 	memset(gWeaponLaserOverrides, 0, sizeof(gWeaponLaserOverrides));
 }
 
-// Per weapon, with the page-wide switch as the fallback. A laser earns its
-// place on a pistol and gets in the way on a rifle with iron sights, so the
-// choice belongs to the weapon rather than to the whole loadout.
+// The Weapons page is the master switch. Per-weapon choices can suppress a
+// laser while it is on, but cannot leave a laser visible after it is disabled.
 bool
 IsTrackedWeaponLaserEnabledForType(int weaponType)
 {
 	LoadSettings();
 	const int stored = ReadWeaponLaserOverride(weaponType);
-	return stored < 0 ? gWeaponLaser : stored != 0;
+	return gWeaponLaser && stored != 0;
 }
 
 int
@@ -2786,7 +2786,7 @@ void
 CycleQuestWeaponLaserOverride(int weaponType, int direction)
 {
 	LoadSettings();
-	// Three states in a ring: follow the global switch, always on, off.
+	// Three states in a ring: follow the master switch, off, on when enabled.
 	int stored = ReadWeaponLaserOverride(weaponType)+1;
 	stored = (stored+3+(direction < 0 ? -1 : 1)) % 3;
 	WriteWeaponLaserOverride(weaponType, stored-1);
@@ -4196,7 +4196,7 @@ CycleQuestHolsterPointSlot(int point, int direction)
 		choice = (choice+(direction < 0 ? -1 : 1)+
 			(int)ARRAY_SIZE(choices))%(int)ARRAY_SIZE(choices);
 		const int candidate = choices[choice];
-		if(point == HOLSTER_CHEST_CENTRE && candidate != WEAPONSLOT_PROJECTILE &&
+		if(point == HOLSTER_CHEST_CENTRE && candidate != -1 && candidate != WEAPONSLOT_PROJECTILE &&
 		   candidate != WEAPONSLOT_GRENADE)
 			continue;
 		bool used = false;

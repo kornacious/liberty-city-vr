@@ -30,6 +30,10 @@ Personal checkpoints live in `vr_settings.ini`, under
 Left-hand keys use the existing `Left` prefix. Classic and Xbox share the
 generic weapon profiles and checkpoint namespace. Modern is separate.
 The laser remains a per-weapon setting and is not included in a hand checkpoint.
+The Weapons page laser switch disables all weapon lasers, including saved ON
+overrides. Enable it to use the individual weapon choices again.
+The centre chest holster cycles through Molotov, grenade and EMPTY; EMPTY is
+saved and leaves that holster unused after restarting.
 Grip style now has a per-hand key, with compatibility fallback for older files.
 Installing this update does not replace existing INI calibrations or saves.
 

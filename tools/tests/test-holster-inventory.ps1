@@ -24,5 +24,8 @@ foreach ($pattern in @(
     $parts += $match.Value
 }
 $generated = Join-Path $PSScriptRoot 'holster-inventory-production.inc'
+$normalization = [regex]::Match($quest, '(?ms)^\t// Keep the centre dedicated.*?(?=^\tgSettingsLoaded = true;)')
+if (-not $normalization.Success) { throw 'Missing centre holster settings normalization.' }
+$parts += "void NormalizeLoadedCentre() {`n" + $normalization.Value + "`n}"
 [IO.File]::WriteAllText($generated, ($parts -join "`n`n"), [Text.UTF8Encoding]::new($false))
 & (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-holster-inventory.cpp')

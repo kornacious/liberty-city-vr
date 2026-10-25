@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #define GTA_VR_WEAPONS
 #define nil nullptr
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -26,12 +27,22 @@ struct Text { const char *Get(const char *s) { return s; } } TheText;
 int gHolsterPointSlot[HOLSTER_POINT_COUNT] = {-1,-1,-1,-1,2,-1,-1};
 const char *kSettingsPath = "test";
 void LoadSettings() {}
-void WritePrivateProfileStringA(const char *, const char *, const char *, const char *) {}
+char savedKey[64], savedValue[16];
+void WritePrivateProfileStringA(const char *, const char *key, const char *value, const char *) {
+    std::snprintf(savedKey,sizeof(savedKey),"%s",key);
+    std::snprintf(savedValue,sizeof(savedValue),"%s",value);
+}
 #include "holster-inventory-production.inc"
 void Check(bool ok, const char *message) {
     if (!ok) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); }
 }
 int main() {
+    for(int slot : {-1,(int)WEAPONSLOT_PROJECTILE,(int)WEAPONSLOT_GRENADE,(int)WEAPONSLOT_HANDGUN}) {
+        gHolsterPointSlot[4]=slot;
+        NormalizeLoadedCentre();
+        Check(gHolsterPointSlot[4]==(slot==WEAPONSLOT_HANDGUN ? WEAPONSLOT_PROJECTILE : slot),
+            "reload preserves empty and throwables while rejecting a non-throwable centre");
+    }
     WeaponCheat();
     bool seen[13] = {};
     for (int slot=1; slot<TOTAL_WEAPON_SLOTS; ++slot) {
@@ -63,10 +74,25 @@ int main() {
     Check(choices[WEAPONSLOT_GRENADE] && choices[WEAPONSLOT_ROCKET] && choices[WEAPONSLOT_OTHER] && choices[WEAPONSLOT_AK47],"missing weapons are selectable");
     CycleQuestHolsterPointSlot(4,1);
     Check(gHolsterPointSlot[4]==WEAPONSLOT_GRENADE,"centre selects grenade");
+    CycleQuestHolsterPointSlot(4,1);
+    Check(gHolsterPointSlot[4]==-1,"centre selects empty after grenade");
+    Check(std::strcmp(savedKey,"HolsterChestCentreSlot")==0 && std::strcmp(savedValue,"-1")==0,
+        "empty centre persists under its own settings key");
+    CycleQuestHolsterPointSlot(4,1);
+    Check(gHolsterPointSlot[4]==WEAPONSLOT_PROJECTILE,"centre wraps empty to Molotov");
+    CycleQuestHolsterPointSlot(4,-1);
+    Check(gHolsterPointSlot[4]==-1,"centre selects empty in reverse");
+    CycleQuestHolsterPointSlot(4,-1);
+    Check(gHolsterPointSlot[4]==WEAPONSLOT_GRENADE,"centre wraps empty to grenade in reverse");
     CycleQuestHolsterPointSlot(4,-1);
     Check(gHolsterPointSlot[4]==WEAPONSLOT_PROJECTILE,"centre selects Molotov in reverse");
     gHolsterPointSlot[1]=WEAPONSLOT_GRENADE;
     CycleQuestHolsterPointSlot(4,1);
-    Check(gHolsterPointSlot[4]==WEAPONSLOT_PROJECTILE,"centre cannot steal assigned grenade");
+    Check(gHolsterPointSlot[4]==-1,"centre skips assigned grenade to empty");
+    gHolsterPointSlot[2]=WEAPONSLOT_PROJECTILE;
+    CycleQuestHolsterPointSlot(4,1);
+    Check(gHolsterPointSlot[4]==-1,"centre stays empty when both throwables are assigned elsewhere");
+    CycleQuestHolsterPointSlot(4,-1);
+    Check(gHolsterPointSlot[4]==-1,"centre stays empty in reverse when both throwables are assigned");
     std::puts("Holster inventory: all twelve weapons, cheat, ownership and loadout cycling passed.");
 }

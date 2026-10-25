@@ -18,6 +18,14 @@ These tests compile production helpers or extract production functions into
 small native adapters. They check code behavior; they do not launch the game,
 replace game data or establish headset appearance/FPS.
 
+`test-holster-inventory.ps1 -StageRoot <assembled-tree>` checks independent
+inventory slots, holster assignment cycling, centre EMPTY persistence and
+settings reload normalization. `test-throwable-preview.ps1` uses the same
+argument and compiles the production trajectory renderer to check grenade and
+Molotov arcs in both hands, collision termination and visibility gates.
+`test-laser-cache.ps1` checks cached per-weapon profiles and verifies that the
+Weapons page OFF switch suppresses saved ON overrides in both model sets.
+
 `test-plane-visibility.ps1 -StageRoot <assembled-tree>` compiles the actual
 big-building vehicle branch and shared visibility helper in VR and non-VR
 configurations. It checks planes outside the mono view remain eligible during

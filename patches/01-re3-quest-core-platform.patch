@@ -2769,7 +2769,7 @@ index d6c02b9d..37e05119 100644
 +	if(!player || !OculusVR::IsTrackedThrowablePreviewActive(hand))
 +		return;
 +	const int heldSlot = OculusVR::GetHeldWeaponSlot(hand);
-+	if(heldSlot != WEAPONSLOT_PROJECTILE || heldSlot >= TOTAL_WEAPON_SLOTS)
++	if(heldSlot < 0 || heldSlot >= TOTAL_WEAPON_SLOTS)
 +		return;
 +	const int resolvedType = OculusVR::GetVrWeaponTypeForSlot(heldSlot);
 +	if(resolvedType < 0 || !player->HasWeapon((uint8)resolvedType))
