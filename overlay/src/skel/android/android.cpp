@@ -1533,15 +1533,15 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		!player->DyingOrDead() && player->m_pFrames[PED_HEAD] != nil &&
 		(player->InVehicle() || player->m_pFrames[PED_TORSO] != nil);
 #ifdef GTA_VR_WEAPONS
-	// On foot the real Claude skeleton is now the VR body: keep it visible so
-	// VrBodyIK can drive the arms beneath the existing tracked hand meshes.
-	// Immersive/motion vehicle modes still use the historical hands-only policy.
-	// OFF = shipped hands-only presentation. ON = real skinned Claude body on foot.
-	// Vehicle ownership remains unchanged.
+	// Disabling VR hands also hides Claude during first-person gameplay,
+	// regardless of body IK or driving mode. Native vehicle transitions own the
+	// animated body; cutscenes, death and third-person views are outside the head.
+	// With hands enabled, retain the on-foot and vehicle body IK policies.
 	const bool vehicleBodyIK =
 		gVrInVehicle && androidgame::VrVehicleBodyIKEnabled();
-	gVrHidePlayerBody = gVrCameraInsidePlayerHead &&
-		((!gVrInVehicle && !androidgame::VrBodyIKEnabled() &&
+	gVrHidePlayerBody = gVrCameraInsidePlayerHead && !vehicleTransition &&
+		(!OculusVR::AreTrackedHandsEnabled() ||
+		 (!gVrInVehicle && !androidgame::VrBodyIKEnabled() &&
 		  !androidgame::VrKnockdownPresentationActive()) ||
 		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK));
 #else
