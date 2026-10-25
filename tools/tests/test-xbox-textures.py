@@ -13,6 +13,31 @@ spec.loader.exec_module(xbox)
 
 
 class XboxTextures(unittest.TestCase):
+    def test_gta3_vehicle_manifest_names(self):
+        # These GTA III names differ from the VC conversion pack aliases.
+        names = {'blista', 'fbicar', 'panlant', 'ghost'}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'source'
+            source.mkdir()
+            for name in names:
+                (source / f'{name}.dff').write_bytes(b'model fixture')
+            output = root / 'xbox'
+            xbox.build(source, output)
+            self.assertEqual(set((output / 'vehicle_models.txt').read_text().splitlines()), names)
+            self.assertFalse((output / 'ped_models.txt').exists())
+
+    def test_iii_archive_wrapper_selects_main_set(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            main = root / '[III] Fixed XBOX Vehicles v1.0/Fixed Xbox Vehicles/gta3.img'
+            main.mkdir(parents=True)
+            (main / 'police.txd').write_bytes(b'LCPD')
+            optional = main.parents[1] / 'cutscene_props_aircraft_2/Prop Vehicles'
+            optional.mkdir(parents=True)
+            (optional / 'police.txd').write_bytes(b'optional variant')
+            self.assertEqual(xbox.compatible_source_files(root), [main / 'police.txd'])
+
     def test_pack_variants_and_emergency_pairs(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -15,13 +15,15 @@ import urllib.request
 import uuid
 
 TOOLS = Path(__file__).resolve().parent
-BUILDER_VERSION = '0.7.1-xbox-lcv-1'
+BUILDER_VERSION = '0.7.2-xbox-lcv-1'
 
 
 def compatible_source_files(source):
     # This distributed pack also contains optional replacements. Do not flatten
     # them over the main set, or mix their geometry with unrelated dictionaries.
     main = source / 'Fixed Xbox Vehicles'
+    if not main.is_dir():
+        main = source / '[III] Fixed XBOX Vehicles v1.0' / 'Fixed Xbox Vehicles'
     if main.is_dir():
         source = main
     files = sorted((p for p in source.rglob('*') if p.suffix.lower() in ('.dff', '.txd')))
@@ -49,7 +51,8 @@ KNOWN_VEHICLES = {
     'rhino','barracks','train','chopper','dodo','coach','cabbie','stallion',
     'rumpo','rcbandit','bellyup','mrwongs','mafia','yardie','yakuza','diablos',
     'columb','hoods','airtrain','deaddodo','speeder','reefer','panlvant','flatbed',
-    'yankee','escape','borgnine','toyz'
+    'yankee','escape','borgnine','toyz',
+    'blista','fbicar','panlant','ghost'
 }
 KNOWN_WEAPONS = {
     'bat','colt45','uzi','shotgun','ak47','m16','sniper','rocket','flame',
@@ -218,7 +221,7 @@ def build(source, output, force=False, compressor=None):
         dff_stems = [f.stem.lower() for f in staged_files if f.suffix.lower() == '.dff']
         vehicles = [s for s in dff_stems if s in KNOWN_VEHICLES]
         weapons = [s for s in dff_stems if s in KNOWN_WEAPONS]
-        peds = [s for s in dff_stems if re.match(r'^(player|cop|swat|fbi|army|medic|fireman|male\d+|female\d+|asuka|salvatore|maria|donald|kenji|misty|ray|phil|catalina|miguel|eight|8ball|luigi|joey|chunky)', s)]
+        peds = [s for s in dff_stems if s not in vehicles and s not in weapons and re.match(r'^(player|cop|swat|fbi|army|medic|fireman|male\d+|female\d+|asuka|salvatore|maria|donald|kenji|misty|ray|phil|catalina|miguel|eight|8ball|luigi|joey|chunky)', s)]
         world = [s for s in dff_stems if s not in vehicles and s not in weapons and s not in peds]
 
         if vehicles:

@@ -84,6 +84,16 @@ opaque C888 textures ignore their unused alpha byte during compression.
 Older generated profiles must be rebuilt with the updated compressor. The
 preparation wizard rejects older builder versions instead of reusing them.
 
+For GTA III vehicles, use **[III] Fixed XBOX Vehicles v1.0** by MrFinger
+(`III_Fixed_XBOX_Vehicles_v1.0.zip`, ModDB addon 251417). Builder 0.7.2 accepts
+the archive's wrapper folder and selects its main `Fixed Xbox Vehicles` set;
+optional aircraft, cutscene and prop variants are excluded. This pack supplies
+GTA III emergency vehicle liveries, so the Vice City compatibility fallbacks
+above do not apply. Supply the archive with `-XboxArchive` / `--xbox-archive`.
+The current Windows automatic download still targets the older pack; select
+the GTA III archive explicitly when rebuilding. Replacing an existing valid
+profile requires a direct builder invocation with `-Force` / `--force`.
+
 ## Modern preparation limitations
 
 The old two-pack automatic Modern workflow is no longer implemented by the

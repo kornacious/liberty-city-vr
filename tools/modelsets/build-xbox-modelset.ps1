@@ -12,6 +12,9 @@ Set-StrictMode -Version 2.0
 
 $sourceRoot = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\', '/')
 $mainSource = Join-Path $sourceRoot 'Fixed Xbox Vehicles'
+if (-not (Test-Path -LiteralPath $mainSource -PathType Container)) {
+    $mainSource = Join-Path $sourceRoot '[III] Fixed XBOX Vehicles v1.0/Fixed Xbox Vehicles'
+}
 if (Test-Path -LiteralPath $mainSource -PathType Container) { $sourceRoot = $mainSource }
 $outRoot = [IO.Path]::GetFullPath($Out).TrimEnd('\', '/')
 
@@ -115,7 +118,8 @@ try {
         "rhino","barracks","train","chopper","dodo","coach","cabbie","stallion",
         "rumpo","rcbandit","bellyup","mrwongs","mafia","yardie","yakuza","diablos",
         "columb","hoods","airtrain","deaddodo","speeder","reefer","panlvant","flatbed",
-        "yankee","escape","borgnine","toyz"
+        "yankee","escape","borgnine","toyz",
+        "blista","fbicar","panlant","ghost"
     )
     $knownWeapons = @(
         "bat","colt45","uzi","shotgun","ak47","m16","sniper","rocket","flame",
@@ -170,6 +174,7 @@ try {
     $vehicles = @($dffModels | Where-Object { $knownVehicles -contains $_ })
     $weapons = @($dffModels | Where-Object { $knownWeapons -contains $_ })
     $peds = @($dffModels | Where-Object {
+        $vehicles -notcontains $_ -and $weapons -notcontains $_ -and
         $_ -match '^(player|cop|swat|fbi|army|medic|fireman|male\d+|female\d+|asuka|salvatore|maria|donald|kenji|misty|ray|phil|catalina|miguel|eight|8ball|luigi|joey|chunky|curly|orient|scum|prostitute|dockworker|tramp|criminal|bodyguard|construction|garbageman)'
     })
     $world = @($dffModels | Where-Object {
