@@ -5,8 +5,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $body = [IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/peds/VrBodyIK.cpp'))
 $parts = @()
-foreach ($name in @('ToBasisLocal','FromBasisLocal','AlignCrouchedSkeleton')) {
-    $match = [regex]::Match($body, ('(?ms)^static (?:CVector|void) ' + $name + '\(.*?^\}'))
+foreach ($name in @('ToBasisLocal','FromBasisLocal','BuildCrouchPoseBasis','AlignCrouchAxes','AlignCrouchedSkeleton')) {
+    $match = [regex]::Match($body, ('(?ms)^static (?:CVector|void|bool) ' + $name + '\(.*?^\}'))
     if (-not $match.Success) { throw "Missing production helper $name" }
     $parts += $match.Value
 }

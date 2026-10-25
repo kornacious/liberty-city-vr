@@ -423,23 +423,56 @@ static CMatrix ApplyCalibration(const CMatrix &raw, const WristCalibration &cal)
 	return out;
 }
 
-// Move the complete authored crouch into the same heading as the tracked
-// torso. Standing IK replaces the torso basis; crouching keeps the native
-// skeleton, whose heading can differ from the view by a quarter turn.
+// The authored pose can turn the pelvis relative to the entity matrix.
+// Measure anatomical right from the hips instead of assuming entity right
+// is also the skeleton's right (that assumption preserves a 90-degree twist).
+static bool BuildCrouchPoseBasis(const CVector &leftHip,
+	const CVector &rightHip, const CMatrix &visualBody, CMatrix &poseBody)
+{
+	CVector up = visualBody.GetUp();
+	if(up.MagnitudeSqr() <= 1.0e-8f)
+		return false;
+	up.Normalise();
+	CVector right = rightHip-leftHip;
+	right -= up*DotProduct(right, up);
+	if(right.MagnitudeSqr() <= 1.0e-8f)
+		return false;
+	right.Normalise();
+	poseBody = visualBody;
+	poseBody.GetRight() = right;
+	poseBody.GetUp() = up;
+	poseBody.GetForward() = CrossProduct(up, right);
+	return true;
+}
+
+static void AlignCrouchAxes(RwMatrix &frame,
+	const CMatrix &poseBody, const CMatrix &visualBody)
+{
+	frame.right = FromBasisLocal(ToBasisLocal(frame.right, poseBody), visualBody);
+	frame.up = FromBasisLocal(ToBasisLocal(frame.up, poseBody), visualBody);
+	frame.at = FromBasisLocal(ToBasisLocal(frame.at, poseBody), visualBody);
+}
+
 static void AlignCrouchedSkeleton(CPed *ped, RpHAnimHierarchy *hier,
 	RwMatrix *mats, const CMatrix &visualBody)
 {
 	if(!ped->bIsDucking)
 		return;
-	const CMatrix &nativeBody = ped->GetMatrix();
+	const int leftHip = RpHAnimIDGetIndex(hier, BONE_upperlegl);
+	const int rightHip = RpHAnimIDGetIndex(hier, BONE_upperlegr);
+	if(leftHip < 0 || rightHip < 0 ||
+	   leftHip >= hier->numNodes || rightHip >= hier->numNodes)
+		return;
+	CMatrix poseBody;
+	if(!BuildCrouchPoseBasis(mats[leftHip].pos, mats[rightHip].pos,
+	   visualBody, poseBody))
+		return;
 	const CVector root = visualBody.GetPosition();
 	for(int i = 0; i < hier->numNodes; i++){
 		RwMatrix &bone = mats[i];
 		bone.pos = root + FromBasisLocal(
-			ToBasisLocal(CVector(bone.pos)-root, nativeBody), visualBody);
-		bone.right = FromBasisLocal(ToBasisLocal(bone.right, nativeBody), visualBody);
-		bone.up = FromBasisLocal(ToBasisLocal(bone.up, nativeBody), visualBody);
-		bone.at = FromBasisLocal(ToBasisLocal(bone.at, nativeBody), visualBody);
+			ToBasisLocal(CVector(bone.pos)-root, poseBody), visualBody);
+		AlignCrouchAxes(bone, poseBody, visualBody);
 	}
 }
 
@@ -1620,10 +1653,17 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame){
 			if(ped->bIsDucking){
-				RwMatrix *root = RwFrameGetMatrix(clumpFrame);
-				root->right = visualBody.GetRight();
-				root->up = visualBody.GetForward();
-				root->at = visualBody.GetUp();
+				RwFrame *leftHip = ped->m_pFrames[PED_UPPERLEGL] ?
+					ped->m_pFrames[PED_UPPERLEGL]->frame : nil;
+				RwFrame *rightHip = ped->m_pFrames[PED_UPPERLEGR] ?
+					ped->m_pFrames[PED_UPPERLEGR]->frame : nil;
+				CMatrix poseBody;
+				if(leftHip && rightHip && BuildCrouchPoseBasis(
+				   RwFrameGetLTM(leftHip)->pos, RwFrameGetLTM(rightHip)->pos,
+				   visualBody, poseBody)){
+					RwMatrix *root = RwFrameGetMatrix(clumpFrame);
+					AlignCrouchAxes(*root, poseBody, visualBody);
+				}
 			}
 			RwFrameGetMatrix(clumpFrame)->pos = nativeRoot + follow;
 			RwFrameUpdateObjects(clumpFrame);

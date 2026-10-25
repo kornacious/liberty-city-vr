@@ -17,6 +17,9 @@ struct CMatrix {
     const CVector &GetUp()const{return u;}
     const CVector &GetForward()const{return f;}
     const CVector &GetPosition()const{return p;}
+    CVector &GetRight(){return r;}
+    CVector &GetUp(){return u;}
+    CVector &GetForward(){return f;}
 };
 struct CPed {
     bool bIsDucking=false; CMatrix body;
@@ -37,7 +40,9 @@ struct CPad {
     int GetPedWalkUpDown(){return y;}
 };
 struct RwMatrix { CVector pos,right,up,at; };
+enum { BONE_upperlegl, BONE_upperlegr };
 struct RpHAnimHierarchy { int numNodes; };
+int RpHAnimIDGetIndex(RpHAnimHierarchy *,int tag){return tag;}
 #include "../../overlay/src/peds/QuestCrouch.h"
 #include "quest-crouch-production.inc"
 static int checks;
@@ -63,13 +68,35 @@ int main(){
     pad={};pad.press=true;pad.x=1;ProcessQuestCrouch(&player,&pad);Check(!player.bIsDucking,"movement wins simultaneous crouch press");
     pad={};pad.press=true;player.vehicle=true;ProcessQuestCrouch(&player,&pad);Check(!player.bIsDucking,"no vehicle crouch");player.vehicle=false;
     CMatrix visual;visual.r={0,1,0};visual.f={-1,0,0};visual.p={3,4,5};
-    RwMatrix bones[2]={{visual.p+CVector(1,0,-0.6f),{1,0,0},{0,1,0},{0,0,1}},
-                       {visual.p+CVector(0,1,0.2f),{1,0,0},{0,0,1},{0,-1,0}}};
+    RwMatrix bones[2]={{visual.p+CVector(-0.1f,0,-0.6f),{1,0,0},{0,1,0},{0,0,1}},
+                       {visual.p+CVector(0.1f,0,-0.6f),{1,0,0},{0,0,1},{0,-1,0}}};
     RpHAnimHierarchy hierarchy{2};
     AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);Near(bones[0].right,{1,0,0},"standing skeleton remains untouched");
     player.bIsDucking=true;AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);
-    Near(bones[0].pos,visual.p+CVector(0,1,-0.6f),"legs follow view yaw around translated root and retain crouch height");
-    Near(bones[1].pos,visual.p+CVector(-1,0,0.2f),"torso follows same yaw as legs");
+    Near(bones[0].pos,visual.p+CVector(0,-0.1f,-0.6f),"legs follow view yaw around translated root and retain crouch height");
+    Near(bones[1].pos,visual.p+CVector(0,0.1f,-0.6f),"both hips follow the same heading");
     Near(bones[0].right,visual.r,"leg basis follows visual body");Near(bones[1].up,{0,0,1},"authored crouch pitch is preserved");
+    // Exercise an authored pelvis yaw independent of the entity matrix.
+    // The original entity-to-view transform fails every quarter-turn case.
+    for(int view=0;view<8;view++)for(int pose=0;pose<8;pose++){
+        const float v=view*0.785398163f,a=pose*0.785398163f;
+        visual.r={std::cos(v),std::sin(v),0};visual.f={-std::sin(v),std::cos(v),0};
+        const CVector hipRight{std::cos(a),std::sin(a),0};
+        const CVector hipForward{-std::sin(a),std::cos(a),0};
+        bones[0]={visual.p-hipRight*0.15f+CVector(0,0,-0.3f),hipRight,hipForward,{0,0,1}};
+        bones[1]={visual.p+hipRight*0.15f+CVector(0,0,-0.3f),hipRight,hipForward,{0,0,1}};
+        CMatrix measured;
+        Check(BuildCrouchPoseBasis(bones[0].pos,bones[1].pos,visual,measured),"hip heading resolves");
+        RwMatrix clumpRoot{{},player.body.r,player.body.f,player.body.u};
+        AlignCrouchAxes(clumpRoot,measured,visual);
+        // Non-skinned animation keeps its authored pose below the root.
+        Near(clumpRoot.right*hipRight.x+clumpRoot.up*hipRight.y,visual.r,"non-skinned authored hip span aligns with torso");
+        AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);
+        Near(bones[1].pos-bones[0].pos,visual.r*0.3f,"skinned hip span aligns with torso despite authored root yaw");
+        Near(bones[0].up,visual.f,"authored forward follows torso heading");
+        Near(bones[0].at,visual.u,"crouch vertical axis is preserved");
+    }
+    CMatrix invalid;
+    Check(!BuildCrouchPoseBasis({0,0,0},{0,0,1},visual,invalid),"degenerate hip span is rejected");
     std::printf("Quest crouch: %d checks passed\n",checks);
 }

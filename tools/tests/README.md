@@ -316,6 +316,9 @@ a physical weapon drop or synthetic trigger-release action.
 alignment helper. It checks repeated toggles, immediate re-entry, all movement
 directions, jumping and airborne recovery, simultaneous input priority, and
 whole-skeleton yaw alignment while retaining the authored crouch height/pitch.
+The heading cases vary pelvis yaw independently of the entity and view across
+64 combinations, including the authored quarter-turn, for skinned bone matrices
+and non-skinned clump axes. Degenerate hip geometry is rejected.
 
 `test-minimal-profiler.cpp` checks the production head-space panel fit against
 both eyes' four frustum planes, including asymmetric FOVs, eye offsets, canted
