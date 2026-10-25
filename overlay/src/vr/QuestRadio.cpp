@@ -70,6 +70,7 @@ CVehicle *Vehicle() {
     return v && v->pDriver==FindPlayerPed() && (v->IsCar() || v->IsBoat()) && !v->IsRealHeli() && !v->IsRealPlane()?v:nil;
 }
 void Load() {
+    VehiclePlacement::runtime(); // Service live packs even when the player is on foot.
     if(!loaded) {
         personal=std::string(platform::gameDataRoot())+"/radio_board.ini";
         defaults=std::string(platform::storageRoot())+"/radio_board_defaults.ini";
@@ -113,7 +114,7 @@ void SavePlacement(bool own=true) {
             else entry.erase(packKeys[i]);
         }
         std::string error;
-        if(!next.save("vehicle_placements.personal.ini",error)) { snprintf(notice,sizeof(notice),"SAVE FAILED"); return; }
+        if(!next.save(VehiclePlacement::personalPath(),error)) { snprintf(notice,sizeof(notice),"SAVE FAILED"); return; }
         store.personal=next;
         if(own) { edit=false; snprintf(notice,sizeof(notice),"PLACEMENT SAVED"); return; }
     }
@@ -139,14 +140,15 @@ bool BuildPlane(Plane &p) {
     auto info=(CVehicleModelInfo*)CModelInfo::GetModelInfo(v->GetModelIndex()); if(!info) return false;
     CVector seat=info->GetFrontSeatPosn();
     Placement place=edit?draft:Resolved();
+    float values[]={place.v[0]*.1f,place.v[1]*.1f,place.v[2]*.1f,(float)place.v[3],(float)place.v[4],(float)-place.v[5],(float)place.v[6]};
+    if(!edit) for(int i=0;i<7;i++)values[i]=VehiclePlacement::runtime().value(PlacementSet(),modelId,packKeys[i],values[i]);
     auto b=VehiclePlacement::radio(VehiclePlacement::Vec(seat.x,seat.y,seat.z),v->IsBoat(),
-        VehiclePlacement::Vec(place.v[0]*.1f,place.v[1]*.1f,place.v[2]*.1f),
-        VehiclePlacement::Vec(place.v[3],place.v[4],-place.v[5]));
+        VehiclePlacement::Vec(values[0],values[1],values[2]),VehiclePlacement::Vec(values[3],values[4],values[5]));
     p.origin=v->GetPosition()+Multiply3x3(v->GetMatrix(),CVector(b.position.x,b.position.y,b.position.z));
     p.right=Multiply3x3(v->GetMatrix(),CVector(b.right.x,b.right.y,b.right.z));
     p.up=Multiply3x3(v->GetMatrix(),CVector(b.up.x,b.up.y,b.up.z));
     p.normal=Multiply3x3(v->GetMatrix(),CVector(-b.forward.x,-b.forward.y,-b.forward.z));
-    p.width=.40f*place.v[6]/100.f; return true;
+    p.width=.40f*values[6]/100.f; return true;
 }
 void Station(int direction) {
     CVehicle *v=Vehicle(); if(!v || MusicManager.UsesPoliceRadio(v)) return;

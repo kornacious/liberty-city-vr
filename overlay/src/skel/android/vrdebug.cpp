@@ -3294,7 +3294,7 @@ VrDebugUpdate(const PadInput &in)
 					VehiclePlacement::Store &s=VehiclePlacement::runtime();VehiclePlacement::Pack next=s.personal;
 					auto &entry=next.entries[VehiclePlacement::section(set,model)];
 					const char *keys[]={"X","Y","Z","Pitch","Yaw","Roll","Size"};for(auto key:keys)entry.erase(prefix+key);
-					std::string error;if(next.save("vehicle_placements.personal.ini",error))s.personal=next;
+					std::string error;if(next.save(VehiclePlacement::personalPath(),error))s.personal=next;
 					placementHandled=true;break;}
 				}
 				if(suffix){std::string key=prefix+suffix;float lo,hi;VehiclePlacement::limits(key,lo,hi);

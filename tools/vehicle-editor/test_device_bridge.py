@@ -113,6 +113,29 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(backups, [b.EMPTY.encode()])
         self.assertFalse(any(k.endswith('.upload') for k in d.files))
 
+    def test_live_install_and_acknowledgement(self):
+        d = self.device()
+        d.running = True
+        text = b.serialize({'xbox:106': {'RadioRoll': 61.64}})
+        d.install(b.FILES['personal'], text, b.EMPTY.encode(), live=True)
+        self.assertEqual(d.files[b.FILES['personal']], text.encode())
+        read = d.read
+        def status(name):
+            if name == 'vehicle_placements.live.ini':
+                nonce = d.files.get('vehicle_placements.reload', b'').decode()
+                return f'[LivePlacement]\nVersion=1\nRequest={nonce}\npersonal={b.content_hash(text.encode())}\n'.encode()
+            return read(name)
+        d.read = status
+        self.assertTrue(d.acknowledge('personal', text))
+        d.running = False
+        self.assertFalse(d.acknowledge('personal', text))
+
+    def test_missing_live_acknowledgement_is_failure(self):
+        d = self.device(); d.running = True
+        with patch.object(b.time, 'monotonic', side_effect=[0, 11]):
+            with self.assertRaises(b.BridgeError):
+                d.acknowledge('personal', b.EMPTY)
+
     def test_failed_upload_preserves_destination(self):
         d = self.device()
         d.corrupt = True

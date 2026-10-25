@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
 
 ROOT = '/sdcard/Android/data/com.libertyvr.quest/files/gamedata'
 PACKAGE = 'com.libertyvr.quest'
@@ -141,10 +143,15 @@ class Device:
             raise BridgeError('Device operation failed; existing game data was preserved')
         return p
 
-    def stopped(self):
+    def is_running(self):
         # pidof's nonzero status alone could mean a shell/transport failure.
         p = self.run('shell', f'if pidof {PACKAGE} >/dev/null; then echo RUNNING; else echo STOPPED; fi')
-        if p.stdout.strip() != b'STOPPED':
+        if p.stdout.strip() not in (b'STOPPED', b'RUNNING'):
+            raise BridgeError('Cannot determine game state')
+        return p.stdout.strip() == b'RUNNING'
+
+    def stopped(self):
+        if self.is_running():
             raise BridgeError('Close Liberty City VR on the headset before transfer')
 
     def read(self, name):
@@ -161,8 +168,9 @@ class Device:
                 raise BridgeError('Device configuration exceeds limits')
             return local.read_bytes()
 
-    def install(self, name, text, expected):
-        self.stopped()
+    def install(self, name, text, expected, live=False):
+        if not live:
+            self.stopped()
         if self.read(name) != expected:
             raise BridgeError('Destination changed during preview; import and preview again')
         tmp_name = name + '.upload'
@@ -174,7 +182,8 @@ class Device:
                 self.run('push', str(local), f'{ROOT}/{tmp_name}')
                 if self.read(tmp_name) != content:
                     raise BridgeError('Upload verification failed; destination preserved')
-            self.stopped()
+            if not live:
+                self.stopped()
             if self.read(name) != expected:
                 raise BridgeError('Destination changed during upload; import again')
             stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
@@ -187,6 +196,37 @@ class Device:
             self.run('shell', f'rm -f {ROOT}/{tmp_name}', check=False)
 
 
+    def acknowledge(self, kind, text):
+        if not self.is_running():
+            return False
+        nonce = uuid.uuid4().hex
+        with tempfile.TemporaryDirectory(prefix='lcvr-reload-') as folder:
+            local = Path(folder) / 'request.txt'
+            local.write_text(nonce, encoding='ascii')
+            self.run('push', str(local), f'{ROOT}/vehicle_placements.reload')
+        expected = str(content_hash(text.encode('utf-8')))
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            raw = self.read('vehicle_placements.live.ini')
+            if raw:
+                try:
+                    status = configparser.ConfigParser()
+                    status.read_string(raw.decode('ascii'))
+                    if status.get('LivePlacement', 'Version', fallback='') == '1' and status.get('LivePlacement', 'Request', fallback='') == nonce and status.get('LivePlacement', kind, fallback='') == expected:
+                        return True
+                except (UnicodeError, configparser.Error):
+                    pass
+            time.sleep(.15)
+        raise BridgeError('Pack installed, but the running game did not acknowledge it. Update the APK or resume the game; live sync has stopped.')
+
+
+def content_hash(data):
+    value = 14695981039346656037
+    for byte in data:
+        value = ((value ^ byte) * 1099511628211) & ((1 << 64) - 1)
+    return value
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('action', choices=['status', 'import', 'preview', 'deploy', 'restore'])
@@ -197,6 +237,7 @@ def main(argv=None):
     p.add_argument('--pack', type=Path)
     p.add_argument('--sections', default='')
     p.add_argument('--prefer', choices=['local', 'remote'])
+    p.add_argument('--live', action='store_true', help='Allow atomic deployment while the updated game runs and verify reload acknowledgement')
     p.add_argument('--backup', help='Exact configuration backup filename returned by deployment')
     a = p.parse_args(argv)
     try:
@@ -204,9 +245,9 @@ def main(argv=None):
         if a.action == 'status':
             print(f'personal Quest 3 device: authorized and responsive; eligible headsets: {d.count}')
             return 0
-        d.stopped()
         baseline = a.workspace / '.device-baseline'
         if a.action == 'restore':
+            d.stopped()
             name = FILES[a.kind]
             if not a.backup or not re.fullmatch(re.escape(name) + r'\.backup-[0-9]{8}T[0-9]{12}Z', a.backup):
                 raise BridgeError('Choose a valid backup filename for this placement layer')
@@ -264,10 +305,20 @@ def main(argv=None):
                 before, after = remote.get(s, {}).get(k), merged.get(s, {}).get(k)
                 if before != after:
                     print(f'{s}/{k}: {before} -> {after}')
+        if a.kind == 'template':
+            personal_raw = d.read(FILES['personal'])
+            personal = parse(personal_raw.decode('utf-8-sig')) if personal_raw else {}
+            masked = [f'{s}/{k}' for s in sections for k in merged.get(s, {}) if k in personal.get(s, {})]
+            if masked:
+                print('Personal overrides mask template fields: ' + ', '.join(masked))
         if a.action == 'deploy':
-            backup = d.install(name, text, raw)
+            backup = d.install(name, text, raw, live=a.live)
             (baseline / name).write_text(text, encoding='utf-8')
-            print('Installed on personal Quest 3 device with backup and verified upload. Restart the game to apply.')
+            if a.live and d.acknowledge(a.kind, text):
+                print('Live reload acknowledged by the running game.')
+            else:
+                print('The installed pack will load when the game starts.')
+            print('Installed on personal Quest 3 device with backup and verified upload. Transfer complete.')
             if backup:
                 print('Previous configuration backup: ' + backup)
         return 0

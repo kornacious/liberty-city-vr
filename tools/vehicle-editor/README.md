@@ -51,8 +51,10 @@ personal settings. Never put original game files in this workspace or a release.
 2. Select Classic, Modern or Xbox and search the catalogue. Missing modelsets and
    unsupported vehicle types remain visible. The source label identifies actual
    geometry/texture sources, including Classic fallback.
-3. Choose personal overrides or template/release defaults. Template editing
-   previews that layer without personal overrides masking it. Field labels show
+3. Choose personal overrides or template/release defaults. Template fields show the authored layer. **Preview effective game values**
+   includes higher-priority personal overrides in the viewport. A warning and an
+   explicit clear-personal action identify masked templates; turn effective preview
+   off to author a template independently (gizmos are disabled while masked). Field labels show
    their source; Reset removes the active layer's field and reveals the layer below.
 4. Select the wheel, dashboard group, an individual HUD panel or the radio/music player. Sliders, numeric
    entry and move/rotation gizmos update the 3D preview. Size is uniform; wheel
@@ -174,7 +176,7 @@ templates, personal settings, game data and saves remain separate.
 
 ## Device import and deployment
 
-Connect an authorized Quest 3 and close Liberty City VR. **Import** reads the
+Connect an authorized Quest 3. Import and deployment can run while the updated game is running. **Import** reads the
 three placement layers plus legacy `vr_settings.ini` and saves a local baseline.
 Existing workspace files get `.before-import` backups. Import does not copy game
 assets or saves. If multiple eligible headsets exist, choose an index from the
@@ -186,10 +188,14 @@ baseline, preserving unrelated device edits. Conflicts list modelset/model/field
 names; select local or remote resolution explicitly if needed. Reset fields are
 merged as deletions. A missing import baseline blocks transfer.
 
-The helper refuses a running game, uploads to a temporary path, reads back and
+The helper uploads to a temporary path, reads back and
 compares bytes, rechecks the destination, makes a timestamped device backup, then
-renames the verified upload. Failed uploads retain existing settings. Restart the
-game afterward. No APK uninstall, data erasure or automatic game-asset transfer
+renames the verified upload. Failed uploads retain existing settings. The updated game polls validated packs every 250 ms. A nonce and content hash
+acknowledgement confirm that the running game loaded the uploaded file. If the
+headset is paused/asleep or the APK is old, the helper reports a missing
+acknowledgement instead of claiming live success. Closed games load the pack at
+startup. Direct CLI transfers require `--live` to allow a running game; restoration
+still requires closing the game. No APK uninstall, data erasure or automatic game-asset transfer
 is performed. Offline Save always remains available.
 
 The helper is also usable directly; run `python device_bridge.py --help`.
@@ -213,3 +219,23 @@ GALLIUM_DRIVER=llvmpipe` enables a software graphics smoke test.
 Desktop rendering does not reproduce the Quest's lighting or stereo optics.
 Modern geometry requires a locally installed compatible overlay to validate.
 No assets, headset images or settings are included in automated test fixtures.
+
+### Live synchronization and template masking
+
+After importing, enable **Live sync current entry to headset**. Edits are saved
+and sent for the current vehicle/modelset and edit layer after a 700 ms pause;
+this excludes other ticked entries. Editing remains available during transfer.
+A conflict or missing acknowledgement disables live sync and shows the error.
+Live sync is intentionally re-enabled per session rather than remembered.
+
+Personal overrides always outrank templates. For example, a personal RadioRoll
+of -90 continues to win over a template RadioRoll of 61.64. The effective game
+preview shows this result, while template fields continue to show their authoring
+values. **Clear personal overrides and edit personal layer** removes that entry's
+personal fields locally; installing that personal layer (or live sync) deploys the
+reset and reveals the template. Other entries remain untouched. Existing personal
+settings are never silently erased by a template deployment.
+
+The game retains the last good generation for malformed updates; removing a pack
+reveals lower layers. Radio preview and rendering use shared float transforms;
+legacy radio menu values retain their millimetre/integer-degree controls.

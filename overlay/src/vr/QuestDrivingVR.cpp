@@ -207,6 +207,7 @@ static HandleCalibration
 	gCarCalibration[VR_CAR_MODEL_COUNT][VR_HAND_COUNT];
 static VehicleViewCalibration
 	gVehicleViewCalibration[VR_CAR_MODEL_COUNT];
+static VehicleViewCalibration gLegacyVehicleViewCalibration[VR_CAR_MODEL_COUNT];
 static VehicleCategoryCalibration
 	gVehicleCategoryCalibration[VR_VEHICLE_CATEGORY_COUNT];
 enum eDefaultVehicleViewType
@@ -984,6 +985,7 @@ GetViewCalibration(int model)
 	VehicleViewCalibration &calibration =
 		gVehicleViewCalibration[model-MI_FIRST_VEHICLE];
 	if(calibration.valid){
+        calibration=gLegacyVehicleViewCalibration[model-MI_FIRST_VEHICLE];
 		RefreshViewPlacement(model,calibration);
 		return &calibration;
 	}
@@ -1023,8 +1025,9 @@ GetViewCalibration(int model)
 		 VR_CAR_WHEEL_MAX_ROTATION_HALF_DEG);
 	calibration.carWheelVisibilityOverride = ReadViewValue(model,
 		"VirtualWheelVisibility", defaults.carWheelVisibilityOverride) == 0 ? 0 : -1;
-	RefreshViewPlacement(model,calibration);
 	calibration.valid = true;
+    gLegacyVehicleViewCalibration[model-MI_FIRST_VEHICLE]=calibration;
+	RefreshViewPlacement(model,calibration);
 	return &calibration;
 }
 

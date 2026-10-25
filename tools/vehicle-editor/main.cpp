@@ -48,7 +48,9 @@ static char pythonPath[1024] = "python3";
 static char importPath[1024] = "";
 static std::string message, fingerprintNow;
 static std::string deviceOutput;
-static bool showDeviceOutput = false;
+static bool showDeviceOutput = false, effectivePreview = true, liveSync = false, taskIsLive = false;
+static std::string liveObserved, liveSent, liveStatus = "Disabled";
+static auto liveChangedAt = std::chrono::steady_clock::now();
 static std::map<std::string, std::string> reviews;
 static std::set<std::string> staleReviews;
 static std::set<std::string> selection;
@@ -77,6 +79,7 @@ static Preferences capturePreferences() {
             if (!error)
                 p.paths[key] = path.lexically_normal().string();
         }
+    p.set("EffectivePreview", effectivePreview);
     p.set("AutoResetCamera", autoResetCamera);
     p.set("Orbit", orbit);
     p.set("VSync", vsync);
@@ -113,6 +116,7 @@ static void applyPreferences(const Preferences &p) {
         std::snprintf(pythonPath, sizeof(pythonPath), "%s", p.paths.at("Python").c_str());
     if (!p.paths.at("ADB").empty())
         std::snprintf(adbPath, sizeof(adbPath), "%s", p.paths.at("ADB").c_str());
+    effectivePreview = (bool)p.get("EffectivePreview");
     autoResetCamera = (bool)p.get("AutoResetCamera");
     orbit = (bool)p.get("Orbit");
     vsync = (bool)p.get("VSync");
@@ -248,14 +252,14 @@ static rw::Frame *findFrame(rw::Frame *f, const std::string &name) {
     }
     return nullptr;
 }
-static Values values() {
+static Values values(bool gamePreview = false) {
     if (selected < 0)
         return {};
     auto &v = assets.vehicles[selected];
     auto result = legacy.resolve(set, v);
     radioLegacy.radio(v.id, result, radioDefaults);
     auto name = section(set, v.id);
-    if (!layer)
+    if (!layer || (gamePreview && effectivePreview))
         result = VehiclePlacement::resolve(store, set, v.id, result);
     // Template authoring previews the template without personal overrides.
     else
@@ -265,7 +269,8 @@ static Values values() {
                 f.second = value;
         }
     float linked;
-    bool explicitAnchor = (!layer && store.personal.get(name, "DashFollowWheel", linked)) ||
+    bool explicitAnchor = ((!layer || (gamePreview && effectivePreview)) &&
+                           store.personal.get(name, "DashFollowWheel", linked)) ||
                           store.templates.get(name, "DashFollowWheel", linked) ||
                           store.bundled.get(name, "DashFollowWheel", linked);
     if (!explicitAnchor && legacy.entries.empty()) {
@@ -313,7 +318,7 @@ static void driver() {
     if (selected < 0)
         return;
     auto &v = assets.vehicles[selected];
-    auto p = values();
+    auto p = values(true);
     eye = seat;
     if (!v.boat())
         eye.x = -eye.x;
@@ -671,7 +676,7 @@ static void renderPlacement() {
     auto &car = assets.vehicles[selected];
     if (!car.supported())
         return;
-    auto v = values();
+    auto v = values(true);
     Basis w = wheel(seat, car.boat(), v);
     rw::SetRenderState(rw::ZTESTENABLE, 1);
     rw::SetRenderState(rw::ZWRITEENABLE, 0);
@@ -781,7 +786,7 @@ static void transformFields(const std::string &prefix, Values &v, bool size) {
     if (size)
         editField((prefix + "Size").c_str(), "Size %", v);
 }
-static void device(const std::string &action) {
+static void device(const std::string &action, bool automatic = false) {
     if (deviceTask.valid()) {
         message = "A device operation is already running.";
         return;
@@ -807,7 +812,7 @@ static void device(const std::string &action) {
                         (layer ? "vehicle_placements.template.ini" : "vehicle_placements.personal.ini"))
                            .string());
         std::string sections;
-        for (auto &s : selection) {
+        for (auto &s : (automatic ? std::set<std::string>() : selection)) {
             if (!sections.empty())
                 sections += ",";
             sections += s;
@@ -825,11 +830,19 @@ static void device(const std::string &action) {
             args.push_back(conflictPreference == 1 ? "local" : "remote");
         }
     }
+    if (action == "deploy")
+        args.push_back("--live");
+    taskIsLive = automatic;
+    if (automatic)
+        liveStatus = "Uploading current entry...";
     message = "Local device operation running...";
     deviceTask =
         std::async(std::launch::async, [args, action] { return action + "\n" + editor::process(args); });
 }
 static void gizmo() {
+    if (layer && effectivePreview && store.personal.entries.count(currentSection()) &&
+        !store.personal.entries.at(currentSection()).empty())
+        return;
     if (selected < 0 || !clump || fingerprintNow.empty() || !assets.available[set] ||
         !assets.vehicles[selected].supported())
         return;
@@ -906,7 +919,17 @@ static void ui() {
         if (result.find("import\nImported") == 0)
             openWorkspace();
         deviceOutput = result;
-        showDeviceOutput = true;
+        if (taskIsLive) {
+            bool success = result.find("Transfer complete.") != std::string::npos;
+            liveStatus = success ? (result.find("Live reload acknowledged") != std::string::npos
+                                        ? "Live reload acknowledged by game."
+                                        : "Pack saved; game is closed.")
+                                 : "Stopped; see transfer error.";
+            if (!success)
+                liveSync = false;
+        }
+        showDeviceOutput = !taskIsLive || !liveSync;
+        taskIsLive = false;
         message = "Device helper finished. See the transfer preview for changes or errors.";
     }
     ImGui::SetNextWindowPos(ImVec2(8, 8), ImGuiCond_Once);
@@ -1097,6 +1120,21 @@ static void ui() {
     ImGui::Begin("Placement");
     if (selected >= 0 && clump && !fingerprintNow.empty() && assets.available[set] &&
         assets.vehicles[selected].supported()) {
+        if (layer && store.personal.entries.count(currentSection()) &&
+            !store.personal.entries.at(currentSection()).empty()) {
+            ImGui::TextWrapped(
+                "Personal overrides take priority over this template in the game. The effective preview "
+                "includes them; template fields below show the authored layer.");
+            if (ImGui::Button("Clear personal overrides and edit personal layer")) {
+                history.clear();
+                layer = 0;
+                editing = &store.personal;
+                remember();
+                editing->entries.erase(currentSection());
+                reviews.erase(currentSection());
+            }
+        }
+        ImGui::Checkbox("Preview effective game values", &effectivePreview);
         auto v = values();
         const char *elements[] = {"Virtual wheel", "Dashboard group",     "Map", "Status", "Clock",
                                   "Ammo",          "Radio / music player"};
@@ -1236,8 +1274,8 @@ static void ui() {
     if (ImGui::Button(layer ? "Install template" : "Install personal overrides"))
         ImGui::OpenPopup("Install placement pack?");
     if (ImGui::BeginPopupModal("Install placement pack?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("The destination is reread, merged and backed up. Close the game first. "
-                           "Restart after transfer.");
+        ImGui::TextWrapped("The destination is reread, merged and backed up. The updated game reloads "
+                           "the pack live; acknowledgement is checked while it runs.");
         if (ImGui::Button("Install selected entries")) {
             device("deploy");
             ImGui::CloseCurrentPopup();
@@ -1247,10 +1285,36 @@ static void ui() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+    if (ImGui::Checkbox("Live sync current entry to headset", &liveSync)) {
+        liveObserved.clear();
+        liveSent.clear();
+        liveStatus = liveSync ? "Waiting to synchronize current entry..." : "Disabled";
+    }
+    ImGui::TextWrapped("Live sync: %s", liveStatus.c_str());
+    ImGui::TextWrapped("Import first. Live sync saves and deploys the current entry/layer after a short "
+                       "pause. Conflicts or missing game acknowledgement stop synchronization.");
+    if (liveSync && selected >= 0 && clump && assets.available[set] &&
+        assets.vehicles[selected].supported()) {
+        std::string signature = std::to_string(layer) + currentSection() + editing->text();
+        auto now = std::chrono::steady_clock::now();
+        if (signature != liveObserved) {
+            liveObserved = signature;
+            liveChangedAt = now;
+        }
+        if (!deviceTask.valid() && signature != liveSent &&
+            now - liveChangedAt > std::chrono::milliseconds(700)) {
+            liveSent = signature;
+            device("deploy", true);
+            if (!deviceTask.valid()) {
+                liveSync = false;
+                liveStatus = "Stopped: " + message;
+            }
+        }
+    }
     ImGui::TextWrapped("Save exports the selected layer in the workspace. Deployment requires Python 3 "
                        "and ADB. Only configuration files are transferred.");
     ImGui::End();
-    if (deviceTask.valid())
+    if (deviceTask.valid() && !taskIsLive)
         ImGui::OpenPopup("Device operation");
     if (ImGui::BeginPopupModal("Device operation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (!deviceTask.valid())

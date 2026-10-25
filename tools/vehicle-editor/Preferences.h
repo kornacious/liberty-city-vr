@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -15,7 +16,8 @@ struct Preferences {
     };
     std::map<std::string, std::string> paths = {
         {"GameFolder", ""}, {"WorkspaceFolder", ""}, {"Python", ""}, {"ADB", ""}};
-    std::map<std::string, Number> numbers = {{"AutoResetCamera", {0, 0, 1, true}},
+    std::map<std::string, Number> numbers = {{"EffectivePreview", {1, 0, 1, true}},
+                                             {"AutoResetCamera", {0, 0, 1, true}},
                                              {"Orbit", {0, 0, 1, true}},
                                              {"VSync", {1, 0, 1, true}},
                                              {"FPSLimit", {0, 0, 1000, true}},
@@ -44,7 +46,8 @@ struct Preferences {
         return numbers.at(key).value;
     }
     void set(const std::string &key, float value) {
-        numbers.at(key).value = value;
+        auto &n = numbers.at(key);
+        n.value = std::max(n.low, std::min(n.high, value));
     }
     static std::string trim(const std::string &s) {
         auto first = s.find_first_not_of(" \t\r\n");

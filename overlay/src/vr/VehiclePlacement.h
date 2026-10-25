@@ -1,7 +1,10 @@
 #pragma once
 // Shared by the standalone editor and Quest. No RenderWare, Android or XR types.
 #include <algorithm>
+#include <cerrno>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -10,6 +13,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <sys/stat.h>
 
 namespace VehiclePlacement {
 struct Vec {
@@ -291,21 +295,117 @@ struct Store {
         personal.load(root + "/vehicle_placements.personal.ini", error);
     }
 };
-inline Store &runtime() {
-    static Store s;
-    static bool loaded = false;
-    if (!loaded) {
-        loaded = true;
-        s.load(".");
+// Poll only completed, validated files. Malformed updates retain the last good
+// generation; removed packs reveal the layer beneath them.
+inline uint64_t contentHash(const std::string &text) {
+    uint64_t hash = 14695981039346656037ull;
+    for (unsigned char c : text) {
+        hash ^= c;
+        hash *= 1099511628211ull;
     }
-    return s;
+    return hash;
+}
+struct LiveStore {
+    Store store;
+    std::string root = ".", acknowledged;
+    uint64_t revision = 0;
+    std::string hashes[3];
+    std::chrono::steady_clock::time_point lastPoll{};
+    bool poll(bool force = false) {
+        auto now = std::chrono::steady_clock::now();
+        if (!force && now - lastPoll < std::chrono::milliseconds(250))
+            return false;
+        lastPoll = now;
+        const char *names[] = {"bundled", "template", "personal"};
+        Pack incoming[3];
+        std::string nextHash[3];
+        for (int i = 0; i < 3; i++) {
+            std::string path = root + "/vehicle_placements." + names[i] + ".ini", raw, error;
+            struct stat info;
+            if (stat(path.c_str(), &info) != 0) {
+                if (errno != ENOENT)
+                    return false;
+            } else {
+                if (info.st_size > 4 * 1024 * 1024)
+                    return false;
+                std::ifstream file(path, std::ios::binary);
+                if (!file)
+                    return false;
+                std::ostringstream bytes;
+                bytes << file.rdbuf();
+                if (file.bad())
+                    return false;
+                raw = bytes.str();
+                std::istringstream input(raw);
+                if (!incoming[i].parse(input, error))
+                    return false;
+            }
+            nextHash[i] = std::to_string(contentHash(raw));
+        }
+        bool changed = store.bundled.text() != incoming[0].text() ||
+                       store.templates.text() != incoming[1].text() ||
+                       store.personal.text() != incoming[2].text();
+        if (changed) {
+            store.bundled = incoming[0];
+            store.templates = incoming[1];
+            store.personal = incoming[2];
+            ++revision;
+        }
+        std::string request;
+        {
+            std::ifstream file(root + "/vehicle_placements.reload");
+            std::getline(file, request);
+        }
+        if (request.size() != 32 || request.find_first_not_of("0123456789abcdef") != request.npos)
+            request.clear();
+        bool acknowledge = request != acknowledged;
+        for (int i = 0; i < 3; i++)
+            acknowledge = acknowledge || hashes[i] != nextHash[i];
+        if (acknowledge) {
+            const std::string path = root + "/vehicle_placements.live.ini", temp = path + ".tmp";
+            std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+            out << "[LivePlacement]\nVersion=1\nRequest=" << request << "\n";
+            for (int i = 0; i < 3; i++)
+                out << names[i] << "=" << nextHash[i] << "\n";
+            out.close();
+            if (out) {
+#ifdef _WIN32
+                std::remove(path.c_str());
+#endif
+                if (std::rename(temp.c_str(), path.c_str()) == 0) {
+                    acknowledged = request;
+                    for (int i = 0; i < 3; i++)
+                        hashes[i] = nextHash[i];
+                }
+            }
+        }
+        return changed;
+    }
+};
+inline LiveStore &liveRuntime() {
+    static LiveStore live;
+    return live;
+}
+inline void configureRuntime(const std::string &root) {
+    auto &live = liveRuntime();
+    live.root = root;
+    live.lastPoll = {};
+    live.poll(true);
+}
+inline Store &runtime() {
+    auto &live = liveRuntime();
+    live.poll();
+    return live.store;
+}
+inline std::string personalPath() {
+    return liveRuntime().root + "/vehicle_placements.personal.ini";
 }
 inline bool savePersonal(int set, int model, const std::string &key, float value) {
     Store &s = runtime();
     Pack next = s.personal;
     next.entries[section(set, model)][key] = value;
     std::string error;
-    if (!next.save("vehicle_placements.personal.ini", error))
+    if (!next.save(personalPath(), error))
         return false;
     s.personal = next;
     return true;

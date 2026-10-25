@@ -1030,6 +1030,9 @@ android_main(android_app *app)
 	platform::setNativeActivity(app->activity);
 	platform::setStorageRoot(app->activity->externalDataPath);
 #ifndef MIAMIVR_BRINGUP
+    VehiclePlacement::configureRuntime(platform::gameDataRoot());
+#endif
+#ifndef MIAMIVR_BRINGUP
 	androidgame::QuestProfilerSetLogDirectory(
 		app->activity->externalDataPath);
 #endif

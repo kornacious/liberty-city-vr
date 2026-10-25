@@ -265,6 +265,51 @@ int main() {
               "redo invalidates modified review");
         history.capture(doc, reviewed);
         check(!history.redo(doc, reviewed), "branching edit clears redo");
+        LiveStore live;
+        live.root = root.string();
+        Pack liveTemplate, livePersonal;
+        liveTemplate.entries["xbox:106"]["RadioRoll"] = 61.64f;
+        livePersonal.entries["xbox:106"]["RadioRoll"] = -90;
+        check(liveTemplate.save((root / "vehicle_placements.template.ini").string(), error),
+              "live template seed");
+        check(livePersonal.save((root / "vehicle_placements.personal.ini").string(), error),
+              "live personal seed");
+        live.poll(true);
+        check(live.store.value(2, 106, "RadioRoll", 0) == -90, "live effective personal masks template");
+        auto revision = live.revision;
+        livePersonal.entries["xbox:106"]["RadioRoll"] = 23.5f;
+        check(livePersonal.save((root / "vehicle_placements.personal.ini").string(), error),
+              "live update save");
+        live.poll(true);
+        check(live.revision > revision && live.store.value(2, 106, "RadioRoll", 0) == 23.5f,
+              "live hot reload update");
+        {
+            std::ofstream bad(root / "vehicle_placements.personal.ini");
+            bad << "[Placement]\nVersion=99\n";
+        }
+        live.poll(true);
+        check(live.store.value(2, 106, "RadioRoll", 0) == 23.5f,
+              "malformed live update retains previous generation");
+        editor::fs::remove(root / "vehicle_placements.personal.ini");
+        {
+            std::ofstream request(root / "vehicle_placements.reload");
+            request << "0123456789abcdef0123456789abcdef";
+        }
+        live.poll(true);
+        check(std::fabs(live.store.value(2, 106, "RadioRoll", 0) - 61.64f) < .001f,
+              "deleted personal pack reveals template live");
+        {
+            std::ifstream status(root / "vehicle_placements.live.ini");
+            std::ostringstream text;
+            text << status.rdbuf();
+            check(text.str().find("Request=0123456789abcdef0123456789abcdef") != std::string::npos,
+                  "live request acknowledged");
+        }
+        for (auto name : {"vehicle_placements.template.ini", "vehicle_placements.personal.ini.bak",
+                          "vehicle_placements.live.ini", "vehicle_placements.reload"})
+            editor::fs::remove(root / name);
+        prefs.set("FieldOfView", 115.00001f);
+        check(prefs.get("FieldOfView") == 115, "slider boundary roundoff clamped before saving");
         auto prefFile = root / "vehicle-editor.ini";
         check(prefs.save(prefFile, prefError), "application settings save");
         prefs.set("FPSLimit", 30);
