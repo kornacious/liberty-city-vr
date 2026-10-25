@@ -1,5 +1,11 @@
 # Host regression tests
 
+`python3 tools/tests/test-patch-series.py <local-re3-clone>` checks that every
+patch uses LF and applies the complete series to the pinned upstream revision.
+It exports tracked source with `core.autocrlf=false` so Windows also exercises
+the clean Linux source bytes. It needs Python 3.12+ and Git, uses a temporary
+directory, and does not read game data or modify the upstream checkout.
+
 `test-android-audio.ps1` covers the production Android callback and controls,
 headset frame composition, and measured binaural filters. It checks front/rear
 separation, world-coordinate ear ordering, elevation, independent head/body
