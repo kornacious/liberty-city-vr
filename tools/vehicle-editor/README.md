@@ -174,7 +174,8 @@ For future release defaults, copy an exported template pack to
 building the APK. The APK refreshes only its bundled baseline. Installed
 templates, personal settings, game data and saves remain separate.
 The current release baseline includes manually calibrated Classic and Xbox
-wheel/radio entries. Fields without authored overrides, including Xbox Speeder,
+wheel/radio entries. Xbox placements, including Speeder, are calibrated for
+the GTA III Fixed XBOX Vehicles v1.0 pack. Fields without authored overrides
 continue to use the existing fallback; Modern retains its previous defaults.
 
 ## Device import and deployment
