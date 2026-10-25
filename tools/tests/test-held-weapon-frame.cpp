@@ -67,7 +67,10 @@ static bool IsRunning(){return !gameplay;}
 static bool IsCutsceneProcessing(){return false;}
 }
 static struct {bool m_WideScreenOn=false;} TheCamera;
-namespace androidgame {static void *VrCutsceneCameraActor(){return nullptr;}}
+namespace androidgame {
+static void *VrCutsceneCameraActor(){return nullptr;}
+static bool VrKnockdownPresentationActive(){return false;}
+}
 namespace VrBodyIK {
 struct RigidWeaponHandLink {bool valid=false;CVector positionLocal,rightLocal,upLocal,forwardLocal;};
 static RigidWeaponHandLink gRigidWeaponLink[2];

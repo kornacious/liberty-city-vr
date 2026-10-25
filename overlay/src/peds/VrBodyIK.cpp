@@ -423,6 +423,26 @@ static CMatrix ApplyCalibration(const CMatrix &raw, const WristCalibration &cal)
 	return out;
 }
 
+// Move the complete authored crouch into the same heading as the tracked
+// torso. Standing IK replaces the torso basis; crouching keeps the native
+// skeleton, whose heading can differ from the view by a quarter turn.
+static void AlignCrouchedSkeleton(CPed *ped, RpHAnimHierarchy *hier,
+	RwMatrix *mats, const CMatrix &visualBody)
+{
+	if(!ped->bIsDucking)
+		return;
+	const CMatrix &nativeBody = ped->GetMatrix();
+	const CVector root = visualBody.GetPosition();
+	for(int i = 0; i < hier->numNodes; i++){
+		RwMatrix &bone = mats[i];
+		bone.pos = root + FromBasisLocal(
+			ToBasisLocal(CVector(bone.pos)-root, nativeBody), visualBody);
+		bone.right = FromBasisLocal(ToBasisLocal(bone.right, nativeBody), visualBody);
+		bone.up = FromBasisLocal(ToBasisLocal(bone.up, nativeBody), visualBody);
+		bone.at = FromBasisLocal(ToBasisLocal(bone.at, nativeBody), visualBody);
+	}
+}
+
 static bool BuildGroundedVisualBody(CPed *ped,
 	RpHAnimHierarchy *hier, RwMatrix *mats, CMatrix &visualBody)
 {
@@ -499,6 +519,7 @@ static bool BuildGroundedVisualBody(CPed *ped,
 		}
 	}
 
+	AlignCrouchedSkeleton(ped, hier, mats, visualBody);
 	return true;
 }
 
@@ -1598,6 +1619,12 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		// Offset root clump frame in roomscale
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame){
+			if(ped->bIsDucking){
+				RwMatrix *root = RwFrameGetMatrix(clumpFrame);
+				root->right = visualBody.GetRight();
+				root->up = visualBody.GetForward();
+				root->at = visualBody.GetUp();
+			}
 			RwFrameGetMatrix(clumpFrame)->pos = nativeRoot + follow;
 			RwFrameUpdateObjects(clumpFrame);
 		}

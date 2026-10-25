@@ -304,6 +304,11 @@ inactive actions, frame-start failures and raw crouch-edge clearing.
 It also checks that unavailable hand poses cannot turn neutralized input into
 a physical weapon drop or synthetic trigger-release action.
 
+`test-quest-crouch.ps1` compiles the production crouch controller and skeleton
+alignment helper. It checks repeated toggles, immediate re-entry, all movement
+directions, jumping and airborne recovery, simultaneous input priority, and
+whole-skeleton yaw alignment while retaining the authored crouch height/pitch.
+
 `test-minimal-profiler.cpp` checks the production head-space panel fit against
 both eyes' four frustum planes, including asymmetric FOVs, eye offsets, canted
 views, narrow FOVs that require scaling, and invalid views. Run with a C++17

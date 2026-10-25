@@ -436,48 +436,24 @@ diff --git a/src/peds/PlayerPed.cpp b/src/peds/PlayerPed.cpp
 index 2c040e55..92c088f8 100644
 --- a/src/peds/PlayerPed.cpp
 +++ b/src/peds/PlayerPed.cpp
-@@ -888,6 +888,22 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
+@@ -888,6 +888,11 @@ CPlayerPed::PlayerControlFighter(CPad *padUsed)
++#include "QuestCrouch.h"
++
  void
  CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
  {
 +#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
-+	// Quest adds general on-foot crouching.
-+	if ( padUsed != nil && padUsed->DuckJustDown() ) {
-+		if ( bIsDucking ) {
-+			ClearDuck();
-+			bCrouchWhenShooting = false;
-+		} else if ( !bIsInTheAir &&
-+		            m_nPedState != PED_JUMP &&
-+		            m_nMoveState != PEDMOVE_SPRINT &&
-+		            !InVehicle() ) {
-+			// General locomotion crouch uses the normal full-body duck path.
-+			bCrouchWhenShooting = false;
-+			SetDuck(60000);
-+		}
-+	}
++	ProcessQuestCrouch(this, padUsed);
 +#endif
  	float leftRight = padUsed->GetPedWalkLeftRight();
  	float upDown = padUsed->GetPedWalkUpDown();
  	float padMove = CVector2D(leftRight, upDown).Magnitude();
-@@ -1912,6 +1928,22 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
+@@ -1912,6 +1928,9 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
  void
  CPlayerPed::PlayerControlZelda(CPad *padUsed)
  {
 +#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
-+	// Quest adds general on-foot crouching.
-+	if ( padUsed != nil && padUsed->DuckJustDown() ) {
-+		if ( bIsDucking ) {
-+			ClearDuck();
-+			bCrouchWhenShooting = false;
-+		} else if ( !bIsInTheAir &&
-+		            m_nPedState != PED_JUMP &&
-+		            m_nMoveState != PEDMOVE_SPRINT &&
-+		            !InVehicle() ) {
-+			// General locomotion crouch uses the normal full-body duck path.
-+			bCrouchWhenShooting = false;
-+			SetDuck(60000);
-+		}
-+	}
++	ProcessQuestCrouch(this, padUsed);
 +#endif
  	bool doSmoothSpray = DoWeaponSmoothSpray();
  	float camOrientation = TheCamera.Orientation;
