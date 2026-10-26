@@ -1,12 +1,16 @@
 [CmdletBinding()]
 param(
-    [string]$BuildDir = (Join-Path $PSScriptRoot '../../out/vehicle-editor-build'),
-    [string]$OutputDir = (Join-Path $PSScriptRoot '../../out/vehicle-editor'),
+    [string]$BuildDir = '',
+    [string]$OutputDir = '',
     [string]$CMake = '',
     [string]$PythonRuntime = '',
     [switch]$Package
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell can evaluate parameter defaults before PSScriptRoot is set.
+# Resolve script-relative defaults after binding; explicit paths remain supported.
+if (-not $BuildDir) { $BuildDir = Join-Path $PSScriptRoot '../../out/vehicle-editor-build' }
+if (-not $OutputDir) { $OutputDir = Join-Path $PSScriptRoot '../../out/vehicle-editor' }
 if (-not $CMake) {
     $found = Get-Command cmake -ErrorAction SilentlyContinue
     if ($found) { $CMake = $found.Source }
