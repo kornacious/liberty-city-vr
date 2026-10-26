@@ -132,7 +132,7 @@ static void applyPreferences(const Preferences &p) {
     background[2] = (float)p.get("BackgroundB");
     showHud = (bool)p.get("PreviewHUD");
     showWheel = (bool)p.get("PreviewWheel");
-    set = (int)p.get("Modelset");
+    set = editor::canonicalModelSet((int)p.get("Modelset"));
     layer = (int)p.get("EditLayer");
     element = (int)p.get("Element");
     operation = (int)p.get("Gizmo");
@@ -443,14 +443,8 @@ static void loadModel() {
         fingerprintNow = editor::fingerprint(hashes) + genericHashes[set];
         if (!cameraInitialized || autoResetCamera)
             driver();
-        message = std::string("Geometry: ") +
-                  (source == 0   ? "Classic"
-                   : source == 1 ? "Modern"
-                                 : "Xbox") +
-                  "; textures: " +
-                  (txSource == 0   ? "Classic"
-                   : txSource == 1 ? "Modern"
-                                   : "Xbox");
+        message = std::string("Geometry: ") + editor::modelSetName(source) +
+                  "; textures: " + editor::modelSetName(txSource);
         if (set && source == 0)
             message += " (Classic geometry fallback)";
         if (!modelTextures)
@@ -563,7 +557,7 @@ static void openWorkspace() {
         dirty = false;
         readReviews();
         history.clear();
-        message = "Workspace loaded. Legacy Classic/Xbox settings are shared fallbacks.";
+        message = "Workspace loaded. Legacy Classic/Modern settings are shared fallbacks.";
     } catch (const std::exception &e) {
         message = e.what();
     }
@@ -1017,7 +1011,7 @@ static void ui() {
                 reviews.clear();
                 history.clear();
                 dirty = true;
-                message = "Imported legacy fallbacks; Classic and Xbox legacy values remain shared.";
+                message = "Imported legacy fallbacks; Classic and Modern legacy values remain shared.";
             } catch (const std::exception &) {
                 message = "Cannot import legacy INI; check the source file and workspace.";
             }
@@ -1033,17 +1027,20 @@ static void ui() {
     ImGui::SameLine();
     if (ImGui::Button("Redo") && history.redo(*editing, reviews))
         dirty = true;
-    const char *sets[] = {"Classic", assets.available[1] ? "Modern" : "Modern (not installed)",
-                          assets.available[2] ? "Xbox" : "Xbox (not installed)"};
-    if (ImGui::Combo("Modelset", &set, sets, 3))
+    const char *sets[] = {"Classic", assets.available[2] ? "Modern" : "Modern (not installed)"};
+    int visibleSet = set == 0 ? 0 : 1;
+    if (ImGui::Combo("Modelset", &visibleSet, sets, 2)) {
+        set = editor::visibleModelSets[visibleSet];
         loadModel();
+    }
     ImGui::InputText("Search", search, sizeof(search));
     if (ImGui::Button("Next unreviewed")) {
         bool found = false;
-        for (size_t step = 1; step <= assets.vehicles.size() * 3; step++) {
-            int index = (std::max(0, selected) + set * (int)assets.vehicles.size() + (int)step) %
-                        ((int)assets.vehicles.size() * 3);
-            int s = index / (int)assets.vehicles.size(), i = index % (int)assets.vehicles.size();
+        for (size_t step = 1; step <= assets.vehicles.size() * 2; step++) {
+            int index = (std::max(0, selected) + (set == 0 ? 0 : 1) * (int)assets.vehicles.size() + (int)step) %
+                        ((int)assets.vehicles.size() * 2);
+            int s = editor::visibleModelSets[index / (int)assets.vehicles.size()],
+                i = index % (int)assets.vehicles.size();
             if (assets.vehicles[i].supported() && assets.available[s] &&
                 !reviews.count(section(s, assets.vehicles[i].id))) {
                 set = s;
@@ -1418,10 +1415,10 @@ static void draw(float dt) {
     camera->showRaster(vsync ? rw::Raster::FLIPWAITVSYNCH : 0);
     savePreferences();
     if (smokeAll) {
-        int total = (int)assets.vehicles.size() * 3;
+        int total = (int)assets.vehicles.size() * 2;
         while (smokeIndex < total) {
             int index = smokeIndex++;
-            set = index / (int)assets.vehicles.size();
+            set = editor::visibleModelSets[index / (int)assets.vehicles.size()];
             selected = index % (int)assets.vehicles.size();
             if (assets.available[set] && assets.vehicles[selected].supported()) {
                 loadModel();

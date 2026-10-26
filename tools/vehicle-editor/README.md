@@ -48,7 +48,7 @@ personal settings. Never put original game files in this workspace or a release.
 
 1. Open or create a workspace. Import placement packs or a legacy INI from the
    local-file section, or import the current headset settings from the device panel.
-2. Select Classic, Modern or Xbox and search the catalogue. Missing modelsets and
+2. Select Classic or Modern and search the catalogue. Missing modelsets and
    unsupported vehicle types remain visible. The source label identifies actual
    geometry/texture sources, including Classic fallback.
 3. Choose personal overrides or template/release defaults. Template fields show the authored layer. **Preview effective game values**
@@ -88,8 +88,14 @@ personal settings. Never put original game files in this workspace or a release.
 The sample panel text illustrates physical placement and dimensions; it does
 not run gameplay, controller interaction or a live minimap. Imported vehicle
 HUD settings from before `VehicleHudAnchorVersion=1` use the same migrated
-dashboard defaults as the game. Classic/Xbox legacy wheel settings remain
+dashboard defaults as the game. Classic/Modern legacy wheel settings remain
 ambiguous shared fallback values until explicit entries are authored.
+
+Modern reads the Xbox HD assets prepared under `modelsets/modern` in the selected
+game folder, with Classic fallback for missing files. Old Modern or Xbox editor
+selections reopen as Modern. Modern placement records retain the `xbox:` section
+prefix for compatibility with the game's HD calibration identity; existing
+placement files are preserved.
 
 ## Application preferences
 

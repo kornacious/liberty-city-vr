@@ -11,6 +11,12 @@
 
 namespace editor {
 namespace fs = std::filesystem;
+// The game uses legacy Xbox ID 2 for HD calibration records while loading
+// those assets from modelsets/modern. Only these two choices are visible.
+inline constexpr int visibleModelSets[] = {0, 2};
+inline int canonicalModelSet(int value) { return value == 1 || value == 2 ? 2 : 0; }
+inline const char *modelSetName(int value) { return value == 0 ? "Classic" : "Modern"; }
+
 inline std::string lower(std::string s) {
     for (char &c : s)
         c = (char)std::tolower((unsigned char)c);
@@ -191,10 +197,14 @@ struct Assets {
                     vehicleColors[lower(name)] = {a, b};
             }
         }
-        for (int set = 0; set < 3; set++) {
+        for (int i = 0; i < 3; i++) {
+            archives[i] = Archive{};
+            available[i] = false;
+        }
+        for (int set : visibleModelSets) {
             fs::path p =
                 set == 0 ? root
-                         : casePath(root, std::string("modelsets/") + (set == 1 ? "modern" : "xbox"));
+                         : casePath(root, std::string("modelsets/modern"));
             archives[set].open(casePath(p, "models"));
             available[set] = !archives[set].index.empty();
         }
@@ -202,12 +212,13 @@ struct Assets {
                   [](const Vehicle &a, const Vehicle &b) { return a.name < b.name; });
     }
     std::vector<uint8_t> read(int set, const std::string &name, int *source = nullptr) const {
+        set = canonicalModelSet(set);
         if (set > 0) {
-            fs::path p = casePath(root, std::string("modelsets/") + (set == 1 ? "modern" : "xbox") +
+            fs::path p = casePath(root, std::string("modelsets/modern") +
                                             "/models/" + name);
             auto b = bytes(p);
             if (b.empty())
-                b = bytes(casePath(root, std::string("modelsets/") + (set == 1 ? "modern" : "xbox") +
+                b = bytes(casePath(root, std::string("modelsets/modern") +
                                              "/models/generic/" + name));
             if (b.empty())
                 b = archives[set].read(name);
@@ -227,10 +238,11 @@ struct Assets {
         return b;
     }
     std::vector<uint8_t> common(int set, const std::string &name) const {
+        set = canonicalModelSet(set);
         // MODELFILE assets use loose models/generic paths in re3; they are not
         // individual streamed vehicle entries in gta3.img.
         if (set > 0) {
-            auto data = bytes(casePath(root, std::string("modelsets/") + (set == 1 ? "modern" : "xbox") +
+            auto data = bytes(casePath(root, std::string("modelsets/modern") +
                                                  "/models/generic/" + name));
             if (!data.empty())
                 return data;

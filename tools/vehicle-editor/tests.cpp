@@ -13,6 +13,12 @@ static void near(Vec a, Vec b) {
 }
 int main() {
     try {
+        check(editor::visibleModelSets[0] == 0 && editor::visibleModelSets[1] == 2 &&
+                  std::size(editor::visibleModelSets) == 2, "only Classic and Modern are exposed");
+        check(editor::canonicalModelSet(0) == 0 && editor::canonicalModelSet(1) == 2 &&
+                  editor::canonicalModelSet(2) == 2 && editor::canonicalModelSet(-1) == 0,
+              "old Modern/Xbox preferences map to the HD calibration identity");
+        check(std::string(editor::modelSetName(2)) == "Modern", "HD calibration ID is labelled Modern");
         // Radio keeps its seat-relative frame independent of wheel/dashboard/steering.
         auto radioValues = legacyDefaults(0, 95, false);
         auto rb = radio(Vec(1, 2, 3), false, radioValues);
@@ -190,7 +196,7 @@ int main() {
               "unsupported train/aircraft stay visible");
         inventory.root = root;
         auto baseWheels = root / "models" / "generic",
-             xboxWheels = root / "modelsets" / "xbox" / "models" / "generic";
+             xboxWheels = root / "modelsets" / "modern" / "models" / "generic";
         editor::fs::create_directories(baseWheels);
         editor::fs::create_directories(xboxWheels);
         {
@@ -213,6 +219,11 @@ int main() {
                       "xbox-wheel-container" &&
                   xboxWheelData.second == baseWheelData.second,
               "modelset common wheels and texture fallback match loose MODELFILE assets");
+        check(inventory.wheelData(1, 164) == xboxWheelData,
+              "old Modern preference resolves the same Modern geometry as HD calibration ID");
+        check(VehiclePlacement::section(editor::canonicalModelSet(1), 95) == "xbox:95",
+              "Modern editor export targets the calibration record used by the game");
+
         check(p.save((root / "pack.ini").string(), error), "atomic save");
         p.entries[key]["WheelY"] = 10;
         check(p.save((root / "pack.ini").string(), error), "replace save");

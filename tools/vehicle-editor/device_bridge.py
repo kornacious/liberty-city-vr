@@ -279,7 +279,7 @@ def main(argv=None):
                     shutil.copy2(dest, dest.with_suffix(dest.suffix + '.before-import'))
                 dest.write_bytes(content)
                 (baseline / name).write_bytes(content)
-            print('Imported placement layers and legacy settings from personal Quest 3 device. Classic/Xbox legacy values remain shared fallbacks.')
+            print('Imported placement layers and legacy settings from personal Quest 3 device. Classic/Modern legacy values remain shared fallbacks.')
             return 0
         if a.pack is None:
             raise BridgeError('Choose a saved placement pack')
