@@ -273,7 +273,6 @@ evidence for this port:
 | --- | --- |
 | `test-devtools-culling.ps1` | `render/VrCullViz` module absent from this port |
 | `test-heli-bullets.ps1` | Private `baseline-qbuild`, reVC revision `026cd10`, sniper and M60 paths |
-| `test-modelset-profiles.ps1` | reVC streaming region and `CdStreamPosix.cpp` registration |
 | `test-modelset-wheels.ps1` | Wheel texture-transfer behavior differs from Liberty City's MODELFILE loader |
 | `test-ragdoll-vehicle-hook.ps1` | Movable-pair hook and `KillPedWithCar` signature differ |
 | `test-ragdoll-visibility.ps1` | Expects two population-cleanup integration sites absent in current sources |
@@ -356,3 +355,18 @@ bike grip keep their existing behavior. The converted meshes share local
 geometry and rely on the controller conversion's handedness signs; a positive
 basis determinant alone cannot establish correct anatomy. These checks require
 no game assets; the final visual fit still needs a headset check.
+
+### Xbox Version HD preparation and routing
+
+`python tools/tests/test-xbox-modelset.py` runs five synthetic production-builder
+cases without network or ADB: both profiles, archive precedence, full output
+hashes, source pinning, allowlisted extraction, conversion failure rollback,
+verified-cache reuse and official mirror/HTML-error handling. Windows uses the
+bundled compressor; build `tools/modelsets/txdcompress` first on Linux.
+
+`test-modelset-profiles.ps1` now tests Liberty City's production ModelSets and
+streaming category filter, and is included in `test-current-sources.ps1`.
+Its 70 checks cover all categories, mixed/shared textures, map/loose paths,
+Classic fallback, restart behavior and Xbox HD calibration aliases. Actual-pack
+preparation and headset appearance/performance checks remain separate; see
+[the asset guide](../../overlay/docs/QUEST_MODELSETS.md).

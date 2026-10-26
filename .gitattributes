@@ -1,4 +1,5 @@
 * text=auto
+*.sh text eol=lf
 # Patches must be authored with LF and survive checkout byte-exact everywhere.
 # Validate with tools/tests/test-patch-series.py, including on Windows.
 patches/*.patch -text

@@ -124,16 +124,11 @@ function Find-Adb {
 
 function Test-ModernFolder {
     param([string]$Path)
-    if ([string]::IsNullOrWhiteSpace($Path) -or
-        -not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
-    if ($Profile -eq "Xbox") { return (Test-XboxOverlay $Path) }
-    $required = $profileRequiredFiles
-    foreach ($relative in $required) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Path $relative) -PathType Leaf)) {
-            return $false
-        }
-    }
-    return $true
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
+    . (Join-Path $PSScriptRoot 'modelsets/xbox-modelset.ps1')
+    $python = Get-ModelsetPython
+    & $python (Join-Path $PSScriptRoot 'modelsets/xbox-modelset.py') validate --out $Path --profile $Profile.ToLowerInvariant()
+    return $LASTEXITCODE -eq 0
 }
 
 function Resolve-ModernFolder {
@@ -210,6 +205,9 @@ try {
     Write-Host "This copies a model overlay generated locally by the player; it downloads no model assets."
 
     $modern = Resolve-ModernFolder -Requested $ModernDir
+    $profileHashFiles = @([IO.File]::ReadAllLines((Join-Path $modern 'BUILD_INFO.txt')) | ForEach-Object {
+        if ($_ -match '^SHA256 (.+)=([A-F0-9]{64})$') { $Matches[1] }
+    })
     $script:adb = Find-Adb
     Select-QuestDevice
 
@@ -280,9 +278,8 @@ try {
             -FailureMessage "Required copied file is missing: $requiredRemote" -Quiet | Out-Null
     }
 
-    # White wheels are the characteristic result of a missing/corrupt loose
-    # wheel TXD.  Hash the two small wheel assets explicitly; hashing the
-    # multi-gigabyte archive here would needlessly extend every installation.
+    # Verify every manifest file, including world definitions and loose TXDs,
+    # before activating the staged profile.
     foreach ($relative in $profileHashFiles) {
         $localWheel = Join-Path $modern $relative
         $remoteWheel = "$script:stagingRemote/$($relative.Replace('\', '/'))"

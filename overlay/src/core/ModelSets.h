@@ -13,7 +13,7 @@ enum eModelSet
 	MODEL_SET_COUNT
 };
 
-// Overlays can be mixed by category (World, Vehicles, Peds, Weapons for Xbox and Modern; Vegetation remains Classic on Quest).
+// Overlays can be mixed by category (World, Vehicles, Peds, Weapons for Xbox and Modern; Vegetation defaults to Classic on Quest).
 // Changes require a restart so loaded RenderWare objects are not replaced.
 enum eModelCategory
 {
@@ -42,6 +42,8 @@ const char *GetName(eModelSet modelSet);
 const char *GetSourceName(eModelSet modelSet);
 
 eModelSet GetActiveForCategory(eModelCategory category);
+// Both aliases of Xbox HD use Xbox geometry calibration, not old Modern offsets.
+eModelSet GetCalibrationSetForCategory(eModelCategory category);
 eModelSet GetRequestedForCategory(eModelCategory category);
 void SetRequestedForCategory(eModelCategory category, eModelSet modelSet);
 void CycleRequestedCategory(eModelCategory category, int direction);
@@ -53,7 +55,7 @@ const char *GetCategoryName(eModelCategory category);
 
 // Vegetation is intentionally manifest-driven.  Model-name heuristics would
 // eventually classify a building or prop incorrectly.  The model-set builder
-// emits this manifest from the exact vegetation source directories.
+// emits this manifest from the authored GTA III vegetation dictionaries.
 bool HasVegetationManifest();
 bool IsVegetationModel(const char *modelName);
 

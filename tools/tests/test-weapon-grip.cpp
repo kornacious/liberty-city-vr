@@ -18,7 +18,7 @@ namespace ModelSets {
 enum eModelSet { MODEL_SET_CLASSIC, MODEL_SET_MODERN, MODEL_SET_XBOX };
 enum { MODEL_CATEGORY_WEAPONS };
 static eModelSet active=MODEL_SET_CLASSIC;
-static eModelSet GetActiveForCategory(int){return active;}
+static eModelSet GetCalibrationSetForCategory(int){return active;}
 }
 struct CMatrix {
     CVector r{1,0,0},f{0,1,0},u{0,0,1},p{0,0,0};

@@ -127,15 +127,8 @@ find_adb() {
 test_modern_folder() {
   local path="$1"
   [ -n "$path" ] && [ -d "$path" ] || return 1
-  if [ "$PROFILE" = xbox ]; then
-    python3 "$SCRIPT_DIR/modelsets/xbox-modelset.py" validate --out "$path"
-    return $?
-  fi
-  local rel
-  for rel in "${REQUIRED[@]}"; do
-    [ -f "$path/$rel" ] || return 1
-  done
-  return 0
+  python3 "$SCRIPT_DIR/modelsets/xbox-modelset.py" validate --out "$path" --profile "$PROFILE"
+
 }
 
 resolve_modern_folder() {
@@ -205,6 +198,11 @@ echo "Liberty City VR - Modern / Xbox model installer ($INSTALLER_VERSION)"
 echo "This copies a model overlay generated locally by the player; it downloads no model assets."
 
 MODERN="$(resolve_modern_folder "$MODERN_DIR")" || die "Profile validation failed; no device commands were sent."
+HASH_FILES=()
+while IFS= read -r line; do
+  if [[ "$line" =~ ^SHA256\ (.+)=([A-F0-9]{64})$ ]]; then HASH_FILES+=("${BASH_REMATCH[1]}"); fi
+done < "$MODERN/BUILD_INFO.txt"
+
 ADB="$(find_adb)" || die "ADB discovery failed; no transfer started."
 select_quest_device
 
@@ -270,9 +268,8 @@ for relative in "${REQUIRED[@]}"; do
   adb_checked_quiet shell test -f "$STAGING_REMOTE/$relative"
 done
 
-# White wheels are the characteristic result of a missing/corrupt loose
-# wheel TXD. Hash the two small wheel assets explicitly; hashing the
-# multi-gigabyte archive here would needlessly extend every installation.
+# Verify every manifest file, including world definitions and loose TXDs,
+# before activating the staged profile.
 for relative in "${HASH_FILES[@]}"; do
   local_wheel="$MODERN/$relative"
   remote_wheel="$STAGING_REMOTE/$relative"

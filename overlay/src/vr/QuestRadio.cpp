@@ -83,7 +83,7 @@ void Load() {
     CVehicle *current=Vehicle();
     if(current!=touchVehicle) { for(auto &t:touch) t.Reset(); touchVehicle=current; }
     int id=current?current->GetModelIndex():-1;
-    int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+    int set=(int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
     if(id!=modelId || set!=placementSet) {
         placementSet=set;
         if(edit) CloseEditor();
@@ -91,7 +91,7 @@ void Load() {
     }
 }
 const char *packKeys[]={"RadioX","RadioY","RadioZ","RadioPitch","RadioYaw","RadioRoll","RadioSize"};
-int PlacementSet() { return (int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
+int PlacementSet() { return (int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
 Placement Resolved() {
     Placement p=RadioBoard::Resolve(model,global,bundledModel,bundledGlobal);
     if(modelId>=0) for(int i=0;i<7;++i) {

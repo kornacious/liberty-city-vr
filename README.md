@@ -209,7 +209,8 @@ Runtime/data layout is documented in
 body deformation, and [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md)
 for optional model mixing.
 The [asset guide](overlay/docs/QUEST_MODELSETS.md) also describes the current
-Xbox-first installer and limitations of the Modern preparation branches.
+Xbox/Modern preparation from the pinned Xbox Version HD (re3) release,
+including world, pedestrian, weapon and vehicle effects.
 
 ## Troubleshooting and Game Data
 

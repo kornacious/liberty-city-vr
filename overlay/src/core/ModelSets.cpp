@@ -34,12 +34,13 @@ eModelSet gRequestedModelSet = MODEL_SET_CLASSIC;
 bool gInitialized;
 bool gModernArchivePairAvailable;
 bool gXboxAvailable;
+bool gXboxHDProfiles[MODEL_SET_COUNT];
 eModelSet gActiveCategory[MODEL_CATEGORY_COUNT];
 eModelSet gRequestedCategory[MODEL_CATEGORY_COUNT];
 enum { MAX_VEGETATION_MODELS = 512, MAX_MANIFEST_MODEL_NAME = 24 };
-char gVegetationModels[MAX_VEGETATION_MODELS][MAX_MANIFEST_MODEL_NAME] = {};
-int gNumVegetationModels;
-bool gVegetationManifestAvailable;
+char gVegetationModels[MODEL_SET_COUNT][MAX_VEGETATION_MODELS][MAX_MANIFEST_MODEL_NAME] = {};
+int gNumVegetationModels[MODEL_SET_COUNT];
+bool gVegetationManifestAvailable[MODEL_SET_COUNT];
 char gGameRoot[1024] = {};
 char gSettingsPath[1024] = {};
 
@@ -61,8 +62,8 @@ const char *const gCategoryNames[MODEL_CATEGORY_COUNT] = {
 
 // The HD vegetation source is dramatically heavier than the Classic trees
 // (especially the palms, which are repeated hundreds of times around the
-// city). The headset-validated baseline uses Modern world textures and weapon
-// models while vehicles, pedestrians and vegetation stay Classic. An existing
+// city). The Modern defaults request world textures and weapon models while
+// vehicles, pedestrians and vegetation stay Classic. An existing
 // INI value still wins after the one-time baseline migration.
 const int gCategoryDefaults[MODEL_CATEGORY_COUNT] = {
 	1, // world / buildings
@@ -153,7 +154,9 @@ bool IsSafeModelsPath(const char *path)
 	return MODELSET_STRNICMP(path, "models\\", 7) == 0 ||
 		MODELSET_STRNICMP(path, "models/", 7) == 0 ||
 		MODELSET_STRNICMP(path, "txd\\", 4) == 0 ||
-		MODELSET_STRNICMP(path, "txd/", 4) == 0;
+		MODELSET_STRNICMP(path, "txd/", 4) == 0 ||
+		MODELSET_STRNICMP(path, "data\\maps\\", 10) == 0 ||
+		MODELSET_STRNICMP(path, "data/maps/", 10) == 0;
 }
 
 void BuildOverlayPath(eModelSet modelSet, const char *relativePath, char *destination,
@@ -200,12 +203,25 @@ bool IsGta3ArchivePath(const char *relative)
 		MODELSET_STRICMP(relative, "models/gta3.dir") == 0;
 }
 
-void LoadVegetationManifest()
+void LoadPackIdentity(eModelSet set)
 {
-	gNumVegetationModels = 0;
-	gVegetationManifestAvailable = false;
+	gXboxHDProfiles[set] = false;
+	char path[1024], line[256];
+	BuildOverlayPath(set, "BUILD_INFO.txt", path, sizeof(path));
+	FILE *file = fopen(path, "rt");
+	if(!file) return;
+	while(fgets(line, sizeof(line), file))
+		if(strncmp(line, "SourceSHA256=879024BED6FB89C218F6C75A46119F95FC068A64849BC74DEDF0851D3FD210A6", 77) == 0)
+			gXboxHDProfiles[set] = true;
+	fclose(file);
+}
+
+void LoadVegetationManifest(eModelSet set)
+{
+	gNumVegetationModels[set] = 0;
+	gVegetationManifestAvailable[set] = false;
 	char path[1024];
-	BuildOverlayPath(MODEL_SET_MODERN, "vegetation_models.txt", path, sizeof(path));
+	BuildOverlayPath(set, "vegetation_models.txt", path, sizeof(path));
 	FILE *file = fopen(path, "rt");
 	if(!file){
 		debug("Model set: no vegetation manifest at %s; vegetation cannot be separated from world assets\n", path);
@@ -213,7 +229,7 @@ void LoadVegetationManifest()
 	}
 
 	char line[256];
-	while(gNumVegetationModels < MAX_VEGETATION_MODELS &&
+	while(gNumVegetationModels[set] < MAX_VEGETATION_MODELS &&
 	      fgets(line, sizeof(line), file)){
 		char *begin = line;
 		while(*begin == ' ' || *begin == '\t')
@@ -227,15 +243,15 @@ void LoadVegetationManifest()
 		char *extension = strrchr(begin, '.');
 		if(extension && MODELSET_STRICMP(extension, ".dff") == 0)
 			*extension = '\0';
-		strncpy(gVegetationModels[gNumVegetationModels], begin,
+		strncpy(gVegetationModels[set][gNumVegetationModels[set]], begin,
 			MAX_MANIFEST_MODEL_NAME-1);
-		gVegetationModels[gNumVegetationModels][MAX_MANIFEST_MODEL_NAME-1] = '\0';
-		gNumVegetationModels++;
+		gVegetationModels[set][gNumVegetationModels[set]][MAX_MANIFEST_MODEL_NAME-1] = '\0';
+		gNumVegetationModels[set]++;
 	}
 	fclose(file);
-	gVegetationManifestAvailable = gNumVegetationModels > 0;
+	gVegetationManifestAvailable[set] = gNumVegetationModels[set] > 0;
 	debug("Model set: loaded %d vegetation model names\n",
-		gNumVegetationModels);
+		gNumVegetationModels[set]);
 }
 }
 
@@ -256,7 +272,10 @@ void InitializeStartup(const char *gameRoot)
 		BuildOverlayPath(MODEL_SET_XBOX, xboxFiles[i], path, sizeof(path));
 		gXboxAvailable = gXboxAvailable && FileExists(path);
 	}
-	LoadVegetationManifest();
+	LoadPackIdentity(MODEL_SET_MODERN);
+	LoadPackIdentity(MODEL_SET_XBOX);
+	LoadVegetationManifest(MODEL_SET_MODERN);
+	LoadVegetationManifest(MODEL_SET_XBOX);
 	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
 		MODEL_SET_XBOX, gSettingsPath);
 	if(requested < MODEL_SET_CLASSIC || requested >= MODEL_SET_COUNT ||
@@ -270,7 +289,7 @@ void InitializeStartup(const char *gameRoot)
 		int selected = (int)(int32)GetPrivateProfileIntA("VR",
 			gCategorySettingNames[category], fallback, gSettingsPath);
 		if(selected < MODEL_SET_CLASSIC || selected >= MODEL_SET_COUNT ||
-		   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION))
+		   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
 			selected = MODEL_SET_CLASSIC;
 		gActiveCategory[category] = gRequestedCategory[category] = (eModelSet)selected;
 	}
@@ -367,9 +386,7 @@ static eModelSet EffectiveCategory(eModelCategory category, eModelSet preset,
 		return MODEL_SET_CLASSIC;
 	const eModelSet selected = selections[category];
 	if(!IsAvailable(selected) ||
-	   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
-	   (selected == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
-	    !gVegetationManifestAvailable))
+	   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
 		return MODEL_SET_CLASSIC;
 	return selected;
 }
@@ -377,6 +394,12 @@ static eModelSet EffectiveCategory(eModelCategory category, eModelSet preset,
 eModelSet GetActiveForCategory(eModelCategory category)
 {
 	return EffectiveCategory(category, gActiveModelSet, gActiveCategory);
+}
+
+eModelSet GetCalibrationSetForCategory(eModelCategory category)
+{
+	const eModelSet set = GetActiveForCategory(category);
+	return gXboxHDProfiles[set] ? MODEL_SET_XBOX : set;
 }
 
 eModelSet GetRequestedForCategory(eModelCategory category)
@@ -389,9 +412,7 @@ void SetRequestedForCategory(eModelCategory category, eModelSet modelSet)
 	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
 		return;
 	if(!IsAvailable(modelSet) ||
-	   (modelSet == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
-	   (modelSet == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
-	    !gVegetationManifestAvailable))
+	   (modelSet != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[modelSet]))
 		modelSet = MODEL_SET_CLASSIC;
 	// A category selected from the base preset must enable its overlay too.
 	if(modelSet != MODEL_SET_CLASSIC && gRequestedModelSet == MODEL_SET_CLASSIC)
@@ -410,9 +431,7 @@ void CycleRequestedCategory(eModelCategory category, int direction)
 	for(int i = 0; i < MODEL_SET_COUNT; i++){
 		selected = (selected+MODEL_SET_COUNT+(direction > 0 ? 1 : -1)) % MODEL_SET_COUNT;
 		if(!IsAvailable((eModelSet)selected) ||
-		   (selected == MODEL_SET_XBOX && category == MODEL_CATEGORY_VEGETATION) ||
-		   (selected == MODEL_SET_MODERN && category == MODEL_CATEGORY_VEGETATION &&
-		    !gVegetationManifestAvailable))
+		   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
 			continue;
 		SetRequestedForCategory(category, (eModelSet)selected);
 		return;
@@ -436,7 +455,8 @@ bool IsCategoryAvailable(eModelCategory category)
 	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
 		return false;
 	if(category == MODEL_CATEGORY_VEGETATION)
-		return gModernArchivePairAvailable && gVegetationManifestAvailable;
+		return (gModernArchivePairAvailable && gVegetationManifestAvailable[MODEL_SET_MODERN]) ||
+		(gXboxAvailable && gVegetationManifestAvailable[MODEL_SET_XBOX]);
 	return gXboxAvailable || gModernArchivePairAvailable;
 }
 
@@ -449,16 +469,16 @@ const char *GetCategoryName(eModelCategory category)
 
 bool HasVegetationManifest()
 {
-	return gVegetationManifestAvailable;
+	return gVegetationManifestAvailable[MODEL_SET_MODERN] || gVegetationManifestAvailable[MODEL_SET_XBOX];
 }
 
 bool IsVegetationModel(const char *modelName)
 {
-	if(!modelName || !gVegetationManifestAvailable)
-		return false;
-	for(int i = 0; i < gNumVegetationModels; i++)
-		if(MODELSET_STRICMP(modelName, gVegetationModels[i]) == 0)
-			return true;
+	if(!modelName) return false;
+	for(int set = MODEL_SET_MODERN; set < MODEL_SET_COUNT; set++)
+		for(int i = 0; i < gNumVegetationModels[set]; i++)
+			if(MODELSET_STRICMP(modelName, gVegetationModels[set][i]) == 0)
+				return true;
 	return false;
 }
 
@@ -509,22 +529,18 @@ const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	// Loose TXDs still use the ordinary Modern fallback behavior.
 	if(IsGta3ArchivePath(relative))
 		return originalPath;
-	// Collision files (.col in models/coll/) must NEVER be redirected.
-	// Retail models/coll/ contains the complete collision sets for all 59 GTA III vehicles
-	// (including train and boats), weapons, and peds. External Xbox packs frequently bundle
-	// Vice City vehicles.col files which lack train collision and cause fatal crashes.
-	if(MODELSET_STRNICMP(relative, "models\\coll\\", 12) == 0 ||
-	   MODELSET_STRNICMP(relative, "models/coll/", 12) == 0)
+	// Preserve complete retail vehicle collisions (train/boats included).
+	// World collision and map definitions travel with their matching geometry.
+	if(MODELSET_STRICMP(relative, "models\\coll\\vehicles.col") == 0 ||
+	   MODELSET_STRICMP(relative, "models/coll/vehicles.col") == 0)
 		return originalPath;
 	eModelCategory cat = MODEL_CATEGORY_WORLD;
-	if(MODELSET_STRNICMP(relative, "models\\coll\\", 12) == 0 ||
-	   MODELSET_STRNICMP(relative, "models/coll/", 12) == 0 ||
-	   MODELSET_STRNICMP(relative, "models\\generic\\", 15) == 0 ||
-	   MODELSET_STRNICMP(relative, "models/generic/", 15) == 0)
+	if(MODELSET_STRICMP(relative, "models\\generic\\wheels.dff") == 0 ||
+	   MODELSET_STRICMP(relative, "models/generic/wheels.dff") == 0 ||
+	   MODELSET_STRICMP(relative, "models\\generic\\wheels.txd") == 0 ||
+	   MODELSET_STRICMP(relative, "models/generic/wheels.txd") == 0)
 		cat = MODEL_CATEGORY_VEHICLES;
-	else if(MODELSET_STRICMP(relative, "models\\generic.txd") == 0 ||
-	        MODELSET_STRICMP(relative, "models/generic.txd") == 0)
-		cat = MODEL_CATEGORY_VEGETATION;
+	// generic.txd is shared by roads/props and trees; it follows World.
 
 	eModelSet active = GetActiveForCategory(cat);
 	if(active == MODEL_SET_XBOX && gXboxAvailable){

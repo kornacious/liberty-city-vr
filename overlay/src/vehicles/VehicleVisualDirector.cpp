@@ -99,7 +99,7 @@ QuestVehicleVisualBudgetBeginVehicle(CVehicle *vehicle)
 
 	if(vehicle == nil || vehicle->m_rwObject == nil ||
 	   vehicle->m_vehType != VEHICLE_TYPE_CAR ||
-	   !ModelSets::IsCategoryModernActive(ModelSets::MODEL_CATEGORY_VEHICLES))
+	   ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES) != ModelSets::MODEL_SET_MODERN)
 		return false;
 
 	// STOCK is deliberately the default and stays on the exact original body

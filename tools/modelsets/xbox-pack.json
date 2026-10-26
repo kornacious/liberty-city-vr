@@ -1,12 +1,386 @@
 {
-  "profile": "XBOX",
-  "builderVersion": "0.7.2-xbox-lcv-1",
-  "game": "Grand Theft Auto III",
-  "categories": [
-    "Vehicles",
-    "Characters and Pedestrians",
-    "Weapons",
-    "World and Environment"
+  "builderVersion": "0.8.0-xbox-hd-re3-1",
+  "title": "[III] Xbox Version HD (Supports re3)",
+  "page": "https://www.moddb.com/mods/gta-iii-xbox-version-hd/downloads/iii-xbox-version-hd-supports-re3",
+  "downloadPage": "https://www.moddb.com/downloads/start/224588",
+  "archiveName": "III_Xbox_Version_HD_Supports_re3.zip",
+  "archiveBytes": 1552864677,
+  "archiveSha256": "879024BED6FB89C218F6C75A46119F95FC068A64849BC74DEDF0851D3FD210A6",
+  "sourceFolder": "[III] Xbox Version HD (Supports re3)/[III] Xbox Version HD (re3)",
+  "archives": [
+    "gta3",
+    "xbox_models",
+    "xbox_hd_textures",
+    "xbox_vehicles"
   ],
-  "description": "Xbox assets conversion profile for Liberty City VR (re3 Quest)"
+  "files": {
+    "data/maps/comnbtm/comnbtm.col": {
+      "bytes": 375084,
+      "sha256": "0403AA2D53BD4FA2BAD8E8F86C4D57BC4DBF97C9E9D389321213CF4481A2C00C"
+    },
+    "data/maps/comnbtm/comnbtm.ide": {
+      "bytes": 36199,
+      "sha256": "659A14EF654F1CA4144DD47EE675B93FF1CF97121905E019EBA04A45D78AB603"
+    },
+    "data/maps/comnbtm/comnbtm.ipl": {
+      "bytes": 68733,
+      "sha256": "5B40564F0E41E816DBFB78DFC6AB3D63206F2E0DD6BCA48BC16AD80D24B0FC0A"
+    },
+    "data/maps/comnbtm.ipl": {
+      "bytes": 68659,
+      "sha256": "D3EA586344F2C74ADA8BA9076C7C1FA74DE4B9BCD48F63BA90491C39E9FC6286"
+    },
+    "data/maps/comntop/comntop.col": {
+      "bytes": 317528,
+      "sha256": "08593834D4BF51E79697DCECECCB88E6D30CD33446BD94BD62EF3093C5BBC935"
+    },
+    "data/maps/comntop/comntop.ide": {
+      "bytes": 25547,
+      "sha256": "2B59498377E8802DBCD7CEEF1D68B71D2D6D3C418A9B503B020C143519D81A67"
+    },
+    "data/maps/comntop/comntop.ipl": {
+      "bytes": 81664,
+      "sha256": "DC4F41787D84508068F91C60EDF0585B2D3333401C84D4B2BF2AEA9C1E03D2C7"
+    },
+    "data/maps/comntop.ipl": {
+      "bytes": 81430,
+      "sha256": "F80D9995FB3304B0585EF43C16BDA5563AA3D2B9181DEC1CC0C6C966275F5DE1"
+    },
+    "data/maps/comroad/comroad.col": {
+      "bytes": 156760,
+      "sha256": "DDC37C5D78E144AB180D50C733ADC8F474F3F3E9837FE77216E3671BE4464C97"
+    },
+    "data/maps/comroad/comroad.ide": {
+      "bytes": 86554,
+      "sha256": "163415D834A1FB103F685EBD5A86F229F1C9A81603C7046C6F51AF205E4BEA7A"
+    },
+    "data/maps/comroad/comroad.ipl": {
+      "bytes": 8577,
+      "sha256": "70E6A1B00B409DDAFCBB82B35BCB179DEF16F1B348E9EC0A0F61DFCDA43A58D9"
+    },
+    "data/maps/comse/comse.col": {
+      "bytes": 219764,
+      "sha256": "F47805E955F4DC73F9B59242EA96B4721401085485EB904E9B3602946333A25D"
+    },
+    "data/maps/comse/comse.ide": {
+      "bytes": 29113,
+      "sha256": "3EC628FF2678D2BC4BEAF2F5FE1AAC8EECC6409721B79B57A379294BEDAB4222"
+    },
+    "data/maps/comse/comse.ipl": {
+      "bytes": 43035,
+      "sha256": "CBD8401FD83B810AB0279622155B44831FEB58021EC44AD9E1156221E760B861"
+    },
+    "data/maps/comse.ipl": {
+      "bytes": 43025,
+      "sha256": "B3D74956CDE01C1949609F38BA671ABA01B35B73EFEC28746AA6F3D938A01A67"
+    },
+    "data/maps/comsw/comsw.col": {
+      "bytes": 315224,
+      "sha256": "126BB6A3C865D889659806FAD01F59EAC2EA1225FC65E5D099EE67CBD6A200AF"
+    },
+    "data/maps/comsw/comsw.ide": {
+      "bytes": 30878,
+      "sha256": "093BC99F20E471573E9D8195FE27C918BE972A0AB5FB7BACC3780D92C535A4D8"
+    },
+    "data/maps/comsw/comsw.ipl": {
+      "bytes": 60433,
+      "sha256": "911DCE1AEC63190215C178033C37B795F59A0C713EA82E84A0918B57E38D3C84"
+    },
+    "data/maps/comsw.ipl": {
+      "bytes": 60424,
+      "sha256": "E860A948C8F473A6C3B52F297CFA6E52037B88A29841E721844A37694225113A"
+    },
+    "data/maps/cull.ipl": {
+      "bytes": 66906,
+      "sha256": "9973FFA8577DE83A153F105743EE9DC1F8C1AF5703618C090829439D45F2C444"
+    },
+    "data/maps/generic.ide": {
+      "bytes": 82824,
+      "sha256": "8511E1AA513848565AF907D1AE1186EDF1CA809A0A6B3B1874BE7A315E8F107C"
+    },
+    "data/maps/gta3.ide": {
+      "bytes": 613068,
+      "sha256": "7685651084B62840910616A9240D885F3D4CA246730503068EADDFAEC29255B2"
+    },
+    "data/maps/indroads/indroads.col": {
+      "bytes": 156908,
+      "sha256": "5921217BAD6CABAFC34FB3F710AD500B3B5D8AE524969767B865329CA4B5B088"
+    },
+    "data/maps/indroads/indroads.ide": {
+      "bytes": 86206,
+      "sha256": "67B9554F627AE58E13331DE3607649E27A51AA585D6FB24F19764BD8BF02BB0D"
+    },
+    "data/maps/indroads/indroads.ipl": {
+      "bytes": 8564,
+      "sha256": "DF00697F88125509E0FF6EB11F82FCBAFE9721071106B23378483EA44A23A22B"
+    },
+    "data/maps/industne/industne.col": {
+      "bytes": 288472,
+      "sha256": "F1CECABA4E539854ACF7E545502234CAC1721E06932F07C740172644294AD8D0"
+    },
+    "data/maps/industne/industne.ide": {
+      "bytes": 8818,
+      "sha256": "E05745C12C65A3245FDB9DA50BA91B72B5CF06DB5A26255251D7599540978BA4"
+    },
+    "data/maps/industne/industne.ipl": {
+      "bytes": 41297,
+      "sha256": "F4574C1EE568B4E1B4D72DA8A72C78776D1E44A59528EF34FD3729DE9582319A"
+    },
+    "data/maps/industne.ipl": {
+      "bytes": 41469,
+      "sha256": "F3FD9E32096FE6CC076F4113A17C947470F565141171B5FE0A445A600ACCB2AF"
+    },
+    "data/maps/industnw/industnw.col": {
+      "bytes": 197828,
+      "sha256": "97A63BAAA913F44C8ACEDA1B7C6191CB0FB9929D78A697DC504F2D3FED41C58F"
+    },
+    "data/maps/industnw/industnw.ide": {
+      "bytes": 14137,
+      "sha256": "20D743C063E533474FD54CF354787ACC93B41C503BFB359317548CED128A45FE"
+    },
+    "data/maps/industnw/industnw.ipl": {
+      "bytes": 53574,
+      "sha256": "0522C7AB10541BD6494AE3FA92321267428AE42D4A062FECB1FB71C300CDCB77"
+    },
+    "data/maps/industnw.ipl": {
+      "bytes": 53496,
+      "sha256": "BD2AD55CF035E567B3C792E0009B566BC64EF0D2AD15B26995704021FA912E39"
+    },
+    "data/maps/industse/industse.col": {
+      "bytes": 296376,
+      "sha256": "3FF947F220D6C92ECE5078E733E92C0E44A177B9055751EDBB6D21DFB57F4A1A"
+    },
+    "data/maps/industse/industse.ide": {
+      "bytes": 32733,
+      "sha256": "09A4F4D0482BAA003505BF5A66009A3C0473EE735012F2BB9215F42C769A43F9"
+    },
+    "data/maps/industse/industse.ipl": {
+      "bytes": 55179,
+      "sha256": "1A31F231D507B7CA88C85E28B02FC8B430BD43BCF253B3D7AA9832134D49AF7F"
+    },
+    "data/maps/industse.ipl": {
+      "bytes": 54896,
+      "sha256": "CFFC8F4F88D45D2CB8621F53091A4123BAFB4B255AA8E2E642CED8D8C3745C6A"
+    },
+    "data/maps/industsw/industsw.col": {
+      "bytes": 209576,
+      "sha256": "BDDE1D26087679A84C9D1921B3942CD45E1165EB1544EBF98D146D36EBDB0F2B"
+    },
+    "data/maps/industsw/industsw.ide": {
+      "bytes": 22683,
+      "sha256": "1586C586073DD88883EA6C9D3E0EDE54B6A53D0034531ADD09AF82E595263162"
+    },
+    "data/maps/industsw/industsw.ipl": {
+      "bytes": 50430,
+      "sha256": "5B6DE484484C8AB357B71E5390540EAF6D03B011F7201C49E05B7FEF3F749551"
+    },
+    "data/maps/industsw.ipl": {
+      "bytes": 50418,
+      "sha256": "905AE057D8CD95089A30E89A0117422FDB5F26EEE54A9501F097F99EB942D552"
+    },
+    "data/maps/landne/landne.col": {
+      "bytes": 525216,
+      "sha256": "4E749C83308B50997E0D0E50BC788DF18EF56DEF8FCA67332A8932A037F47002"
+    },
+    "data/maps/landne/landne.ide": {
+      "bytes": 24817,
+      "sha256": "E538B788F8C3B59C1479D042B7B7D35B7F0F793A80419B70A06836AC58AF496E"
+    },
+    "data/maps/landne/landne.ipl": {
+      "bytes": 72286,
+      "sha256": "343522B8A00F511BF251968F607FA8B72F2876E1ABF1858D75FB554EB2927C44"
+    },
+    "data/maps/landsw/landsw.col": {
+      "bytes": 539028,
+      "sha256": "1C33CAEBBF78D1C49D036EC7ADA78ADE03B9003A7AF8BEA62DE1DEDFC2BA51C1"
+    },
+    "data/maps/landsw/landsw.ide": {
+      "bytes": 55631,
+      "sha256": "82BAF8E61E0D92D3AB38CAA2A956DF0BEC4C1ED5EBBA05A3A84DF0ACACF70ABF"
+    },
+    "data/maps/landsw/landsw.ipl": {
+      "bytes": 95278,
+      "sha256": "7F11746D2F3BA7E94903CD326B88C68232C7EC7986018C70E37FB82F5FA06D3E"
+    },
+    "data/maps/making/making.col": {
+      "bytes": 42360,
+      "sha256": "B12A8ED312EF58404CB10342A9131458883C0535D1B949C9A38AE8ECE4F12B34"
+    },
+    "data/maps/making/making.ide": {
+      "bytes": 2427,
+      "sha256": "BA67E1C61BA49EE1120993A4B57965965B3F8CEBA90F140128702B260CA012BA"
+    },
+    "data/maps/making/making.ipl": {
+      "bytes": 2812,
+      "sha256": "7E60E558648B96C830F87CF4693D943E7697A4732411559F49836A70ED03C39D"
+    },
+    "data/maps/overview.ipl": {
+      "bytes": 7142,
+      "sha256": "E49B5ACD090258344DF0405ECCC0C51CA97CFBD5B622B53D1AD45A67D55D9EA4"
+    },
+    "data/maps/props.ipl": {
+      "bytes": 37578,
+      "sha256": "96932486ED053444D6E6340A114B27A4A73EE9FD7703E5F7A7E04E94CE42B05F"
+    },
+    "data/maps/subroads/subroads.col": {
+      "bytes": 177220,
+      "sha256": "8446FAEE8A4F9D8581AE8A38E31C7A6B342EC71F091F71EACD950AABEE45266A"
+    },
+    "data/maps/subroads/subroads.ide": {
+      "bytes": 71008,
+      "sha256": "AE8ECC9013951DFD85C3829CB76CAC54ACD4116FB40FDD5AB6E9DC63F49C7E43"
+    },
+    "data/maps/subroads/subroads.ipl": {
+      "bytes": 8098,
+      "sha256": "FE42EF06229748A0CA762DBCB83C010450B5D0C7BCE89FE6E6DDBDE68E8F0419"
+    },
+    "data/maps/suburbne.ipl": {
+      "bytes": 72145,
+      "sha256": "038219203382A1E301682457477D84D1C7080CC53DFC9BA082EFE681D83804E1"
+    },
+    "data/maps/suburbsw.ipl": {
+      "bytes": 94839,
+      "sha256": "0E3667CC057C30E57CFAE8C11982100F4AD055087C713A69C330E2ADE1E2C1BE"
+    },
+    "data/maps/temppart/temppart.col": {
+      "bytes": 82620,
+      "sha256": "9AAFD1BFF437EC834145065EAB31F81E792FD4CDA7E0182CE5A32B7753563963"
+    },
+    "data/maps/temppart/temppart.ide": {
+      "bytes": 5943,
+      "sha256": "10104D02D59A88DAF097F5D8D48C9B242298F9836EE50198C04473420FFDE60D"
+    },
+    "data/maps/temppart/temppart.ipl": {
+      "bytes": 8546,
+      "sha256": "69BEDCBAFAF79D87E12F5AE3C460F1EB5838E7B55D8E158388284267182DDC43"
+    },
+    "models/coll/generic.col": {
+      "bytes": 380576,
+      "sha256": "CD7A68BEAB449758699BC1B602847570D102C80A2B7631D42A7D6BBB589C8A2E"
+    },
+    "models/fonts.txd": {
+      "bytes": 5309864,
+      "sha256": "CDF481B33B9A6369539BE66387DFDA5DE121DA982FA746976A98F49E4E723497"
+    },
+    "models/fonts_j.txd": {
+      "bytes": 1052072,
+      "sha256": "CA54716C29ADD38E053F5232D7CB80B50583A0BB5CE8D0E13C3D72078609AC9A"
+    },
+    "models/fonts_p.txd": {
+      "bytes": 1379752,
+      "sha256": "DEA5FF954B5D3DC97FAEE74F719148B65F029EFB9023BB9212FFA9B8EA2A6070"
+    },
+    "models/fonts_r.txd": {
+      "bytes": 1379752,
+      "sha256": "3C844ED8B7D35ABE3A7722185876C9906D1E86C9B8BCDCFB36D7F7E46394AA1E"
+    },
+    "models/frontend_ds3.txd": {
+      "bytes": 590632,
+      "sha256": "986E80A186D67784C194B52A315E7F9B79C9821B16C073ED65DB5B4B172D93D4"
+    },
+    "models/frontend_ds4.txd": {
+      "bytes": 590632,
+      "sha256": "8DDB5BBF56474B4CA531706543A3F655B2E98F40BDE0F22C7C77409255D453CB"
+    },
+    "models/frontend_nsw.txd": {
+      "bytes": 2360104,
+      "sha256": "1E804C54B551DF57CE0653703CD8BFA65BE4F06CEC173F88826DCC8B9343956D"
+    },
+    "models/frontend_x360.txd": {
+      "bytes": 590632,
+      "sha256": "33A55F0F7D355BE2AFBA0833339404BA2785FC0F61CF84814D33A5FB98353D79"
+    },
+    "models/frontend_xone.txd": {
+      "bytes": 590632,
+      "sha256": "6A1680251A2586BE250A1B38E43421328B1556D4B4328E4DE6DF333B258F3B51"
+    },
+    "models/generic/wheels.dff": {
+      "bytes": 240878,
+      "sha256": "FADEDA3EC88C5B2C6E4A7F56C44657A64AECB5B709526A65D41472828AEBE726"
+    },
+    "models/generic.txd": {
+      "bytes": 37119020,
+      "sha256": "625E469B5E31F0A75BCE78B52FCBEB59823B51F6F34508B6143E85E8B6EE8EEB"
+    },
+    "models/gta3.dir": {
+      "bytes": 123392,
+      "sha256": "C55D545D2FC5F23DD505E716B8D93DABE1702608CDCD1860C091E7B121453399"
+    },
+    "models/gta3.img": {
+      "bytes": 168783872,
+      "sha256": "F4C2C63EF60B985734A8B3892B126CB18624F26180D1CAF31A7ADCA0D7784087"
+    },
+    "models/hud.txd": {
+      "bytes": 1102888,
+      "sha256": "AFA94DC40D06279EF9637FC9AC1C75690DF2D283B47531E6799947AC7C7B539C"
+    },
+    "models/menu.txd": {
+      "bytes": 10244648,
+      "sha256": "1090130D4C60A0A2C98EB35E148851603D41CCEAF9FBA4668511B92B4F1F3921"
+    },
+    "models/nswbtns.txd": {
+      "bytes": 528424,
+      "sha256": "44601110B352B03DB36597CBC87EFF000F167011591938ABB1F86181AA6CC2E8"
+    },
+    "models/particle.txd": {
+      "bytes": 6227112,
+      "sha256": "7A62F104E33873B19E6E5226EB529617444C8279F6ADFA35D506FA35CDF26270"
+    },
+    "models/ps3btns.txd": {
+      "bytes": 528424,
+      "sha256": "34651695302A04F92DE57CD1B4D2F8EABC6AD4DB9C2A215A8310A60C6E59961E"
+    },
+    "models/x360btns.txd": {
+      "bytes": 528424,
+      "sha256": "4BEA0E33F6D1CC42FFA54D1A303F01500C582EE917A2C7468E9F77BF0735FA51"
+    },
+    "models/xbox_hd_textures.dir": {
+      "bytes": 19744,
+      "sha256": "3636CBA25CFC7DDB2DFD368926AA4BCC1F69425B40BBADD77371F95CAAB1A281"
+    },
+    "models/xbox_hd_textures.img": {
+      "bytes": 1918529536,
+      "sha256": "A1F5D92062E12A9D4DC3EC7F44EB7E1914EB53F30A3CE52865C942FC7861B1A6"
+    },
+    "models/xbox_models.dir": {
+      "bytes": 93088,
+      "sha256": "C37AFB1F4B845572C1602D9A274F8157450980AF090C20054C215BED5A0F52E1"
+    },
+    "models/xbox_models.img": {
+      "bytes": 87152640,
+      "sha256": "943890CF249982F334376DBC495BF0966B2C105D108932E826D6DC9B5DA19E3B"
+    },
+    "models/xbox_vehicles.dir": {
+      "bytes": 3968,
+      "sha256": "9D5B66EC35BB318F8B4D8FD1F3EE553F1A43E2AF4E1B5F576FF3123AA1850C68"
+    },
+    "models/xbox_vehicles.img": {
+      "bytes": 91824128,
+      "sha256": "FCD772A3BA77A2C0F624B88A3FDA328C5FC76156B45F6A947FC3131A563DF925"
+    },
+    "txd/mainsc1.txd": {
+      "bytes": 2097320,
+      "sha256": "460DE970DE493AE0AE754E7F29399B11EDD6EC66DCC94F1BE323D86A2A08F439"
+    },
+    "txd/mainsc2.txd": {
+      "bytes": 2097320,
+      "sha256": "7EEB0620C7436EA5312B5E97F6BE38F0C10331C2C427E4495AA21F25CDA85ED7"
+    },
+    "txd/news.txd": {
+      "bytes": 2097320,
+      "sha256": "443F4F350BB4405F001C0599B71D0A377DD82E62F501B04D89611536623BBFC8"
+    },
+    "txd/splash1.txd": {
+      "bytes": 1048744,
+      "sha256": "7E3014ED8AF20A751FFDEF37AA857F13BEDDF2344F32B0517D41894CE2143522"
+    },
+    "txd/splash2.txd": {
+      "bytes": 1048744,
+      "sha256": "3772B75D428399404A28857706F5906604D914C1B4CD83E1079C1A17DD8B06CC"
+    },
+    "txd/splash3.txd": {
+      "bytes": 1048744,
+      "sha256": "AD4663F81D6A8AED1D1352B84C885DBF039BA94F894A898AE282008D7EA1CC66"
+    }
+  }
 }

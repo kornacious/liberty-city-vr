@@ -566,7 +566,7 @@ ReadWeaponLaserOverride(int weaponType)
 {
 	if(weaponType < 0 || weaponType >= WEAPONTYPE_TOTALWEAPONS)
 		return -1;
-	const bool modern = ModelSets::GetActiveForCategory(
+	const bool modern = ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN;
 	WeaponLaserOverride &cached = gWeaponLaserOverrides[modern ? 1 : 0][weaponType];
 	if(cached.loaded)
@@ -585,7 +585,7 @@ WriteWeaponLaserOverride(int weaponType, int value)
 {
 	if(weaponType < 0 || weaponType >= WEAPONTYPE_TOTALWEAPONS)
 		return;
-	const bool modern = ModelSets::GetActiveForCategory(
+	const bool modern = ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN;
 	WeaponLaserOverride &cached = gWeaponLaserOverrides[modern ? 1 : 0][weaponType];
 	char section[96], text[16];
@@ -836,7 +836,7 @@ GetDefaultCalibration(int weaponType, int hand,
 	WeaponCalibration *calibration)
 {
 	GetDefaultCalibrationForSet(weaponType, hand,
-		ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS),
+		ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS),
 		calibration);
 }
 
@@ -850,7 +850,7 @@ GetCalibration(int hand, int weaponType)
 	if(calibration.valid)
 		return &calibration;
 	char section[96];
-	const bool modern = ModelSets::GetActiveForCategory(
+	const bool modern = ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN;
 	ModelSets::eModelSet calibrationSet = modern ?
 		ModelSets::MODEL_SET_MODERN : ModelSets::MODEL_SET_CLASSIC;
@@ -1379,7 +1379,7 @@ static void
 ApplyBakedLeftWeaponPosition(int hand, CMatrix *matrix)
 {
 	if(!matrix || hand != 0 ||
-	   ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+	   ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
 	   ModelSets::MODEL_SET_MODERN)
 		return;
 
@@ -2368,7 +2368,7 @@ GetWeaponLocalBarrelDirection(int weaponType)
 	case WEAPONTYPE_SNIPERRIFLE:
 		return CVector(0.9891f, -0.1477f, 0.0f);
 	case WEAPONTYPE_ROCKETLAUNCHER:
-		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+		if(ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
 		   ModelSets::MODEL_SET_MODERN)
 			// Direction between the III mesh's rear and front tube centres.
 			return CVector(-0.295286557f, 0.132528077f, 0.946172372f);
@@ -2397,7 +2397,7 @@ GetWeaponLocalMuzzle(int weaponType)
 	case WEAPONTYPE_SNIPERRIFLE:
 		return CVector(0.770f, -0.0902f, 0.0902f);
 	case WEAPONTYPE_ROCKETLAUNCHER:
-		if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+		if(ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
 		   ModelSets::MODEL_SET_MODERN)
 			// Centre of the front opening, not an approximate point beside it.
 			return CVector(-0.070460401f, 0.114642583f, 0.783905983f);
@@ -4142,7 +4142,7 @@ SaveQuestCalibrationToSection(const char *section, int hand,
 static void
 QuestCalibrationSection(int weaponType, bool defaults, char *section)
 {
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_WEAPONS) == ModelSets::MODEL_SET_MODERN ?
 		"VRWeaponModern%s_%02d_%s" : "VRWeapon%s_%02d_%s",
 		defaults ? "Default" : "", weaponType, GetVrWeaponName(weaponType));
@@ -4172,7 +4172,7 @@ RestoreQuestCalibrationDefault(int hand, int weaponType, bool factory)
 	WeaponCalibration *calibration = GetCalibration(hand, weaponType);
 	if(!calibration) return;
 	GetDefaultCalibrationForSet(weaponType, hand,
-		ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_WEAPONS), calibration);
+		ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS), calibration);
 	char section[96];
 	QuestCalibrationSection(weaponType, true, section);
 	if(!factory && ReadCalibrationValue(section, hand, "Configured", 0)){

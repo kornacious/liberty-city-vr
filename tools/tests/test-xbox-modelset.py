@@ -1,134 +1,123 @@
 #!/usr/bin/env python3
-"""Exercise production Xbox builders with a user-supplied pack; no device access."""
-import argparse
-import contextlib
-import hashlib
+"""Production preparation regressions using synthetic assets; no ADB/network."""
+import copy
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
-import shutil
 import struct
-import subprocess
 import sys
+import tempfile
+import unittest
 from unittest import mock
-sys.dont_write_bytecode=True
+import zipfile
 
-p=argparse.ArgumentParser(description=__doc__)
-p.add_argument('--kit-root',type=Path,default=Path(__file__).resolve().parents[2])
-p.add_argument('--archive',type=Path,required=True)
-p.add_argument('--out',type=Path,required=True)
-a=p.parse_args(); a.kit_root=a.kit_root.resolve(); a.archive=a.archive.resolve(); a.out=a.out.resolve()
-if a.out.exists(): raise SystemExit('Use a fresh --out directory; prior evidence is preserved.')
-a.out.mkdir(parents=True)
-spec=importlib.util.spec_from_file_location('xbox',a.kit_root/'tools/modelsets/xbox-modelset.py')
-x=importlib.util.module_from_spec(spec);spec.loader.exec_module(x)
-checks=0
-def check(value,message):
- global checks
- checks+=1
- if not value: raise AssertionError(message)
-def rejected(call,message):
- try: call()
- except (OSError,ValueError,subprocess.CalledProcessError): check(True,message);return
- check(False,message)
-def run(argv,success=True,env=None):
- if os.name=='nt' and str(argv[0]).lower().endswith('powershell.exe') and env is None:
-  env={k:v for k,v in os.environ.items() if k.lower()!='psmodulepath'}
- r=subprocess.run([str(s) for s in argv],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,env=env)
- check((r.returncode==0)==success,'unexpected command result: '+r.stdout[-2000:]);return r
+spec = importlib.util.spec_from_file_location('xbox', Path(__file__).resolve().parents[1] / 'modelsets/xbox-modelset.py')
+x = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(x)
 
-x.assert_archive(a.archive); check(True,'actual pinned archive')
-extracted=a.out/'sources/xbox-pack';x.extract(a.archive,extracted)
-source=extracted/x.PACK['sourceFolder'];x.assert_source(source)
-check(sum(p.is_file() for p in source.rglob('*'))==217,'main folder selection')
-check(not any(p.name in ('III Xbox Perennial','Cutscene Vehicles','Prop Vehicles') for p in extracted.iterdir()),'optional variants extracted')
-output=a.out/'python/xbox'
-x.build(source,output)
-check(x.valid_overlay(output),'actual Python build')
-original={rel:x.sha(source/rel) for rel in x.PACK['files']}
-for rel in ('models/coll/vehicles.col','models/generic/wheels.dff'):
- check(x.sha(source/rel)==x.sha(output/rel),'native geometry/COL changed')
-img=(output/'models/gta3.img').read_bytes()
-entries=list(struct.iter_unpack('<II24s',(output/'models/gta3.dir').read_bytes()))
-for sector,size,raw in entries:
- name=raw.split(b'\0')[0].decode()
- check((source/'gta3.img'/name).is_file(),'unexpected entry '+name)
- if name.endswith('.dff'):
-  authored=(source/'gta3.img'/name).read_bytes()
-  check(img[sector*2048:sector*2048+len(authored)]==authored,'DFF altered '+name)
-check(len(entries)==214,'compact overlay directory count')
-col=(output/'models/coll/vehicles.col').read_bytes();pos=0;collisions=set()
-while pos<len(col):
- magic,size=struct.unpack_from('<4sI',col,pos)
- check(magic==b'COLL' and pos+8+size<=len(col),'invalid authored COL')
- collisions.add(col[pos+8:pos+30].split(b'\0')[0].decode());pos+=8+size
-models=set((output/'vehicle_models.txt').read_text().splitlines())
-check(models<=collisions,'vehicle missing COL')
-check({'cougar','toyz'}<=collisions,'native fallback vehicle COL absent')
-stable={rel:x.sha(output/rel) for rel in x.OUTPUTS+('BUILD_INFO.txt',)}
-bad=output/'models/gta3.dir';old=bad.read_bytes();bad.write_bytes(b'\xff'*4+old[4:])
-check(not x.valid_overlay(output),'corrupt directory accepted');bad.write_bytes(old)
-bad=output/'models/generic/wheels.txd';old=bad.read_bytes();bad.write_bytes(old[:-1])
-check(not x.valid_overlay(output),'truncated wheel dictionary accepted');bad.write_bytes(old)
-extra=output/'unrelated.txt';extra.write_text('private');check(not x.valid_overlay(output),'extra transferable file accepted');extra.unlink()
-srcfile=source/'gta3.img/admiral.dff';old=srcfile.read_bytes();srcfile.write_bytes(old+b'changed')
-rejected(lambda:x.build(source,output,True),'modified source accepted')
-check(stable=={r:x.sha(output/r) for r in stable},'failed source validation changed working output')
-srcfile.write_bytes(old)
-rejected(lambda:x.build(source,source/'xbox',True),'overlapping paths accepted')
-foreign=a.out/'foreign/xbox';foreign.mkdir(parents=True);(foreign/'private.txt').write_text('keep')
-rejected(lambda:x.build(source,foreign,True),'foreign output replaced')
-check((foreign/'private.txt').read_text()=='keep','foreign data changed')
-rejected(lambda:x.build(source,output,True,compressor=a.out/'missing-compressor'),'failed conversion accepted')
-check(stable=={r:x.sha(output/r) for r in stable},'conversion failure changed working output')
-check(not any(p.name.startswith('.xbox.') for p in output.parent.iterdir()),'unfinished conversion temporary files')
-with mock.patch.object(sys,'argv',['xbox','prepare','--out',str(output),'--work-dir',str(a.out/'unused')]),mock.patch.object(x.urllib.request,'urlopen',side_effect=AssertionError('cache downloaded')):
- check(x.main()==0,'complete cache not reused')
-check(not (a.out/'unused').exists(),'complete cache created workspace')
-with mock.patch.object(x.subprocess,'run',side_effect=AssertionError('cache extracted')):
- x.extract(a.archive,extracted);check(True,'source cache extracted again')
-check(original=={r:x.sha(source/r) for r in original},'source assets changed')
+class Preparation(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.source = self.root / 'source'
+        (self.source / 'models').mkdir(parents=True)
+        self.saved = copy.deepcopy(x.PACK)
+        self.pack = copy.deepcopy(x.PACK)
+        txd = struct.pack('<III', 0x16, 0, 0x1803ffff)
+        self.entries = {
+            'gta3': {'building.dff': b'original building', 'building.txd': txd, 'cop.dff': b'ped', 'colt45.dff': b'weapon'},
+            'xbox_models': {'building.dff': b'Xbox building'},
+            'xbox_hd_textures': {'building.txd': txd},
+            'xbox_vehicles': {'police.dff': b'GTA III police', 'police.txd': txd},
+        }
+        for archive, entries in self.entries.items():
+            sector = 0
+            with (self.source / ('models/' + archive + '.img')).open('wb') as img, (self.source / ('models/' + archive + '.dir')).open('wb') as directory:
+                for name, data in entries.items():
+                    directory.write(struct.pack('<II24s', sector, 1, name.encode()))
+                    img.write(data + b'\0' * (2048-len(data)))
+                    sector += 1
+        (self.source / 'data/maps').mkdir(parents=True)
+        (self.source / 'data/maps/generic.ide').write_text('objs\n100, treepatch, trees2, 1, 200, 4\nend\n')
+        (self.source / 'models/particle.txd').write_bytes(txd)
+        self.pack['files'] = {p.relative_to(self.source).as_posix(): {'bytes': p.stat().st_size, 'sha256': x.sha(p)} for p in self.source.rglob('*') if p.is_file()}
+        archive = self.root / 'pack.zip'
+        with zipfile.ZipFile(archive, 'w') as z:
+            for p in self.source.rglob('*'):
+                if p.is_file(): z.write(p, self.pack['sourceFolder'] + '/' + p.relative_to(self.source).as_posix())
+            z.writestr(self.pack['sourceFolder'] + '/userfiles/GTA3sf1.b', 'private save')
+            z.writestr(self.pack['sourceFolder'] + '/re3.exe', 'never execute')
+        self.pack['archiveBytes'] = archive.stat().st_size
+        self.pack['archiveSha256'] = x.sha(archive)
+        x.PACK.clear(); x.PACK.update(self.pack)
+        self.archive = archive
 
-# Exercise the production streaming download implementation with bounded fake
-# HTTP responses, including servers which ignore Range and Google HTML errors.
-payload=b'pinned-public-fixture'*19
-class Response(io.BytesIO):
- def __init__(self,data,status,headers=None):super().__init__(data);self.status=status;self.headers=headers or {}
-saved=dict(x.PACK)
-try:
- x.PACK['archiveBytes']=len(payload);x.PACK['archiveSha256']=hashlib.sha256(payload).hexdigest().upper()
- for status in (200,206):
-  dest=a.out/f'resume-{status}.rar';part=dest.with_name(dest.name+'.partial');part.write_bytes(payload[:13])
-  reply=Response(payload[13:] if status==206 else payload,status,{'Content-Range':f'bytes 13-{len(payload)-1}/{len(payload)}'})
-  with mock.patch.object(x.urllib.request,'urlopen',return_value=reply):x.download(dest)
-  check(dest.read_bytes()==payload,'resume/range ignored broke downloaded bytes')
- dest=a.out/'complete-partial.rar';dest.with_name(dest.name+'.partial').write_bytes(payload)
- with mock.patch.object(x.urllib.request,'urlopen',side_effect=AssertionError('full partial downloaded')):x.download(dest)
- check(dest.read_bytes()==payload,'complete partial was not promoted')
- dest=a.out/'html.rar'
- with mock.patch.object(x.urllib.request,'urlopen',return_value=Response(b'<html>login</html>',200)):
-  rejected(lambda:x.download(dest),'HTML accepted as model archive')
- check(not dest.exists(),'bad downloaded file committed')
-finally:x.PACK.clear();x.PACK.update(saved)
+    def tearDown(self):
+        x.PACK.clear(); x.PACK.update(self.saved)
+        self.temp.cleanup()
 
-if os.name=='nt':
- ps='powershell.exe';psout=a.out/'powershell/xbox'
- r=run([ps,'-NoProfile','-ExecutionPolicy','Bypass','-File',a.kit_root/'tools/modelsets/build-xbox-modelset.ps1','-Source',source,'-Out',psout])
- (a.out/'powershell-build.log').write_text(r.stdout)
- for rel in stable:check(x.sha(psout/rel)==stable[rel],'PS/Python output differs: '+rel)
- # Run the full production preparation path, provided archive -> extraction ->
- # XboxOnly -> build-only. These tiny input sentinels are never transferred.
- game=a.out/'game';(game/'models').mkdir(parents=True)
- for name in ('gta3.img','gta3.dir','generic.txd'):(game/'models'/name).write_bytes(b'untouched-game-fixture')
- modern=game/'modelsets/modern';modern.mkdir(parents=True);(modern/'private.txt').write_text('keep-modern')
- command=[ps,'-NoProfile','-ExecutionPolicy','Bypass','-File',a.kit_root/'tools/prepare-modern-models.ps1','-XboxOnly','-GameDir',game,'-WorkDir',a.out/'prep-cache','-XboxArchive',a.archive,'-BuildOnly','-NonInteractive','-LogPath',a.out/'prepare.log']
- run(command);check(x.valid_overlay(game/'modelsets/xbox'),'XboxOnly profile missing')
- check((modern/'private.txt').read_text()=='keep-modern','Xbox preparation changed Modern')
- run(command);check((a.out/'prepare.log').read_text(encoding='utf-8-sig').find('Reusing the complete verified Xbox profile')>=0,'PS finished profile not reused')
- check(all(p.read_bytes()==b'untouched-game-fixture' for p in (game/'models').iterdir()),'game assets changed')
+    def build(self, name='xbox', **kwargs):
+        out = self.root / 'profiles' / name
+        x.build(self.source, out, profile=name, **kwargs)
+        return out
 
-receipt={'checks':checks,'archiveSha256':x.sha(a.archive),'outputs':stable,'actualVehicles':107,'archiveEntries':214,'deviceCommands':0,'network':False}
-(a.out/'results.json').write_text(json.dumps(receipt,indent=2)+'\n')
-print(f'PASS: {checks} Xbox source/cache/builder checks; 107 actual vehicles, no device commands.')
+    def test_profiles_precedence_and_integrity(self):
+        for name in ('xbox', 'modern'):
+            with self.subTest(profile=name):
+                out = self.build(name)
+                self.assertTrue(x.valid_overlay(out, name))
+                self.assertFalse(x.valid_overlay(out, 'modern' if name == 'xbox' else 'xbox'))
+                entries = {n: (s,c) for n,s,c in x.archive_entries(out/'models/gta3.img', out/'models/gta3.dir')}
+                data = (out/'models/gta3.img').read_bytes()
+                sector,_ = entries['building.dff']
+                self.assertTrue(data[sector*2048:].startswith(b'Xbox building'))
+                self.assertEqual((out/'vegetation_models.txt').read_text(), 'treepatch\n')
+                self.assertEqual((out/'vehicle_models.txt').read_text(), 'police\n')
+                p = out/'models/particle.txd'; original=p.read_bytes();p.write_bytes(original+b'corrupt')
+                self.assertFalse(x.valid_overlay(out, name));p.write_bytes(original)
+                p=out/'unrelated-save.b';p.write_text('private');self.assertFalse(x.valid_overlay(out, name));p.unlink()
+                self.assertTrue(x.valid_overlay(out, name))
+
+    def test_allowlist_extraction_and_source_validation(self):
+        dest=self.root/'extract';x.extract_archive(self.archive,dest)
+        self.assertFalse((dest/'re3.exe').exists());self.assertFalse((dest/'userfiles').exists())
+        self.assertEqual(set(x.source_root(dest)[1]), set(self.pack['files']))
+        p=dest/'models/particle.txd';p.write_bytes(b'changed')
+        with self.assertRaises(ValueError):x.source_root(dest)
+        with self.assertRaises(ValueError):x.assert_archive(p)
+
+    def test_failure_preserves_output_and_source(self):
+        out=self.build();before={p.relative_to(out):x.sha(p) for p in out.rglob('*') if p.is_file()}
+        source_hashes={p.relative_to(self.source):x.sha(p) for p in self.source.rglob('*') if p.is_file()}
+        with self.assertRaises((ValueError,OSError)):x.build(self.source,out,True,compressor=self.root/'missing')
+        self.assertEqual(before,{p.relative_to(out):x.sha(p) for p in out.rglob('*') if p.is_file()})
+        self.assertEqual(source_hashes,{p.relative_to(self.source):x.sha(p) for p in self.source.rglob('*') if p.is_file()})
+        self.assertFalse(any(p.name.startswith('.xbox.') for p in out.parent.iterdir()))
+        foreign=self.root/'foreign/xbox';foreign.mkdir(parents=True);(foreign/'private').write_text('keep')
+        with self.assertRaises(ValueError):x.build(self.source,foreign,True)
+        with self.assertRaises(ValueError):x.build(self.source,self.source/'xbox')
+
+    def test_prepare_reuses_only_verified_profile(self):
+        out=self.build()
+        with mock.patch.object(sys,'argv',['builder','prepare','--out',str(out)]),mock.patch.object(x,'download',side_effect=AssertionError('cache download')):
+            self.assertEqual(x.main(),0)
+        with mock.patch.object(sys,'argv',['builder','prepare','--out',str(out),'--work-dir',str(self.root/'work'),'--archive',str(self.root/'missing.zip'),'--non-interactive']):
+            with self.assertRaises(OSError):x.main()
+
+    def test_download_validates_html_errors_and_fresh_mirror(self):
+        page=b'<a href="/downloads/mirror/224588/131/fresh">Download</a>'
+        target=self.root/'download.zip'
+        with mock.patch.object(x.urllib.request,'urlopen',side_effect=[io.BytesIO(page),io.BytesIO(self.archive.read_bytes())]) as request:
+            x.download(target)
+            self.assertEqual(target.read_bytes(),self.archive.read_bytes())
+            self.assertIn('/224588/131/fresh',request.call_args_list[1].args[0])
+        target=self.root/'bad.zip'
+        with mock.patch.object(x.urllib.request,'urlopen',side_effect=[io.BytesIO(page),io.BytesIO(b'<html>blocked</html>')]):
+            with self.assertRaises(ValueError):x.download(target)
+            self.assertFalse(target.exists())
+        with mock.patch.object(x.urllib.request,'urlopen',return_value=io.BytesIO(b'no mirror')):
+            with self.assertRaises(ValueError):x.download(target)
+
+if __name__ == '__main__':
+    unittest.main()

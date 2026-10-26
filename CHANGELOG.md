@@ -9,6 +9,11 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Replace Xbox/Modern preparation with the pinned GTA III Xbox Version HD (re3)
+  pack on Windows/Linux. Merge the complete visual archives, validate every
+  source/output file, filter streaming by category, route matching world map
+  data and share Xbox VR calibration across the new profile aliases.
+
 - Sanitized device identifiers in build/install, model-install and game-file
   repair diagnostics. Device menus show numbered model names; Windows logs
   no longer include transcript headers containing launch arguments.

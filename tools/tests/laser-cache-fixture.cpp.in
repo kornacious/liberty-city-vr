@@ -10,7 +10,7 @@ enum { WEAPONTYPE_TOTALWEAPONS = 37 };
 namespace ModelSets {
 enum { MODEL_CATEGORY_WEAPONS, MODEL_SET_CLASSIC, MODEL_SET_MODERN };
 static int active = MODEL_SET_CLASSIC;
-int GetActiveForCategory(int) { return active; }
+int GetCalibrationSetForCategory(int) { return active; }
 }
 
 static const char *kSettingsPath = ".\\vr_settings.ini";

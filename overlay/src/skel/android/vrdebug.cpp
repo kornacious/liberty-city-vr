@@ -3281,7 +3281,7 @@ VrDebugUpdate(const PadInput &in)
 			bool placementHandled=false;
 			if(context!=WRIST_CONTEXT_DEFAULT && placementVehicle &&
 			   context==ActiveWristContext() && (placementVehicle->IsCar() || placementVehicle->IsBoat())){
-				const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+				const int set=(int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
 				const int model=placementVehicle->GetModelIndex();
 				const std::string prefix=VehiclePlacement::panelName(panel);
 				const char *suffix=nil;float fallback=0,increment=placementStep*.1f;
@@ -4431,7 +4431,7 @@ DrawQuestWristRadarPage(void)
 		gWristPitch[panel][slot]*.1f,gWristYaw[panel][slot]*.1f,gWristRoll[panel][slot]*.1f,(float)gWristSize[panel][slot]};
 	CVehicle *vehicle=FindPlayerVehicle();
 	if(context!=WRIST_CONTEXT_DEFAULT && vehicle && context==ActiveWristContext()){
-		const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+		const int set=(int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
 		const std::string prefix=VehiclePlacement::panelName(panel);
 		const char *suffix[]={"Y","X","Z","Pitch","Yaw","Roll","Size"};
 		for(int i=0;i<7;i++)display[i]=VehiclePlacement::runtime().value(set,vehicle->GetModelIndex(),prefix+suffix[i],i>=3&&i<=5?0:display[i]);
@@ -5722,7 +5722,7 @@ VrGetWristPanelCalibration(int panel, float *alongCm, float *acrossCm,
 	if(scale) *scale = (float)gWristSize[panel][slot]/100.0f;
 	CVehicle *vehicle=FindPlayerVehicle();
 	if(vehicle && (vehicle->IsCar() || vehicle->IsBoat())){
-		const int set=(int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
+		const int set=(int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES);
 		const int model=vehicle->GetModelIndex();
 		const std::string p=VehiclePlacement::panelName(panel);
 		const VehiclePlacement::Store &s=VehiclePlacement::runtime();

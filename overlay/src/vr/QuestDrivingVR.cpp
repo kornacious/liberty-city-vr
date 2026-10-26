@@ -147,7 +147,7 @@ struct BikeLeanCalibration
 };
 
 static bool gSettingsLoaded;
-static int PlacementSet() { return (int)ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
+static int PlacementSet() { return (int)ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES); }
 static float PlacementValue(int model, const char *key, float fallback) {
 	return VehiclePlacement::runtime().value(PlacementSet(), model, key, fallback);
 }
@@ -631,7 +631,7 @@ GetBuiltInBikeHandleCalibration(int model, int hand,
 	if(!calibration || hand < 0 || hand >= VR_HAND_COUNT)
 		return false;
 	// Prefer the row measured for the set in use, then the classic baseline.
-	const ModelSets::eModelSet active = ModelSets::GetActiveForCategory(
+	const ModelSets::eModelSet active = ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES);
 	for(int pass = 0; pass < 2; pass++){
 		const ModelSets::eModelSet wanted = pass == 0 ? active :
@@ -668,7 +668,7 @@ GetBikeCalibration(int model, int hand)
 	if(calibration.valid)
 		return &calibration;
 	char section[64];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"BikeHandleModern_%d_%s" : "BikeHandle_%d_%s", model,
 		hand == 0 ? "Left" : "Right");
@@ -706,7 +706,7 @@ GetCarCalibration(int model, int hand)
 	if(calibration.valid)
 		return &calibration;
 	char section[64];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"CarWheelV2Modern_%d_%s" : "CarWheelV2_%d_%s", model,
 		hand == 0 ? "Left" : "Right");
@@ -738,7 +738,7 @@ GetBikeLeanCalibration(int model)
 	if(calibration.valid)
 		return &calibration;
 	char section[64];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"BikeControlModern_%d" : "BikeControl_%d", model);
 	calibration.wheelieHeightCm = clamp((int)(int32)
@@ -817,7 +817,7 @@ ReadCategoryValue(int category, const char *suffix, int fallback,
 {
 	char key[64];
 	int value;
-	if(ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES) ==
+	if(ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES) ==
 	   ModelSets::MODEL_SET_MODERN){
 		sprintf(key, "%s%s", gCategoryPrefixes[category], suffix);
 		if(ReadProfileInt("VR", key, &value)) fallback = value;
@@ -848,14 +848,14 @@ ReloadVehicleCalibration()
 	for(int type = 0; type < VR_DEFAULT_VIEW_COUNT; type++){
 		gDefaultVehicleViewOffset[type].seatHeightCm = clamp(
 			(int)(int32)GetPrivateProfileIntA("VR", heightKeys[type],
-				type == VR_DEFAULT_VIEW_CAR && ModelSets::GetActiveForCategory(
+				type == VR_DEFAULT_VIEW_CAR && ModelSets::GetCalibrationSetForCategory(
 					ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_XBOX ?
 					0 : legacyHeight, kSettingsPath), -100, 150);
 		gDefaultVehicleViewOffset[type].seatDistanceCm = clamp(
 			(int)(int32)GetPrivateProfileIntA("VR", distanceKeys[type],
 				0, kSettingsPath), -100, 100);
 	}
-	const ModelSets::eModelSet modelSet = ModelSets::GetActiveForCategory(
+	const ModelSets::eModelSet modelSet = ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES);
 	for(int category = 0; category < VR_VEHICLE_CATEGORY_COUNT; category++){
 		VehicleCategoryCalibration defaults;
@@ -903,7 +903,7 @@ SaveCategoryCalibrationValue(int category, const char *suffix, int value)
 		return;
 	char key[64], text[32];
 	sprintf(key, "%s%s%s",
-		ModelSets::GetActiveForCategory(ModelSets::MODEL_CATEGORY_VEHICLES) ==
+		ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_VEHICLES) ==
 			ModelSets::MODEL_SET_MODERN ? "Modern" : "",
 		gCategoryPrefixes[category], suffix);
 	sprintf(text, "%d", value);
@@ -937,7 +937,7 @@ ReadViewValue(int model, const char *name, int fallback)
 {
 	char classic[64], active[64];
 	sprintf(classic, "VehicleView_%d", model);
-	sprintf(active, ModelSets::GetActiveForCategory(
+	sprintf(active, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"VehicleViewModern_%d" : "VehicleView_%d", model);
 	int value;
@@ -1060,7 +1060,7 @@ SaveViewCalibrationValue(int model, const char *name, int value)
 		return;
 	}
 	char section[64], text[32];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"VehicleViewModern_%d" : "VehicleView_%d", model);
 	sprintf(text, "%d", value);
@@ -1074,7 +1074,7 @@ SaveCalibrationValue(const char *prefix, int model, int hand,
 	if(!prefix || !name || hand < 0 || hand >= VR_HAND_COUNT)
 		return;
 	char section[64], text[32];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"%sModern_%d_%s" : "%s_%d_%s", prefix, model,
 		hand == 0 ? "Left" : "Right");
@@ -1086,7 +1086,7 @@ static void
 SaveBikeLeanValue(int model, const char *name, int value)
 {
 	char section[64], text[32];
-	sprintf(section, ModelSets::GetActiveForCategory(
+	sprintf(section, ModelSets::GetCalibrationSetForCategory(
 		ModelSets::MODEL_CATEGORY_VEHICLES) == ModelSets::MODEL_SET_MODERN ?
 		"BikeControlModern_%d" : "BikeControl_%d", model);
 	sprintf(text, "%d", value);

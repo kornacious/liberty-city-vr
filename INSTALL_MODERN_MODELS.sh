@@ -2,6 +2,18 @@
 # Linux port of INSTALL_MODERN_MODELS.bat for Liberty City VR.
 set -uo pipefail
 
+goto_finish() {
+    echo ""
+    if [ "$RESULT" -ne 0 ]; then
+        echo "FAILED. Read the error above; inspect the diagnostic log before retrying."
+    fi
+    if [ -t 0 ]; then
+        echo "Press any key to close."
+        read -r -n 1 || true
+    fi
+    exit "$RESULT"
+}
+
 title "Liberty City VR - Download Build and Install Modern / Xbox Models" 2>/dev/null || true
 cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
@@ -23,15 +35,4 @@ fi
 bash "$INSTALLER" "$@"
 RESULT=$?
 
-goto_finish() {
-    echo ""
-    if [ "$RESULT" -ne 0 ]; then
-        echo "FAILED. Read the error above; the previous overlay folder was not replaced silently."
-    else
-        echo "COMPLETE. Fully restart Liberty City VR on the headset."
-    fi
-    echo ""
-    echo "This window will remain open. Press any key when you are done reading it."
-    read -n 1
-    exit "$RESULT"
-}
+goto_finish

@@ -48,10 +48,11 @@ g++ -O2 -o txdcompress txdcompress.cpp
 
 (`txdcompress` is gitignored; `txdcompress.exe` is the committed Windows build.)
 
-The asset wizard currently defaults to Xbox. Linux needs a local Xbox archive
-or extracted folder; the Modern preparation branches are incomplete. See
-[QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md) for current commands and
-limitations before preparing optional assets.
+The asset wizard defaults to Xbox and supports Xbox, Modern and Both using
+one pinned GTA III Xbox Version HD (re3) release. Python 3.9+ is required on
+both platforms. Supply the ModDB ZIP locally if automated download is blocked.
+See [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md) for commands, storage
+requirements, category effects and validation limits.
 
 Do not launch `tools\build-and-install.ps1` directly. The `.bat` wrapper keeps
 the window open and always prints the location of the persistent diagnostic

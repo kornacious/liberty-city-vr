@@ -1,142 +1,144 @@
-# Classic, Modern and Xbox model assets on Quest
+# Classic, Xbox HD and Modern assets on Quest
 
-The runtime exposes World, Vegetation, Vehicles, Peds and Weapons categories
-under `VR MENU > SETTINGS > MODEL ASSETS`. Select a non-Classic preset before
-mixing overlay categories; the Classic preset forces every category to the base
-installation. Changes require a full process restart.
+Xbox and Modern preparation now use **[III] Xbox Version HD (Supports re3)**,
+ModDB file 224588, released December 4, 2021:
+https://www.moddb.com/mods/gta-iii-xbox-version-hd/downloads/iii-xbox-version-hd-supports-re3
 
-The Quest baseline requests Modern world and weapons, with Classic vegetation,
-vehicles and pedestrians. Missing overlays fall back to the base installation.
-Existing saved choices take precedence after the one-time baseline migration.
-Keep vegetation Classic: HD trees can be expensive on the mobile GPU. The Xbox
-preset keeps vegetation Classic and requests Xbox for the other categories.
+This replaces the old vehicle pack, Google Drive downloads and two-pack Modern
+workflow. The two profile names remain available for saved category choices;
+newly generated Xbox and Modern contain the same assets. Installing files
+preserves saved selections. Fully restart the game after changing categories.
 
-No third-party pack is included in the source kit. Players supply their own
-legally obtained assets; generated overlays must not be redistributed.
+No game/mod assets are included in the repository or APK. Build the overlays
+locally for a legally owned GTA III PC installation. Never redistribute them.
 
-## Xbox preparation and installation
+## Prepare and install
 
-Despite its name, `INSTALL_MODERN_MODELS.bat` / `INSTALL_MODERN_MODELS.sh`
-currently defaults to the Xbox profile. It requires an original GTA III PC
-installation and, unless building only, an installed Quest APK and an authorized
-USB connection.
+Install **Python 3.9 or later** and put it on PATH (Windows and Linux). Windows
+uses the bundled `txdcompress.exe`. Linux also needs a C++ compiler; first run:
 
-On Windows, the wizard tries an automatic pack download and can ask for a local
-archive or extracted folder if it is unavailable. On Linux, supply a local
-archive or extracted folder; the current Python preparation path does not
-download a pack automatically. Explicit local-source examples:
+```sh
+c++ -O2 -o tools/modelsets/txdcompress tools/modelsets/txdcompress.cpp
+```
+
+Windows:
 
 ```powershell
-.\INSTALL_MODERN_MODELS.bat -GameDir "C:\Games\GTA3" -XboxSource "C:\Packs\Xbox"
+.\INSTALL_MODERN_MODELS.bat -GameDir "C:\Games\GTA3" -Profile Both -XboxArchive "C:\Packs\III_Xbox_Version_HD_Supports_re3.zip"
 ```
+
+Linux:
 
 ```sh
-./INSTALL_MODERN_MODELS.sh --game-dir "$HOME/Games/GTA3" --xbox-source "$HOME/Packs/Xbox"
+./INSTALL_MODERN_MODELS.sh --game-dir "$HOME/Games/GTA3" --profile both --xbox-archive "$HOME/Packs/III_Xbox_Version_HD_Supports_re3.zip"
 ```
 
-Use `-XboxArchive` / `--xbox-archive` for an archive instead of a folder.
-`-XboxOnly` / `--xbox-only` explicitly selects the default profile.
-`-BuildOnly` / `--build-only` builds without device access. `-OutputDir` /
-`--output-dir` selects the generated profile folder; its leaf name must be
-`xbox`. The default output is the selected PC game's `modelsets/xbox` folder.
-Work files are stored in `C:\LCVRBuild\modern-assets` on Windows or
-`$HOME/LCVRBuild/modern-assets` on Linux unless overridden.
+Default profile is Xbox. Use `-Profile Modern` / `--profile modern` for Modern
+only. `-XboxOnly`, `-ModernOnly` and `-SkipXbox` remain compatibility aliases.
+`-ModernArchive` and `-HdArchive` also accept this same pinned archive.
+`-ModsArchive` is rejected because the former second pack is retired.
 
-Windows uses the bundled texture compressor. Linux needs Python 3, a C++
-compiler, and an extractor suitable for the supplied archive. Build the
-compressor once:
+Use `-BuildOnly` / `--build-only` to prepare without device access.
+`-OutputDir` / `--output-dir` requires one profile and a matching `xbox` or
+`modern` folder name. Both writes to `<game>/modelsets/xbox` and `modern`.
+`-XboxSource` / `--xbox-source` accepts the extracted re3 folder or its wrapper;
+its allowlisted files must match the supported release exactly.
 
-```sh
-cd tools/modelsets
-g++ -O2 -o txdcompress txdcompress.cpp
-```
+Without a local input, `-AcceptDownloads` / `--accept-downloads` requests the
+pinned release through a fresh official ModDB mirror. ModDB may block automated
+clients; the wizard fails with the release URL and instructions to supply the
+ZIP locally. It never substitutes another pack. Non-interactive use without
+local input requires explicit download consent. Old cached vehicle ZIPs and
+unversioned source folders are never auto-selected.
 
-The generated profile includes:
+Default cache: `C:\LCVRBuild\modern-assets` on Windows,
+`$HOME/LCVRBuild/modern-assets` on Linux. Allow roughly 12 GB free during
+preparation; this pack is much larger than the former vehicle-only overlay.
+A generated IMG is about 2.01 GiB; installing Both uses roughly twice that.
+
+The supported ZIP is 1,552,864,677 bytes. Its SHA256 is:
 
 ```text
-modelsets/xbox/models/gta3.img
-modelsets/xbox/models/gta3.dir
-modelsets/xbox/vehicle_models.txt
-modelsets/xbox/BUILD_INFO.txt
+879024BED6FB89C218F6C75A46119F95FC068A64849BC74DEDF0851D3FD210A6
 ```
 
-Pedestrian and weapon manifests and loose wheel assets depend on the input
-pack. A collision file may be retained by the builder, but the runtime keeps
-base `models/coll/` files rather than redirecting them to an overlay.
+Builder `0.8.0-xbox-hd-re3-1` checks the archive and 92 allowlisted source-file
+hashes. It merges `gta3`, `xbox_models`, `xbox_hd_textures`, `xbox_vehicles`,
+with later archives taking precedence. Four empty base placeholders are omitted.
+The result contains 4,051 archive entries, 62 vehicle DFFs and 101 vegetation
+names. DFFs retain their authored bytes; TXDs are compressed/mip-capped at
+1024 where supported by the converter. Input files remain untouched.
 
-The current workflow accepts user-selected sources and does not enforce a
-pinned source archive hash or a fixed count of source files. Xbox validation
-checks the generated archive pair and directory structure. The device installer
-checks copied file sizes and SHA256 hashes for `gta3.img` and `gta3.dir` before
-replacing the previous profile. Those transfer checks do not establish the
-source pack's provenance or visual compatibility.
+Every output file has a hash in `BUILD_INFO.txt`. Validation checks all hashes,
+the exact output file inventory and IMG directory structure. Preparation builds
+in temporary directories and replaces only folders marked as generated profiles.
+Explicit local input rebuilds an existing generated profile. Without explicit
+input, only a complete profile from this builder/source version is reused.
 
-After installation, select the Xbox preset or the desired category mix in
-`VR MENU > SETTINGS > MODEL ASSETS`, then fully restart. The installer preserves
-saved profile choices; installing files does not select the profile.
-
-Builder 0.7.1 selects the main `Fixed Xbox Vehicles` folder rather than merging
-optional variants. When its police dictionary identifies Vice City liveries,
-ambulance, Enforcer, fire truck, police car and police helicopter use matching
-base GTA III geometry and textures. These are Classic fallbacks until compatible
-GTA III Xbox replacements are supplied. The Predator keeps its supplied model;
-opaque C888 textures ignore their unused alpha byte during compression.
-Older generated profiles must be rebuilt with the updated compressor. The
-preparation wizard rejects older builder versions instead of reusing them.
-
-For GTA III vehicles, use **[III] Fixed XBOX Vehicles v1.0** by MrFinger
-(`III_Fixed_XBOX_Vehicles_v1.0.zip`, ModDB addon 251417). Builder 0.7.2 accepts
-the archive's wrapper folder and selects its main `Fixed Xbox Vehicles` set;
-optional aircraft, cutscene and prop variants are excluded. This pack supplies
-GTA III emergency vehicle liveries, so the Vice City compatibility fallbacks
-above do not apply. Supply the archive with `-XboxArchive` / `--xbox-archive`.
-The current Windows automatic download still targets the older pack; select
-the GTA III archive explicitly when rebuilding. Replacing an existing valid
-profile requires a direct builder invocation with `-Force` / `--force`.
-
-## Modern preparation limitations
-
-The old two-pack automatic Modern workflow is no longer implemented by the
-current wrapper. On Windows, the Modern branch passes a `modern` output folder
-to a builder that requires an `xbox` folder and fails. On Linux, the Modern/Both
-branches do not build or install a Modern overlay, even if the wrapper prints
-a completion message. Do not use `-ModernOnly`, `-SkipXbox`, or their Unix
-counterparts as a working Modern preparation route in this revision.
-
-The older `tools/modelsets/build-modern-modelset.ps1` and `.sh` remain in the
-repository, but contain Vice City-specific input assumptions. They are not a
-verified GTA III replacement for the current wrapper. An already generated,
-compatible Modern overlay can still be installed using the commands below.
-
-A Modern overlay requires `models/gta3.img`, `models/gta3.dir`,
-`vegetation_models.txt` and `BUILD_INFO.txt`. Preserve any generated loose wheel
-assets under `models/generic/`. If the vegetation manifest is missing, the
-runtime makes that category unavailable rather than guessing model names.
-
-## Installing an existing overlay
-
-Use the installer for the matching profile:
+Device installers stage and verify file sizes and every manifest hash before
+replacing a profile. Saves, settings and the original game files are preserved.
+Direct installation of a prepared profile remains available:
 
 ```powershell
-.\tools\install-modern-models.ps1 -Profile Xbox -ModernDir "C:\path\to\xbox"
-.\tools\install-modern-models.ps1 -Profile Modern -ModernDir "C:\path\to\modern"
+.\tools\install-modern-models.ps1 -Profile Xbox -ModernDir "C:\Games\GTA3\modelsets\xbox"
+.\tools\install-modern-models.ps1 -Profile Modern -ModernDir "C:\Games\GTA3\modelsets\modern"
 ```
 
 ```sh
-./tools/install-modern-models.sh --profile xbox --modern-dir /path/to/xbox
-./tools/install-modern-models.sh --profile modern --modern-dir /path/to/modern
+./tools/install-modern-models.sh --profile xbox --modern-dir "$HOME/Games/GTA3/modelsets/xbox"
+./tools/install-modern-models.sh --profile modern --modern-dir "$HOME/Games/GTA3/modelsets/modern"
 ```
 
-These installers stage the copy and verify it before replacing the profile
-folder. They preserve saves, settings, the base game and the other overlay.
-Final device paths are:
+## In-game effects and boundaries
 
-```text
-/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/xbox
-/sdcard/Android/data/com.libertyvr.quest/files/gamedata/modelsets/modern
-```
+`VR MENU > SETTINGS > MODEL ASSETS` offers a preset and per-category choices.
+Classic forces retail assets. A non-Classic preset enables category mixing.
+The Xbox startup default requests Xbox world, vehicles, peds and weapons, with
+Classic vegetation. Existing saved choices take precedence. The existing Modern
+startup defaults request Modern world/weapons and Classic vehicles/peds/vegetation.
 
-Each profile must directly contain its `models` directory; avoid nesting
-`xbox/xbox` or `modern/modern`. Fully restart after copying or changing categories.
-See [QUEST_PORT.md](QUEST_PORT.md) for the base game's storage bootstrap and
-[BUILDING.md](../../BUILDING.md) for the APK installation workflow.
+| Category | What follows the selected profile |
+|---|---|
+| World / buildings | Buildings, roads, props, LODs, radar dictionaries; matching map IDE definitions, IPL placements and map COL files; `models/coll/generic.col`; HUD, fonts, menu, particles, controller prompt dictionaries and splash textures. |
+| Vehicles | Cars, emergency vehicles, boats, aircraft and other vehicle DFF/TXD entries; loose `models/generic/wheels.dff`. Retail vehicle collision files remain in use, including train/boat collision records. |
+| Pedestrians | Player/pedestrian DFF/TXD entries recognized by the engine, plus `3d` cutscene actor entries. Existing animation, body IK and ragdoll systems still apply. |
+| Weapons | GTA III weapon IDs, including projectiles/bombs, and their associated dictionaries. Existing VR weapon behavior still applies. |
+| Vegetation | The manifest identifies objects using the pack's authored tree dictionaries. Xbox and Modern can both be selected explicitly; Classic remains the recommended starting choice pending performance checks. |
+
+Streaming filters DFFs by engine model type, weapon ID and vegetation manifest.
+A texture dictionary shared by categories falls back to retail if its owners
+use different profiles. Unreferenced dictionaries follow World, except `3d`
+cutscene actors. Missing files fall back to retail. `models/generic.txd` is
+shared by roads, props and trees and follows World, so Classic vegetation can
+still receive those shared HD textures. World map definitions and collisions
+follow World as a unit; this can change scene placement and collision behavior.
+
+Both new profiles use the Xbox VR calibration namespace for weapon grips,
+lasers/muzzles, seats, steering controls and radio placement. Old Modern geometry
+offsets are inappropriate for this new source. Previously stored Xbox overrides
+remain active; their fit with the new pack still needs visual checking.
+
+Excluded from preparation: PC EXE/DLL/PDB files, re3 settings, controller mapping
+configuration, bundled save files, mission scripts, optional audio, GXT language
+files, skins, and Neo renderer configuration. Selecting this pack does not
+activate the PC Neo renderer or import its graphics settings, freeroam scripts
+or saves. Native Quest rendering, VR UI and gameplay settings remain authoritative.
+
+## Validation and remaining headset work
+
+The local source archive matched ModDB's published MD5 and the pinned SHA256.
+Both complete profiles were built from it; Windows PowerShell preparation,
+Bash cache reuse and a fresh Bash Modern build passed. Focused tests cover category routing, shared TXDs,
+Classic fallback, calibration selection, failed conversion preservation,
+archive/source validation, extraction exclusions and blocked download responses.
+The full ARM64 debug APK compiled and updated the personal Quest 3 device.
+The broader source gate finished with 55 passing suites and four pre-existing
+fixture failures; see [the validation report](../../testreports/XBOX_HD_ASSET_PREPARATION.md).
+Generated pack assets were not transferred in that validation run.
+
+These checks do not establish visual compatibility or frame-time performance.
+Before release, check both eyes during loading, every district/LOD, collisions,
+radar/HUD/font glyphs, vehicles and wheels, player/pedestrian skinning and ragdolls,
+cutscenes, every weapon grip/muzzle/scope, mixed categories, and sustained memory,
+GPU and thermal behavior. The PC pack's larger textures, changed world geometry
+and changed collision data expand validation well beyond vehicles.
