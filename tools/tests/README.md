@@ -376,3 +376,9 @@ launches the real Windows preparation script with synthetic game sentinels.
 It waits for each download/local-archive question to become visible before
 sending any answer, detecting prompts hidden by the PowerShell output pipeline.
 No download or device command is issued. The same test accepts PowerShell 7.
+
+`test-installer-native-tools.ps1` exercises the production build command wrapper
+under strict PowerShell error handling: successful stderr warnings, nonzero
+exit codes, missing executables and caller preference restoration. Its isolated
+ADB discovery checks cover the default `LCVRBuild` cache, explicit SDK precedence
+and missing-SDK failures, without discovering a device or transferring data.

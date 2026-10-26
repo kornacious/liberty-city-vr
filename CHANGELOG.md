@@ -9,6 +9,10 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Find the Liberty City build wizard's cached Android SDK during optional model
+  installation on Windows/Linux. Treat native SDK/Gradle stderr warnings as
+  diagnostics in Windows PowerShell 5.1 while enforcing process failure codes.
+
 - Make model preparation prompts visible through PowerShell's output pipeline,
   run Python unbuffered, bound interpreter probes, and show file/byte progress
   through validation, extraction, conversion and archive creation.

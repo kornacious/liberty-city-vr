@@ -108,7 +108,7 @@ find_adb() {
   [ -n "$ANDROID_SDK" ] && candidates+=("$ANDROID_SDK/platform-tools/adb")
   [ -n "${ANDROID_HOME:-}" ] && candidates+=("$ANDROID_HOME/platform-tools/adb")
   [ -n "${ANDROID_SDK_ROOT:-}" ] && candidates+=("$ANDROID_SDK_ROOT/platform-tools/adb")
-  candidates+=("${HOME}/VCVRBuild/.android-sdk/platform-tools/adb" "${HOME}/Android/Sdk/platform-tools/adb")
+  candidates+=("${HOME}/LCVRBuild/.android-sdk/platform-tools/adb" "${HOME}/VCVRBuild/.android-sdk/platform-tools/adb" "${HOME}/Android/Sdk/platform-tools/adb")
   local installed
   installed="$(command -v adb || true)"
   [ -n "$installed" ] && candidates+=("$installed")

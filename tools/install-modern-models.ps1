@@ -107,6 +107,7 @@ function Find-Adb {
     if (-not [string]::IsNullOrWhiteSpace($env:ANDROID_SDK_ROOT)) {
         $candidates.Add((Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe"))
     }
+    $candidates.Add("C:\LCVRBuild\.android-sdk\platform-tools\adb.exe")
     $candidates.Add("C:\VCVRBuild\.android-sdk\platform-tools\adb.exe")
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
         $candidates.Add((Join-Path $env:LOCALAPPDATA "Android\Sdk\platform-tools\adb.exe"))
@@ -338,7 +339,7 @@ try {
     }
     Write-Host ""
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "The active Modern folder was not replaced before a complete verified copy was ready."
+    Write-Host "The active $Profile folder was not replaced before a complete verified copy was ready."
     Write-Host "Diagnostic log: $LogPath"
     Stop-DiagnosticLog
     exit 1

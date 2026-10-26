@@ -73,13 +73,26 @@ function Invoke-Checked {
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [string]$FailureMessage = "Command failed"
     )
-    if ($FilePath -eq $script:adb) {
-        Invoke-PrivateAdb @Arguments | ForEach-Object { Write-Host $_ }
-    } else {
-        & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
+    if (-not (Test-Path -LiteralPath $FilePath -PathType Leaf)) {
+        throw "$FailureMessage (required tool is missing)."
     }
-    if ($LASTEXITCODE -ne 0) {
-        throw "$FailureMessage (exit code $LASTEXITCODE)."
+    # Windows PowerShell 5.1 wraps native stderr in ErrorRecords. Warnings
+    # from Gradle/sdkmanager must remain visible without terminating a
+    # successful command; the process exit code determines command failure.
+    $savedErrorPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        if ($FilePath -eq $script:adb) {
+            Invoke-PrivateAdb @Arguments | ForEach-Object { Write-Host $_ }
+        } else {
+            & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
+        }
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "$FailureMessage (exit code $exitCode)."
     }
 }
 

@@ -90,7 +90,10 @@ Explicit local input rebuilds an existing generated profile. Without explicit
 input, only a complete profile from this builder/source version is reused.
 
 Device installers stage and verify file sizes and every manifest hash before
-replacing a profile. Saves, settings and the original game files are preserved.
+replacing a profile. They discover the build wizard's SDK at
+`C:\LCVRBuild\.android-sdk` on Windows or `$HOME/LCVRBuild/.android-sdk` on
+Linux. For a custom SDK location, pass `-AndroidSdk` / `--android-sdk` with
+its root folder (the directory containing `platform-tools`). Saves, settings and the original game files are preserved.
 Direct installation of a prepared profile remains available:
 
 ```powershell

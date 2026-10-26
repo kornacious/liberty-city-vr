@@ -75,3 +75,32 @@ checked in Windows PowerShell 5.1 and PowerShell 7: each question appeared befor
 any answer was sent. Both real cached profiles validated with visible progress.
 Python compilation and PowerShell syntax checks passed. These follow-up checks
 used build-only mode and did not transfer data or alter headset profiles.
+
+## SDK discovery and Windows native-command follow-up
+
+The model installer omitted the build wizard's `LCVRBuild` SDK cache and only
+listed the legacy `VCVRBuild` location. Windows and Bash model installation now
+check the Liberty City default cache first while retaining explicit/environment
+SDK overrides and the legacy fallback.
+
+The build wrapper ran native commands under PowerShell's global Stop preference.
+Windows PowerShell 5.1 converted Gradle's SDK XML stderr warning into a terminating
+ErrorRecord despite a successful native process. Native diagnostics are now
+forwarded under Continue with the caller preference restored afterward; actual
+nonzero exit codes and missing executables still fail.
+
+Production-function fixtures passed in PowerShell 5.1 and 7 for stderr warnings,
+exit code 7, missing tools, restored preferences, default SDK selection and
+explicit SDK precedence. Fake-ADB privacy regressions and script syntax checks
+passed. The actual complete build wizard passed in Windows PowerShell 5.1,
+including the SDK XML warning, and compiled the ARM64 debug APK in 45 seconds.
+
+The task APK and both real prepared profiles were installed on the personal
+Quest 3 device. Each profile transferred 90 files and passed all installer
+checks before activation. SDK discovery was exercised without an explicit SDK
+argument or Android SDK environment variables. The first validation launch
+inherited incompatible PowerShell module paths and stopped before profile
+activation; retrying in the native Windows PowerShell environment completed.
+No application uninstall or data reset occurred. Saved category choices, saves
+and base game files were preserved. The game remains stopped for headset testing;
+visual compatibility and sustained performance are still not established.
