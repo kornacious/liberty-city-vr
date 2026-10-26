@@ -1,5 +1,23 @@
 # Local privacy checks
 
+## Installer diagnostics
+
+The Windows and Linux build, model-install and game-file repair tools keep ADB
+device discovery local. Device menus show numbered model names; target status
+uses **personal Quest 3 device**. ADB output is captured and device identifiers
+are replaced before console output, diagnostic logging or error reporting.
+Windows logs use explicit sanitized messages rather than transcript headers,
+which can include a private `-Serial` launch argument.
+
+If several devices have the same model name, connect only the intended headset
+before continuing, or select it with the existing local `-Serial` / `--serial`
+option. Do not paste that argument into support reports.
+
+Logs created by older versions are not rewritten. Keep those local and generate
+a fresh diagnostic log with the updated tools when requesting support.
+
+## Repository checks
+
 Before committing or pushing from any new clone, run with Python 3:
 
 ```text

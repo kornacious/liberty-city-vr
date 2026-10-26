@@ -28,6 +28,7 @@ $testedRe3Commit = "b050e1cc63b1869e6b514ab2f1a00ef4969e0c84"
 $re3Url = "https://github.com/mrxenginner/re3.git"
 $re3Branch = "master"
 $re3DirName = "re3-public-b050e1c"
+. (Join-Path $PSScriptRoot "device-diagnostics.ps1")
 $script:transcriptStarted = $false
 $script:adb = $null
 
@@ -48,7 +49,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($logDirectory)) {
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     }
-    Start-Transcript -Path $LogPath -Force | Out-Null
+    Initialize-PrivateDiagnosticLog
     $script:transcriptStarted = $true
 } catch {
     Write-Host "Warning: diagnostic logging could not start: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -56,7 +57,7 @@ try {
 
 function Stop-DiagnosticLog {
     if (-not $script:transcriptStarted) { return }
-    try { Stop-Transcript | Out-Null } catch { }
+    $script:diagnosticLogEnabled = $false
     $script:transcriptStarted = $false
 }
 
@@ -65,6 +66,9 @@ function Invoke-NativeCapture {
         [Parameter(Mandatory = $true)][string]$FilePath,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
+    if ($FilePath -eq $script:adb) {
+        return Invoke-PrivateAdbCapture -Arguments $Arguments -Discovery:($Arguments[0] -eq "devices")
+    }
     $savedErrorPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
@@ -226,7 +230,7 @@ function Select-QuestDevice {
     }
     if (-not [string]::IsNullOrWhiteSpace($Serial)) {
         if ($devices -notcontains $Serial) {
-            throw "Quest '$Serial' is not connected and authorized. Accept the USB debugging prompt inside the headset."
+            throw "The selected device is not connected and authorized. Accept the USB debugging prompt inside the headset."
         }
         return
     }
@@ -240,7 +244,7 @@ function Select-QuestDevice {
     if ($NonInteractive) { throw "Multiple Android devices are connected; pass -Serial." }
     Write-Host "Connected Android devices:" -ForegroundColor Yellow
     for ($index = 0; $index -lt $devices.Count; $index++) {
-        Write-Host "  $($index + 1). $($devices[$index])"
+        Write-Host "  $($index + 1). $(Get-PrivateDeviceLabel $devices[$index])"
     }
     $answer = Read-Host "Select the Quest number"
     $selection = 0
@@ -260,7 +264,7 @@ try {
     $script:adb = Find-Adb
     Write-Host "ADB: $script:adb"
     Select-QuestDevice
-    Write-Host "Quest: $Serial"
+    Write-Host "Quest: personal Quest 3 device"
 
     # A missing gamedata root means the game was never given its data; copying
     # the port assets into an empty tree would look like success and still fail

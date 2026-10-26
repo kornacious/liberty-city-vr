@@ -9,6 +9,10 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Sanitized device identifiers in build/install, model-install and game-file
+  repair diagnostics. Device menus show numbered model names; Windows logs
+  no longer include transcript headers containing launch arguments.
+
 - Added full-body IK and articulated GTA III-style hands, including support for
   non-skinned PC models, room-scale tracking, vehicle entry and cutscene cameras.
 - Improved weapon grips, bore-centered firing and aiming, factory calibration

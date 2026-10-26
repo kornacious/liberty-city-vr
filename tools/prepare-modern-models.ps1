@@ -31,6 +31,7 @@ $repoRoot = Split-Path $PSScriptRoot -Parent
 $builder = Join-Path $PSScriptRoot "modelsets\build-modern-modelset.ps1"
 $xboxBuilder = Join-Path $PSScriptRoot "prepare-xbox-models.ps1"
 $questInstaller = Join-Path $PSScriptRoot "install-modern-models.ps1"
+. (Join-Path $PSScriptRoot "device-diagnostics.ps1")
 $script:transcriptStarted = $false
 
 try {
@@ -38,7 +39,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($logDirectory)) {
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     }
-    Start-Transcript -Path $LogPath -Force | Out-Null
+    Initialize-PrivateDiagnosticLog
     $script:transcriptStarted = $true
 } catch {
     Write-Host "Warning: diagnostic logging could not start: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -46,7 +47,7 @@ try {
 
 function Stop-DiagnosticLog {
     if (-not $script:transcriptStarted) { return }
-    try { Stop-Transcript | Out-Null } catch { }
+    $script:diagnosticLogEnabled = $false
     $script:transcriptStarted = $false
 }
 
@@ -59,7 +60,7 @@ function Invoke-NativeChecked {
     $previousErrorAction = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        & $FilePath @Arguments
+        & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
         $nativeExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorAction

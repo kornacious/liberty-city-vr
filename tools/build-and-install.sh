@@ -22,6 +22,7 @@
 #   --help              / -h                show this help
 
 set -uo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/device-diagnostics.sh"
 
 # ---- defaults -------------------------------------------------------------
 GAME_DIR=""
@@ -316,7 +317,7 @@ adb_checked() {
 
 select_quest_device() {
   local output
-  capture "$ADB" devices -l
+  private_adb_discover
   [ "$CAPTURED_EXIT" -eq 0 ] || die "adb devices failed."
   local devices=()
   local line
@@ -329,7 +330,7 @@ select_quest_device() {
   if [ -n "$SERIAL" ]; then
     local d
     for d in "${devices[@]}"; do [ "$d" = "$SERIAL" ] && return 0; done
-    die "Quest '$SERIAL' is not connected and authorized. Check the USB debugging prompt inside the headset."
+    die "The selected device is not connected and authorized. Check the USB debugging prompt inside the headset."
   fi
   if [ "${#devices[@]}" -eq 0 ]; then
     die "No authorized Android device found. Connect the Quest, enable USB debugging, and accept the prompt inside the headset."
@@ -344,7 +345,7 @@ select_quest_device() {
   echo "Connected devices:"
   local i
   for i in "${!devices[@]}"; do
-    echo "  $((i + 1)). ${devices[$i]}"
+    echo "  $((i + 1)). $(private_device_label "${devices[$i]}")"
   done
   local selection
   read -r -p "Select the Quest device number " selection
@@ -404,7 +405,7 @@ find_child_directory() {
 
 require_installed_for_update() {
   local installed
-  installed="$("$ADB" -s "$SERIAL" shell pm path "$PACKAGE_NAME" 2>&1)"
+  installed="$(private_adb -s "$SERIAL" shell pm path "$PACKAGE_NAME" 2>&1)"
   [ "$?" -eq 0 ] && printf '%s\n' "$installed" | grep -q '^package:' ||
     die "UPDATE requires an existing Liberty City VR installation. Use BUILD_AND_INSTALL for the first install."
 }
@@ -513,12 +514,12 @@ fi
 
 step 7 "Installing on the connected Quest"
 select_quest_device
-echo "Quest: $SERIAL"
+echo "Quest: personal Quest 3 device"
 if [ "$UPDATE_ONLY" -eq 1 ]; then require_installed_for_update; fi
 # Build the full adb argv (with -s SERIAL when pinned) and run it, capturing
 # output because a failed install must be inspected, not treated as fatal
 # before the incompatible-signature handling below.
-adb_argv=("$ADB")
+adb_argv=(private_adb)
 if [ -n "$SERIAL" ]; then adb_argv+=("-s" "$SERIAL"); fi
 adb_argv+=("install" "-r" "$APK")
 install_output="$("${adb_argv[@]}" 2>&1)"
@@ -561,7 +562,7 @@ if [ "$UPDATE_ONLY" -eq 1 ]; then
   exit 0
 fi
 # Run the save-provider bootstrap query with the same device prefix.
-provider_argv=("$ADB")
+provider_argv=(private_adb)
 if [ -n "$SERIAL" ]; then provider_argv+=("-s" "$SERIAL"); fi
 provider_argv+=("shell" "content" "query" "--uri" "$SAVE_PROVIDER_URI" "--projection" "_display_name:_size")
 provider_output="$("${provider_argv[@]}" 2>&1)"
@@ -603,21 +604,21 @@ if [ "$SKIP_GAME_DATA" -eq 0 ]; then
       find "$folder" -type d | while read -r subdir; do
         rel="${subdir#"${RESOLVED_GAME%/}/"}"
         if [ -n "$SERIAL" ]; then
-          "$ADB" -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
+          private_adb -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
         else
-          "$ADB" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
+          private_adb shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg "$rel" >/dev/null 2>&1 || true
         fi
       done
       if [ -n "$SERIAL" ]; then
-        "$ADB" -s "$SERIAL" push "$folder" "$REMOTE_GAME_DATA" || die "Failed to copy $folder"
+        private_adb -s "$SERIAL" push "$folder" "$REMOTE_GAME_DATA" || die "Failed to copy $folder"
       else
-        "$ADB" push "$folder" "$REMOTE_GAME_DATA" || die "Failed to copy $folder"
+        private_adb push "$folder" "$REMOTE_GAME_DATA" || die "Failed to copy $folder"
       fi
     done
     if [ -n "$SERIAL" ]; then
-      "$ADB" -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
+      private_adb -s "$SERIAL" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
     else
-      "$ADB" shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
+      private_adb shell content call --uri content://com.libertyvr.quest.saves --method mkdir --arg txd >/dev/null 2>&1 || true
     fi
   else
     echo "Game-data copy skipped. The app requires existing data under $REMOTE_GAME_DATA."
@@ -640,19 +641,19 @@ for name in "${port_model_files[@]}"; do
   [ -f "$ASSEMBLED_DIR/gamefiles/models/$name" ] || die "Required port asset is missing from the assembled tree: gamefiles/models/$name"
 done
 if [ -n "$SERIAL" ]; then
-  "$ADB" -s "$SERIAL" shell mkdir -p "$REMOTE_GAME_DATA/TEXT"
-  "$ADB" -s "$SERIAL" shell mkdir -p "$REMOTE_GAME_DATA/models"
+  private_adb -s "$SERIAL" shell mkdir -p "$REMOTE_GAME_DATA/TEXT"
+  private_adb -s "$SERIAL" shell mkdir -p "$REMOTE_GAME_DATA/models"
 else
-  "$ADB" shell mkdir -p "$REMOTE_GAME_DATA/TEXT"
-  "$ADB" shell mkdir -p "$REMOTE_GAME_DATA/models"
+  private_adb shell mkdir -p "$REMOTE_GAME_DATA/TEXT"
+  private_adb shell mkdir -p "$REMOTE_GAME_DATA/models"
 fi
 [ $? -eq 0 ] || die "Could not create the port asset directories on the headset"
 for name in "${port_text_files[@]}"; do
-  if [ -n "$SERIAL" ]; then "$ADB" -s "$SERIAL" push "$ASSEMBLED_DIR/gamefiles/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name"; else "$ADB" push "$ASSEMBLED_DIR/gamefiles/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name"; fi
+  if [ -n "$SERIAL" ]; then private_adb -s "$SERIAL" push "$ASSEMBLED_DIR/gamefiles/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name"; else private_adb push "$ASSEMBLED_DIR/gamefiles/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name"; fi
   [ $? -eq 0 ] || die "Failed to copy port asset TEXT/$name"
 done
 for name in "${port_model_files[@]}"; do
-  if [ -n "$SERIAL" ]; then "$ADB" -s "$SERIAL" push "$ASSEMBLED_DIR/gamefiles/models/$name" "$REMOTE_GAME_DATA/models/$name"; else "$ADB" push "$ASSEMBLED_DIR/gamefiles/models/$name" "$REMOTE_GAME_DATA/models/$name"; fi
+  if [ -n "$SERIAL" ]; then private_adb -s "$SERIAL" push "$ASSEMBLED_DIR/gamefiles/models/$name" "$REMOTE_GAME_DATA/models/$name"; else private_adb push "$ASSEMBLED_DIR/gamefiles/models/$name" "$REMOTE_GAME_DATA/models/$name"; fi
   [ $? -eq 0 ] || die "Failed to copy port asset models/$name"
 done
 
@@ -663,19 +664,19 @@ for name in "${hand_files[@]}"; do
   [ -f "$hands_source/$name" ] || die "Bundled VR hand file is missing: $name"
 done
 if [ -n "$SERIAL" ]; then
-  "$ADB" -s "$SERIAL" shell mkdir -p "$hands_remote"
+  private_adb -s "$SERIAL" shell mkdir -p "$hands_remote"
 else
-  "$ADB" shell mkdir -p "$hands_remote"
+  private_adb shell mkdir -p "$hands_remote"
 fi
 [ $? -eq 0 ] || die "Could not create the VR hand data directory"
 for name in "${hand_files[@]}"; do
-  if [ -n "$SERIAL" ]; then "$ADB" -s "$SERIAL" push "$hands_source/$name" "$hands_remote/$name"; else "$ADB" push "$hands_source/$name" "$hands_remote/$name"; fi
+  if [ -n "$SERIAL" ]; then private_adb -s "$SERIAL" push "$hands_source/$name" "$hands_remote/$name"; else private_adb push "$hands_source/$name" "$hands_remote/$name"; fi
   [ $? -eq 0 ] || die "Failed to copy VR hand asset $name"
 done
 if [ -n "$SERIAL" ]; then
-  "$ADB" -s "$SERIAL" shell am force-stop "$PACKAGE_NAME"
+  private_adb -s "$SERIAL" shell am force-stop "$PACKAGE_NAME"
 else
-  "$ADB" shell am force-stop "$PACKAGE_NAME"
+  private_adb shell am force-stop "$PACKAGE_NAME"
 fi
 [ $? -eq 0 ] || die "Could not leave the app stopped after installation"
 

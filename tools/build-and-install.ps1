@@ -39,6 +39,7 @@ $cmakeVersion = "3.22.1"
 $remoteGameData = "/sdcard/Android/data/com.libertyvr.quest/files/gamedata"
 $saveProviderUri = "content://com.libertyvr.quest.saves/slot/1"
 $repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "device-diagnostics.ps1")
 $script:transcriptStarted = $false
 $script:replacedIncompatibleInstall = $false
 $script:replacementGameDir = $null
@@ -48,7 +49,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($logDirectory)) {
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     }
-    Start-Transcript -Path $LogPath -Force | Out-Null
+    Initialize-PrivateDiagnosticLog
     $script:transcriptStarted = $true
 } catch {
     Write-Host "Warning: diagnostic logging could not start: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -56,7 +57,7 @@ try {
 
 function Stop-DiagnosticLog {
     if (-not $script:transcriptStarted) { return }
-    try { Stop-Transcript | Out-Null } catch { }
+    $script:diagnosticLogEnabled = $false
     $script:transcriptStarted = $false
 }
 
@@ -72,7 +73,11 @@ function Invoke-Checked {
         [Parameter(Mandatory = $true)][string[]]$Arguments,
         [string]$FailureMessage = "Command failed"
     )
-    & $FilePath @Arguments
+    if ($FilePath -eq $script:adb) {
+        Invoke-PrivateAdb @Arguments | ForEach-Object { Write-Host $_ }
+    } else {
+        & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host ([string]$_) }
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "$FailureMessage (exit code $LASTEXITCODE)."
     }
@@ -286,15 +291,16 @@ function Invoke-AdbChecked {
 }
 
 function Select-QuestDevice {
-    $output = & $script:adb devices -l
-    if ($LASTEXITCODE -ne 0) { throw "adb devices failed." }
+    $discovery = Invoke-PrivateAdbCapture -Arguments @("devices", "-l") -Discovery
+    $output = $discovery.Lines
+    if ($discovery.ExitCode -ne 0) { throw "adb devices failed." }
     $devices = @()
     foreach ($line in $output) {
         if ($line -match '^(\S+)\s+device(?:\s|$)') { $devices += $Matches[1] }
     }
     if (-not [string]::IsNullOrWhiteSpace($Serial)) {
         if ($devices -notcontains $Serial) {
-            throw "Quest '$Serial' is not connected and authorized. Check the USB debugging prompt inside the headset."
+            throw "The selected device is not connected and authorized. Check the USB debugging prompt inside the headset."
         }
         return
     }
@@ -310,7 +316,7 @@ function Select-QuestDevice {
     }
     Write-Host "Connected devices:"
     for ($index = 0; $index -lt $devices.Count; $index++) {
-        Write-Host "  $($index + 1). $($devices[$index])"
+        Write-Host "  $($index + 1). $(Get-PrivateDeviceLabel $devices[$index])"
     }
     $selection = Read-Host "Select the Quest device number"
     $parsed = 0
@@ -323,7 +329,7 @@ function Select-QuestDevice {
 
 function Assert-UpdateInstalled {
     $arguments = Get-AdbArguments @("shell", "pm", "path", "com.libertyvr.quest")
-    $installedPackage = & $script:adb @arguments
+    $installedPackage = Invoke-PrivateAdb @arguments
     if ($LASTEXITCODE -ne 0 -or ($installedPackage | Out-String) -notmatch '(?m)^package:') {
         throw "Update-only mode requires Liberty City VR already installed. Use BUILD_AND_INSTALL for the first installation."
     }
@@ -490,13 +496,13 @@ try {
 
     Write-Step 7 "Installing on the connected Quest"
     Select-QuestDevice
-    Write-Host "Quest: $Serial"
+    Write-Host "Quest: personal Quest 3 device"
     if ($UpdateOnly) { Assert-UpdateInstalled }
     $installArguments = Get-AdbArguments @("install", "-r", $apk)
     $savedErrorPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $installOutput = @(& $script:adb @installArguments 2>&1)
+        $installOutput = @(Invoke-PrivateAdb @installArguments 2>&1)
         $installExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $savedErrorPreference
@@ -544,7 +550,7 @@ try {
         "shell", "content", "query", "--uri", $saveProviderUri,
         "--projection", "_display_name:_size"
     )
-    $providerOutput = & $script:adb @providerArguments
+    $providerOutput = Invoke-PrivateAdb @providerArguments
     if ($LASTEXITCODE -ne 0 -or ($providerOutput | Out-String) -notmatch '_display_name=GTA3sf1\.b') {
         throw "The APK installed, but the safe external-data bootstrap failed. Output: $($providerOutput | Out-String)"
     }
@@ -585,12 +591,12 @@ try {
                 # Pre-create all subdirectories via SaveProvider to avoid Horizon OS scoped storage mkdir denial
                 Get-ChildItem -LiteralPath $folder.FullName -Directory -Recurse | ForEach-Object {
                     $rel = $_.FullName.Substring($resolvedGame.Length).TrimStart('\', '/').Replace('\', '/')
-                    & $script:adb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", $rel)) 2>&1 | Out-Null
+                    Invoke-PrivateAdb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", $rel)) 2>&1 | Out-Null
                 }
                 Invoke-AdbChecked -Arguments @("push", $folder.FullName, $remoteGameData) `
                     -FailureMessage "Failed to copy $($folder.FullName)"
             }
-            & $script:adb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", "txd")) 2>&1 | Out-Null
+            Invoke-PrivateAdb @(Get-AdbArguments @("shell", "content", "call", "--uri", "content://com.libertyvr.quest.saves", "--method", "mkdir", "--arg", "txd")) 2>&1 | Out-Null
         } else {
             Write-Host "Game-data copy skipped. The app requires existing data under $remoteGameData." -ForegroundColor Yellow
         }

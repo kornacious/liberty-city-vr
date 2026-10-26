@@ -22,6 +22,7 @@
 #   --non-interactive    / -NonInteractive     never prompt; fail instead
 
 set -uo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/device-diagnostics.sh"
 
 GAME_FILES_DIR=""
 WORK_DIR="${HOME}/LCVRBuild"
@@ -99,7 +100,7 @@ adb_checked() {
   local args=()
   if [ -n "$SERIAL" ]; then args+=("-s" "$SERIAL"); fi
   args+=("$@")
-  "$ADB" "${args[@]}"
+  private_adb "${args[@]}"
   local rc=$?
   [ "$rc" -eq 0 ] || die "$msg (exit code $rc)."
 }
@@ -110,7 +111,7 @@ adb_checked_quiet() {
   local args=()
   if [ -n "$SERIAL" ]; then args+=("-s" "$SERIAL"); fi
   args+=("$@")
-  "$ADB" "${args[@]}" >/dev/null
+  private_adb "${args[@]}" >/dev/null
   local rc=$?
   [ "$rc" -eq 0 ] || die "$msg (exit code $rc)."
 }
@@ -211,7 +212,7 @@ resolve_game_files_folder() {
 }
 
 select_quest_device() {
-  capture "$ADB" devices -l
+  private_adb_discover
   [ "$CAPTURED_EXIT" -eq 0 ] || die "adb devices failed."
   local devices=()
   local line
@@ -224,7 +225,7 @@ select_quest_device() {
   if [ -n "$SERIAL" ]; then
     local d
     for d in "${devices[@]}"; do [ "$d" = "$SERIAL" ] && return 0; done
-    die "Quest '$SERIAL' is not connected and authorized. Accept the USB debugging prompt inside the headset."
+    die "The selected device is not connected and authorized. Accept the USB debugging prompt inside the headset."
   fi
   if [ "${#devices[@]}" -eq 0 ]; then
     die "No authorized Quest was found. Connect it by USB, enable USB debugging and accept the prompt inside the headset."
@@ -237,7 +238,7 @@ select_quest_device() {
   echo "Connected Android devices:"
   local i
   for i in "${!devices[@]}"; do
-    echo "  $((i + 1)). ${devices[$i]}"
+    echo "  $((i + 1)). $(private_device_label "${devices[$i]}")"
   done
   local answer selection
   read -r -p "Select the Quest number " answer
@@ -257,12 +258,12 @@ SOURCE="$(resolve_game_files_folder)"
 ADB="$(find_adb)"
 echo "ADB: $ADB"
 select_quest_device
-echo "Quest: $SERIAL"
+echo "Quest: personal Quest 3 device"
 
 # A missing gamedata root means the game was never given its data; copying
 # the port assets into an empty tree would look like success and still fail
 # on launch, so say what is actually wrong instead.
-probe_argv=("$ADB")
+probe_argv=(private_adb)
 if [ -n "$SERIAL" ]; then probe_argv+=("-s" "$SERIAL"); fi
 probe_argv+=("shell" "ls" "$REMOTE_GAME_DATA/models/gta3.img")
 probe_output="$("${probe_argv[@]}" 2>&1)"
@@ -277,18 +278,18 @@ adb_checked_quiet "Could not create $REMOTE_GAME_DATA/models on the headset" she
 for name in "${port_text_files[@]}"; do
   echo "  TEXT/$name"
   if [ -n "$SERIAL" ]; then
-    "$ADB" -s "$SERIAL" push "$SOURCE/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name" >/dev/null || die "Failed to copy TEXT/$name"
+    private_adb -s "$SERIAL" push "$SOURCE/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name" >/dev/null || die "Failed to copy TEXT/$name"
   else
-    "$ADB" push "$SOURCE/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name" >/dev/null || die "Failed to copy TEXT/$name"
+    private_adb push "$SOURCE/TEXT/$name" "$REMOTE_GAME_DATA/TEXT/$name" >/dev/null || die "Failed to copy TEXT/$name"
   fi
   copied=$((copied + 1))
 done
 for name in "${port_model_files[@]}"; do
   echo "  models/$name"
   if [ -n "$SERIAL" ]; then
-    "$ADB" -s "$SERIAL" push "$SOURCE/models/$name" "$REMOTE_GAME_DATA/models/$name" >/dev/null || die "Failed to copy models/$name"
+    private_adb -s "$SERIAL" push "$SOURCE/models/$name" "$REMOTE_GAME_DATA/models/$name" >/dev/null || die "Failed to copy models/$name"
   else
-    "$ADB" push "$SOURCE/models/$name" "$REMOTE_GAME_DATA/models/$name" >/dev/null || die "Failed to copy models/$name"
+    private_adb push "$SOURCE/models/$name" "$REMOTE_GAME_DATA/models/$name" >/dev/null || die "Failed to copy models/$name"
   fi
   copied=$((copied + 1))
 done

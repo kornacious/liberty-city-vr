@@ -13,6 +13,7 @@
 #   --non-interactive  / -NonInteractive   never prompt; fail instead
 
 set -uo pipefail
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/device-diagnostics.sh"
 
 MODERN_DIR=""
 PROFILE="modern"
@@ -66,7 +67,7 @@ adb_checked() {
   local args=()
   if [ -n "$SERIAL" ]; then args+=("-s" "$SERIAL"); fi
   args+=("$@")
-  "$ADB" "${args[@]}"
+  private_adb "${args[@]}"
   local rc=$?
   [ "$rc" -eq 0 ] || die "ADB command failed (exit code $rc)."
 }
@@ -76,7 +77,7 @@ adb_checked_quiet() {
   local args=()
   if [ -n "$SERIAL" ]; then args+=("-s" "$SERIAL"); fi
   args+=("$@")
-  "$ADB" "${args[@]}" >/dev/null
+  private_adb "${args[@]}" >/dev/null
   local rc=$?
   [ "$rc" -eq 0 ] || die "ADB command failed (exit code $rc)."
 }
@@ -86,7 +87,7 @@ adb_capture() {
   local args=()
   if [ -n "$SERIAL" ]; then args+=("-s" "$SERIAL"); fi
   args+=("$@")
-  CAPTURED_OUTPUT="$("$ADB" "${args[@]}" 2>&1)"
+  CAPTURED_OUTPUT="$(private_adb "${args[@]}" 2>&1)"
   CAPTURED_EXIT=$?
 }
 
@@ -95,7 +96,7 @@ adb_shell() {
   [ -n "${ADB:-}" ] || return 1
   local args=()
   if [ -n "$SERIAL" ]; then args+=(-s "$SERIAL"); fi
-  "$ADB" "${args[@]}" shell "$@"
+  private_adb "${args[@]}" shell "$@"
 }
 
 file_sha256() {
@@ -162,7 +163,7 @@ resolve_modern_folder() {
 }
 
 select_quest_device() {
-  adb_capture devices -l
+  private_adb_discover
   [ "$CAPTURED_EXIT" -eq 0 ] || die "adb devices failed."
   local devices=()
   local line
@@ -175,7 +176,7 @@ select_quest_device() {
   if [ -n "$SERIAL" ]; then
     local d
     for d in "${devices[@]}"; do [ "$d" = "$SERIAL" ] && return 0; done
-    die "Quest '$SERIAL' is not connected and authorized. Accept the USB debugging prompt inside the headset."
+    die "The selected device is not connected and authorized. Accept the USB debugging prompt inside the headset."
   fi
   if [ "${#devices[@]}" -eq 0 ]; then
     die "No authorized Quest was found. Connect it by USB, enable USB debugging and accept the prompt inside the headset."
@@ -188,7 +189,7 @@ select_quest_device() {
   echo "Connected Android devices:"
   local i
   for i in "${!devices[@]}"; do
-    echo "  $((i + 1)). ${devices[$i]}"
+    echo "  $((i + 1)). $(private_device_label "${devices[$i]}")"
   done
   local answer selection
   read -r -p "Select the Quest number " answer
@@ -209,7 +210,7 @@ select_quest_device
 
 echo "$PROFILE folder: $MODERN"
 echo "ADB: $ADB"
-echo "Quest: $SERIAL"
+echo "Quest: personal Quest 3 device"
 
 adb_capture shell pm path "$PACKAGE_NAME"
 if [ "$CAPTURED_EXIT" -ne 0 ] || ! echo "$CAPTURED_OUTPUT" | grep -q "package:"; then

@@ -24,6 +24,7 @@ if ($Profile -eq "Xbox") {
 $packageName = "com.libertyvr.quest"
 $remoteModelSets = "/sdcard/Android/data/$packageName/files/gamedata/modelsets"
 $repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot "device-diagnostics.ps1")
 $script:transcriptStarted = $false
 $script:adb = $null
 $script:stagingRemote = $null
@@ -33,7 +34,7 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($logDirectory)) {
         New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     }
-    Start-Transcript -Path $LogPath -Force | Out-Null
+    Initialize-PrivateDiagnosticLog
     $script:transcriptStarted = $true
 } catch {
     Write-Host "Warning: diagnostic logging could not start: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -41,7 +42,7 @@ try {
 
 function Stop-DiagnosticLog {
     if (-not $script:transcriptStarted) { return }
-    try { Stop-Transcript | Out-Null } catch { }
+    $script:diagnosticLogEnabled = $false
     $script:transcriptStarted = $false
 }
 
@@ -50,6 +51,9 @@ function Invoke-NativeCapture {
         [Parameter(Mandatory = $true)][string]$FilePath,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
+    if ($FilePath -eq $script:adb) {
+        return Invoke-PrivateAdbCapture -Arguments $Arguments -Discovery:($Arguments[0] -eq "devices")
+    }
     $savedErrorPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
@@ -176,7 +180,7 @@ function Select-QuestDevice {
     }
     if (-not [string]::IsNullOrWhiteSpace($Serial)) {
         if ($devices -notcontains $Serial) {
-            throw "Quest '$Serial' is not connected and authorized. Accept the USB debugging prompt inside the headset."
+            throw "The selected device is not connected and authorized. Accept the USB debugging prompt inside the headset."
         }
         return
     }
@@ -190,7 +194,7 @@ function Select-QuestDevice {
     if ($NonInteractive) { throw "Multiple Android devices are connected; pass -Serial." }
     Write-Host "Connected Android devices:" -ForegroundColor Yellow
     for ($index = 0; $index -lt $devices.Count; $index++) {
-        Write-Host "  $($index + 1). $($devices[$index])"
+        Write-Host "  $($index + 1). $(Get-PrivateDeviceLabel $devices[$index])"
     }
     $answer = Read-Host "Select the Quest number"
     $selection = 0
@@ -211,7 +215,7 @@ try {
 
     Write-Host "$Profile folder: $modern"
     Write-Host "ADB: $script:adb"
-    Write-Host "Quest: $Serial"
+    Write-Host "Quest: personal Quest 3 device"
 
     $packageResult = Invoke-AdbCapture -Arguments @("shell", "pm", "path", $packageName)
     if ($packageResult.ExitCode -ne 0 -or

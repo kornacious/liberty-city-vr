@@ -1,5 +1,13 @@
 # Host regression tests
 
+`python3 tools/tests/test-device-diagnostics.py --powershell powershell.exe`
+checks the production Windows installer selection and ADB boundaries using a
+fake native process. `--powershell pwsh` selects PowerShell 7; `--bash bash`
+checks the Unix installer functions and tee logs. Both flags may be combined.
+It verifies console/log redaction, numbered selection, unauthorized/offline
+devices, native stdout/stderr, failure exit codes and explicit target routing.
+It uses no Git commands, network, game data or real device.
+
 `python3 tools/tests/test-patch-series.py <local-re3-clone>` checks that every
 patch uses LF and applies the complete series to the pinned upstream revision.
 It exports tracked source with `core.autocrlf=false` so Windows also exercises
