@@ -42,6 +42,8 @@ class Preparation(unittest.TestCase):
         (self.source / 'data/maps').mkdir(parents=True)
         (self.source / 'data/maps/generic.ide').write_text('objs\n100, treepatch, trees2, 1, 200, 4\nend\n')
         (self.source / 'models/particle.txd').write_bytes(txd)
+        (self.source / 'models/generic').mkdir()
+        (self.source / 'models/generic/player.bmp').write_bytes(b'HD Claude UV skin')
         self.pack['files'] = {p.relative_to(self.source).as_posix(): {'bytes': p.stat().st_size, 'sha256': x.sha(p)} for p in self.source.rglob('*') if p.is_file()}
         archive = self.root / 'pack.zip'
         with zipfile.ZipFile(archive, 'w') as z:
@@ -49,6 +51,7 @@ class Preparation(unittest.TestCase):
                 if p.is_file(): z.write(p, self.pack['sourceFolder'] + '/' + p.relative_to(self.source).as_posix())
             z.writestr(self.pack['sourceFolder'] + '/userfiles/GTA3sf1.b', 'private save')
             z.writestr(self.pack['sourceFolder'] + '/re3.exe', 'never execute')
+            z.writestr(self.pack['sourceFolder'] + '/skins/player.bmp', 'optional custom skin')
         self.pack['archiveBytes'] = archive.stat().st_size
         self.pack['archiveSha256'] = x.sha(archive)
         x.PACK.clear(); x.PACK.update(self.pack)
@@ -68,6 +71,10 @@ class Preparation(unittest.TestCase):
             with self.subTest(profile=name):
                 out = self.build(name)
                 self.assertTrue(x.valid_overlay(out, name))
+                self.assertEqual((out/'models/generic/player.bmp').read_bytes(), b'HD Claude UV skin')
+                skin=out/'models/generic/player.bmp'; skin.write_bytes(b'Classic Claude UV skin')
+                self.assertFalse(x.valid_overlay(out, name))
+                skin.write_bytes(b'HD Claude UV skin')
                 self.assertFalse(x.valid_overlay(out, 'modern' if name == 'xbox' else 'xbox'))
                 entries = {n: (s,c) for n,s,c in x.archive_entries(out/'models/gta3.img', out/'models/gta3.dir')}
                 data = (out/'models/gta3.img').read_bytes()
@@ -82,7 +89,8 @@ class Preparation(unittest.TestCase):
 
     def test_allowlist_extraction_and_source_validation(self):
         dest=self.root/'extract';x.extract_archive(self.archive,dest)
-        self.assertFalse((dest/'re3.exe').exists());self.assertFalse((dest/'userfiles').exists())
+        self.assertEqual((dest/'models/generic/player.bmp').read_bytes(), b'HD Claude UV skin')
+        self.assertFalse((dest/'re3.exe').exists());self.assertFalse((dest/'userfiles').exists());self.assertFalse((dest/'skins').exists())
         self.assertEqual(set(x.source_root(dest)[1]), set(self.pack['files']))
         p=dest/'models/particle.txd';p.write_bytes(b'changed')
         with self.assertRaises(ValueError):x.source_root(dest)

@@ -1,0 +1,24 @@
+--- a/src/renderer/PlayerSkin.cpp
++++ b/src/renderer/PlayerSkin.cpp
+@@ -17,6 +17,7 @@
+ #include "Lights.h"
+ #include "MemoryMgr.h"
+ #include "GameRenderCommand.h"
++#include "ModelSets.h"
+ 
+ RpClump *gpPlayerClump;
+ float gOldFov;
+@@ -104,7 +105,12 @@
+ 	else
+ 		sprintf(gString, "skins\\%s.bmp", texName);
+ 
+-	if (RwImage *image = RtBMPImageRead(gString)) {
++	// The HD Claude mesh uses a different UV layout. His default bitmap must
++	// follow the same profile, including when RenderPlayerCB draws playerh.
++	// Custom skins remain explicit player choices outside the model overlay.
++	char skinPath[1024];
++	const char *imagePath = ModelSets::ResolveAssetPath(gString, skinPath, sizeof(skinPath));
++	if (RwImage *image = RtBMPImageRead(imagePath)) {
+ 		RwImageFindRasterFormat(image, rwRASTERTYPETEXTURE, &width, &height, &depth, &format);
+ 		raster = RwRasterCreate(width, height, depth, format);
+ 		RwRasterSetFromImage(raster, image);

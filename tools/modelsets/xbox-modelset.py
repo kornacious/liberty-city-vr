@@ -159,7 +159,7 @@ def valid_overlay(root, profile=None, report=False):
         if info['BuilderVersion'] != BUILDER_VERSION or info['SourceSHA256'] != PACK['archiveSha256']:
             return False
         hashes = {key[7:]: value for key, value in info.items() if key.startswith('SHA256 ')}
-        required = {'models/gta3.img', 'models/gta3.dir', 'vegetation_models.txt', 'vehicle_models.txt', 'asset_categories.json'}
+        required = {'models/gta3.img', 'models/gta3.dir', 'models/generic/player.bmp', 'vegetation_models.txt', 'vehicle_models.txt', 'asset_categories.json'}
         if not required <= hashes.keys():
             return False
         actual = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()}
@@ -287,7 +287,7 @@ def build(source, output, force=False, compressor=None, profile='modern'):
             (stage / (name + '_models.txt')).write_text('\n'.join(sorted(values)) + '\n')
         categories = {'archives': PACK['archives'], 'entries': len(selected), 'vehicles': len(vehicles), 'vegetation': len(vegetation),
                       'world': 'World models/textures, map IDE/IPL/COL, HUD/fonts/particles and splash textures',
-                      'peds': 'Player and pedestrian models/textures referenced by retail IDEs',
+                      'peds': 'Player and pedestrian models/textures, including the matching default Claude skin bitmap',
                       'weapons': 'GTA III weapon model IDs and their texture dictionaries',
                       'excluded': 'PC binaries, scripts, settings, saves, audio, skins, neo renderer configuration; retail vehicle collisions retained'}
         (stage / 'asset_categories.json').write_text(json.dumps(categories, indent=2) + '\n')

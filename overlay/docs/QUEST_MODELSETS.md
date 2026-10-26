@@ -60,12 +60,19 @@ Default cache: `C:\LCVRBuild\modern-assets` on Windows or
 the final IMG is about 2.01 GiB. Existing marked local outputs are replaced only
 after a complete verified build. Unmarked folders are preserved and rejected.
 
-The builder pins 92 source-file hashes and merges four archive layers in their
+The builder pins 93 source-file hashes and merges four archive layers in their
 PC precedence order: `gta3`, `xbox_models`, `xbox_hd_textures`, `xbox_vehicles`.
 Four empty placeholders are omitted. The output has 4,051 entries, 62 vehicle
-models, 101 vegetation names and 90 files including its manifest. DFFs retain
+models, 101 vegetation names and 91 files including its manifest. DFFs retain
 their authored data; supported TXDs are compressed/mip-capped at 1024. Every
 output file has a checksum; source files remain untouched.
+
+Modern also includes the pack's `models/generic/player.bmp`. Claude's gameplay
+body and cutscene head use this bitmap through re3's player-skin renderer, so
+loading the Classic bitmap produces misplaced facial and clothing textures.
+The default bitmap follows the active Classic/Modern profile; custom skins
+remain user choices. Rebuild and reinstall older generated Modern overlays
+after updating to the Claude skin fix, and fully restart the game.
 
 No game/mod assets are included in the repository or APK. Generated assets
 remain local and must not be redistributed.

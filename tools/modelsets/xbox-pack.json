@@ -1,5 +1,5 @@
 {
-  "builderVersion": "0.8.0-xbox-hd-re3-1",
+  "builderVersion": "0.8.1-xbox-hd-re3-claude",
   "title": "[III] Xbox Version HD (Supports re3)",
   "page": "https://www.moddb.com/mods/gta-iii-xbox-version-hd/downloads/iii-xbox-version-hd-supports-re3",
   "downloadPage": "https://www.moddb.com/downloads/start/224588",
@@ -381,6 +381,10 @@
     "txd/splash3.txd": {
       "bytes": 1048744,
       "sha256": "AD4663F81D6A8AED1D1352B84C885DBF039BA94F894A898AE282008D7EA1CC66"
+    },
+    "models/generic/player.bmp": {
+      "bytes": 786486,
+      "sha256": "4738D681D55E10250C8EA2B3F77033669A7631781D9FD7458E03FA16F73018E0"
     }
   }
 }
