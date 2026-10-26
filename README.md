@@ -192,9 +192,9 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 - Physics Director V2 with an ORIGINAL/OFF fallback; separate pedestrian and
   vehicle density controls from OFF to 300%. OFF prevents new spawns rather
   than deleting existing traffic.
-- Classic/Modern/Xbox asset categories. The Quest baseline keeps vehicles,
-  pedestrians and vegetation Classic and requests Modern world/weapons when
-  available. Optional asset overlays are built separately and are not distributed here.
+- Classic or Modern (Xbox HD) asset profiles. Modern loads its complete world,
+  vegetation, vehicle, pedestrian and weapon pack together. Changes require a
+  full app restart.
 
 Defaults retain 100% render scale and sustained CPU/GPU performance hints.
 Ragdolls and vehicle deformation default to OFF; saved preferences take precedence.
@@ -207,9 +207,9 @@ Runtime/data layout is documented in
 [QUEST_RAGDOLL.md](overlay/docs/QUEST_RAGDOLL.md) for ragdoll behavior and limits,
 [QUEST_VEHICLE_DEFORMATION.md](overlay/docs/QUEST_VEHICLE_DEFORMATION.md) for
 body deformation, and [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md)
-for optional model mixing.
+for Classic/Modern asset selection.
 The [asset guide](overlay/docs/QUEST_MODELSETS.md) also describes the current
-Xbox/Modern preparation from the pinned Xbox Version HD (re3) release,
+Modern preparation from the pinned Xbox Version HD (re3) release,
 including world, pedestrian, weapon and vehicle effects.
 
 ## Troubleshooting and Game Data

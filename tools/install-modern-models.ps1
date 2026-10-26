@@ -13,14 +13,11 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 $installerVersion = "0.7.0-models-lcv-1"
-$profileDirectory = $Profile.ToLowerInvariant()
+if ($Profile -eq 'Xbox') { Write-Host 'Xbox is a legacy alias for the single Modern profile.' }
+$Profile = 'Modern'
+$profileDirectory = 'modern'
 $profileRequiredFiles = @("models/gta3.img", "models/gta3.dir", "BUILD_INFO.txt")
 $profileHashFiles = @("models/gta3.img", "models/gta3.dir")
-if ($Profile -eq "Xbox") {
-    . (Join-Path $PSScriptRoot "modelsets/xbox-modelset.ps1")
-    $profileRequiredFiles = @("models/gta3.img", "models/gta3.dir", "BUILD_INFO.txt")
-    $profileHashFiles = @("models/gta3.img", "models/gta3.dir")
-}
 $packageName = "com.libertyvr.quest"
 $remoteModelSets = "/sdcard/Android/data/$packageName/files/gamedata/modelsets"
 $repoRoot = Split-Path $PSScriptRoot -Parent

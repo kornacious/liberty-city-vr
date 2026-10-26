@@ -44,6 +44,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$PROFILE" in modern|xbox) ;; *) echo 'Profile must be modern or xbox.' >&2; exit 1 ;; esac
+[ "$PROFILE" = modern ] || echo 'Xbox is a legacy alias for the single Modern profile.'
+PROFILE=modern
 REQUIRED=("models/gta3.img" "models/gta3.dir" "BUILD_INFO.txt")
 HASH_FILES=("models/gta3.img" "models/gta3.dir")
 LOG_DIR="$(dirname "$LOG_PATH")"

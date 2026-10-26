@@ -9,11 +9,11 @@ enum eModelSet
 {
 	MODEL_SET_CLASSIC = 0,
 	MODEL_SET_MODERN,
-	MODEL_SET_XBOX,
+	MODEL_SET_XBOX, // Legacy saved value and Xbox calibration identity; never selectable.
 	MODEL_SET_COUNT
 };
 
-// Overlays can be mixed by category (World, Vehicles, Peds, Weapons for Xbox and Modern; Vegetation defaults to Classic on Quest).
+// Select the complete Classic or Modern (Xbox HD) set. Categories share one selection.
 // Changes require a restart so loaded RenderWare objects are not replaced.
 enum eModelCategory
 {

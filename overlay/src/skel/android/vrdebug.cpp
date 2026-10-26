@@ -728,11 +728,6 @@ enum eVrWeaponsMenuItem {
 
 enum eVrModelAssetsMenuItem {
 	VR_MODEL_ASSETS_PRESET = 0,
-	VR_MODEL_ASSETS_WORLD,
-	VR_MODEL_ASSETS_VEGETATION,
-	VR_MODEL_ASSETS_VEHICLES,
-	VR_MODEL_ASSETS_PEDS,
-	VR_MODEL_ASSETS_WEAPONS,
 	VR_MODEL_ASSETS_BACK,
 	VR_MODEL_ASSETS_ITEM_COUNT
 };
@@ -2972,25 +2967,7 @@ VrDebugUpdate(const PadInput &in)
 			const int direction = decreasePulse ? -1 : 1;
 			if(gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET){
 				ModelSets::CycleRequested(direction);
-				const ModelSets::eModelSet preset = ModelSets::GetRequested();
-				for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT;
-				    category++){
-					const ModelSets::eModelSet requested =
-						preset == ModelSets::MODEL_SET_MODERN ?
-						(category == ModelSets::MODEL_CATEGORY_VEGETATION ?
-						 ModelSets::MODEL_SET_CLASSIC : ModelSets::MODEL_SET_MODERN) :
-						(preset == ModelSets::MODEL_SET_XBOX ?
-						 (category == ModelSets::MODEL_CATEGORY_VEGETATION ?
-						  ModelSets::MODEL_SET_CLASSIC : ModelSets::MODEL_SET_XBOX) :
-						 ModelSets::MODEL_SET_CLASSIC);
-					ModelSets::SetRequestedForCategory(
-						(ModelSets::eModelCategory)category, requested);
-				}
-			}else if(gVrModelAssetsSelection >= VR_MODEL_ASSETS_WORLD &&
-			         gVrModelAssetsSelection <= VR_MODEL_ASSETS_WEAPONS){
-				ModelSets::CycleRequestedCategory(
-					(ModelSets::eModelCategory)(gVrModelAssetsSelection-1),
-					direction);
+
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK &&
 			         positivePulse)
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
@@ -4310,49 +4287,15 @@ DrawQuestDeformationPage(void)
 static void
 DrawQuestModelAssetsPage(void)
 {
-	BeginFullVrMenuPage("MODEL ASSETS",
-		"CLASSIC / MODERN / XBOX - FULL APP RESTART REQUIRED");
-	char rows[VR_MODEL_ASSETS_ITEM_COUNT][112];
-	snprintf(rows[VR_MODEL_ASSETS_PRESET], sizeof(rows[0]),
-		"PRESET  < %s >",
-		ModelSets::GetSourceName(ModelSets::GetRequested()));
-	for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT;
-	    category++){
-		const bool available = ModelSets::IsCategoryAvailable(
-			(ModelSets::eModelCategory)category);
-		snprintf(rows[category+1], sizeof(rows[0]), "%s  < %s >%s%s",
-			ModelSets::GetCategoryName((ModelSets::eModelCategory)category),
-			ModelSets::GetSourceName(ModelSets::GetRequestedForCategory(
-				(ModelSets::eModelCategory)category)),
-			available ? "" : "  UNAVAILABLE",
-			ModelSets::IsCategoryRestartRequired(
-				(ModelSets::eModelCategory)category) ? "  RESTART" : "");
-	}
-	strcpy(rows[VR_MODEL_ASSETS_BACK], "BACK TO SETTINGS");
-	for(int item = 0; item < VR_MODEL_ASSETS_ITEM_COUNT; item++){
-		const bool available = item == VR_MODEL_ASSETS_PRESET ||
-			item == VR_MODEL_ASSETS_BACK ||
-			ModelSets::IsCategoryAvailable(
-				(ModelSets::eModelCategory)(item-1));
-		const bool modernVehicleWarning =
-			item == VR_MODEL_ASSETS_VEHICLES &&
-			ModelSets::GetRequestedForCategory(
-				ModelSets::MODEL_CATEGORY_VEHICLES) ==
-				ModelSets::MODEL_SET_MODERN;
-		DrawFullVrMenuRow(rows[item], 210+item*42, 2,
-			item == gVrModelAssetsSelection, available,
-			modernVehicleWarning);
-	}
-	if(ModelSets::GetRequestedForCategory(
-	   ModelSets::MODEL_CATEGORY_VEHICLES) ==
-	   ModelSets::MODEL_SET_MODERN){
-		DrawVrMenuText("WARNING: MODERN VEHICLES ARE VERY GPU HEAVY",
-			VR_MENU_WIDTH/2, 630, 2, 255, 95, 85);
-		DrawVrMenuText("USE CLASSIC VEHICLES OR REDUCE 300% TRAFFIC IF FPS DROPS",
-			VR_MENU_WIDTH/2, 660, 2, 255, 155, 105);
-	}else
-		DrawVrMenuText("CLASSIC VEGETATION IS DEFAULT FOR QUEST PERFORMANCE",
-			VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+	BeginFullVrMenuPage("MODEL ASSETS", "CLASSIC / MODERN - FULL APP RESTART REQUIRED");
+	char row[112];
+	snprintf(row, sizeof(row), "ASSET PROFILE  < %s >%s",
+		ModelSets::GetSourceName(ModelSets::GetRequested()),
+		ModelSets::IsRestartRequired() ? "  RESTART" : "");
+	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
+	DrawFullVrMenuRow("BACK TO SETTINGS", 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+	DrawVrMenuText("MODERN LOADS THE COMPLETE XBOX HD PACK", VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
+	DrawVrMenuText("MODELS AND TEXTURES SWITCH TOGETHER", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
 }
 
 static void

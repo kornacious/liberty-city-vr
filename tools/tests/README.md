@@ -359,15 +359,15 @@ no game assets; the final visual fit still needs a headset check.
 ### Xbox Version HD preparation and routing
 
 `python tools/tests/test-xbox-modelset.py` runs seven synthetic production-builder
-cases without network or ADB: both profiles, archive precedence, full output
+cases without network or ADB: the Modern profile, archive precedence, full output
 hashes, source pinning, allowlisted extraction, conversion failure rollback,
 verified-cache reuse and official mirror/HTML-error handling. Windows uses the
 bundled compressor; build `tools/modelsets/txdcompress` first on Linux.
 
 `test-modelset-profiles.ps1` now tests Liberty City's production ModelSets and
 streaming category filter, and is included in `test-current-sources.ps1`.
-Its 70 checks cover all categories, mixed/shared textures, map/loose paths,
-Classic fallback, restart behavior and Xbox HD calibration aliases. Actual-pack
+Its 77 checks cover complete-pack routing, ignored old category mixes, map/loose
+paths, Classic fallback, restart behavior and Xbox HD calibration identity. Actual-pack
 preparation and headset appearance/performance checks remain separate; see
 [the asset guide](../../overlay/docs/QUEST_MODELSETS.md).
 
@@ -382,3 +382,10 @@ under strict PowerShell error handling: successful stderr warnings, nonzero
 exit codes, missing executables and caller preference restoration. Its isolated
 ADB discovery checks cover the default `LCVRBuild` cache, explicit SDK precedence
 and missing-SDK failures, without discovering a device or transferring data.
+
+`test-hd-texture-loading.ps1` covers the production shared generic lookup
+(model-local precedence, missing names, repeated installation and shutdown),
+and the production vehicle alpha depth policy for opaque bodywork and glass.
+It is included in the current-source gate. `test-modelset-profiles.ps1` now
+checks two selectable profiles, legacy Xbox migration, complete-pack routing,
+ignored old category mixes and the internal Xbox calibration identity.

@@ -35,6 +35,6 @@ function Invoke-ModelsetPython {
 }
 function Test-XboxOverlay([string]$Root) {
     $python = Get-ModelsetPython
-    & $python (Join-Path $PSScriptRoot 'xbox-modelset.py') validate --out $Root --profile xbox
+    & $python (Join-Path $PSScriptRoot 'xbox-modelset.py') validate --out $Root --profile modern
     return $LASTEXITCODE -eq 0
 }

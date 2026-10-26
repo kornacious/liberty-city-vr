@@ -3,7 +3,7 @@
 # Patches must be authored with LF and survive checkout byte-exact everywhere.
 # Validate with tools/tests/test-patch-series.py, including on Windows.
 patches/*.patch -text
-patches/*.patch whitespace=-space-before-tab
+patches/*.patch whitespace=-space-before-tab,-blank-at-eol
 *.png -text
 *.uxrh -text
 overlay/android/diagnostics/asan-wrap.sh text eol=lf

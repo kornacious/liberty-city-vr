@@ -48,9 +48,9 @@ g++ -O2 -o txdcompress txdcompress.cpp
 
 (`txdcompress` is gitignored; `txdcompress.exe` is the committed Windows build.)
 
-The asset wizard defaults to Xbox and supports Xbox, Modern and Both using
-one pinned GTA III Xbox Version HD (re3) release. Python 3.9+ is required on
-both platforms. Supply the ModDB ZIP locally if automated download is blocked.
+The asset wizard prepares one Modern overlay using the pinned GTA III Xbox
+Version HD (re3) release. In-game selection is Classic or Modern. Python 3.9+
+is required on both platforms. Supply the ModDB ZIP locally if automated download is blocked.
 See [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md) for commands, storage
 requirements, category effects and validation limits.
 

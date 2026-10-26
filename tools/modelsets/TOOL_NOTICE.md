@@ -5,7 +5,8 @@ asset overlay locally from a legally owned GTA III installation and the pinned X
 pack they obtain themselves. Python 3.9+ is required on both platforms.
 
 - `xbox-modelset.py` provides shared source validation, preparation and staging.
-  The Xbox and Modern Windows/Linux wrappers use this same implementation.
+  Windows/Linux wrappers use this same implementation. Xbox is a legacy
+  command alias; only the Modern overlay is generated.
 - The IMG/TXD helper scripts and `txdcompress.cpp` are provided in source form.
   The Linux ports of the byte-level helpers are Python:
   `imgextract.py`, `imginject.py`, `imgtexaudit.py`, `txdmerge.py`.
@@ -22,7 +23,7 @@ pack they obtain themselves. Python 3.9+ is required on both platforms.
   executable.
 
 The utilities do not grant rights to the original game data or third-party mod
-assets. Generated `modelsets/xbox` and `modelsets/modern` content is for the player's local,
+assets. Generated `modelsets/modern` content is for the player's local,
 personal installation and must not be redistributed.
 
 This repository does not currently grant a general license to reuse or

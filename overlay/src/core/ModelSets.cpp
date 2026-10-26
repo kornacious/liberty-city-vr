@@ -35,8 +35,6 @@ bool gInitialized;
 bool gModernArchivePairAvailable;
 bool gXboxAvailable;
 bool gXboxHDProfiles[MODEL_SET_COUNT];
-eModelSet gActiveCategory[MODEL_CATEGORY_COUNT];
-eModelSet gRequestedCategory[MODEL_CATEGORY_COUNT];
 enum { MAX_VEGETATION_MODELS = 512, MAX_MANIFEST_MODEL_NAME = 24 };
 char gVegetationModels[MODEL_SET_COUNT][MAX_VEGETATION_MODELS][MAX_MANIFEST_MODEL_NAME] = {};
 int gNumVegetationModels[MODEL_SET_COUNT];
@@ -44,33 +42,12 @@ bool gVegetationManifestAvailable[MODEL_SET_COUNT];
 char gGameRoot[1024] = {};
 char gSettingsPath[1024] = {};
 
-const char *const gCategorySettingNames[MODEL_CATEGORY_COUNT] = {
-	"ModelSetWorld",
-	"ModelSetVegetation",
-	"ModelSetVehicles",
-	"ModelSetPeds",
-	"ModelSetWeapons"
-};
-
 const char *const gCategoryNames[MODEL_CATEGORY_COUNT] = {
 	"WORLD / BUILDINGS",
 	"VEGETATION / PALMS",
 	"VEHICLES",
 	"PEDESTRIANS",
 	"WEAPONS"
-};
-
-// The HD vegetation source is dramatically heavier than the Classic trees
-// (especially the palms, which are repeated hundreds of times around the
-// city). The Modern defaults request world textures and weapon models while
-// vehicles, pedestrians and vegetation stay Classic. An existing
-// INI value still wins after the one-time baseline migration.
-const int gCategoryDefaults[MODEL_CATEGORY_COUNT] = {
-	1, // world / buildings
-	0, // vegetation / palms
-	0, // vehicles
-	0, // pedestrians
-	1  // weapons
 };
 
 bool FileExists(const char *path)
@@ -266,33 +243,20 @@ void InitializeStartup(const char *gameRoot)
 	gModernArchivePairAvailable = FileExists(path);
 	BuildOverlayPath(MODEL_SET_MODERN, "models/gta3.dir", path, sizeof(path));
 	gModernArchivePairAvailable = gModernArchivePairAvailable && FileExists(path);
-	const char *xboxFiles[] = { "models/gta3.img", "models/gta3.dir" };
-	gXboxAvailable = true;
-	for(size_t i = 0; i < ARRAY_SIZE(xboxFiles); i++){
-		BuildOverlayPath(MODEL_SET_XBOX, xboxFiles[i], path, sizeof(path));
-		gXboxAvailable = gXboxAvailable && FileExists(path);
-	}
+	// One complete HD pack. Never register the duplicate legacy Xbox image
+	// or combine its geometry with independent category texture choices.
+	gXboxAvailable = false;
 	LoadPackIdentity(MODEL_SET_MODERN);
-	LoadPackIdentity(MODEL_SET_XBOX);
 	LoadVegetationManifest(MODEL_SET_MODERN);
-	LoadVegetationManifest(MODEL_SET_XBOX);
 	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
-		MODEL_SET_XBOX, gSettingsPath);
-	if(requested < MODEL_SET_CLASSIC || requested >= MODEL_SET_COUNT ||
-	   !IsAvailable((eModelSet)requested))
-		requested = MODEL_SET_CLASSIC;
+		MODEL_SET_MODERN, gSettingsPath);
+	const bool legacyXbox = requested == MODEL_SET_XBOX;
+	if(legacyXbox) requested = MODEL_SET_MODERN;
+	if(requested < MODEL_SET_CLASSIC || requested > MODEL_SET_MODERN ||
+	   !IsAvailable((eModelSet)requested)) requested = MODEL_SET_CLASSIC;
 	gRequestedModelSet = gActiveModelSet = (eModelSet)requested;
-	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++){
-		const int fallback = requested == MODEL_SET_XBOX ?
-			(category == MODEL_CATEGORY_VEGETATION ? MODEL_SET_CLASSIC : MODEL_SET_XBOX) :
-			gCategoryDefaults[category];
-		int selected = (int)(int32)GetPrivateProfileIntA("VR",
-			gCategorySettingNames[category], fallback, gSettingsPath);
-		if(selected < MODEL_SET_CLASSIC || selected >= MODEL_SET_COUNT ||
-		   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
-			selected = MODEL_SET_CLASSIC;
-		gActiveCategory[category] = gRequestedCategory[category] = (eModelSet)selected;
-	}
+	if(legacyXbox)
+		WritePrivateProfileStringA("VR", "ModelSet", "1", gSettingsPath);
 	gInitialized = true;
 	ALOG("ModelSets::InitializeStartup: root='%s' modern=%d xbox=%d active=%s (vehicles=%s world=%s)",
 		gGameRoot, (int)gModernArchivePairAvailable, (int)gXboxAvailable,
@@ -334,66 +298,32 @@ void CycleRequested(int direction)
 
 bool IsModernActive()
 {
-	if(gActiveModelSet == MODEL_SET_CLASSIC || !gModernArchivePairAvailable)
-		return false;
-	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++)
-		if(GetActiveForCategory((eModelCategory)category) == MODEL_SET_MODERN)
-			return true;
-	return false;
+	return gActiveModelSet == MODEL_SET_MODERN && gModernArchivePairAvailable;
 }
 
-bool IsXboxActive()
-{
-	if(gActiveModelSet == MODEL_SET_XBOX && gXboxAvailable)
-		return true;
-	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++)
-		if(GetActiveForCategory((eModelCategory)category) == MODEL_SET_XBOX)
-			return true;
-	return false;
-}
+bool IsXboxActive() { return false; }
 
-bool IsRestartRequired()
-{
-	for(int category = 0; category < MODEL_CATEGORY_COUNT; category++)
-		if(IsCategoryRestartRequired((eModelCategory)category))
-			return true;
-	return false;
-}
+bool IsRestartRequired() { return gRequestedModelSet != gActiveModelSet; }
 
 bool IsAvailable(eModelSet modelSet)
 {
 	return modelSet == MODEL_SET_CLASSIC ||
-		(modelSet == MODEL_SET_MODERN && gModernArchivePairAvailable) ||
-		(modelSet == MODEL_SET_XBOX && gXboxAvailable);
+		(modelSet == MODEL_SET_MODERN && gModernArchivePairAvailable);
 }
 
 const char *GetName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_XBOX ? "XBOX" :
-		modelSet == MODEL_SET_MODERN ? "MODERN" : "CLASSIC";
+	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "MODERN";
 }
 
 const char *GetSourceName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_XBOX ? "XBOX ASSETS" :
-		modelSet == MODEL_SET_MODERN ? "MODERN OVERLAY" : "BASE INSTALL";
-}
-
-static eModelSet EffectiveCategory(eModelCategory category, eModelSet preset,
-	const eModelSet *selections)
-{
-	if(category < 0 || category >= MODEL_CATEGORY_COUNT || preset == MODEL_SET_CLASSIC)
-		return MODEL_SET_CLASSIC;
-	const eModelSet selected = selections[category];
-	if(!IsAvailable(selected) ||
-	   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
-		return MODEL_SET_CLASSIC;
-	return selected;
+	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "MODERN (XBOX HD)";
 }
 
 eModelSet GetActiveForCategory(eModelCategory category)
 {
-	return EffectiveCategory(category, gActiveModelSet, gActiveCategory);
+	return category >= 0 && category < MODEL_CATEGORY_COUNT ? gActiveModelSet : MODEL_SET_CLASSIC;
 }
 
 eModelSet GetCalibrationSetForCategory(eModelCategory category)
@@ -404,38 +334,18 @@ eModelSet GetCalibrationSetForCategory(eModelCategory category)
 
 eModelSet GetRequestedForCategory(eModelCategory category)
 {
-	return EffectiveCategory(category, gRequestedModelSet, gRequestedCategory);
+	return category >= 0 && category < MODEL_CATEGORY_COUNT ? gRequestedModelSet : MODEL_SET_CLASSIC;
 }
 
 void SetRequestedForCategory(eModelCategory category, eModelSet modelSet)
 {
-	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
-		return;
-	if(!IsAvailable(modelSet) ||
-	   (modelSet != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[modelSet]))
-		modelSet = MODEL_SET_CLASSIC;
-	// A category selected from the base preset must enable its overlay too.
-	if(modelSet != MODEL_SET_CLASSIC && gRequestedModelSet == MODEL_SET_CLASSIC)
-		SetRequested(modelSet);
-	gRequestedCategory[category] = modelSet;
-	char value[16];
-	sprintf(value, "%d", (int)modelSet);
-	WritePrivateProfileStringA("VR", gCategorySettingNames[category], value, gSettingsPath);
+	if(category >= 0 && category < MODEL_CATEGORY_COUNT)
+		SetRequested(modelSet == MODEL_SET_XBOX ? MODEL_SET_MODERN : modelSet);
 }
 
 void CycleRequestedCategory(eModelCategory category, int direction)
 {
-	if(category < 0 || category >= MODEL_CATEGORY_COUNT || direction == 0)
-		return;
-	int selected = GetRequestedForCategory(category);
-	for(int i = 0; i < MODEL_SET_COUNT; i++){
-		selected = (selected+MODEL_SET_COUNT+(direction > 0 ? 1 : -1)) % MODEL_SET_COUNT;
-		if(!IsAvailable((eModelSet)selected) ||
-		   (selected != MODEL_SET_CLASSIC && category == MODEL_CATEGORY_VEGETATION && !gVegetationManifestAvailable[selected]))
-			continue;
-		SetRequestedForCategory(category, (eModelSet)selected);
-		return;
-	}
+	if(category >= 0 && category < MODEL_CATEGORY_COUNT) CycleRequested(direction);
 }
 
 bool IsCategoryModernActive(eModelCategory category)
@@ -448,16 +358,11 @@ bool IsCategoryModernRequested(eModelCategory category)
 }
 bool IsCategoryRestartRequired(eModelCategory category)
 {
-	return GetActiveForCategory(category) != GetRequestedForCategory(category);
+	return category >= 0 && category < MODEL_CATEGORY_COUNT && IsRestartRequired();
 }
 bool IsCategoryAvailable(eModelCategory category)
 {
-	if(category < 0 || category >= MODEL_CATEGORY_COUNT)
-		return false;
-	if(category == MODEL_CATEGORY_VEGETATION)
-		return (gModernArchivePairAvailable && gVegetationManifestAvailable[MODEL_SET_MODERN]) ||
-		(gXboxAvailable && gVegetationManifestAvailable[MODEL_SET_XBOX]);
-	return gXboxAvailable || gModernArchivePairAvailable;
+	return category >= 0 && category < MODEL_CATEGORY_COUNT && gModernArchivePairAvailable;
 }
 
 const char *GetCategoryName(eModelCategory category)
@@ -492,14 +397,7 @@ bool GetModernAssetPath(const char *relativePath, char *resolvedPath,
 	return FileExists(resolvedPath);
 }
 
-bool GetXboxAssetPath(const char *relativePath, char *resolvedPath,
-	size_t resolvedPathSize)
-{
-	if(!relativePath || !resolvedPath || resolvedPathSize == 0 || !gXboxAvailable)
-		return false;
-	BuildOverlayPath(MODEL_SET_XBOX, relativePath, resolvedPath, resolvedPathSize);
-	return FileExists(resolvedPath);
-}
+bool GetXboxAssetPath(const char *, char *, size_t) { return false; }
 
 static bool IsOverlayPath(eModelSet modelSet, const char *path)
 {
@@ -510,7 +408,7 @@ static bool IsOverlayPath(eModelSet modelSet, const char *path)
 	return MODELSET_STRNICMP(path, overlayRoot, strlen(overlayRoot)) == 0;
 }
 bool IsModernAssetPath(const char *path) { return IsOverlayPath(MODEL_SET_MODERN, path); }
-bool IsXboxAssetPath(const char *path) { return IsOverlayPath(MODEL_SET_XBOX, path); }
+bool IsXboxAssetPath(const char *) { return false; }
 
 const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	size_t resolvedPathSize)

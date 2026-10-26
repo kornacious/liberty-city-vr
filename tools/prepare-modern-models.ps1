@@ -4,7 +4,7 @@ param(
     [string]$GameDir,
     [string]$WorkDir = 'C:\LCVRBuild\modern-assets',
     [string]$OutputDir,
-    [ValidateSet('Xbox', 'Modern', 'Both')][string]$Profile = 'Xbox',
+    [ValidateSet('Xbox', 'Modern', 'Both')][string]$Profile = 'Modern',
     [string]$AndroidSdk,
     [string]$Serial,
     [string]$XboxArchive,
@@ -26,10 +26,10 @@ $ErrorActionPreference = 'Stop'
 try {
     Initialize-PrivateDiagnosticLog
     if ($ModsArchive) { throw 'The old two-pack Modern workflow is retired. Supply the re3 pack using -XboxArchive or -ModernArchive.' }
-    if ($XboxOnly -and ($ModernOnly -or $SkipXbox)) { throw 'Conflicting profile switches.' }
-    if ($XboxOnly) { $Profile = 'Xbox' }
+    if ($XboxOnly) { $Profile = 'Modern' }
     if ($ModernOnly -or $SkipXbox) { $Profile = 'Modern' }
-    if ($Profile -eq 'Both' -and $OutputDir) { throw '-OutputDir requires one profile; Both uses game/modelsets/xbox and modern.' }
+    if ($Profile -ne 'Modern') { Write-Host 'Xbox/Both are legacy aliases; preparing the single Modern (Xbox HD) profile.' }
+    $Profile = 'Modern'
     if (-not $GameDir) {
         if ($NonInteractive) { throw '-GameDir is required in non-interactive mode.' }
         $GameDir = Read-Host 'Original GTA III PC folder'
@@ -41,7 +41,7 @@ try {
     $archive = $XboxArchive
     if (-not $archive) { $archive = $ModernArchive }
     if (-not $archive) { $archive = $HdArchive }
-    $profiles = if ($Profile -eq 'Both') { @('Xbox', 'Modern') } else { @($Profile) }
+    $profiles = @('Modern')
     Write-Host "Preparing $Profile assets. Existing headset profiles stay in place until a verified replacement is ready."
     Write-Host "Work folder: $WorkDir"
     Write-Host "Diagnostic log: $LogPath"
@@ -67,7 +67,7 @@ try {
             & (Join-Path $PSScriptRoot 'install-modern-models.ps1') @options
             if (-not $?) { throw "$target installation failed." }
         }
-        Write-Host 'Requested profiles installed. Select asset categories in MODEL ASSETS, then fully restart. Saved selections were preserved.'
+        Write-Host 'Requested profiles installed. Select Classic or Modern in MODEL ASSETS, then fully restart. Saved selections were preserved.'
     } else {
         Write-Host 'Requested profiles built and verified; no device commands were sent.'
     }

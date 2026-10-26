@@ -1,0 +1,43 @@
+--- a/src/core/Game.cpp
++++ b/src/core/Game.cpp
+@@ -74,6 +74,9 @@
+ #include "TrafficLights.h"
+ #include "Train.h"
+ #include "TxdStore.h"
++#ifdef RW_VULKAN
++#include "QuestTextureFallback.h"
++#endif
+ #include "User.h"
+ #include "VisibilityPlugins.h"
+ #include "WaterCannon.h"
+@@ -383,7 +386,10 @@
+ // missing altogether on PS2
+ void
+ CGame::FinalShutdown(void)
+-{	
++{
++#ifdef RW_VULKAN
++	QuestTextureFallback::Remove();
++#endif
+ 	CTxdStore::Shutdown();
+ 	CPedStats::Shutdown();
+ 	CdStreamShutdown();
+@@ -424,6 +430,8 @@
+ #ifdef EXTENDED_PIPELINES
+ 	// for generic fallback
+ 	CustomPipes::SetTxdFindCallback();
++#elif defined(RW_VULKAN)
++	QuestTextureFallback::Install(CTxdStore::GetSlot(gameTxdSlot)->texDict);
+ #endif
+ 
+ 	LoadingScreen("Loading the Game", "Loading particles", nil);
+@@ -664,6 +672,9 @@
+ 
+ bool CGame::ShutDown(void)
+ {
++#ifdef RW_VULKAN
++	QuestTextureFallback::Remove();
++#endif
+ #ifdef GTA_VR_WEAPONS
+ 	OculusVR::PrepareForGameShutdown();
+ #endif

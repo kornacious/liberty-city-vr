@@ -1,3 +1,4 @@
+#include "VehicleAlphaPolicy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -637,7 +638,9 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		// that is a dither pattern, not a soft edge. On a neon tube or a
 		// leaf it reads as a lattice. Multisampling still earns its place
 		// on the geometry it was made for -- railings, poles, wires.
-		const bool gsSplit = masked && getPs2AlphaTestEnabled();
+		const bool vehicleSplit = splitVehicleAlpha(vehicleAlphaPass != 0, wantsBlend, savedZWrite != 0);
+		const bool gsSplit = vehicleSplit || (masked && getPs2AlphaTestEnabled());
+		const float splitReference = vehicleSplit ? vehicleOpaqueReference() : gstate.gsAlphaTestRef/255.0f;
 		// Leaf masks are the highest frequency in the game and the thing
 		// that sparkles at distance. Nothing spatial can resolve detail
 		// finer than a pixel, so the honest answer is to stop asking for
@@ -653,11 +656,14 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			gstate.alphaTestFunction != ALPHAALWAYS;
 		gstate.mipLodBias = blendedMask ? getMaskedMipBias() : 0;
 		for(int gsPass = 0; gsPass < (gsSplit ? 2 : 1); gsPass++){
-		if((vehicleAlphaPass && wantsBlend) || (gsSplit && gsPass == 1))
+		if((vehicleAlphaPass && wantsBlend && !vehicleSplit) || (gsSplit && gsPass == 1))
 			gstate.zWriteEnabled = 0;
+		const uint32 savedAlphaFunction = gstate.alphaTestFunction;
+		if(vehicleSplit) gstate.alphaTestFunction = ALPHAGREATEREQUAL;
 		VkPipeline pipeline = getPipeline(shader,
 		                                  (VkPrimitiveTopology)header->primType);
 		gstate.zWriteEnabled = savedZWrite;
+		gstate.alphaTestFunction = savedAlphaFunction;
 		if(pipeline == VK_NULL_HANDLE)
 			continue;
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -728,8 +734,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 				((geometry->flags & Geometry::NORMALS) ? 0x10000u : 0u) |
 				envBits << 17 | ownVehicleBit | waterBit);
 		push.surfaceProps[3] = gsSplit ?
-			(gsPass == 0 ? gstate.gsAlphaTestRef/255.0f :
-				-(float32)gstate.gsAlphaTestRef/255.0f) :
+			(gsPass == 0 ? splitReference : -splitReference) :
 			gstate.alphaTestRef/255.0f;
 
 		vkCmdPushConstants(commandBuffer, getPipelineLayout(),

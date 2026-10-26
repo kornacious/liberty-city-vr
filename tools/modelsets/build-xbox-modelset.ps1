@@ -5,6 +5,6 @@ param([Parameter(Mandatory=$true)][string]$Source,
       [switch]$Force)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'xbox-modelset.ps1')
-$arguments = @('build', '--source', $Source, '--out', $Out, '--profile', 'xbox')
+$arguments = @('build', '--source', $Source, '--out', $Out, '--profile', 'modern')
 if ($Force) { $arguments += '--force' }
 Invoke-ModelsetPython -Arguments $arguments

@@ -9,6 +9,11 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Consolidate model assets into Classic and Modern (Xbox HD), migrate old Xbox
+  selections, and load the HD pack as a whole. Restore desktop re3's shared
+  generic texture fallback on Quest and preserve opaque vehicle body depth
+  while blending glass in mixed alpha materials.
+
 - Find the Liberty City build wizard's cached Android SDK during optional model
   installation on Windows/Linux. Treat native SDK/Gradle stderr warnings as
   diagnostics in Windows PowerShell 5.1 while enforcing process failure codes.

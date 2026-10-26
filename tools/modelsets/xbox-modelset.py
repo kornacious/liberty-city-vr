@@ -154,7 +154,7 @@ def valid_overlay(root, profile=None, report=False):
     root = Path(root)
     try:
         info = dict(line.split('=', 1) for line in (root / 'BUILD_INFO.txt').read_text().splitlines() if '=' in line)
-        if info['Profile'] not in ('XBOX', 'MODERN') or (profile and info['Profile'] != profile.upper()):
+        if info['Profile'] != 'MODERN' or (profile and info['Profile'] != profile.upper()):
             return False
         if info['BuilderVersion'] != BUILDER_VERSION or info['SourceSHA256'] != PACK['archiveSha256']:
             return False
@@ -206,13 +206,13 @@ def compressor_path():
     raise ValueError('Build tools/modelsets/txdcompress.cpp first; texture conversion is required.')
 
 
-def build(source, output, force=False, compressor=None, profile='xbox'):
+def build(source, output, force=False, compressor=None, profile='modern'):
     profile = profile.lower()
     output_path = Path(output)
     linked_output = output_path.is_symlink()
     source, output = Path(source).resolve(), output_path.resolve()
-    if profile not in ('xbox', 'modern') or output.name != profile or linked_output or source == output or source in output.parents or output in source.parents:
-        raise ValueError('Use a separate output folder named for the requested profile (xbox or modern).')
+    if profile != 'modern' or output.name != profile or linked_output or source == output or source in output.parents or output in source.parents:
+        raise ValueError('Use a separate output folder named modern; Xbox is a retired selection.')
     if output.exists():
         marker = output / 'BUILD_INFO.txt'
         if not force or not marker.is_file() or ('Profile=' + profile.upper()) not in marker.read_text().splitlines():
@@ -337,12 +337,15 @@ def main():
     parser.add_argument('--source')
     parser.add_argument('--archive')
     parser.add_argument('--out', required=True)
-    parser.add_argument('--profile', choices=('xbox', 'modern'), default='xbox')
+    parser.add_argument('--profile', choices=('xbox', 'modern'), default='modern')
     parser.add_argument('--work-dir')
     parser.add_argument('--force', action='store_true')
     parser.add_argument('--accept-downloads', action='store_true')
     parser.add_argument('--non-interactive', action='store_true')
     args = parser.parse_args()
+    if args.profile == 'xbox':
+        args.profile = 'modern'  # Backward-compatible command alias, one output.
+
     if args.command == 'validate':
         return 0 if valid_overlay(args.out, args.profile) else 1
     progress('Asset preparation started: ' + args.profile.upper())

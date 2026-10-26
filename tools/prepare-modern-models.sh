@@ -2,7 +2,7 @@
 # Prepare the same pinned GTA III re3 pack for either runtime profile.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GAME_DIR=""; WORK_DIR="$HOME/LCVRBuild/modern-assets"; OUTPUT_DIR=""; PROFILE=xbox
+GAME_DIR=""; WORK_DIR="$HOME/LCVRBuild/modern-assets"; OUTPUT_DIR=""; PROFILE=modern
 ARCHIVE=""; SOURCE=""; BUILD_ONLY=0; ACCEPT=0; NONINTERACTIVE=0; INSTALL_ARGS=()
 LOG_PATH="${TMPDIR:-/tmp}/LibertyCityVR-Prepare-Modern-Models.log"
 while [ "$#" -gt 0 ]; do
@@ -14,25 +14,26 @@ while [ "$#" -gt 0 ]; do
     --xbox-archive|-XboxArchive|--modern-archive|-ModernArchive|--hd-archive|-HdArchive) ARCHIVE="$2"; shift 2 ;;
     --xbox-source|-XboxSource) SOURCE="$2"; shift 2 ;;
     --mods-archive|-ModsArchive) echo 'The old two-pack workflow is retired. Supply the re3 pack with --xbox-archive.' >&2; exit 1 ;;
-    --xbox-only|-XboxOnly) PROFILE=xbox; shift ;;
+    --xbox-only|-XboxOnly) PROFILE=modern; shift ;;
     --modern-only|-ModernOnly|--skip-xbox|-SkipXbox) PROFILE=modern; shift ;;
     --android-sdk|-AndroidSdk|--serial|-Serial) INSTALL_ARGS+=("$1" "$2"); shift 2 ;;
     --build-only|-BuildOnly) BUILD_ONLY=1; shift ;;
     --accept-downloads|-AcceptDownloads) ACCEPT=1; shift ;;
     --non-interactive|-NonInteractive) NONINTERACTIVE=1; INSTALL_ARGS+=(--non-interactive); shift ;;
     --log-path|-LogPath) LOG_PATH="$2"; shift 2 ;;
-    --help|-h) echo 'Prepare Xbox Version HD (re3): --game-dir DIR [--profile xbox|modern|both] [--xbox-archive ZIP] [--build-only]'; exit 0 ;;
+    --help|-h) echo 'Prepare Xbox Version HD (re3): --game-dir DIR [--profile modern] [--xbox-archive ZIP] [--build-only]'; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
 case "$PROFILE" in xbox|modern|both) ;; *) echo 'Profile must be xbox, modern or both.' >&2; exit 1 ;; esac
-[ "$PROFILE" != both ] || [ -z "$OUTPUT_DIR" ] || { echo '--output-dir requires a single profile.' >&2; exit 1; }
+[ "$PROFILE" = modern ] || echo 'Xbox/Both are legacy aliases for the single Modern (Xbox HD) profile.'
+PROFILE=modern
 if [ -z "$GAME_DIR" ] && [ "$NONINTERACTIVE" -eq 0 ]; then read -r -p 'Original GTA III PC folder: ' GAME_DIR; fi
 [ -n "$GAME_DIR" ] && [ -f "$GAME_DIR/models/gta3.img" ] && [ -f "$GAME_DIR/models/gta3.dir" ] || { echo 'Select an original GTA III installation with --game-dir.' >&2; exit 1; }
 mkdir -p "$(dirname "$LOG_PATH")"
 exec > >(tee "$LOG_PATH") 2>&1
 PROFILES=("$PROFILE")
-[ "$PROFILE" != both ] || PROFILES=(xbox modern)
+
 OUTPUTS=()
 for target in "${PROFILES[@]}"; do
   out="${OUTPUT_DIR:-$GAME_DIR/modelsets/$target}"
@@ -50,5 +51,5 @@ else
   for i in "${!PROFILES[@]}"; do
     bash "$SCRIPT_DIR/install-modern-models.sh" --profile "${PROFILES[$i]}" --modern-dir "${OUTPUTS[$i]}" "${INSTALL_ARGS[@]}"
   done
-  echo 'Requested profiles installed. Select categories in MODEL ASSETS, then fully restart. Saved selections were preserved.'
+  echo 'Requested profiles installed. Select Classic or Modern in MODEL ASSETS, then fully restart. Saved selections were preserved.'
 fi

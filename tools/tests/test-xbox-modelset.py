@@ -58,13 +58,13 @@ class Preparation(unittest.TestCase):
         x.PACK.clear(); x.PACK.update(self.saved)
         self.temp.cleanup()
 
-    def build(self, name='xbox', **kwargs):
+    def build(self, name='modern', **kwargs):
         out = self.root / 'profiles' / name
         x.build(self.source, out, profile=name, **kwargs)
         return out
 
     def test_profiles_precedence_and_integrity(self):
-        for name in ('xbox', 'modern'):
+        for name in ('modern',):
             with self.subTest(profile=name):
                 out = self.build(name)
                 self.assertTrue(x.valid_overlay(out, name))
@@ -95,9 +95,9 @@ class Preparation(unittest.TestCase):
         self.assertEqual(before,{p.relative_to(out):x.sha(p) for p in out.rglob('*') if p.is_file()})
         self.assertEqual(source_hashes,{p.relative_to(self.source):x.sha(p) for p in self.source.rglob('*') if p.is_file()})
         self.assertFalse(any(p.name.startswith('.xbox.') for p in out.parent.iterdir()))
-        foreign=self.root/'foreign/xbox';foreign.mkdir(parents=True);(foreign/'private').write_text('keep')
+        foreign=self.root/'foreign/modern';foreign.mkdir(parents=True);(foreign/'private').write_text('keep')
         with self.assertRaises(ValueError):x.build(self.source,foreign,True)
-        with self.assertRaises(ValueError):x.build(self.source,self.source/'xbox')
+        with self.assertRaises(ValueError):x.build(self.source,self.source/'modern')
 
     def test_prepare_reuses_only_verified_profile(self):
         out=self.build()

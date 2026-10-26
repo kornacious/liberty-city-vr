@@ -1,5 +1,4 @@
-"""Regression checks for source selection and opaque C888 texture conversion."""
-import importlib.util
+"""Regression check for opaque C888 conversion; old vehicle-pack selection cases are retired."""
 from pathlib import Path
 import struct
 import subprocess
@@ -7,62 +6,9 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('xbox', ROOT / 'tools/modelsets/xbox-modelset.py')
-xbox = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(xbox)
 
 
 class XboxTextures(unittest.TestCase):
-    def test_gta3_vehicle_manifest_names(self):
-        # These GTA III names differ from the VC conversion pack aliases.
-        names = {'blista', 'fbicar', 'panlant', 'ghost'}
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            source = root / 'source'
-            source.mkdir()
-            for name in names:
-                (source / f'{name}.dff').write_bytes(b'model fixture')
-            output = root / 'xbox'
-            xbox.build(source, output)
-            self.assertEqual(set((output / 'vehicle_models.txt').read_text().splitlines()), names)
-            self.assertFalse((output / 'ped_models.txt').exists())
-
-    def test_iii_archive_wrapper_selects_main_set(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            main = root / '[III] Fixed XBOX Vehicles v1.0/Fixed Xbox Vehicles/gta3.img'
-            main.mkdir(parents=True)
-            (main / 'police.txd').write_bytes(b'LCPD')
-            optional = main.parents[1] / 'cutscene_props_aircraft_2/Prop Vehicles'
-            optional.mkdir(parents=True)
-            (optional / 'police.txd').write_bytes(b'optional variant')
-            self.assertEqual(xbox.compatible_source_files(root), [main / 'police.txd'])
-
-    def test_pack_variants_and_emergency_pairs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            main = root / 'Fixed Xbox Vehicles/gta3.img'
-            main.mkdir(parents=True)
-            for name in ('police', 'ambulan', 'enforcer', 'firetruk', 'chopper', 'predator', 'taxi'):
-                for ext in ('dff', 'txd'):
-                    (main / f'{name}.{ext}').write_bytes(b'policemiami' if name == 'police' else b'original')
-            optional = root / 'Taxi and Police models with badges'
-            optional.mkdir()
-            (optional / 'taxi.dff').write_bytes(b'wrong variant')
-            files = {p.name: p for p in xbox.compatible_source_files(root)}
-            self.assertEqual(set(files), {'predator.dff', 'predator.txd', 'taxi.dff', 'taxi.txd'})
-            self.assertEqual(files['taxi.dff'].read_bytes(), b'original')
-
-    def test_gta3_source_retained_and_duplicates_rejected(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / 'police.txd').write_bytes(b'GTA III')
-            self.assertEqual(len(xbox.compatible_source_files(root)), 1)
-            (root / 'variant').mkdir()
-            (root / 'variant/police.txd').write_bytes(b'different')
-            with self.assertRaisesRegex(ValueError, 'Ambiguous'):
-                xbox.compatible_source_files(root)
-
     def test_c888_unused_alpha_is_opaque(self):
         def chunk(kind, data):
             return struct.pack('<III', kind, len(data), 0x1803ffff) + data
