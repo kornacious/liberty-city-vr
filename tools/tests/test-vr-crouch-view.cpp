@@ -11,6 +11,14 @@ int main(){
 	for(int hz : {72,90,120}){
 		VrCrouchView view;
 		const CVector target(0.25f,-0.18f,-0.45f);
+		VrCrouchView faster;
+		VrKnockdownView reference;
+		reference.Update(true,2.0f/hz,target,0,0,0);
+		CVector fastOffset=faster.Update(true,true,true,true,0,1.0f/hz,target);
+		Check((fastOffset-reference.offset).Magnitude()<0.000001f,"crouch entry advances at twice the original speed");
+		reference.Update(false,1.0f/hz,{},0,0,0);
+		fastOffset=faster.Update(true,false,false,true,1,1.0f/hz,{});
+		Check((fastOffset-reference.offset).Magnitude()<0.000001f,"standing recovery retains its existing speed");
 		unsigned frame=0;
 		CVector offset;
 		for(int i=0;i<hz;i++){

@@ -18,7 +18,10 @@ public:
 		if(postPhysics && (!frameValid || frame != currentFrame)){
 			frame = currentFrame;
 			frameValid = true;
-			motion.Update(crouched && posed, seconds, target, 0, 0, 0);
+			// Reach the crouched neck sooner, before the visible body crosses
+			// the eye. Keep the existing standing recovery speed.
+			const bool following = crouched && posed;
+			motion.Update(following, following ? seconds*2.0f : seconds, target, 0, 0, 0);
 		}
 		return motion.offset;
 	}
