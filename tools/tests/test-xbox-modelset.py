@@ -66,6 +66,27 @@ class Preparation(unittest.TestCase):
         x.build(self.source, out, profile=name, **kwargs)
         return out
 
+    def test_missing_wheel_texture_repair_preserves_mesh_and_masks(self):
+        def chunk(kind, payload):
+            return struct.pack('<III', kind, len(payload), 0x1803ffff) + payload
+        missing = b'wheel_lightvan64back'.ljust(24, b'\0')
+        fallback = b'wheel_lightvan64'.ljust(24, b'\0')
+        texture = chunk(6, chunk(1, b'filter') + chunk(2, missing) + chunk(2, missing))
+        # Binary geometry and unrelated strings must never be searched/replaced.
+        mesh = chunk(1, b'geometry UVs ' + missing)
+        material = chunk(7, texture)
+        data = chunk(16, chunk(26, chunk(15, mesh + chunk(8, material))))
+        path = self.root/'wheels.dff'; path.write_bytes(data)
+        self.assertEqual(x.repair_wheel_texture_references(path), 1)
+        expected = data.replace(chunk(2, missing), chunk(2, fallback), 1)
+        self.assertEqual(path.read_bytes(), expected)
+        self.assertEqual(x.repair_wheel_texture_references(path), 0)
+        self.assertEqual(path.read_bytes(), expected)
+        path.write_bytes(data[:-1])
+        with self.assertRaises(ValueError):
+            x.repair_wheel_texture_references(path)
+        self.assertEqual(path.read_bytes(), data[:-1])
+
     def test_profiles_precedence_and_integrity(self):
         for name in ('modern',):
             with self.subTest(profile=name):

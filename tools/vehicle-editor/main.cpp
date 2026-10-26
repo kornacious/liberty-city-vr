@@ -341,10 +341,27 @@ static void loadModel() {
         std::vector<std::vector<uint8_t>> hashes = {dff, txd};
         if (!genericDictionaries[set]) {
             auto generic = assets.read(set, "generic.txd");
-            genericHashes[set] = editor::fingerprint({generic});
+            auto misc = assets.read(set, "misc.txd");
+            genericHashes[set] = editor::fingerprint({generic, misc});
             genericDictionaries[set] = loadTxd(generic);
             if (genericDictionaries[set])
                 dictionaries.pop_back();
+            // default.dat merges MISC.TXD into the shared game dictionary;
+            // it contains the stock tyre and rim textures used by both profiles.
+            if (auto shared = loadTxd(misc)) {
+                dictionaries.pop_back();
+                if (!genericDictionaries[set])
+                    genericDictionaries[set] = shared;
+                else {
+                    std::vector<rw::Texture *> textures;
+                    FORLIST(link, shared->textures)
+                        textures.push_back(rw::Texture::fromDict(link));
+                    for (auto texture : textures)
+                        if (!genericDictionaries[set]->find(texture->name))
+                            genericDictionaries[set]->add(texture);
+                    shared->destroy();
+                }
+            }
         }
         modelTextures = loadTxd(txd) != nullptr;
         clump = loadDff(dff);
@@ -414,6 +431,15 @@ static void loadModel() {
                         w->removeAtomic(a);
                         a->destroy();
                     } else {
+                        if (a->geometry) {
+                            const auto &materials = a->geometry->matList;
+                            for (int i = 0; i < materials.numMaterials; ++i) {
+                                auto texture = materials.materials[i]->texture;
+                                if (texture && (!texture->raster || texture->raster->width == 0 ||
+                                                texture->raster->height == 0))
+                                    modelWheels = false;
+                            }
+                        }
                         // The production loader detaches each wheel atomic
                         // from the container hierarchy before instancing it.
                         auto frame = rw::Frame::create();
@@ -478,7 +504,8 @@ static void checkReviews() {
                 parts.push_back(std::move(wheels.second));
             }
             if (generics[selectedSet].empty())
-                generics[selectedSet] = editor::fingerprint({assets.read(selectedSet, "generic.txd")});
+                generics[selectedSet] = editor::fingerprint({assets.read(selectedSet, "generic.txd"),
+                                                          assets.read(selectedSet, "misc.txd")});
             hash = editor::fingerprint(parts) + generics[selectedSet];
         }
         if (hash != it->second) {

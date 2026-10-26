@@ -206,6 +206,50 @@ def compressor_path():
     raise ValueError('Build tools/modelsets/txdcompress.cpp first; texture conversion is required.')
 
 
+def repair_wheel_texture_references(path):
+    """Repair the pinned pack's absent wheel-back texture using its stock rim art.
+
+    Only TEXTURE name strings are changed, keeping geometry, UVs, masks and
+    chunk sizes intact. The matching stock wheel_lightvan64 lives in MISC.TXD.
+    """
+    data = bytearray(Path(path).read_bytes())
+    missing, fallback = b'wheel_lightvan64back', b'wheel_lightvan64'
+    repaired = 0
+
+    def visit(begin, end):
+        nonlocal repaired
+        offset = begin
+        while offset < end:
+            if offset + 12 > end:
+                raise ValueError('Truncated shared wheel chunk header.')
+            kind, size, _ = struct.unpack_from('<III', data, offset)
+            start, stop = offset + 12, offset + 12 + size
+            if stop > end:
+                raise ValueError('Truncated shared wheel chunk payload.')
+            if kind == 6:  # TEXTURE: STRUCT followed by name STRING and mask STRING.
+                child = start
+                while child < stop:
+                    if child + 12 > stop:
+                        raise ValueError('Truncated wheel texture chunk.')
+                    tag, length, _ = struct.unpack_from('<III', data, child)
+                    value = child + 12
+                    if value + length > stop:
+                        raise ValueError('Truncated wheel texture string.')
+                    if tag == 2:
+                        if bytes(data[value:value+length]).split(b'\0')[0] == missing:
+                            data[value:value+length] = fallback.ljust(length, b'\0')
+                            repaired += 1
+                        break  # The second STRING is the mask, never an alias.
+                    child = value + length
+            elif kind in (16, 26, 15, 8, 7):  # CLUMP/GEOLIST/GEOMETRY/MATLIST/MATERIAL
+                visit(start, stop)
+            offset = stop
+
+    visit(0, len(data))
+    Path(path).write_bytes(data)
+    return repaired
+
+
 def build(source, output, force=False, compressor=None, profile='modern'):
     profile = profile.lower()
     output_path = Path(output)
@@ -254,6 +298,10 @@ def build(source, output, force=False, compressor=None, profile='modern'):
             target = stage / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, target)
+        wheels = stage / 'models/generic/wheels.dff'
+        if wheels.is_file():
+            repaired = repair_wheel_texture_references(wheels)
+            progress(f'Repaired {repaired} missing shared wheel texture references.')
         txds = sorted(list(work.glob('*.txd')) + list(stage.rglob('*.txd')))
         for index, txd in enumerate(txds, 1):
             report_item(index, len(txds), 'Converting textures', txd.name)

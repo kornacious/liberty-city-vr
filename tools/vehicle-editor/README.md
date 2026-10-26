@@ -95,7 +95,8 @@ Modern reads the Xbox HD assets prepared under `modelsets/modern` in the selecte
 game folder, with Classic fallback for missing files. Old Modern or Xbox editor
 selections reopen as Modern. Modern placement records retain the `xbox:` section
 prefix for compatibility with the game's HD calibration identity; existing
-placement files are preserved.
+placement files are preserved. Shared tyre and rim textures also come from
+`models/MISC.TXD` in the selected base game folder.
 
 ## Application preferences
 

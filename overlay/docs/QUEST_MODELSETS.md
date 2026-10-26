@@ -63,7 +63,7 @@ after a complete verified build. Unmarked folders are preserved and rejected.
 The builder pins 93 source-file hashes and merges four archive layers in their
 PC precedence order: `gta3`, `xbox_models`, `xbox_hd_textures`, `xbox_vehicles`.
 Four empty placeholders are omitted. The output has 4,051 entries, 62 vehicle
-models, 101 vegetation names and 91 files including its manifest. DFFs retain
+models, 101 vegetation names and 91 files including its manifest. DFF geometry and UVs retain
 their authored data; supported TXDs are compressed/mip-capped at 1024. Every
 output file has a checksum; source files remain untouched.
 
@@ -76,6 +76,14 @@ after updating to the Claude skin fix, and fully restart the game.
 
 No game/mod assets are included in the repository or APK. Generated assets
 remain local and must not be redistributed.
+
+The pinned wheel container references an absent `wheel_lightvan64back` texture
+on six shared wheel materials. Preparation replaces only that texture name
+with stock `wheel_lightvan64` from the base game's `models/MISC.TXD`, retaining
+geometry, UVs and alpha. This provides a textured rim/tyre fallback instead of
+the solid white surface. Rebuild older Modern overlays to apply the repair.
+The Vehicle Editor loads both `MISC.TXD` and `generic.txd` as shared textures
+and its catalogue validation rejects unresolved wheel textures.
 
 ## Installation
 
