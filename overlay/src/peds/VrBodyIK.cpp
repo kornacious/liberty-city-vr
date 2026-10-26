@@ -197,11 +197,6 @@ static float gBikeBodyLateralLast;
 static float gBikeBodyLateralAccum;
 static int gBikeBodyLateralStableFrames;
 
-static CPed *gHandCarrierPed;
-static bool gHandCarrierValid;
-static bool gHandCarrierWasVehicle;
-static CMatrix gHandCarrierPrev;
-
 enum { MAX_BODY_IK_NODES = 96 };
 
 struct HandDescendantPose
@@ -291,38 +286,6 @@ static CVector FromBasisLocal(const CVector &local, const CMatrix &basis)
 {
 	return basis.GetRight()*local.x + basis.GetUp()*local.y +
 		basis.GetForward()*local.z;
-}
-
-static CVector
-AdvancePositionBetweenCarriers(const CVector &worldPosition,
-	const CMatrix &fromCarrier, const CMatrix &toCarrier)
-{
-	const CVector local =
-		ToBasisLocal(worldPosition-fromCarrier.GetPosition(), fromCarrier);
-	return toCarrier.GetPosition()+
-		FromBasisLocal(local, toCarrier);
-}
-
-static bool
-CarrierDeltaIsReasonable(const CMatrix &fromCarrier,
-	const CMatrix &toCarrier)
-{
-	const CVector delta =
-		toCarrier.GetPosition()-fromCarrier.GetPosition();
-
-	if(delta.MagnitudeSqr() > 4.0f) // > 2 metres in one render
-		return false;
-
-	const CVector a = fromCarrier.GetForward();
-	const CVector b = toCarrier.GetForward();
-	if(a.MagnitudeSqr() <= 1.0e-8f || b.MagnitudeSqr() <= 1.0e-8f)
-		return false;
-
-	CVector an = a, bn = b;
-	an.Normalise();
-	bn.Normalise();
-
-	return DotProduct(an, bn) > -0.5f;
 }
 
 static bool BuildBikeCarrierBasis(CVehicle *bike, const CMatrix &nativeBody,
@@ -1140,9 +1103,6 @@ void Reset(void)
 	gBikeBodyLateralLast = 0.0f;
 	gBikeBodyLateralAccum = 0.0f;
 	gBikeBodyLateralStableFrames = 0;
-	gHandCarrierPed = nil;
-	gHandCarrierValid = false;
-	gHandCarrierWasVehicle = false;
 	gHandPose[0] = HandDescendantPose();
 	gHandPose[1] = HandDescendantPose();
 	gLastPlayer = nil;
@@ -1168,10 +1128,6 @@ void ResetVehicleTransition(void)
 	gBikeBodyLateralLast = 0.0f;
 	gBikeBodyLateralAccum = 0.0f;
 	gBikeBodyLateralStableFrames = 0;
-
-	gHandCarrierPed = nil;
-	gHandCarrierValid = false;
-	gHandCarrierWasVehicle = false;
 
 	IKCALLOG("[IK] vehicle transition: transient ownership cleared; anatomy preserved");
 }
@@ -1415,6 +1371,12 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		gBikeBodyLateralAccum = 0.0f;
 	}
 
+	// Publish the vehicle anchor after the body/neck pose is ready, then
+	// convert the controller sample once into that same frame. Carrying this
+	// target again by the previous body delta makes free hands jump by speed*dt
+	// (and drops that offset abruptly at the old two-metre carry cutoff).
+	if(vehicleIK)
+		::VrUpdateFirstPersonAnchor(false);
 	OculusVR::RefreshQuestTrackedHandWorldPosesForRender();
 
 	CMatrix desiredWorld[2];
@@ -1462,38 +1424,6 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		cal.lastPoseValid = true;
 		desiredValid[handIndex] = true;
 	}
-
-	const bool carrierModeVehicle = vehicleIK;
-	const bool sameCarrierContext =
-		gHandCarrierValid &&
-		gHandCarrierPed == ped &&
-		gHandCarrierWasVehicle == carrierModeVehicle;
-
-	// On-foot tracking already uses this frame's anchor. Applying the body
-	// delta here would move the target twice (and only for unlocked hands).
-	if(vehicleIK && sameCarrierContext &&
-	   CarrierDeltaIsReasonable(gHandCarrierPrev, visualBody)){
-		for(int handIndex = 0; handIndex < 2; handIndex++){
-			if(!desiredValid[handIndex])
-				continue;
-
-			if(weaponSupportLocked[handIndex])
-				continue;
-			if(vehicleIK &&
-			   OculusVR::IsImmersiveSteeringHandleGrabbed(handIndex))
-				continue;
-
-			desiredWorld[handIndex].GetPosition() =
-				AdvancePositionBetweenCarriers(
-					desiredWorld[handIndex].GetPosition(),
-					gHandCarrierPrev, visualBody);
-		}
-	}
-
-	gHandCarrierPrev = visualBody;
-	gHandCarrierPed = ped;
-	gHandCarrierWasVehicle = carrierModeVehicle;
-	gHandCarrierValid = true;
 
 	if(hier->numNodes <= 0 || hier->numNodes > 96)
 		return;
@@ -1717,6 +1647,12 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		}
 	}
 
+	// Publish the vehicle anchor after the body/neck pose is ready, then
+	// convert the controller sample once into that same frame. Carrying this
+	// target again by the previous body delta makes free hands jump by speed*dt
+	// (and drops that offset abruptly at the old two-metre carry cutoff).
+	if(vehicleIK)
+		::VrUpdateFirstPersonAnchor(false);
 	OculusVR::RefreshQuestTrackedHandWorldPosesForRender();
 
 	CMatrix desiredWorld[2];
@@ -1758,37 +1694,6 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		cal.lastPoseValid = true;
 		desiredValid[handIndex] = true;
 	}
-
-	const bool carrierModeVehicle = vehicleIK;
-	const bool sameCarrierContext =
-		gHandCarrierValid &&
-		gHandCarrierPed == ped &&
-		gHandCarrierWasVehicle == carrierModeVehicle;
-
-	// Match the skinned path: freshly anchored on-foot poses need no carry.
-	if(vehicleIK && sameCarrierContext &&
-	   CarrierDeltaIsReasonable(gHandCarrierPrev, visualBody)){
-		for(int handIndex = 0; handIndex < 2; handIndex++){
-			if(!desiredValid[handIndex])
-				continue;
-
-			if(weaponSupportLocked[handIndex])
-				continue;
-			if(vehicleIK &&
-			   OculusVR::IsImmersiveSteeringHandleGrabbed(handIndex))
-				continue;
-
-			desiredWorld[handIndex].GetPosition() =
-				AdvancePositionBetweenCarriers(
-					desiredWorld[handIndex].GetPosition(),
-					gHandCarrierPrev, visualBody);
-		}
-	}
-
-	gHandCarrierPrev = visualBody;
-	gHandCarrierPed = ped;
-	gHandCarrierWasVehicle = carrierModeVehicle;
-	gHandCarrierValid = true;
 
 	int solveOrder[2] = { 0, 1 };
 	if(OculusVR::GetHeldWeaponSlot(1) >= 0 &&
@@ -1918,8 +1823,6 @@ void Apply(CPed *ped)
 		gSolvedHandValid[1] = false;
 		gRigidWeaponLink[0] = RigidWeaponHandLink();
 		gRigidWeaponLink[1] = RigidWeaponHandLink();
-		gHandCarrierPed = nil;
-		gHandCarrierValid = false;
 		return;
 	}
 
@@ -1942,8 +1845,8 @@ void Apply(CPed *ped)
 	// PreRender runs before the final camera setup. On foot, publish the
 	// current player anchor before solving either wrist: otherwise the gun
 	// inherits the previous camera position while the eyes use this frame.
-	// Do not advance refreshed targets by the body delta again. Vehicle neck
-	// anchors can depend on the body solve, so retain their existing path.
+	// Vehicle anchors are published inside each solver after its body/neck
+	// pose is ready. Neither path advances refreshed targets by a body delta.
 	if(onFootIK)
 		::VrUpdateFirstPersonAnchor(false);
 
