@@ -1,0 +1,213 @@
+#pragma once
+
+// No engine objects cross the writer boundary. The game thread only copies
+// numeric samples into a bounded queue; formatting and disk I/O run elsewhere.
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <mutex>
+#include <string>
+#include <thread>
+
+namespace questperf {
+
+enum Event : uint32_t {
+    Damage = 1, Died = 2, Recovered = 4, EnteredVehicle = 8,
+    LeftVehicle = 16, WeaponUsed = 32, PlayerAppeared = 64,
+    PlayerDisappeared = 128, Relocated = 256, PauseChanged = 512,
+    CutsceneChanged = 1024, MissionChanged = 2048, WantedChanged = 4096
+};
+enum Activity { Unavailable, Still, Walking, Running, Sprinting, Vehicle,
+    Melee, Attacking, Aiming, Dead, Arrested };
+inline const char *ActivityName(int value)
+{
+    static const char *names[] = {"unavailable", "still", "walking", "running",
+        "sprinting", "vehicle", "melee", "attacking", "aiming", "dead", "arrested"};
+    return value >= 0 && value < 11 ? names[value] : names[0];
+}
+struct Player {
+    int valid = 0, activity = Unavailable, pedState = -1, moveState = -1;
+    int vehicleModel = -1, weapon = -1, weaponState = -1, ammo = -1, wanted = -1;
+    int dead = 0, inVehicle = 0, paused = 0, cutscene = 0, mission = 0;
+    float health = 0, armour = 0, x = 0, y = 0, z = 0, speed = 0;
+};
+class PlayerEvents {
+    Player previous{};
+    bool observed = false, sawDead = false;
+public:
+    uint32_t Update(const Player &p, uint32_t weaponUses)
+    {
+        uint32_t events = weaponUses ? WeaponUsed : 0;
+        if(observed) {
+            if(p.paused != previous.paused) events |= PauseChanged;
+            if(p.cutscene != previous.cutscene) events |= CutsceneChanged;
+            if(p.mission != previous.mission) events |= MissionChanged;
+            if(p.valid && previous.valid && p.wanted != previous.wanted) events |= WantedChanged;
+        }
+        if(observed && p.valid != previous.valid)
+            events |= p.valid ? PlayerAppeared : PlayerDisappeared;
+        if(p.valid) {
+            if(observed && previous.valid) {
+                if(p.health < previous.health || p.armour < previous.armour) events |= Damage;
+                if(p.dead && !previous.dead) events |= Died;
+                if(p.inVehicle != previous.inVehicle)
+                    events |= p.inVehicle ? EnteredVehicle : LeftVehicle;
+                const float dx = p.x-previous.x, dy = p.y-previous.y, dz = p.z-previous.z;
+                if(dx*dx+dy*dy+dz*dz > 2500.0f) events |= Relocated;
+            }
+            if(!p.dead && sawDead) events |= Recovered;
+            sawDead = p.dead != 0;
+        }
+        previous = p;
+        observed = true;
+        return events;
+    }
+};
+
+constexpr size_t PhaseCount = 24;
+struct Frame {
+    uint64_t id = 0, startNs = 0, phaseMask = 0;
+    double intervalMs = -1, cpuMs = 0;
+    float stages[6]{}; // pre, vk begin, step, post, vk end, recorder preparation
+    float phases[PhaseCount]{};
+    float runtimeCpuMs = -1, runtimeGpuMs = -1, vulkanGpuMs = -1, refreshHz = 0;
+    int width = 0, height = 0;
+    int activeModels[5]{}, requestedModel = 0;
+    float renderScale = -1;
+    uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
+    Player player{};
+};
+
+class Writer {
+    static constexpr size_t Capacity = 1024;
+    std::array<Frame, Capacity> queue{};
+    size_t head = 0, count = 0;
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::thread worker;
+    bool stopping = false;
+    FILE *frames = nullptr, *metadata = nullptr;
+    std::atomic<uint64_t> dropped{0};
+    uint64_t written = 0;
+
+    static FILE *OpenExclusive(const std::string &path)
+    {
+#ifdef _MSC_VER
+        FILE *file = nullptr;
+        return fopen_s(&file, path.c_str(), "wx") == 0 ? file : nullptr;
+#else
+        return std::fopen(path.c_str(), "wx");
+#endif
+    }
+
+    void Write(const Frame &f)
+    {
+        const Player &p = f.player;
+        std::fprintf(frames, "%llu,%llu,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.3f,%llu,%llu",
+            (unsigned long long)f.id, (unsigned long long)f.startNs, f.intervalMs, f.cpuMs,
+            f.stages[0], f.stages[1], f.stages[2], f.stages[3], f.stages[4], f.stages[5],
+            f.runtimeCpuMs, f.runtimeGpuMs, f.vulkanGpuMs, f.refreshHz,
+            (unsigned long long)f.phaseMask, (unsigned long long)dropped.load());
+        for(float phase : f.phases) std::fprintf(frames, ",%.6f", phase);
+        std::fprintf(frames, ",%u,%u,%u,%u,%u,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.6f,%d,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
+            f.renderCalls[0], f.renderCalls[1], f.renderCalls[2], f.events, f.weaponUses,
+            p.valid, ActivityName(p.activity), p.pedState, p.moveState, p.vehicleModel,
+            p.weapon, p.weaponState, p.ammo, p.wanted, p.dead, p.inVehicle,
+            p.paused, p.cutscene, p.mission, p.health, p.armour, p.x, p.y, p.z, p.speed,
+            f.width, f.height, f.renderScale, f.activeModels[0], f.activeModels[1],
+            f.activeModels[2], f.activeModels[3], f.activeModels[4], f.requestedModel);
+    }
+    void Run()
+    {
+        std::array<Frame, 128> batch{};
+        bool failed = false;
+        auto lastFlush = std::chrono::steady_clock::now();
+        for(;;) {
+            size_t n;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                ready.wait_for(lock, std::chrono::milliseconds(200), [this]{return count || stopping;});
+                n = count < batch.size() ? count : batch.size();
+                for(size_t i = 0; i < n; ++i) {
+                    batch[i] = queue[head];
+                    head = (head+1)%Capacity;
+                }
+                count -= n;
+                if(!n && stopping) break;
+            }
+            for(size_t i = 0; i < n; ++i) {
+                if(!failed) {
+                    Write(batch[i]);
+                    failed = std::ferror(frames) != 0;
+                }
+                if(failed) ++dropped;
+                else ++written;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if(now-lastFlush >= std::chrono::seconds(1)) {
+                if(std::fflush(frames) != 0) failed = true;
+                lastFlush = now;
+            }
+        }
+        if(std::fflush(frames) != 0) failed = true;
+        std::fprintf(metadata, "written_rows,%llu\ndropped_rows,%llu\nwrite_error,%d\nclosed,1\n",
+            (unsigned long long)written, (unsigned long long)dropped.load(), failed ? 1 : 0);
+    }
+public:
+    ~Writer() { Stop(); }
+    // Exclusive creation prevents a repeated session name overwriting a capture.
+    bool Start(const std::string &stem, const std::string &details)
+    {
+        Stop();
+        frames = OpenExclusive(stem+".frames.csv");
+        if(!frames) return false;
+        metadata = OpenExclusive(stem+".session.csv");
+        if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
+        std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
+        std::fputs("key,value\nschema,1\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\n", metadata);
+        std::fputs(details.c_str(), metadata);
+        std::fflush(metadata);
+        std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
+        static const char *names[] = {"game", "streaming", "population", "car", "audio",
+            "world_list", "pre_render", "scene_setup", "world_render", "ui", "particle_update",
+            "particle_render", "script", "pre_world_misc", "world_process", "post_world_camera_fx",
+            "render_sky", "render_roads", "render_reflections", "render_world", "render_water",
+            "render_fading", "render_weather", "render_effects"};
+        static_assert(sizeof(names)/sizeof(names[0]) == PhaseCount, "capture phase schema");
+        for(const char *name : names) std::fprintf(frames, ",%s_ms", name);
+        std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set\n", frames);
+        if(std::ferror(frames) || std::ferror(metadata)) {
+            std::fclose(frames); std::fclose(metadata);
+            frames = metadata = nullptr;
+            return false;
+        }
+        head = count = 0; written = 0; dropped = 0; stopping = false;
+        worker = std::thread(&Writer::Run, this);
+        return true;
+    }
+    bool Submit(const Frame &frame)
+    {
+        if(!worker.joinable()) return false;
+        std::unique_lock<std::mutex> lock(mutex, std::try_to_lock);
+        if(!lock.owns_lock() || count == Capacity) { ++dropped; return false; }
+        queue[(head+count)%Capacity] = frame;
+        ++count;
+        if(count >= 64) ready.notify_one();
+        return true;
+    }
+    void Stop()
+    {
+        if(worker.joinable()) {
+            { std::lock_guard<std::mutex> lock(mutex); stopping = true; }
+            ready.notify_one();
+            worker.join();
+        }
+        if(frames) std::fclose(frames);
+        if(metadata) std::fclose(metadata);
+        frames = metadata = nullptr;
+    }
+};
+} // namespace questperf

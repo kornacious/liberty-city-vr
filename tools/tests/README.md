@@ -389,3 +389,9 @@ and the production vehicle alpha depth policy for opaque bodywork and glass.
 It is included in the current-source gate. `test-modelset-profiles.ps1` now
 checks two selectable profiles, legacy Xbox migration, complete-pack routing,
 ignored old category mixes and the internal Xbox calibration identity.
+
+`test-perf-capture.ps1` validates the production per-frame writer: raw timing
+precision, CSV schema, event transitions, queue overflow accounting, shutdown
+draining and exclusive session creation. It is included in the current-source
+gate. `python tools/tests/test-perf-analysis.py` separately tests the comparison
+tool's percentiles, validity masks, activity selection and incomplete sessions.

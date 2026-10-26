@@ -4,6 +4,9 @@ class CEntity;
 
 namespace androidgame {
 
+// Successful player weapon activations, counted on the game thread.
+void QuestProfilerCountPlayerWeaponUse(void);
+
 enum QuestProfilerPhase
 {
 	QUEST_PROFILER_PHASE_GAME,

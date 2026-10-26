@@ -4,8 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #include "QuestProfiler.h"
+#include "QuestPerfCapture.h"
 #include "xr_vulkan_session.h"
 #include "vulkan/rwvk.h"
 #include "CarCtrl.h"
@@ -21,6 +23,18 @@
 #include "Population.h"
 #include "Renderer.h"
 #include "Streaming.h"
+#include "ModelSets.h"
+#include "PlayerPed.h"
+#include "PlayerInfo.h"
+#include "Vehicle.h"
+#include "Wanted.h"
+#include "World.h"
+#include "Weapon.h"
+#include "Timer.h"
+#include "CutsceneMgr.h"
+#include "Script.h"
+#include "OculusVR.h"
+#include "platform_android.h"
 
 namespace androidgame {
 namespace {
@@ -83,6 +97,14 @@ float gVehicleRenderPhaseSmoothedMs[QUEST_VEHICLE_RENDER_PHASE_COUNT];
 float gVehicleRenderPhaseMaxMs[QUEST_VEHICLE_RENDER_PHASE_COUNT];
 char gLogPath[512];
 FILE *gLogFile;
+char gCaptureDirectory[512];
+questperf::Writer gCaptureWriter;
+questperf::Frame gCaptureFrame;
+questperf::PlayerEvents gCaptureEvents;
+uint64 gCaptureId, gPreviousCaptureStartNs;
+uint32 gPlayerWeaponUses;
+static_assert(QUEST_PROFILER_PHASE_COUNT == questperf::PhaseCount,
+    "Update the frame-capture phase schema with the profiler phases");
 QuestProfilerSnapshot gSnapshot;
 int32 gPreviousSpawnTrace[16];
 int32 gPreviousSpawnAttempts;
@@ -158,10 +180,97 @@ CloseOpenPhases(double now)
 		if(!gPhaseOpen[i])
 			continue;
 		const float elapsed = (float)(now-gPhaseStartedMs[i]);
+		if(elapsed >= 0.0f) gCaptureFrame.phases[i] += elapsed;
 		if(elapsed >= 0.0f && elapsed < 1000.0f)
 			gFramePhaseMs[i] += elapsed;
 		gPhaseOpen[i] = false;
+		gCaptureFrame.phaseMask |= uint64(1) << i;
 	}
+}
+
+questperf::Player
+CapturePlayer(void)
+{
+	questperf::Player result;
+	result.paused = CTimer::GetIsPaused();
+	result.cutscene = CCutsceneMgr::IsRunning();
+	result.mission = CTheScripts::IsPlayerOnAMission();
+	CPlayerPed *player = FindPlayerPed();
+	if(player == nil) return result;
+	result.valid = 1;
+	result.pedState = player->GetPedState();
+	result.moveState = player->m_nMoveState;
+	result.health = player->m_fHealth;
+	result.armour = player->m_fArmour;
+	result.dead = player->DyingOrDead() || player->m_fHealth <= 0;
+	result.inVehicle = player->bInVehicle && player->m_pMyVehicle != nil;
+	const CVector position = player->GetPosition();
+	result.x = position.x; result.y = position.y; result.z = position.z;
+	result.speed = player->GetMoveSpeed().Magnitude();
+	result.wanted = player->m_pWanted ? player->m_pWanted->GetWantedLevel() : 0;
+	if(result.inVehicle) result.vehicleModel = player->m_pMyVehicle->GetModelIndex();
+	CWeapon *weapon = player->GetWeapon();
+	if(weapon){
+		result.weapon = weapon->m_eWeaponType;
+		result.weaponState = weapon->m_eWeaponState;
+		result.ammo = weapon->m_nAmmoTotal;
+	}
+	if(result.dead) result.activity = questperf::Dead;
+	else if(player->GetPedState() == PED_ARRESTED) result.activity = questperf::Arrested;
+	else if(result.inVehicle) result.activity = questperf::Vehicle;
+	else if(player->GetPedState() == PED_FIGHT) result.activity = questperf::Melee;
+	else if(player->GetPedState() == PED_ATTACK) result.activity = questperf::Attacking;
+	else if(player->GetPedState() == PED_AIM_GUN) result.activity = questperf::Aiming;
+	else if(player->m_nMoveState == PEDMOVE_SPRINT) result.activity = questperf::Sprinting;
+	else if(player->m_nMoveState == PEDMOVE_RUN) result.activity = questperf::Running;
+	else if(player->m_nMoveState == PEDMOVE_WALK) result.activity = questperf::Walking;
+	else result.activity = questperf::Still;
+	return result;
+}
+
+void
+StartFrameCapture(void)
+{
+	gCaptureWriter.Stop();
+	gCaptureId = gPreviousCaptureStartNs = 0;
+	gPlayerWeaponUses = 0;
+	gCaptureEvents = {};
+	if(gCaptureDirectory[0] == '\0') return;
+	mkdir(gCaptureDirectory, 0700);
+	const time_t utc = time(nil);
+	tm date = {};
+	gmtime_r(&utc, &date);
+	char stamp[40], stem[640], value[160];
+	strftime(stamp, sizeof(stamp), "%Y%m%dT%H%M%SZ", &date);
+	snprintf(stem, sizeof(stem), "%s/%s-%llu", gCaptureDirectory, stamp,
+		(unsigned long long)NowNanoseconds());
+	timespec realtime;
+	clock_gettime(CLOCK_REALTIME, &realtime);
+	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
+	details += "profiler_compiled," __DATE__ " " __TIME__ "\n";
+	snprintf(value, sizeof(value), "start_unix_ns,%llu\nstart_monotonic_ns,%llu\n",
+		(unsigned long long)realtime.tv_sec*1000000000ULL+realtime.tv_nsec,
+		(unsigned long long)NowNanoseconds());
+	details += value;
+	details += "active_model_set,"; details += ModelSets::GetName(ModelSets::GetActive());
+	details += "\nrequested_model_set,"; details += ModelSets::GetName(ModelSets::GetRequested());
+	details += "\nasset_identity,selection_and_source_not_content_hash\n";
+	static const char *categories[] = {"world", "vegetation", "vehicles", "peds", "weapons"};
+	for(int i = 0; i < ModelSets::MODEL_CATEGORY_COUNT; ++i){
+		const ModelSets::eModelSet set = ModelSets::GetActiveForCategory((ModelSets::eModelCategory)i);
+		details += "active_"; details += categories[i]; details += ",";
+		details += ModelSets::GetSourceName(set); details += "\n";
+	}
+	// Saved values are explicitly named saved_*; menu/runtime overrides can differ.
+	static const char *settings[] = {"RenderScalePercent", "MsaaSamples", "CarReflections",
+		"ModernWater", "DynamicLights", "GenerateMipmaps"};
+	for(const char *setting : settings){
+		snprintf(value, sizeof(value), "saved_%s,%d\n", setting,
+			GetPrivateProfileIntA("VR", setting, -1, ".\\vr_settings.ini"));
+		details += value;
+	}
+	if(!gCaptureWriter.Start(stem, details))
+		__android_log_print(ANDROID_LOG_ERROR, "QuestPerf", "Cannot start per-frame capture");
 }
 
 void
@@ -664,9 +773,11 @@ void
 QuestProfilerSetLogDirectory(const char *directory)
 {
 	gLogPath[0] = '\0';
+	gCaptureDirectory[0] = '\0';
 	if(directory == nil || directory[0] == '\0')
 		return;
 	snprintf(gLogPath, sizeof(gLogPath), "%s/quest_perf.csv", directory);
+	snprintf(gCaptureDirectory, sizeof(gCaptureDirectory), "%s/perf-captures", directory);
 }
 
 void
@@ -675,6 +786,8 @@ QuestProfilerSetEnabled(bool enabled)
 	if(gProfilerEnabled == enabled)
 		return;
 	gProfilerEnabled = enabled;
+	if(enabled) StartFrameCapture();
+	else gCaptureWriter.Stop();
 	if(gLogFile != nil){
 		fclose(gLogFile);
 		gLogFile = nil;
@@ -1027,6 +1140,11 @@ QuestProfilerBeginAppFrame(void)
 	if(!gProfilerEnabled)
 		return;
 	gAppFrameStartedMs = NowMilliseconds();
+	gCaptureFrame = {};
+	gCaptureFrame.id = ++gCaptureId;
+	gCaptureFrame.startNs = NowNanoseconds();
+	gCaptureFrame.intervalMs = gPreviousCaptureStartNs ?
+		(double)(gCaptureFrame.startNs-gPreviousCaptureStartNs)/1000000.0 : -1.0;
 	gAppFrameOpen = true;
 	gVkBeginOpen = false;
 	gStepOpen = false;
@@ -1069,6 +1187,7 @@ QuestProfilerBeginVkBegin(void)
 	const double now = NowMilliseconds();
 	Record((float)(now-gAppFrameStartedMs), &gSnapshot.cpuPreMs,
 		&gWindowPreMaxMs);
+	gCaptureFrame.stages[0] = (float)(now-gAppFrameStartedMs);
 	gVkBeginStartedMs = now;
 	gVkBeginOpen = true;
 }
@@ -1078,7 +1197,8 @@ QuestProfilerEndVkBegin(void)
 {
 	if(!gProfilerEnabled || !gVkBeginOpen)
 		return;
-	Record((float)(NowMilliseconds()-gVkBeginStartedMs),
+	gCaptureFrame.stages[1] = (float)(NowMilliseconds()-gVkBeginStartedMs);
+	Record(gCaptureFrame.stages[1],
 		&gSnapshot.cpuVkBeginMs, &gWindowVkBeginMaxMs);
 	gVkBeginOpen = false;
 }
@@ -1100,6 +1220,7 @@ QuestProfilerEndStep(void)
 	const double now = NowMilliseconds();
 	Record((float)(now-gStepStartedMs), &gSnapshot.cpuStepMs,
 		&gWindowStepMaxMs);
+	gCaptureFrame.stages[2] = (float)(now-gStepStartedMs);
 	gStepEndedMs = now;
 	gStepOpen = false;
 }
@@ -1113,6 +1234,7 @@ QuestProfilerBeginVkEnd(void)
 	if(gStepEndedMs > 0.0)
 		Record((float)(now-gStepEndedMs), &gSnapshot.cpuPostMs,
 			&gWindowPostMaxMs);
+	if(gStepEndedMs > 0.0) gCaptureFrame.stages[3] = (float)(now-gStepEndedMs);
 	gVkEndStartedMs = now;
 	gVkEndOpen = true;
 }
@@ -1122,7 +1244,8 @@ QuestProfilerEndVkEnd(void)
 {
 	if(!gProfilerEnabled || !gVkEndOpen)
 		return;
-	Record((float)(NowMilliseconds()-gVkEndStartedMs),
+	gCaptureFrame.stages[4] = (float)(NowMilliseconds()-gVkEndStartedMs);
+	Record(gCaptureFrame.stages[4],
 		&gSnapshot.cpuVkEndMs, &gWindowVkEndMaxMs);
 	gVkEndOpen = false;
 }
@@ -1147,9 +1270,11 @@ QuestProfilerEndPhase(QuestProfilerPhase phase)
 		return;
 	const double now = NowMilliseconds();
 	const float elapsed = (float)(now-gPhaseStartedMs[phase]);
+	if(elapsed >= 0.0f) gCaptureFrame.phases[phase] += elapsed;
 	if(elapsed >= 0.0f && elapsed < 1000.0f)
 		gFramePhaseMs[phase] += elapsed;
 	gPhaseOpen[phase] = false;
+	gCaptureFrame.phaseMask |= uint64(1) << phase;
 }
 
 void
@@ -1252,6 +1377,31 @@ QuestProfilerEndAppFrame(void)
 		gSnapshot.gpuFrameMs = gSnapshot.gpuVulkanMs;
 		gSnapshot.gpuFrameValid = gSnapshot.gpuVulkanValid;
 	}
+	// CPU phases belong to this frame. GPU values are the latest asynchronous
+	// measurements and deliberately have separate validity/scope columns.
+	const double prepareStarted = NowMilliseconds();
+	gCaptureFrame.cpuMs = localCpuAppRaw;
+	gCaptureFrame.runtimeCpuMs = runtime.appCpuFrameValid ? runtime.appCpuFrameMs : -1;
+	gCaptureFrame.runtimeGpuMs = runtime.appGpuFrameValid ? runtime.appGpuFrameMs : -1;
+	gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
+	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
+	for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT; ++category)
+		gCaptureFrame.activeModels[category] = (int)ModelSets::GetActiveForCategory((ModelSets::eModelCategory)category);
+	gCaptureFrame.requestedModel = (int)ModelSets::GetRequested();
+	xrvk::RenderScaleStatus captureScale = {};
+	if(xrvk::getRenderScaleStatus(&captureScale)){
+		gCaptureFrame.width = (int)captureScale.actualWidth;
+		gCaptureFrame.height = (int)captureScale.actualHeight;
+		gCaptureFrame.renderScale = captureScale.effectivePercent;
+	}
+	memcpy(gCaptureFrame.renderCalls, gFrameRenderEntityCalls, sizeof(gFrameRenderEntityCalls));
+	gCaptureFrame.player = CapturePlayer();
+	gCaptureFrame.weaponUses = gPlayerWeaponUses;
+	gPlayerWeaponUses = 0;
+	gCaptureFrame.events = gCaptureEvents.Update(gCaptureFrame.player, gCaptureFrame.weaponUses);
+	gCaptureFrame.stages[5] = (float)(NowMilliseconds()-prepareStarted);
+	gCaptureWriter.Submit(gCaptureFrame);
+	gPreviousCaptureStartNs = gCaptureFrame.startNs;
 
 	gLogWindowFrames++;
 	if(now-gLogWindowStartedMs >= 1000.0){
@@ -1928,6 +2078,11 @@ QuestProfilerSnapshot
 QuestProfilerGetSnapshot(void)
 {
 	return gSnapshot;
+}
+
+void QuestProfilerCountPlayerWeaponUse(void)
+{
+	if(gProfilerEnabled) ++gPlayerWeaponUses;
 }
 
 } // namespace androidgame
