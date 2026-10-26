@@ -34,6 +34,7 @@
 #include "PlayerInfo.h"
 #include "PlayerPed.h"
 #include "VrKnockdownView.h"
+#include "VrCrouchView.h"
 #include "ColPoint.h"
 #include "CutsceneMgr.h"
 #include "CutsceneObject.h"
@@ -85,6 +86,7 @@ size_t _dwMemAvailPhys;
 static bool gRwInitialised = false;
 static bool gForegroundApp = true;
 static VrKnockdownView gKnockdownView;
+static VrCrouchView gCrouchView;
 static int gKnockdownTilt = -1;
 extern bool gVrFirstPersonActive;
 
@@ -1502,6 +1504,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	   (player->GetPosition()-knockdownRoot).MagnitudeSqr() > 25.0f)
 	{
 		gKnockdownView.Reset();
+		gCrouchView.Reset();
 		knockdownHeadingLatched = false;
 		knockdownHeadingValid = false;
 		knockdownFrameValid = false;
@@ -1621,7 +1624,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 						baseRoot = player->GetMatrix() * CVector(waistLocal.x, waistLocal.y, waistLocal.z);
 					}
 				}
-				if(player->bIsDucking){
+				if(player->bIsDucking && OculusVR::AreTrackedHandsEnabled()){
 					head = baseRoot + up * 0.32f;
 				}else{
 					head = baseRoot + up * 0.68f;
@@ -1757,6 +1760,26 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}
 		}
 #endif
+
+		// Hide VR Hands opts into following the authored crouch head. Keep the
+		// ordinary standing anchor underneath the easing so stand-up/jump/move
+		// recovery cannot introduce a second fixed-height camera jump.
+		const bool followCrouch = knockdownContext &&
+			!OculusVR::AreTrackedHandsEnabled() &&
+			!PlayerKnockedDown(player) && !gKnockdownView.active;
+		CVector crouchHead, crouchForward;
+		bool crouchPosed = followCrouch && player->bIsDucking &&
+			GetAnimatedPedHeadPose(player, &crouchHead, &crouchForward);
+		if(followCrouch && player->bIsDucking && !crouchPosed){
+			player->m_pedIK.GetComponentPosition(crouchHead, PED_HEAD);
+			crouchPosed = true;
+		}
+		const CVector crouchOffset = crouchPosed ?
+			crouchHead+CVector(0,0,0.08f)+forward*0.04f-head : CVector(0,0,0);
+		head += gCrouchView.Update(followCrouch, player->bIsDucking,
+			crouchPosed, postPhysics, CTimer::GetFrameCounter(),
+			CTimer::GetIsPaused() ? 0.0f : CTimer::GetTimeStep()/50.0f,
+			crouchOffset);
 
 		bool knockdownBasis = false;
 		if(knockdownContext){
