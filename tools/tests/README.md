@@ -320,9 +320,10 @@ The heading cases vary pelvis yaw independently of the entity and view across
 64 combinations, including the authored quarter-turn, for skinned bone matrices
 and non-skinned clump axes. Degenerate hip geometry is rejected.
 
-`test-vr-crouch-view.ps1` checks the hidden-hands crouch camera at 72, 90 and
-120 Hz: animated-head convergence, smooth standing recovery, unchanged visible-
+`test-vr-crouch-view.ps1` checks the visible-hands crouch camera at 72, 90 and
+120 Hz: animated-head convergence, smooth standing recovery, stable hidden-
 hands anchors, option/context reset, missing poses and once-per-frame updates.
+It verifies that the camera follows the skeleton only with Hide VR Hands off.
 It reuses the production knockdown position easing without imposing rotation.
 
 `test-minimal-profiler.cpp` checks the production head-space panel fit against

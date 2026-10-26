@@ -1624,7 +1624,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 						baseRoot = player->GetMatrix() * CVector(waistLocal.x, waistLocal.y, waistLocal.z);
 					}
 				}
-				if(player->bIsDucking && OculusVR::AreTrackedHandsEnabled()){
+				if(player->bIsDucking && !OculusVR::AreTrackedHandsEnabled()){
 					head = baseRoot + up * 0.32f;
 				}else{
 					head = baseRoot + up * 0.68f;
@@ -1761,11 +1761,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		}
 #endif
 
-		// Hide VR Hands opts into following the authored crouch head. Keep the
+		// Visible hands/body opt into following the authored crouch head. Keep the
 		// ordinary standing anchor underneath the easing so stand-up/jump/move
 		// recovery cannot introduce a second fixed-height camera jump.
 		const bool followCrouch = knockdownContext &&
-			!OculusVR::AreTrackedHandsEnabled() &&
+			OculusVR::AreTrackedHandsEnabled() &&
 			!PlayerKnockedDown(player) && !gKnockdownView.active;
 		CVector crouchHead, crouchForward;
 		bool crouchPosed = followCrouch && player->bIsDucking &&

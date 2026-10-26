@@ -15,7 +15,7 @@ int main(){
 		CVector offset;
 		for(int i=0;i<hz;i++){
 			offset=view.Update(false,true,true,true,frame++,1.0f/hz,target);
-			Check(offset.MagnitudeSqr()==0,"hands visible preserves the original anchor exactly");
+			Check(offset.MagnitudeSqr()==0,"hands hidden preserves the stable anchor exactly");
 		}
 		for(int i=0;i<hz;i++){
 			offset=view.Update(true,true,true,true,frame++,1.0f/hz,target);
@@ -30,7 +30,7 @@ int main(){
 		Check(offset.MagnitudeSqr()==0,"button movement or jump exit recovers standing anchor");
 		view.Update(true,true,true,true,frame++,0.02f,target);
 		offset=view.Update(false,true,true,true,frame++,0.02f,target);
-		Check(offset.MagnitudeSqr()==0,"switching Hide VR Hands off restores exact original camera");
+		Check(offset.MagnitudeSqr()==0,"switching Hide VR Hands on restores exact stable camera");
 		offset=view.Update(true,true,false,true,frame++,0.02f,target);
 		Check(offset.MagnitudeSqr()==0,"missing head pose leaves stable anchor");
 		view.Update(true,true,true,true,frame++,0.02f,target);
