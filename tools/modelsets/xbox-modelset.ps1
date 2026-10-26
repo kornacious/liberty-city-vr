@@ -3,12 +3,26 @@ function Get-ModelsetPython {
     foreach ($name in @('python', 'python3', 'py')) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
         if ($command) {
-            $saved = $ErrorActionPreference
+            Write-Host "Checking Python 3.9+ ($name)..."
+            $process = $null
             try {
-                $ErrorActionPreference = 'Continue'
-                & $command.Source -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>&1 | Out-Null
-                if ($LASTEXITCODE -eq 0) { return $command.Source }
-            } catch { } finally { $ErrorActionPreference = $saved }
+                $info = New-Object System.Diagnostics.ProcessStartInfo
+                $info.FileName = $command.Source
+                $info.Arguments = '-c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)"'
+                $info.UseShellExecute = $false
+                $info.CreateNoWindow = $true
+                $info.RedirectStandardOutput = $true
+                $info.RedirectStandardError = $true
+                $process = [System.Diagnostics.Process]::Start($info)
+                if (-not $process.WaitForExit(5000)) {
+                    $process.Kill()
+                    Write-Host "$name did not respond within 5 seconds; trying the next launcher."
+                    continue
+                }
+                if ($process.ExitCode -eq 0) { return $command.Source }
+            } catch { } finally {
+                if ($null -ne $process) { $process.Dispose() }
+            }
         }
     }
     throw 'Python 3.9 or later is required. Install Python and add it to PATH.'
@@ -16,7 +30,7 @@ function Get-ModelsetPython {
 function Invoke-ModelsetPython {
     param([string[]]$Arguments)
     $python = Get-ModelsetPython
-    & $python (Join-Path $PSScriptRoot 'xbox-modelset.py') @Arguments | ForEach-Object { Write-Host $_ }
+    & $python -u (Join-Path $PSScriptRoot 'xbox-modelset.py') @Arguments | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw 'Asset preparation/validation failed. The previous profile was preserved.' }
 }
 function Test-XboxOverlay([string]$Root) {

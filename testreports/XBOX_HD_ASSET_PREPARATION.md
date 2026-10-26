@@ -61,3 +61,17 @@ performance validation is made.
 
 Detailed local output is under ignored `.cache/xbox-hd/`; no original assets
 or private device diagnostics are included in this report.
+
+## Installer progress follow-up
+
+The apparent stall after the game-folder prompt was traced to Python's
+newline-free `input()` question being buffered by the PowerShell line pipeline.
+Prompts now flush complete lines, Python runs unbuffered, and interpreter probes
+have a five-second timeout. Hashing, download, extraction, staging, conversion,
+IMG writing and output verification show phase/file/byte progress.
+
+Seven synthetic builder tests passed. The real interactive prompt pipeline was
+checked in Windows PowerShell 5.1 and PowerShell 7: each question appeared before
+any answer was sent. Both real cached profiles validated with visible progress.
+Python compilation and PowerShell syntax checks passed. These follow-up checks
+used build-only mode and did not transfer data or alter headset profiles.

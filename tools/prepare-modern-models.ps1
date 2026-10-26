@@ -42,11 +42,15 @@ try {
     if (-not $archive) { $archive = $ModernArchive }
     if (-not $archive) { $archive = $HdArchive }
     $profiles = if ($Profile -eq 'Both') { @('Xbox', 'Modern') } else { @($Profile) }
+    Write-Host "Preparing $Profile assets. Existing headset profiles stay in place until a verified replacement is ready."
+    Write-Host "Work folder: $WorkDir"
+    Write-Host "Diagnostic log: $LogPath"
     # Finish and validate all requested builds before contacting a device.
     $outputs = @{}
     foreach ($target in $profiles) {
         $name = $target.ToLowerInvariant()
         $out = if ($OutputDir) { [IO.Path]::GetFullPath($OutputDir) } else { Join-Path $game "modelsets/$name" }
+        Write-Host "==> Preparing $target profile: $out"
         $arguments = @('prepare', '--profile', $name, '--out', $out, '--work-dir', $WorkDir)
         if ($XboxSource) { $arguments += @('--source', $XboxSource) }
         if ($archive) { $arguments += @('--archive', $archive) }

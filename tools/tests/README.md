@@ -358,7 +358,7 @@ no game assets; the final visual fit still needs a headset check.
 
 ### Xbox Version HD preparation and routing
 
-`python tools/tests/test-xbox-modelset.py` runs five synthetic production-builder
+`python tools/tests/test-xbox-modelset.py` runs seven synthetic production-builder
 cases without network or ADB: both profiles, archive precedence, full output
 hashes, source pinning, allowlisted extraction, conversion failure rollback,
 verified-cache reuse and official mirror/HTML-error handling. Windows uses the
@@ -370,3 +370,9 @@ Its 70 checks cover all categories, mixed/shared textures, map/loose paths,
 Classic fallback, restart behavior and Xbox HD calibration aliases. Actual-pack
 preparation and headset appearance/performance checks remain separate; see
 [the asset guide](../../overlay/docs/QUEST_MODELSETS.md).
+
+`python tools/tests/test-modelset-progress.py --powershell powershell.exe`
+launches the real Windows preparation script with synthetic game sentinels.
+It waits for each download/local-archive question to become visible before
+sending any answer, detecting prompts hidden by the PowerShell output pipeline.
+No download or device command is issued. The same test accepts PowerShell 7.

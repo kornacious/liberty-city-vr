@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Production preparation regressions using synthetic assets; no ADB/network."""
 import copy
+import contextlib
 import importlib.util
 import io
 import json
@@ -118,6 +119,24 @@ class Preparation(unittest.TestCase):
             self.assertFalse(target.exists())
         with mock.patch.object(x.urllib.request,'urlopen',return_value=io.BytesIO(b'no mirror')):
             with self.assertRaises(ValueError):x.download(target)
+
+    def test_prompt_is_a_flushed_line_before_reading_input(self):
+        output = io.StringIO()
+        def answer():
+            self.assertEqual(output.getvalue(), 'Choose a local archive:\n')
+            return 'fixture.zip'
+        with contextlib.redirect_stdout(output), mock.patch('builtins.input', side_effect=answer):
+            self.assertEqual(x.prompt('Choose a local archive:'), 'fixture.zip')
+
+    def test_long_hash_reports_completion(self):
+        payload = self.root / 'large-fixture.bin'
+        with payload.open('wb') as stream:
+            stream.truncate(64 * 1024 * 1024)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            digest = x.sha(payload, 'Checking fixture')
+        self.assertEqual(digest, x.sha(payload))
+        self.assertIn('Checking fixture: 100%', output.getvalue())
 
 if __name__ == '__main__':
     unittest.main()

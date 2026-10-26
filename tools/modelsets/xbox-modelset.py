@@ -11,6 +11,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 import uuid
@@ -22,21 +23,67 @@ BUILDER_VERSION = PACK['builderVersion']
 NAME = re.compile(r'[a-z0-9_@]{1,19}\.(dff|txd)\Z')
 
 
-def sha(path):
+def progress(message):
+    print(message, flush=True)
+
+
+def prompt(message):
+    # PowerShell forwards native output one line at a time. A bare input()
+    # prompt has no newline, so it can be hidden while we wait for the answer.
+    progress(message)
+    return input()
+
+
+def report_item(index, total, phase, name):
+    if index == 1 or index == total or index % 20 == 0:
+        progress(f'{phase}: {index}/{total} - {name}')
+
+
+def report_bytes(done, total, label, previous, final=False):
+    now = time.monotonic()
+    if final or now - previous >= 1:
+        percent = min(100, done * 100 // total) if total else 0
+        progress(f'{label}: {percent}% ({done // (1024 * 1024)}/{total // (1024 * 1024)} MiB)')
+        return now
+    return previous
+
+
+def copy_with_progress(source, target, total, label):
+    done, previous = 0, 0
+    for block in iter(lambda: source.read(1024 * 1024), b''):
+        target.write(block)
+        done += len(block)
+        if total >= 64 * 1024 * 1024:
+            previous = report_bytes(done, total, label, previous)
+    if total >= 64 * 1024 * 1024:
+        report_bytes(done, total, label, previous, final=True)
+
+
+def sha(path, label=None):
     digest = hashlib.sha256()
+    done, previous = 0, 0
+    total = Path(path).stat().st_size
+    if label:
+        progress(label + '...')
     with Path(path).open('rb') as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             digest.update(block)
+            done += len(block)
+            if label and total >= 64 * 1024 * 1024:
+                previous = report_bytes(done, total, label, previous)
+    if label and total >= 64 * 1024 * 1024:
+        report_bytes(done, total, label, previous, final=True)
     return digest.hexdigest().upper()
 
 
 def assert_archive(path):
-    if Path(path).stat().st_size != PACK['archiveBytes'] or sha(path) != PACK['archiveSha256']:
+    if Path(path).stat().st_size != PACK['archiveBytes'] or sha(path, 'Checking source archive SHA256') != PACK['archiveSha256']:
         raise ValueError('Source archive does not match the supported ModDB re3 release (size/SHA256).')
 
 
 def source_root(path):
     path = Path(path).resolve()
+    progress('Locating the supported re3 source folder...')
     candidates = [path] + [p.parent.parent for p in path.rglob('*') if p.name.lower() == 'xbox_vehicles.img']
     valid = {}
     for candidate in candidates:
@@ -46,9 +93,11 @@ def source_root(path):
     if len(valid) != 1:
         raise ValueError('Select the extracted Xbox Version HD (re3) folder; older vehicle packs are unsupported.')
     root, files = next(iter(valid.items()))
-    for rel, expected in PACK['files'].items():
+    for index, (rel, expected) in enumerate(PACK['files'].items(), 1):
         file = files[rel]
-        if file.is_symlink() or not file.resolve().is_relative_to(root) or file.stat().st_size != expected['bytes'] or sha(file) != expected['sha256']:
+        report_item(index, len(PACK['files']), 'Checking source files', rel)
+        label = 'Checking ' + rel if expected['bytes'] >= 64 * 1024 * 1024 else None
+        if file.is_symlink() or not file.resolve().is_relative_to(root) or file.stat().st_size != expected['bytes'] or sha(file, label) != expected['sha256']:
             raise ValueError('Source file does not match pinned re3 pack: ' + rel)
     return root, {rel: files[rel] for rel in PACK['files']}
 
@@ -60,7 +109,8 @@ def extract_archive(archive, destination):
     destination.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive) as source:
         entries = {i.filename.lower(): i for i in source.infolist()}
-        for rel in PACK['files']:
+        for index, rel in enumerate(PACK['files'], 1):
+            report_item(index, len(PACK['files']), 'Extracting source files', rel)
             entry = entries.get((PACK['sourceFolder'] + '/' + rel).lower())
             if entry is None:
                 raise ValueError('Missing pack entry: ' + rel)
@@ -69,7 +119,7 @@ def extract_archive(archive, destination):
                 raise ValueError('Unsafe extraction target.')
             target.parent.mkdir(parents=True, exist_ok=True)
             with source.open(entry) as src, target.open('wb') as dst:
-                shutil.copyfileobj(src, dst)
+                copy_with_progress(src, dst, entry.file_size, 'Extracting ' + rel)
     source_root(destination)
 
 
@@ -100,7 +150,7 @@ def assert_img(root):
         raise ValueError('Unexpected trailing IMG bytes.')
 
 
-def valid_overlay(root, profile=None):
+def valid_overlay(root, profile=None, report=False):
     root = Path(root)
     try:
         info = dict(line.split('=', 1) for line in (root / 'BUILD_INFO.txt').read_text().splitlines() if '=' in line)
@@ -115,9 +165,12 @@ def valid_overlay(root, profile=None):
         actual = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()}
         if actual != set(hashes) | {'BUILD_INFO.txt'}:
             return False
-        for rel, digest in hashes.items():
+        for index, (rel, digest) in enumerate(hashes.items(), 1):
             p = root / rel
-            if not p.resolve().is_relative_to(root.resolve()) or p.is_symlink() or sha(p) != digest:
+            if report:
+                report_item(index, len(hashes), 'Verifying output files', rel)
+            label = 'Verifying ' + rel if report and p.is_file() and p.stat().st_size >= 64 * 1024 * 1024 else None
+            if not p.resolve().is_relative_to(root.resolve()) or p.is_symlink() or sha(p, label) != digest:
                 return False
         assert_img(root)
         return True
@@ -165,6 +218,7 @@ def build(source, output, force=False, compressor=None, profile='xbox'):
         if not force or not marker.is_file() or ('Profile=' + profile.upper()) not in marker.read_text().splitlines():
             raise ValueError('Refusing to replace a folder without --force and its generated profile marker.')
     _, files = source_root(source)
+    progress('Source verified. Preparing the ' + profile.upper() + ' overlay...')
     compressor = str(compressor or compressor_path())
     output.parent.mkdir(parents=True, exist_ok=True)
     token = uuid.uuid4().hex
@@ -178,12 +232,14 @@ def build(source, output, force=False, compressor=None, profile='xbox'):
         # DFF/TXD per name before converting textures for the mobile GPU.
         selected = {}
         for archive in PACK['archives']:
+            progress('Reading archive directory: ' + archive)
             img = files['models/' + archive + '.img']
             for name, sector, count in archive_entries(img, files['models/' + archive + '.dir'], allow_empty=True):
                 selected[name] = (img, sector, count)
         handles = {}
         try:
-            for name, (img, sector, count) in sorted(selected.items()):
+            for index, (name, (img, sector, count)) in enumerate(sorted(selected.items()), 1):
+                report_item(index, len(selected), 'Staging model and texture entries', name)
                 if img not in handles:
                     handles[img] = img.open('rb')
                 stream = handles[img]
@@ -198,7 +254,9 @@ def build(source, output, force=False, compressor=None, profile='xbox'):
             target = stage / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, target)
-        for txd in sorted(list(work.glob('*.txd')) + list(stage.rglob('*.txd'))):
+        txds = sorted(list(work.glob('*.txd')) + list(stage.rglob('*.txd')))
+        for index, txd in enumerate(txds, 1):
+            report_item(index, len(txds), 'Converting textures', txd.name)
             result = subprocess.run([compressor, '--cap', '1024', str(txd)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             if result.returncode:
                 raise ValueError('Texture conversion failed: ' + txd.name)
@@ -206,7 +264,9 @@ def build(source, output, force=False, compressor=None, profile='xbox'):
         models.mkdir(exist_ok=True)
         with (models / 'gta3.img').open('wb') as img, (models / 'gta3.dir').open('wb') as directory:
             sector = 0
-            for file in sorted(work.iterdir()):
+            entries = sorted(work.iterdir())
+            for index, file in enumerate(entries, 1):
+                report_item(index, len(entries), 'Writing merged IMG', file.name)
                 data = file.read_bytes()
                 size = (len(data) + 2047) // 2048
                 directory.write(struct.pack('<II24s', sector, size, file.name.encode('ascii')))
@@ -232,12 +292,15 @@ def build(source, output, force=False, compressor=None, profile='xbox'):
                       'excluded': 'PC binaries, scripts, settings, saves, audio, skins, neo renderer configuration; retail vehicle collisions retained'}
         (stage / 'asset_categories.json').write_text(json.dumps(categories, indent=2) + '\n')
         lines = ['Profile=' + profile.upper(), 'BuilderVersion=' + BUILDER_VERSION, 'SourceSHA256=' + PACK['archiveSha256']]
-        for file in sorted(stage.rglob('*')):
-            if file.is_file():
-                lines.append('SHA256 ' + file.relative_to(stage).as_posix() + '=' + sha(file))
+        output_files = sorted(p for p in stage.rglob('*') if p.is_file())
+        for index, file in enumerate(output_files, 1):
+            rel = file.relative_to(stage).as_posix()
+            report_item(index, len(output_files), 'Recording output checksums', rel)
+            lines.append('SHA256 ' + rel + '=' + sha(file, 'Hashing ' + rel if file.stat().st_size >= 64 * 1024 * 1024 else None))
         (stage / 'BUILD_INFO.txt').write_text('\n'.join(lines) + '\n')
-        if not valid_overlay(stage, profile):
+        if not valid_overlay(stage, profile, report=True):
             raise ValueError('Completed overlay failed validation.')
+        progress('Verification passed. Activating the completed local profile...')
         replace_directory(stage, output, backup)
         print(f'{profile.upper()} profile built and verified: {len(selected)} archive entries, {len(vehicles)} vehicles, {len(vegetation)} vegetation models.')
     finally:
@@ -251,6 +314,7 @@ def download(destination):
     if destination.is_file():
         assert_archive(destination)
         return
+    progress('Requesting an official ModDB download mirror (timeout: 30 seconds)...')
     with urllib.request.urlopen(PACK['downloadPage'], timeout=30) as response:
         page = response.read(2 * 1024 * 1024).decode('utf-8', errors='replace')
     mirrors = re.findall(r'''href=["']([^"']*/downloads/mirror/224588/[^"']+)''', page)
@@ -260,8 +324,9 @@ def download(destination):
     url = urllib.parse.urljoin(PACK['downloadPage'], html.unescape(mirrors[0]))
     if urllib.parse.urlparse(url).hostname not in ('www.moddb.com', 'moddb.com'):
         raise ValueError('Unexpected ModDB mirror link.')
+    progress('Downloading the 1.45 GB re3 pack from ModDB...')
     with urllib.request.urlopen(url, timeout=60) as response, partial.open('wb') as stream:
-        shutil.copyfileobj(response, stream)
+        copy_with_progress(response, stream, PACK['archiveBytes'], 'Downloading archive')
     assert_archive(partial)
     partial.replace(destination)
 
@@ -280,13 +345,16 @@ def main():
     args = parser.parse_args()
     if args.command == 'validate':
         return 0 if valid_overlay(args.out, args.profile) else 1
+    progress('Asset preparation started: ' + args.profile.upper())
     if args.command == 'build':
         if not args.source:
             parser.error('--source is required to build')
         build(args.source, args.out, args.force, profile=args.profile)
         return 0
     explicit = bool(args.source or args.archive)
-    if not explicit and valid_overlay(args.out, args.profile):
+    if not explicit:
+        progress('Checking for an existing verified local profile...')
+    if not explicit and valid_overlay(args.out, args.profile, report=True):
         print('Reusing the complete verified ' + args.profile.upper() + ' profile.')
         return 0
     if not args.work_dir:
@@ -297,17 +365,18 @@ def main():
     source = args.source
     if not source:
         archive = Path(args.archive).resolve() if args.archive else downloads / PACK['archiveName']
+        progress('Looking for source archive: ' + str(archive))
         if not archive.exists():
             accept = args.accept_downloads
             if not accept and not args.non_interactive:
-                accept = input('Download Xbox Version HD (re3), 1.45 GB, from ModDB? [y/N] ').lower() == 'y'
+                accept = prompt('Download Xbox Version HD (re3), 1.45 GB, from ModDB? [y/N]').lower() == 'y'
             if accept:
                 try:
                     download(archive)
                 except (OSError, ValueError) as error:
                     raise ValueError('Automatic download unavailable. Use --archive with the release from ' + PACK['page']) from error
             elif not args.non_interactive:
-                archive = Path(input('Path to ' + PACK['archiveName'] + ': ').strip().strip('"'))
+                archive = Path(prompt('Path to ' + PACK['archiveName'] + ':').strip().strip('"'))
         assert_archive(archive)
         source = work / 'sources' / PACK['archiveSha256'][:16]
         try:

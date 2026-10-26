@@ -33,6 +33,20 @@ Linux:
 ./INSTALL_MODERN_MODELS.sh --game-dir "$HOME/Games/GTA3" --profile both --xbox-archive "$HOME/Packs/III_Xbox_Version_HD_Supports_re3.zip"
 ```
 
+Do not delete the headset's `modelsets/xbox` or `modelsets/modern` folders
+before preparing or installing. The installer keeps each existing profile until
+a staged replacement has passed verification. Use Both to replace both old
+profiles; the default Xbox-only run leaves Modern untouched. Local output folders
+with a generated profile marker are also replaced automatically after a complete
+build. If an unrecognized local folder is rejected, preserve or rename it rather
+than deleting arbitrary game files.
+
+The console reports the current phase, file counts, and byte percentages during
+large hashes/extractions/downloads. Prompts appear on complete lines before
+waiting for input. Windows runs Python unbuffered and limits each interpreter
+probe to five seconds. Progress is also recorded in the diagnostic log printed
+at startup. Compression reports texture counts; its percentage is not an ETA.
+
 Default profile is Xbox. Use `-Profile Modern` / `--profile modern` for Modern
 only. `-XboxOnly`, `-ModernOnly` and `-SkipXbox` remain compatibility aliases.
 `-ModernArchive` and `-HdArchive` also accept this same pinned archive.

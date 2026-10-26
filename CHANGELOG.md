@@ -9,6 +9,10 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Make model preparation prompts visible through PowerShell's output pipeline,
+  run Python unbuffered, bound interpreter probes, and show file/byte progress
+  through validation, extraction, conversion and archive creation.
+
 - Replace Xbox/Modern preparation with the pinned GTA III Xbox Version HD (re3)
   pack on Windows/Linux. Merge the complete visual archives, validate every
   source/output file, filter streaming by category, route matching world map
