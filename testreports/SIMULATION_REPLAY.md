@@ -9,27 +9,44 @@ a reference route, then runs those controls through the live simulation.
 1. Enter an automobile and stop upright. Select a recording limit of 30, 60 or
    120 simulation seconds. **Record Route repairs the car** and normalizes its
    starting suspension/contact history. The menu closes while recording.
+   An upper-right HUD panel shows `0.0S RECORDED / 120.0S` (elapsed time and
+   selected limit). It updates while recording and disappears when recording
+   ends, independently of the profiler display. With minimal FPS visible, the
+   recording panel sits below it. Both panels stay within both eye frusta.
 2. Drive the route. Open the same page and select **Stop** to save early, or let
    the limit finish it. The new recording becomes the selected demo. Record at
    least one second for playback; avoid traffic impacts in benchmark routes.
-3. Return within 100 metres of the start in the same car model, using the same
-   active asset selections and handling. Stop upright and select **Play**.
+3. Use the same car model, active asset selections and handling. Stop upright
+   anywhere and select **Play**.
    Playback repairs and repositions this car; it does not spawn another car or
-   load a saved game. The nearby-start requirement avoids moving into an
-   unloaded island/collision scene.
+   load a saved game. A distant start loads the destination island collision
+   and scene before teleporting the occupied car; there is no 100-metre range
+   restriction. Scene loading is excluded from automatic playback profiling.
 4. Playback prepares for two simulation seconds, restores the starting car
    state again, then applies the recorded accelerator, brake, steering and
    handbrake values. Head tracking stays live. Use **Stop** to interrupt it.
 
-**Playback Ghost** defaults on. The replay car, player and occupants ignore
+**Recording Ghost** and **Playback Ghost** are independent options, both on by
+default. During the corresponding operation, the car, player and occupants ignore
 pedestrian/vehicle collisions in both processing directions. Ambient entities
 still collide with each other; roads, curbs, buildings and objects retain
 collision physics. Ghost playback suppresses incoming damage, explosions,
 fire, tyre damage and carjacking, and blocks outgoing weapons/melee and vehicle
 impacts against pedestrians. It also suppresses collision damage to the replay
 car, including damage from scenery. No persistent collision/proof flags are
-changed; these filters expire when the run ends. Ghost mode applies during
-preparation and playback, not during normal gameplay or recording.
+changed; these filters expire when the run ends. Playback ghost also applies
+during preparation. Neither option changes ordinary gameplay outside a run.
+
+**Delete Selected Demo** asks for a second press on the same row, then removes
+only the selected input tape. Run reports and performance captures are kept.
+Deletion is blocked during recording or playback. Selecting another action or
+reopening the page cancels the pending deletion.
+
+Unavailable starts keep the menu open with an explanation. If deeper tape or
+state validation fails after queuing, the replay page reopens with the reason,
+such as an invalid tape, a different car/model set/handling, or a short recording.
+A start queued while normal gameplay cannot advance also times out with a
+resume-gameplay message.
 
 **Auto Profile Playback** defaults on. Starting playback closes any existing
 manual performance capture. Preparation is excluded. After the first rendered
@@ -46,13 +63,15 @@ Files are local under the application's external files directory:
 - `simulation-replays/<UTC>-<monotonic-ms>.sim.csv`: a versioned input tape,
   model/handling identity, five active model categories, initial transform and
   velocity/gear state, and reference position/forward/speed samples.
+  V2 tapes also store the recording ghost setting. V1 tapes remain readable;
+  their recording ghost setting is reported as unknown (`-1`).
 - `simulation-replays/<run-id>.run.csv`: completion or abort reason, demo name,
   ghost/auto-profile settings, linked profiler stem, game duration, comparison
   sample count, RMS/maximum position error, maximum heading/speed errors,
   build timestamp and profiler timing alignment.
 - Existing `perf-captures/*.frames.csv` and `*.session.csv`: normal full
   profiling data. Session metadata now links the replay demo, run ID and ghost
-  setting. The run report's `profile_start_simulation_us` identifies the initial
+  settings for recording and playback. The run report's `profile_start_simulation_us` identifies the initial
   portion excluded before the automatic capture started.
 
 Only completed, bounded, finite, monotonically timed tapes with a valid END
@@ -99,8 +118,12 @@ and the Android toolchain, not original game assets.
   functions. They cover malformed/truncated tapes, frame-rate-independent input
   selection and reference interpolation, paused/repeated hooks, duration bounds,
   preparation, profiler lifecycle/failure/interruption, drift without snapping,
-  model/asset/handling/start-distance rejection, stale vehicle handles, ghost
-  symmetry/scope/cleanup, file persistence and menu geometry.
+  model/asset/handling rejection, distant-start scene/collision loading, stale
+  vehicle handles, recording/playback ghost symmetry/scope/cleanup, V1/V2 tape
+  compatibility, deletion scope/confirmation, failed-start feedback, recording
+  HUD lifetime/text bounds, file persistence and menu geometry.
+- The minimal-profiler placement suite checks recording panels both alone and
+  below FPS across asymmetric/canted binocular views, including narrow FOVs.
 - Integration checks verify the World/input/physics/damage/fire/weapon/menu/app
   frame hooks, including all three physical collision-sector paths.
 - Existing performance-writer, legacy vehicle-capture and graphics-layout host

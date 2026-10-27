@@ -11,11 +11,14 @@ void SimulationReplayAfterAppFrame();
 bool SimulationReplayProtected(CEntity *entity);
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
-// Rows: record, selected demo, play, stop, ghost, auto profile, duration, back.
-constexpr int SimulationReplayMenuRows=8;
+// Rows: record, demo, play, stop, playback ghost, auto profile, limit,
+// recording ghost, delete, back.
+constexpr int SimulationReplayMenuRows=10;
 void SimulationReplayMenuRow(int row,char *text,size_t capacity);
 bool SimulationReplayMenuAction(int row,int direction);
 const char *SimulationReplayStatus();
+bool SimulationReplayConsumeStartFailure();
+bool SimulationReplayRecordingText(char *text,size_t capacity);
 #else
 inline void SimulationReplayBeginFrame(){}
 inline void SimulationReplayEndFrame(){}

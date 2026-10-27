@@ -7,7 +7,7 @@
 // inscribed at the panel depth is conservative even with asymmetric/canted
 // views and IPD; every point in it satisfies all four planes of both eyes.
 inline bool
-FitMinimalProfiler(const XrView eyes[2], XrCompositionLayerQuad &panel)
+FitMinimalProfiler(const XrView eyes[2], XrCompositionLayerQuad &panel, unsigned row = 0)
 {
 	const float depth = 1.5f;
 	float extent = depth*tanf(30.0f*0.01745329252f);
@@ -43,6 +43,7 @@ FitMinimalProfiler(const XrView eyes[2], XrCompositionLayerQuad &panel)
 	panel.pose = {};
 	panel.pose.orientation.w = 1.0f;
 	panel.pose.position = {extent-panel.size.width*0.5f,
-		extent-panel.size.height*0.5f, -depth};
+		extent-panel.size.height*0.5f-row*panel.size.height*1.2f, -depth};
+	if(panel.pose.position.y-panel.size.height*0.5f < -extent) return false;
 	return true;
 }

@@ -18,6 +18,11 @@
 
 #include <vector>
 
+// One atlas and upload submission serve the menu/profiler and recording HUD.
+static constexpr int kDebugMenuHeight = 768;
+static constexpr int kRecordingHudWidth = 512;
+static constexpr int kRecordingHudHeight = 64;
+
 static const uint32_t kBringupVertSpv[] =
 #include "bringup_vert.h"
 ;
@@ -274,6 +279,7 @@ struct State
 	VkFence debugFence = VK_NULL_HANDLE;
 	bool debugSubmissionPending = false;
 	bool debugVisible = false;
+	bool recordingVisible = false;
 	XrTime lastCompactDebugUploadTime = 0;
 	XrSwapchain swapchain = XR_NULL_HANDLE;
 	int64_t swapchainFormat = 0;
@@ -1454,7 +1460,7 @@ createSwapchain(void)
 	// swapchain while the menu is being opened.
 	{
 		g.debugWidth = 1024;
-		g.debugHeight = 768;
+		g.debugHeight = kDebugMenuHeight+kRecordingHudHeight;
 		XrSwapchainCreateInfo dinfo = { XR_TYPE_SWAPCHAIN_CREATE_INFO };
 		dinfo.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT |
 		                   XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
@@ -2534,29 +2540,35 @@ getPredictedDisplayTimeNs(void)
 }
 
 void
-setDebugOverlay(const unsigned char *rgba, int width, int height)
+setDebugOverlay(const unsigned char *rgba, int width, int height,
+                const unsigned char *recordingRgba)
 {
 	const bool validSize =
-		width > 0 && height > 0 &&
-		width <= g.debugWidth && height <= g.debugHeight;
+		rgba != nullptr && width > 0 && height > 0 &&
+		width <= g.debugWidth && height <= kDebugMenuHeight;
 	const bool wasVisible = g.debugVisible;
+	const bool wantsRecording = recordingRgba != nullptr;
 	const bool sameContentSize =
-		width == g.debugContentWidth && height == g.debugContentHeight;
-	g.debugVisible = rgba != nullptr && validSize;
-	if(rgba == nullptr || g.debugSwapchain == XR_NULL_HANDLE ||
-	   g.commandPool == VK_NULL_HANDLE || !validSize)
+		(validSize ? width : 0) == g.debugContentWidth &&
+		(validSize ? height : 0) == g.debugContentHeight &&
+		g.recordingVisible == wantsRecording;
+	g.debugVisible = validSize;
+	if(!wantsRecording) g.recordingVisible = false;
+	if((!validSize && !wantsRecording) || g.debugSwapchain == XR_NULL_HANDLE ||
+	   g.commandPool == VK_NULL_HANDLE)
 		return;
 	// The compact profiler changes slowly and its old implementation uploaded
 	// 256 KiB through a separate queue submit + CPU fence wait every frame.
 	// That measurement perturbed the workload it was meant to observe. Keep
 	// full 1024x768 menus frame-responsive, but refresh compact diagnostics at
-	// 2 Hz. Visibility and size transitions always upload immediately. The
+	// 2 Hz (10 Hz while the recording timer is active). Visibility and size
+	// transitions always upload immediately. The
 	// Uploads are submitted asynchronously below. A slower refresh still keeps
 	// the diagnostic probe out of nearly every timing window.
-	const bool compact = width <= 512;
+	const bool compact = !validSize || width <= 512;
 	const XrTime now = g.predictedDisplayTime;
-	const XrTime compactInterval = (XrTime)500000000;
-	if(compact && wasVisible && sameContentSize &&
+	const XrTime compactInterval = wantsRecording ? (XrTime)100000000 : (XrTime)500000000;
+	if(compact && wasVisible == validSize && sameContentSize &&
 	   g.lastCompactDebugUploadTime != 0 && now != 0 &&
 	   now-g.lastCompactDebugUploadTime < compactInterval)
 		return;
@@ -2602,11 +2614,13 @@ setDebugOverlay(const unsigned char *rgba, int width, int height)
 
 	if(compact)
 		g.lastCompactDebugUploadTime = now;
-	g.debugContentWidth = width;
-	g.debugContentHeight = height;
+	g.debugContentWidth = validSize ? width : 0;
+	g.debugContentHeight = validSize ? height : 0;
 	const VkDeviceSize contentSize =
 		(VkDeviceSize)g.debugContentWidth * g.debugContentHeight * 4;
-	memcpy(g.debugStagingMapped, rgba, (size_t)contentSize);
+	if(validSize) memcpy(g.debugStagingMapped, rgba, (size_t)contentSize);
+	if(wantsRecording) memcpy((unsigned char *)g.debugStagingMapped+contentSize,
+		recordingRgba, kRecordingHudWidth*kRecordingHudHeight*4);
 
 	uint32_t imageIndex = 0;
 	XrSwapchainImageAcquireInfo acquireInfo = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
@@ -2641,15 +2655,25 @@ setDebugOverlay(const unsigned char *rgba, int width, int height)
 	                     VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
 	                     0, nullptr, 1, &barrier);
 
-	VkBufferImageCopy region = {};
-	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	region.imageSubresource.layerCount = 1;
-	region.imageExtent.width = (uint32_t)g.debugContentWidth;
-	region.imageExtent.height = (uint32_t)g.debugContentHeight;
-	region.imageExtent.depth = 1;
+	VkBufferImageCopy regions[2] = {};
+	uint32_t regionCount = 0;
+	if(validSize){
+		VkBufferImageCopy &region = regions[regionCount++];
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.layerCount = 1;
+		region.imageExtent = {(uint32_t)g.debugContentWidth,(uint32_t)g.debugContentHeight,1};
+	}
+	if(wantsRecording){
+		VkBufferImageCopy &region = regions[regionCount++];
+		region.bufferOffset = contentSize;
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.layerCount = 1;
+		region.imageOffset.y = kDebugMenuHeight;
+		region.imageExtent = {kRecordingHudWidth,kRecordingHudHeight,1};
+	}
 	vkCmdCopyBufferToImage(g.debugCommand, g.debugStaging,
 	                       g.debugImages[imageIndex],
-	                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+	                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regionCount, regions);
 
 	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -2668,6 +2692,7 @@ setDebugOverlay(const unsigned char *rgba, int width, int height)
 	const VkResult submitted =
 		vkQueueSubmit(g.queue, 1, &submit, g.debugFence);
 	g.debugSubmissionPending = submitted == VK_SUCCESS;
+	if(submitted == VK_SUCCESS) g.recordingVisible = wantsRecording;
 	if(submitted != VK_SUCCESS)
 		LOGE("debug overlay submit failed: %d", (int)submitted);
 
@@ -3015,7 +3040,8 @@ renderFrame(void)
 	XrCompositionLayerProjection layer = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 	XrCompositionLayerQuad theaterLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
 	XrCompositionLayerQuad debugLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
-	const XrCompositionLayerBaseHeader *layers[2] = { nullptr, nullptr };
+	XrCompositionLayerQuad recordingLayer = { XR_TYPE_COMPOSITION_LAYER_QUAD };
+	const XrCompositionLayerBaseHeader *layers[3] = { nullptr, nullptr, nullptr };
 	uint32_t layerCount = 0;
 
 	if(frameState.shouldRender){
@@ -3139,7 +3165,7 @@ renderFrame(void)
 			}
 
 			// Head-locked debug overlay: pose and size are the desktop's.
-			if(g.debugVisible && g.debugSwapchain != XR_NULL_HANDLE &&
+			if(g.debugVisible && g.debugContentWidth > 0 && g.debugSwapchain != XR_NULL_HANDLE &&
 			   g.viewSpace != XR_NULL_HANDLE){
 				const bool fullMenu = g.debugContentWidth > 512;
 				debugLayer.layerFlags =
@@ -3174,6 +3200,22 @@ renderFrame(void)
 				if(overlayFits)
 					layers[layerCount++] =
 						(const XrCompositionLayerBaseHeader *)&debugLayer;
+			}
+			if(g.recordingVisible && g.debugSwapchain != XR_NULL_HANDLE && g.viewSpace != XR_NULL_HANDLE){
+				XrView headViews[2] = {{XR_TYPE_VIEW},{XR_TYPE_VIEW}};
+				XrViewState headState = {XR_TYPE_VIEW_STATE};
+				uint32_t count = 0;
+				locateInfo.space = g.viewSpace;
+				recordingLayer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+				recordingLayer.space = g.viewSpace;
+				recordingLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+				recordingLayer.subImage.swapchain = g.debugSwapchain;
+				recordingLayer.subImage.imageRect.offset.y = kDebugMenuHeight;
+				recordingLayer.subImage.imageRect.extent = {kRecordingHudWidth,kRecordingHudHeight};
+				const unsigned row = g.debugVisible && g.debugContentWidth == 512 && g.debugContentHeight == 64 ? 1 : 0;
+				if(XR_SUCCEEDED(xrLocateViews(g.session,&locateInfo,&headState,2,&count,headViews)) && count == 2 &&
+				   (headState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) && FitMinimalProfiler(headViews,recordingLayer,row))
+					layers[layerCount++] = (const XrCompositionLayerBaseHeader *)&recordingLayer;
 			}
 		}
 	}

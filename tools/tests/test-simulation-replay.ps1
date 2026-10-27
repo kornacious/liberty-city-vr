@@ -15,6 +15,10 @@ foreach($name in @('BeginFullVrMenuPage','DrawFullVrMenuRow','DrawQuestSimulatio
     $pieces+=$definition.Value
 }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'simulation-replay-menu.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
+$hud=[regex]::Match($menu,'(?ms)^const unsigned char \*\r?\nVrSimulationRecordingPixels\(.*?^\}')
+if(-not$hud.Success){throw 'Recording HUD implementation missing'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'simulation-replay-hud.inc'),$hud.Value,[Text.UTF8Encoding]::new($false))
+if($menu-notmatch'SimulationReplayConsumeStartFailure\(\)\)\{\s+gVrMenuVisible = true;\s+gVrMenuPage = VR_MENU_PAGE_SIMULATION;'){throw 'Failed starts must reopen the replay menu with status visible'}
 foreach($pair in @(
     @('src/core/World.cpp','SimulationReplayFrame simulationReplayFrame'),
     @('src/core/World.cpp','SimulationReplayIgnoreDamage\(pEntity, pCreator\)'),

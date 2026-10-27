@@ -15,14 +15,20 @@ int main()
 			eyes[i].pose.position = {i ? 0.034f : -0.034f, 0.003f, 0.01f};
 			eyes[i].fov = {-halfFov, halfFov*0.9f, halfFov*0.8f, -halfFov};
 		}
+		for(unsigned row : {0u,1u}){
 		XrCompositionLayerQuad panel = {};
-		if(!FitMinimalProfiler(eyes, panel)){
+		if(!FitMinimalProfiler(eyes, panel, row)){
 			// A narrow FOV canted beyond its half-angle has no shared centre.
 			assert(halfFov == 0.12f && cant != 0.0f);
 			continue;
 		}
 		assert(panel.pose.position.x > 0 && panel.pose.position.y > 0);
 		assert(fabsf(panel.size.height/panel.size.width-0.125f) < 1e-6f);
+		if(row){
+			XrCompositionLayerQuad fps={};
+			assert(FitMinimalProfiler(eyes,fps));
+			assert(panel.pose.position.y+panel.size.height/2 < fps.pose.position.y-fps.size.height/2);
+		}
 		for(const XrView &eye : eyes)
 		for(int x : {-1, 1}) for(int y : {-1, 1}){
 			const float dx = panel.pose.position.x+x*panel.size.width/2-eye.pose.position.x;
@@ -38,6 +44,7 @@ int main()
 			assert(dy/-ez < tanf(eye.fov.angleUp));
 		}
 		++cases;
+		}
 	}
 	XrView invalid[2] = {};
 	XrCompositionLayerQuad panel = {};

@@ -346,9 +346,10 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	androidgame::VrDebugUpdate(pad);
 	{
 		int width = 0, height = 0;
+		const unsigned char *recordingPixels = androidgame::VrSimulationRecordingPixels();
 		const unsigned char *pixels =
 			androidgame::VrDebugPixels(&width, &height);
-		xrvk::setDebugOverlay(pixels, width, height);
+		xrvk::setDebugOverlay(pixels, width, height, recordingPixels);
 	}
 
 	// Loading keeps the immersive projection for the world revealed by its

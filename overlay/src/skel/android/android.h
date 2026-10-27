@@ -159,6 +159,7 @@ void GetIm2DViewWindow(float *x, float *y);
 // then the RGBA pixel block for the compositor quad layer (nil = hidden).
 void VrDebugUpdate(const PadInput &input);
 const unsigned char *VrDebugPixels(int *width, int *height);
+const unsigned char *VrSimulationRecordingPixels(void);
 bool VrMenuConsumesInput(void);
 const unsigned char *VrRadioGlyph(char character);
 bool VrColorFilterEnabled(void);

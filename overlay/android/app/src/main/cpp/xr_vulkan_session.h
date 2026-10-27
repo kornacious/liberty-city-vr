@@ -197,7 +197,8 @@ long long getPredictedDisplayTimeNs(void);
 
 // RGBA pixels for the head-locked UI overlay quad, or nullptr to hide it.
 // Compact diagnostics/settings use 512x128; full menus use 1024x768.
-void setDebugOverlay(const unsigned char *rgba, int width, int height);
+void setDebugOverlay(const unsigned char *rgba, int width, int height,
+                     const unsigned char *recordingRgba = nullptr);
 
 // Meta runtime app timings. When XR_META_performance_metrics is exposed these
 // are the runtime's own CPU/GPU frame times, sampled after xrEndFrame. The

@@ -60,7 +60,11 @@ struct CPools {static CVehicle *GetVehicle(int ref){return ref==poolHandle?&car:
 struct CWorld {static bool bProcessCutsceneOnly;static void Remove(CVehicle *){}static void Add(CVehicle *){}};
 bool CWorld::bProcessCutsceneOnly;
 struct CReplay {static bool playing;static bool IsPlayingBack(){return playing;}};bool CReplay::playing;
-struct CTimer {static float step;static float GetTimeStepInSeconds(){return step;}};float CTimer::step=.01f;
+struct CTimer {static float step;static float GetTimeStepInSeconds(){return step;}static void Stop(){}static void Update(){}};float CTimer::step=.01f;
+struct CGame {static int currLevel;};int CGame::currLevel=0;
+struct CTheZones {static int GetLevelFromPosition(const CVector *){return 2;}};
+struct CCollision {static int loads;static void SortOutCollisionAfterLoad(){++loads;}};int CCollision::loads=0;
+struct CStreaming {static int loads;static CVector loaded;static void LoadScene(const CVector &p){++loads;loaded=p;}};int CStreaming::loads=0;CVector CStreaming::loaded;
 namespace ModelSets {enum eModelCategory {World,Vegetation,Vehicles,Peds,Weapons};static int asset=0;static int GetActiveForCategory(eModelCategory){return asset;}}
 namespace androidgame {
 static int profilerMode=0;static unsigned profileStarts=0,profileStops=0;static std::string profileContext;
@@ -75,6 +79,8 @@ static unsigned checks=0;
 static void Check(bool ok,const char *why){++checks;if(!ok){std::fprintf(stderr,"FAIL: %s\n",why);std::exit(1);}}
 namespace androidgame {
 enum {VR_MENU_WIDTH=1024,VR_MENU_HEIGHT=768};
+enum {VR_DEBUG_WIDTH=512};
+static uint8 gDebugPixels[512*64*4]={};
 #define nil nullptr
 struct Rect {int left,top,right,bottom;};
 static std::vector<Rect> textRects,highlightRects;
@@ -82,7 +88,9 @@ static int menuSelection=0;
 static int *CurrentMenuSelection(){return &menuSelection;}
 static void FillVrMenuRect(int l,int t,int r,int b,uint8,uint8,uint8,uint8){if(l==85)highlightRects.push_back({l,t,r,b});}
 static void DrawVrMenuText(const char *s,int x,int y,int scale,uint8,uint8,uint8){const int w=int(std::strlen(s))*6*scale;textRects.push_back({x-w/2,y,x+w/2,y+7*scale});}
+static void DrawDebugText(const char *s,int x,int y,int scale,uint8 r,uint8 g,uint8 b){DrawVrMenuText(s,x,y,scale,r,g,b);}
 #include "simulation-replay-menu.inc"
+#include "simulation-replay-hud.inc"
 static bool Overlap(Rect a,Rect b){return a.left<b.right&&b.left<a.right&&a.top<b.bottom&&b.top<a.bottom;}
 static void LayoutTests(){
     for(int row=0;row<SimulationReplayMenuRows;++row){
@@ -108,6 +116,10 @@ static void CoreTests(){
     Check(t.Load(f),"completed tape loads");std::fclose(f);
     C::Sample out;Check(t.At(5000,out)&&out.input.gas==.5f&&out.position[0]==5&&out.speed==25,"hold inputs while interpolating route at different replay frame rate");
     Check(t.At(10000,out)&&out.input.gas==1,"input boundary");Check(!t.At(0,out)&&!t.At(20000,out),"backward time and exact end rejected");
+    f=Temporary();C::Header(f,initial);std::rewind(f);char header[1024];Check(std::fgets(header,sizeof(header),f)!=nullptr,"V2 header fixture");std::fclose(f);
+    std::string legacy=header;legacy.replace(0,11,"LCVR_SIM_V1");legacy.erase(legacy.rfind(','));legacy+='\n';
+    f=Temporary();std::fputs(legacy.c_str(),f);C::Write(f,MakeSample(0));std::fputs("END,10000\n",f);std::rewind(f);C::Tape old;
+    Check(old.Load(f)&&old.initial.recordingGhost==-1,"legacy V1 demos remain readable with unknown recording ghost state");std::fclose(f);
     for(const char *row:{"0,nan,0,0,0,0,0,0,0,1,0,0\nEND,1\n","0,2,0,0,0,0,0,0,0,1,0,0\nEND,1\n","1,0,0,0,0,0,0,0,0,1,0,0\nEND,2\n","0,0,0,0,0,0,0,0,0,1,0,0\n0,0,0,0,0,0,0,0,0,1,0,0\nEND,2\n","0,0,0,0,0,0,0,0,0,1,0,0\n","0,0,0,0,0,0,0,0,0,1,0,0\nEND,120000001\n","0,0,0,0,0,0,0,0,0,1,0,0junk\nEND,1\n","0,0,0,0,0,0,0,0,0,1,0,0\nEND,1\ntrailing"}){
         f=Temporary();C::Header(f,initial);std::fputs(row,f);std::rewind(f);C::Tape bad;Check(!bad.Load(f),"malformed or unfinished tape rejected");std::fclose(f);
     }
@@ -128,12 +140,23 @@ static void RuntimeTests(){
     using namespace androidgame;
     captureRoot=(std::filesystem::current_path()/".cache"/("simulation-host-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
     Frame();Check(!std::filesystem::exists(captureRoot),"idle runtime does not write files");
+    Check(!SimulationReplayMenuAction(2,1)&&std::strstr(SimulationReplayStatus(),"NO RECORDED"),"missing playback keeps menu open with a useful message");
+    Check(!SimulationReplayConsumeStartFailure(),"synchronous menu failure does not request a reopen");
+    selectedCar=nullptr;Check(!SimulationReplayMenuAction(0,1)&&std::strstr(SimulationReplayStatus(),"ENTER AN AUTOMOBILE"),"on-foot start stays in menu with explanation");selectedCar=&car;
+    SimulationReplayMenuAction(0,1);fakeNs+=4000000000ULL;SimulationReplayAfterAppFrame();Check(SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"RESUME"),"paused gameplay cannot silently strand a queued start");
     Check(SimulationReplayMenuAction(0,1),"record queued from overlay");car.m_fGasPedal=.5f;
+    SimulationReplayBeginFrame();char hud[128];Check(SimulationReplayRecordingText(hud,sizeof(hud))&&std::strcmp(hud,"0.0S RECORDED / 120.0S")==0,"recording HUD starts at zero with selected limit");
+    CVehicle recordingTraffic;CPed recordingPed;CEntity scenery;
+    Check(SimulationReplayIgnoreCollision(&car,&recordingTraffic)&&SimulationReplayIgnoreCollision(&recordingPed,&car)&&!SimulationReplayIgnoreCollision(&car,&scenery),"default ghost recording ignores traffic both ways and retains scenery");
+    textRects.clear();Check(VrSimulationRecordingPixels()!=nullptr,"recording panel works with profiling off");
+    Check(textRects.size()==2&&textRects[0].left>=0&&textRects[1].right<=512&&textRects[1].bottom<=64,"timer glyphs fit compact panel");
     for(int i=0;i<130;++i)Frame();Check(sampleCount==130,"one sample per simulation frame despite repeated input hook");
+    Check(SimulationReplayRecordingText(hud,sizeof(hud))&&std::strstr(hud,"1.3S"),"recording HUD reports elapsed simulation time");
     CTimer::step=0;Frame();Check(sampleCount==130,"paused simulation does not record");CTimer::step=.01f;Stop();
     Check(mode==Idle&&!demos.empty(),"stopping records and discovers demo");
+    Check(!SimulationReplayRecordingText(hud,sizeof(hud))&&!VrSimulationRecordingPixels(),"recording timer disappears at completion");
     FILE *f=std::fopen(Path(label+".sim.csv").c_str(),"r");SimulationReplayCore::Tape saved;
-    Check(f&&saved.Load(f)&&saved.samples.size()==130,"saved runtime tape loads");if(f)std::fclose(f);
+    Check(f&&saved.Load(f)&&saved.samples.size()==130&&saved.initial.recordingGhost==1,"saved V2 tape preserves recording ghost state");if(f)std::fclose(f);
     CVehicle ambient;CPed ped;CEntity building;player.m_pMyVehicle=&car;
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost does not affect ordinary gameplay");
     SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&!profilerMode,"preparation excluded from automatic capture");
@@ -155,15 +178,21 @@ static void RuntimeTests(){
     SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"route drift aborts without snapping");car.pos.x=0;
     SimulationReplayMenuAction(4,1);SimulationReplayMenuAction(5,1);SimulationReplayMenuAction(2,1);Frame();
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost toggle respected");Prepare();Check(!profilerMode,"automatic capture can be disabled");Stop();
-    car.model=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"wrong car model rejected");car.model=100;
+    car.model=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"CAR MODEL"),"wrong car model produces useful visible failure");car.model=100;
     ModelSets::asset=1;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed assets rejected");ModelSets::asset=0;
     car.handling.fTractionLoss=.7f;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed handling rejected");car.handling.fTractionLoss=.8f;
-    car.pos.x=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"unloaded distant start rejected");car.pos.x=0;
+    car.pos.x=2000;SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&car.pos.x==0&&CStreaming::loads==1&&CCollision::loads==1&&CGame::currLevel==2,"distant playback loads target island and scene before teleporting");Stop();
     SimulationReplayMenuAction(2,1);Frame();++poolHandle;Frame();Check(mode==Idle,"pool generation change releases stale replay binding");
     SimulationReplayMenuAction(0,1);Frame();selectedCar=nullptr;Frame();Check(mode==Idle,"player exit stops recording");selectedCar=&car;
+    SimulationReplayMenuAction(7,1);SimulationReplayMenuAction(0,1);Frame();Check(!SimulationReplayIgnoreCollision(&car,&recordingTraffic),"recording ghost can be disabled independently");
+    const std::string activePath=Path(label+".sim.csv");SimulationReplayMenuAction(8,1);Check(std::filesystem::exists(activePath)&&mode==Recording,"deletion cannot disrupt active capture");Stop();
+    SimulationReplayMenuAction(7,1);
     duration=120;CTimer::step=.2f;SimulationReplayMenuAction(0,1);for(int i=0;i<605;++i)Frame();
     f=std::fopen(Path(label+".sim.csv").c_str(),"r");SimulationReplayCore::Tape maximum;
     Check(f&&maximum.Load(f)&&maximum.endUs==SimulationReplayCore::MaxTimeUs,"maximum-duration recording remains valid after frame overshoot");if(f)std::fclose(f);
+    const std::string maximumPath=Path(label+".sim.csv");const std::string reportPath=Path("keep.run.csv");f=std::fopen(reportPath.c_str(),"w");std::fputs("kept",f);std::fclose(f);
+    SimulationReplayMenuAction(8,1);Check(std::filesystem::exists(maximumPath),"delete requires an explicit second press");
+    SimulationReplayMenuAction(8,1);Check(!std::filesystem::exists(maximumPath)&&std::filesystem::exists(reportPath),"delete removes only selected tape and retains reports");
     std::printf("Runtime artifacts: %s\n",captureRoot.c_str());
 }
 int main(){CoreTests();RuntimeTests();androidgame::LayoutTests();std::printf("PASS: %u simulation replay checks\n",checks);}

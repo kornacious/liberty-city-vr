@@ -2511,6 +2511,11 @@ VrDebugUpdate(const PadInput &in)
 {
 	LoadVrSettings();
 	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
+	if(SimulationReplayConsumeStartFailure()){
+		gVrMenuVisible = true;
+		gVrMenuPage = VR_MENU_PAGE_SIMULATION;
+		ResetMenuNavigationRepeat();
+	}
 	gQuestCpuPerformanceMode = Min(Max(xrvk::getPerformanceMode(),
 		(int)QUEST_CPU_PERFORMANCE_AUTO),
 		(int)QUEST_CPU_PERFORMANCE_COUNT-1);
@@ -3845,10 +3850,10 @@ DrawQuestSimulationPage(void)
 	char row[160];
 	for(int i=0;i<SimulationReplayMenuRows;++i){
 		SimulationReplayMenuRow(i,row,sizeof(row));
-		DrawFullVrMenuRow(row,180+i*46,2,i==*CurrentMenuSelection(),true);
+		DrawFullVrMenuRow(row,180+i*34,2,i==*CurrentMenuSelection(),true);
 	}
 	DrawVrMenuText(SimulationReplayStatus(), VR_MENU_WIDTH/2, 580, 2, 255, 222, 145);
-	DrawVrMenuText("START STOPPED IN A CAR. PLAY WITHIN 100M OF THE START.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
+	DrawVrMenuText("START STOPPED IN A CAR. PLAYBACK TELEPORTS TO THE START.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
 	DrawVrMenuText("PLAYBACK REPAIRS AND REPOSITIONS YOUR CAR. NO WORLD RESET.", VR_MENU_WIDTH/2, 654, 2, 210, 190, 145);
 	DrawVrMenuText("LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE", VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
@@ -5027,6 +5032,24 @@ DrawCutsceneCameraAnchorNotice(void)
 // Fills the same 1024x768 menu surface as desktop. Compact diagnostics use
 // 512x64 for minimal FPS/frame time, 512x128 for the legacy FPS line,
 // and 512x437 for the full profiler.
+const unsigned char *
+VrSimulationRecordingPixels(void)
+{
+	char text[80];
+	if(!SimulationReplayRecordingText(text,sizeof(text))) return nil;
+	// Reuse the bitmap font, then retain a separate strip before the profiler
+	// paints its own surface. This panel is visible independently of profiling.
+	static uint8 pixels[VR_DEBUG_WIDTH*64*4];
+	for(int i=0;i<VR_DEBUG_WIDTH*64;++i){
+		gDebugPixels[i*4+0]=5;gDebugPixels[i*4+1]=4;
+		gDebugPixels[i*4+2]=12;gDebugPixels[i*4+3]=225;
+	}
+	DrawDebugText("RECORDING",VR_DEBUG_WIDTH/2,8,3,255,170,80);
+	DrawDebugText(text,VR_DEBUG_WIDTH/2,36,3,255,230,145);
+	memcpy(pixels,gDebugPixels,sizeof(pixels));
+	return pixels;
+}
+
 const unsigned char *
 VrDebugPixels(int *width, int *height)
 {

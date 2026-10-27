@@ -11,6 +11,10 @@
 #include "Ped.h"
 #include "ModelSets.h"
 #include "QuestProfiler.h"
+#include "Streaming.h"
+#include "Game.h"
+#include "Zones.h"
+#include "Collision.h"
 #include <algorithm>
 #include <dirent.h>
 #include <memory>
@@ -29,6 +33,8 @@ Mode mode=Idle;
 int request=0,reference=-1,selectedDemo=0;
 unsigned model=0,signature=0,duration=120,sampleCount=0;
 bool ghost=true,autoProfile=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
+bool recordingGhost=true,startFailed=false;
+std::string deleteArmed;
 FILE *output=nullptr;
 std::unique_ptr<Core::Tape> tape;
 Core::Initial initial;
@@ -38,6 +44,7 @@ std::vector<std::string> demos;
 std::string label,runId,result,profile;
 char status[144]="ENTER AN AUTOMOBILE TO RECORD A ROUTE";
 uint64_t elapsed=0,lastInput=0,wallStart=0;
+uint64_t requestStartNs=0;
 uint64_t playbackStartNs=0,playbackEndNs=0,profileStartUs=0;
 double gameTime=0,warmTime=0;
 float frameDt=0;
@@ -76,6 +83,12 @@ CAutomobile *Bound(){
     return v && v->IsCar() && unsigned(v->GetModelIndex())==model?static_cast<CAutomobile *>(v):nullptr;
 }
 CAutomobile *Target(){ CAutomobile *c=Bound(); return c==Selected()?c:nullptr; }
+CAutomobile *Ready(){
+    CAutomobile *c=Selected();
+    if(!c || CWorld::bProcessCutsceneOnly || CReplay::IsPlayingBack()){Status("ENTER AN AUTOMOBILE IN NORMAL GAMEPLAY");return nullptr;}
+    if(c->GetUp().z<0.7f || c->m_vecMoveSpeed.MagnitudeSqr()>0.0004f){Status("STOP THE CAR UPRIGHT BEFORE STARTING");return nullptr;}
+    return c;
+}
 unsigned Signature(CAutomobile *c){
     const tHandlingData &h=*c->pHandling;
     // Canonical text, never compiler padding or pointer values. Include transmission.
@@ -142,51 +155,61 @@ void WriteReport(){
         label.c_str(),result.c_str(),runGhost?1:0,runAutoProfile?1:0,profile.c_str(),model,signature,(unsigned long long)elapsed,
         drift.count,drift.Rms(),double(drift.maxPosition),double(drift.maxSpeed),double(drift.maxHeading),__DATE__,__TIME__);
     for(int i=0;i<5;++i) std::fprintf(f,"assets_%d,%d\n",i,initial.assets[i]);
+    std::fprintf(f,"recording_ghost,%d\n",initial.recordingGhost);
     std::fprintf(f,"playback_start_monotonic_ns,%llu\nplayback_end_monotonic_ns,%llu\nprofile_start_simulation_us,%llu\n",
         (unsigned long long)playbackStartNs,(unsigned long long)playbackEndNs,(unsigned long long)profileStartUs);
     if(std::fclose(f)!=0) Status("RUN REPORT CLOSE FAILED");
 }
-void Start(int operation){
-    if(mode!=Idle) {Status("STOP THE CURRENT RUN FIRST");return;}
-    CAutomobile *c=Selected();
-    if(!c || CWorld::bProcessCutsceneOnly || CReplay::IsPlayingBack()){Status("ENTER AN AUTOMOBILE IN NORMAL GAMEPLAY");return;}
-    if(c->GetUp().z<0.7f || c->m_vecMoveSpeed.MagnitudeSqr()>0.0004f){Status("STOP THE CAR UPRIGHT BEFORE STARTING");return;}
+bool Start(int operation){
+    if(mode!=Idle) {Status("STOP THE CURRENT RUN FIRST");return false;}
+    CAutomobile *c=Ready();if(!c) return false;
     mkdir(Root(),0700);
     Core::Initial current=Initial(c);
-    if(!Core::Valid(current) || current.gear>c->pHandling->Transmission.nNumberOfGears){Status("INVALID VEHICLE STATE");return;}
+    if(!Core::Valid(current) || current.gear>c->pHandling->Transmission.nNumberOfGears){Status("INVALID VEHICLE STATE");return false;}
     initial=current;
     if(operation==2){
-        Refresh(); if(demos.empty()){Status("NO RECORDED DEMOS");return;}
+        Refresh(); if(demos.empty()){Status("NO RECORDED DEMOS");return false;}
         label=demos[selectedDemo];
         FILE *f=std::fopen(Path(label+".sim.csv").c_str(),"r");
         tape.reset(new Core::Tape); const bool loaded=f && tape->Load(f); if(f) std::fclose(f);
-        if(!loaded){tape.reset();Status("INCOMPLETE OR INVALID DEMO");return;}
-        if(tape->endUs<1000000){tape.reset();Status("RECORD AT LEAST ONE SECOND BEFORE PLAYBACK");return;}
+        if(!loaded){tape.reset();Status("INCOMPLETE OR INVALID DEMO");return false;}
+        if(tape->endUs<1000000){tape.reset();Status("RECORD AT LEAST ONE SECOND BEFORE PLAYBACK");return false;}
         const Core::Initial &s=tape->initial;
         bool match=s.vehicle.model==current.vehicle.model && s.vehicle.signature==current.vehicle.signature && s.gear<=c->pHandling->Transmission.nNumberOfGears;
         for(int i=0;i<5;++i) match=match && s.assets[i]==current.assets[i];
-        if(!match){tape.reset();Status("USE THE RECORDED CAR MODEL, ASSETS AND HANDLING");return;}
-        // Avoid crossing islands or teleporting into unloaded collision sectors.
-        if((c->GetPosition()-Vec(s.vehicle.pose)).MagnitudeSqr()>10000){tape.reset();Status("RETURN WITHIN 100 METERS OF THE RECORDED START");return;}
+        if(!match){tape.reset();Status("USE THE RECORDED CAR MODEL, ASSETS AND HANDLING");return false;}
         initial=s;
     }else{
+        initial.recordingGhost=recordingGhost?1:0;
         label=Unique(); output=std::fopen(Path(label+".sim.csv").c_str(),"wx");
-        if(!output){Status("CANNOT CREATE DEMO FILE");return;}
+        if(!output){Status("CANNOT CREATE DEMO FILE");return false;}
         std::setvbuf(output,nullptr,_IOFBF,65536);
-        if(!Core::Header(output,initial)){std::fclose(output);output=nullptr;std::remove(Path(label+".sim.csv").c_str());Status("DEMO HEADER WRITE FAILED");return;}
+        if(!Core::Header(output,initial)){std::fclose(output);output=nullptr;std::remove(Path(label+".sim.csv").c_str());Status("DEMO HEADER WRITE FAILED");return false;}
     }
     reference=CPools::GetVehicleRef(c);model=unsigned(c->GetModelIndex());signature=current.vehicle.signature;
     sampleCount=0; elapsed=lastInput=0; gameTime=warmTime=0; drift={}; wallStart=Now();
     playbackStartNs=playbackEndNs=profileStartUs=0;
-    runGhost=ghost;runAutoProfile=autoProfile;profileStarted=false;profile.clear();runId.clear();
+    runGhost=operation==1?recordingGhost:ghost;runAutoProfile=autoProfile;profileStarted=false;profile.clear();runId.clear();
     if(operation==2){
         runId=Unique();
         if(runAutoProfile) QuestProfilerSetDisplayMode(0);
+        // Match the game's waypoint teleport: load the island's collision and
+        // scene before moving the occupied car. Preparation stays unprofiled.
+        const CVector start=Vec(initial.vehicle.pose);
+        if((c->GetPosition()-start).MagnitudeSqr()>10000){
+            Status("LOADING RECORDED START AREA");
+            CTimer::Stop();
+            CGame::currLevel=CTheZones::GetLevelFromPosition(&start);
+            CCollision::SortOutCollisionAfterLoad();
+            CStreaming::LoadScene(start);
+            CTimer::Update();
+        }
         Restore(c); mode=Preparing; Status("PREPARING PLAYBACK - LIVE WORLD, LIVE HEAD TRACKING");
     }else{Restore(c);mode=Recording;Status("RECORDING - OPEN THIS MENU TO STOP");}
+    return true;
 }
 bool Protected(CEntity *e){
-    if(!e || !runGhost || (mode!=Preparing && mode!=Playing && mode!=Finishing) || runId.empty()) return false;
+    if(!e || !runGhost || (mode!=Recording && mode!=Preparing && mode!=Playing && mode!=Finishing)) return false;
     CAutomobile *c=Bound(); if(!c) return false;
     return e==c || e==(CEntity *)FindPlayerPed() || (e->IsPed() && ((const CPed *)e)->m_pMyVehicle==c);
 }
@@ -194,12 +217,12 @@ bool Protected(CEntity *e){
 
 bool SimulationReplayProtected(CEntity *e){return Protected(e);}
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b){
-    if(!a || !b || !runGhost || mode==Idle || runId.empty()) return false;
+    if(!a || !b || !runGhost || mode==Idle) return false;
     return Core::IgnorePair(true,Protected(a),Protected(b),a->IsPed()||a->IsVehicle(),b->IsPed()||b->IsVehicle());
 }
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker){return Protected(victim)||Protected(attacker);}
 void SimulationReplayBeginFrame(){
-    if(request==1 || request==2){const int op=request;request=0;Start(op);}
+    if(request==1 || request==2){const int op=request;request=0;startFailed=!Start(op);}
     if(mode==Idle || mode==Finishing) return;
     CAutomobile *c=Target();
     if(!c || CWorld::bProcessCutsceneOnly || CReplay::IsPlayingBack()){Finish("ABORTED - VEHICLE EXITED OR GAMEPLAY CHANGED");return;}
@@ -238,10 +261,13 @@ void SimulationReplayEndFrame(){
     else if(mode==Playing && elapsed>=tape->endUs) Finish("COMPLETE");
 }
 void SimulationReplayAfterAppFrame(){
+    if((request==1 || request==2) && Now()-requestStartNs>3000000000ULL){
+        request=0;startFailed=true;Status("RESUME NORMAL GAMEPLAY BEFORE STARTING A RUN");
+    }
     if(request==3){request=0;Finish(mode==Recording?"RECORDING SAVED":"ABORTED - STOPPED BY USER");}
     if(mode!=Idle && mode!=Finishing && Now()-wallStart>300000000000ULL) Finish("ABORTED - WALL TIME LIMIT");
     if(mode==Playing && runAutoProfile && !profileStarted){
-        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";run="+runId;
+        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";run="+runId;
         QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetDisplayMode(2);
         profileStartUs=elapsed;
         profile=QuestProfilerGetCaptureStem();profileStarted=true;
@@ -261,6 +287,12 @@ void SimulationReplayAfterAppFrame(){
     }
 }
 const char *SimulationReplayStatus(){return status;}
+bool SimulationReplayConsumeStartFailure(){const bool failed=startFailed;startFailed=false;return failed;}
+bool SimulationReplayRecordingText(char *text,size_t capacity){
+    if(mode!=Recording) return false;
+    std::snprintf(text,capacity,"%.1fS RECORDED / %.1fS",double(elapsed)/1000000,double(duration));
+    return true;
+}
 void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     switch(row){
     case 0:std::snprintf(text,capacity,"RECORD ROUTE  < REPAIRS CAR >");break;
@@ -270,20 +302,33 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 4:std::snprintf(text,capacity,"PLAYBACK GHOST  < %s >",ghost?"ON":"OFF");break;
     case 5:std::snprintf(text,capacity,"AUTO PROFILE PLAYBACK  < %s >",autoProfile?"ON":"OFF");break;
     case 6:std::snprintf(text,capacity,"RECORDING LIMIT  < %u SECONDS >",duration);break;
+    case 7:std::snprintf(text,capacity,"RECORDING GHOST  < %s >",recordingGhost?"ON":"OFF");break;
+    case 8:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
 bool SimulationReplayMenuAction(int row,int direction){
+    if(row!=8) deleteArmed.clear();
     if(row==-1){Refresh();return false;}
     if(row==3){request=3;return false;}
     if(mode!=Idle || request){Status("STOP THE CURRENT RUN FIRST");return false;}
     switch(row){
-    case 0:request=1;return true;
+    case 0:if(!Ready()) return false;request=1;requestStartNs=Now();return true;
     case 1:Refresh();if(!demos.empty()) selectedDemo=(selectedDemo+direction+int(demos.size()))%int(demos.size());break;
-    case 2:Refresh();request=2;return true;
+    case 2:if(!Ready()) return false;Refresh();if(demos.empty()){Status("NO RECORDED DEMOS");return false;}request=2;requestStartNs=Now();return true;
     case 4:ghost=!ghost;break;
     case 5:autoProfile=!autoProfile;break;
     case 6:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
+    case 7:recordingGhost=!recordingGhost;break;
+    case 8:{
+        Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
+        const std::string name=demos[selectedDemo];
+        if(deleteArmed!=name){deleteArmed=name;Status("PRESS DELETE AGAIN TO REMOVE THE SELECTED DEMO");break;}
+        deleteArmed.clear();
+        if(std::remove(Path(name+".sim.csv").c_str())!=0) Status("COULD NOT DELETE THE SELECTED DEMO");
+        else{Refresh();Status("DEMO DELETED - PERFORMANCE REPORTS KEPT");}
+        break;
+    }
     }
     return false;
 }
