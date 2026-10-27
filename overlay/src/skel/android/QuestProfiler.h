@@ -8,6 +8,10 @@ namespace androidgame {
 void QuestProfilerCountPlayerWeaponUse(void);
 // OFF stops recording; full and minimal select a display while recording.
 void QuestProfilerSetDisplayMode(int mode);
+int QuestProfilerGetDisplayMode();
+// Internal benchmark context; values must not contain CSV delimiters/newlines.
+void QuestProfilerSetCaptureContext(const char *context);
+const char *QuestProfilerGetCaptureStem();
 
 enum QuestProfilerPhase
 {

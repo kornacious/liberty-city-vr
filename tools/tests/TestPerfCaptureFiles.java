@@ -18,6 +18,20 @@ public final class TestPerfCaptureFiles {
         File result = PerfCaptureFiles.resolve(external, valid);
         check(result.getParentFile().equals(new File(external, "perf-captures")));
         check(result.getName().equals(valid));
+        String demo = valid.replace("frames", "sim");
+        String run = valid.replace("frames", "run");
+        check(PerfCaptureFiles.validName(demo, true));
+        check(PerfCaptureFiles.validName(run, true));
+        check(!PerfCaptureFiles.validName(valid, true));
+        check(!PerfCaptureFiles.validName(demo, false));
+        File replay = PerfCaptureFiles.resolve(external, demo, true);
+        check(replay.getParentFile().equals(new File(external, "simulation-replays")));
+        for (String invalid : new String[] {"../saves", "20261027T001530Z-1.sim.csv/../../saves",
+                "/sdcard/game/gta3.img", "20261027T001530Z-1.sim.csv.tmp", "", "name.sim.csv"}) {
+            check(!PerfCaptureFiles.validName(invalid, true));
+            try { PerfCaptureFiles.resolve(external, invalid, true); throw new AssertionError(); }
+            catch (IOException expected) { }
+        }
         System.out.println("PASS: profiler export filename and canonical-path boundaries");
     }
     private static void check(boolean value) { if (!value) throw new AssertionError(); }

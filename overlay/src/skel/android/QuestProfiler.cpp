@@ -42,6 +42,8 @@ namespace {
 
 bool gProfilerEnabled;
 int gCaptureDisplayMode;
+std::string gCaptureContext;
+std::string gLastCaptureStem;
 bool gAppFrameOpen;
 bool gVkBeginOpen;
 bool gStepOpen;
@@ -248,6 +250,7 @@ CapturePlayer(void)
 void
 StartFrameCapture(void)
 {
+	gLastCaptureStem.clear();
 	gCaptureWriter.Stop();
 	gCaptureId = gPreviousCaptureStartNs = 0;
 	gPlayerWeaponUses = 0;
@@ -266,6 +269,7 @@ StartFrameCapture(void)
 	clock_gettime(CLOCK_REALTIME, &realtime);
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
+	details += "simulation_replay," + gCaptureContext + "\n";
 	details += "profiler_compiled," __DATE__ " " __TIME__ "\n";
 	snprintf(value, sizeof(value), "start_unix_ns,%llu\nstart_monotonic_ns,%llu\n",
 		(unsigned long long)realtime.tv_sec*1000000000ULL+realtime.tv_nsec,
@@ -290,6 +294,7 @@ StartFrameCapture(void)
 	}
 	if(!gCaptureWriter.Start(stem, details))
 		__android_log_print(ANDROID_LOG_ERROR, "QuestPerf", "Cannot start per-frame capture");
+	else gLastCaptureStem = stem;
 }
 
 void
@@ -806,6 +811,13 @@ QuestProfilerSetDisplayMode(int mode)
 	// SetEnabled is idempotent: switching full <-> minimal preserves the
 	// same recording, frame IDs, events and observed vehicle peak.
 	QuestProfilerSetEnabled(questperf::RecordsDisplayMode(gCaptureDisplayMode));
+}
+
+int QuestProfilerGetDisplayMode(){ return gCaptureDisplayMode; }
+const char *QuestProfilerGetCaptureStem(){ return gLastCaptureStem.c_str(); }
+void QuestProfilerSetCaptureContext(const char *context){
+	gCaptureContext = context ? context : "";
+	for(char &c : gCaptureContext) if(c == ',' || c == '\n' || c == '\r') c = '_';
 }
 
 void

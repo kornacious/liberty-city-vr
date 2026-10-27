@@ -16,6 +16,7 @@
 #include "QuestRadio.h"
 #include "QuestMusic.h"
 #include "QuestProfiler.h"
+#include "SimulationReplay.h"
 #include "PhysicsDirector.h"
 #include "VehicleVisualDirector.h"
 #include "VehicleDeformation.h"
@@ -547,6 +548,7 @@ enum {
 	VR_MENU_PAGE_CHEATS,
 	VR_MENU_PAGE_MISSIONS,
 	VR_MENU_PAGE_ABOUT,
+	VR_MENU_PAGE_SIMULATION,
 };
 
 enum eVrLightingMenuItem {
@@ -681,6 +683,7 @@ enum eVrMainMenuItem {
 	VR_MAIN_CHEATS,
 	VR_MAIN_RADIO,
 	VR_MAIN_ABOUT,
+	VR_MAIN_SIMULATION,
 	VR_MAIN_ITEM_COUNT
 };
 
@@ -2196,7 +2199,9 @@ ActivateQuestCheatMenuSelection(void)
 static int *
 CurrentMenuSelection(void)
 {
+	static int simulationSelection = 0;
 	switch(gVrMenuPage){
+	case VR_MENU_PAGE_SIMULATION: return &simulationSelection;
 	case VR_MENU_PAGE_GRAPHICS: return &gVrGraphicsSelection;
 	case VR_MENU_PAGE_LIGHTING: return &gVrLightingSelection;
 	case VR_MENU_PAGE_WATER: return &gVrWaterSelection;
@@ -2229,6 +2234,7 @@ static int
 CurrentMenuItemCount(void)
 {
 	switch(gVrMenuPage){
+	case VR_MENU_PAGE_SIMULATION: return SimulationReplayMenuRows;
 	case VR_MENU_PAGE_SETTINGS: return VR_MAIN_ITEM_COUNT;
 	case VR_MENU_PAGE_GRAPHICS: return VR_GRAPHICS_ITEM_COUNT;
 	case VR_MENU_PAGE_LIGHTING: return VR_LIGHTING_ITEM_COUNT;
@@ -2504,6 +2510,7 @@ void
 VrDebugUpdate(const PadInput &in)
 {
 	LoadVrSettings();
+	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
 	gQuestCpuPerformanceMode = Min(Max(xrvk::getPerformanceMode(),
 		(int)QUEST_CPU_PERFORMANCE_AUTO),
 		(int)QUEST_CPU_PERFORMANCE_COUNT-1);
@@ -2790,6 +2797,9 @@ VrDebugUpdate(const PadInput &in)
 			if(gVrMenuSelection == VR_MAIN_RADIO){
 				gVrMenuPage = VR_MENU_PAGE_RADIO;
 				gVrRadioSelection = 0;
+			}else if(gVrMenuSelection == VR_MAIN_SIMULATION){
+				gVrMenuPage = VR_MENU_PAGE_SIMULATION;
+				SimulationReplayMenuAction(-1, 0);
 			}else if(gVrMenuSelection == VR_MAIN_GRAPHICS){
 				gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
 				gVrGraphicsSelection = 0;
@@ -2825,6 +2835,11 @@ VrDebugUpdate(const PadInput &in)
 				gVrWelcomePending = false;
 				gVrAboutDismissArmed = false;
 			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_SIMULATION &&
+		         (positivePulse || decreasePulse)){
+			const int row = *CurrentMenuSelection();
+			if(row == SimulationReplayMenuRows-1) gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+			else if(SimulationReplayMenuAction(row, decreasePulse ? -1 : 1)) gVrMenuVisible = false;
 		}else if(gVrMenuPage == VR_MENU_PAGE_GRAPHICS &&
 		         (positivePulse || decreasePulse)){
 			if(gVrGraphicsSelection == VR_GRAPHICS_RENDER_SCALE){
@@ -3811,6 +3826,7 @@ DrawQuestSettingsPage(void)
 	strcpy(rows[VR_MAIN_CHEATS], "CHEAT MENU  < OPEN >");
 	strcpy(rows[VR_MAIN_RADIO], "RADIO AND CUSTOM MUSIC  < OPEN >");
 	strcpy(rows[VR_MAIN_ABOUT], "ABOUT LIBERTY CITY VR  < OPEN >");
+	strcpy(rows[VR_MAIN_SIMULATION], "SIMULATION REPLAY  < OPEN >");
 
 	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
 		DrawFullVrMenuRow(rows[item], 160+item*44, 3,
@@ -3820,6 +3836,21 @@ DrawQuestSettingsPage(void)
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+}
+
+static void
+DrawQuestSimulationPage(void)
+{
+	BeginFullVrMenuPage("SIMULATION REPLAY", "AUTOMOBILE INPUT REPLAY - LIVE WORLD AND HEAD TRACKING");
+	char row[160];
+	for(int i=0;i<SimulationReplayMenuRows;++i){
+		SimulationReplayMenuRow(i,row,sizeof(row));
+		DrawFullVrMenuRow(row,180+i*46,2,i==*CurrentMenuSelection(),true);
+	}
+	DrawVrMenuText(SimulationReplayStatus(), VR_MENU_WIDTH/2, 580, 2, 255, 222, 145);
+	DrawVrMenuText("START STOPPED IN A CAR. PLAY WITHIN 100M OF THE START.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
+	DrawVrMenuText("PLAYBACK REPAIRS AND REPOSITIONS YOUR CAR. NO WORLD RESET.", VR_MENU_WIDTH/2, 654, 2, 210, 190, 145);
+	DrawVrMenuText("LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE", VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4999,6 +5030,7 @@ DrawCutsceneCameraAnchorNotice(void)
 const unsigned char *
 VrDebugPixels(int *width, int *height)
 {
+	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
 	const bool minimalProfiler = gProfilerDisplayMode == 2;
 	const bool profilerVisible = QuestProfilerIsEnabled() || minimalProfiler;
 	const bool anchorCalibration =
@@ -5083,6 +5115,9 @@ VrDebugPixels(int *width, int *height)
 			break;
 		case VR_MENU_PAGE_ABOUT:
 			DrawQuestAboutPage();
+			break;
+		case VR_MENU_PAGE_SIMULATION:
+			DrawQuestSimulationPage();
 			break;
 		default:
 			DrawQuestSettingsPage();

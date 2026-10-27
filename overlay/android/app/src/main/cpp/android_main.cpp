@@ -20,6 +20,7 @@
 #include "Game.h"
 #include "PlayerInfo.h"
 #include "QuestProfiler.h"
+#include "SimulationReplay.h"
 #include "crossplatform.h"
 #include "VehiclePlacement.h"
 #endif
@@ -479,6 +480,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	const int64_t endFrameEndNs = monotonicNowNs();
 	androidgame::QuestProfilerEndVkEnd();
 	androidgame::QuestProfilerEndAppFrame();
+	androidgame::SimulationReplayAfterAppFrame();
 	traceMenuTransition(theaterBefore, theaterAfter, theaterFrame, colourMode,
 		frameStartNs, beginStartNs, beginEndNs, stepEndNs, endFrameEndNs);
 	platform::setCheckpoint("frame/done");

@@ -14,7 +14,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
 
-/** ADB export of profiler CSVs only; never exposes game files or mutation. */
+/** ADB export of profiler and simulation diagnostics; never exposes game assets or mutation. */
 public final class PerfCaptureProvider extends ContentProvider {
     private void enforce() {
         int caller = Binder.getCallingUid();
@@ -26,10 +26,12 @@ public final class PerfCaptureProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
 
     private File capture(Uri uri) throws IOException {
-        if (uri.getPathSegments().size() != 2 || !"capture".equals(uri.getPathSegments().get(0))) {
-            throw new IOException("Expected capture/name");
+        if (uri.getPathSegments().size() != 2) throw new IOException("Expected diagnostics/name");
+        String scope = uri.getPathSegments().get(0);
+        if (!"capture".equals(scope) && !"replay".equals(scope)) {
+            throw new IOException("Expected capture/name or replay/name");
         }
-        return PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), uri.getLastPathSegment());
+        return PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), uri.getLastPathSegment(), "replay".equals(scope));
     }
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
@@ -47,18 +49,20 @@ public final class PerfCaptureProvider extends ContentProvider {
     @Override public Cursor query(Uri uri, String[] projection, String selection,
             String[] selectionArgs, String sortOrder) {
         enforce();
-        if (uri.getPathSegments().size() != 1 || !"captures".equals(uri.getLastPathSegment())) {
-            throw new IllegalArgumentException("Expected captures listing");
+        if (uri.getPathSegments().size() != 1 ||
+                (!"captures".equals(uri.getLastPathSegment()) && !"replays".equals(uri.getLastPathSegment()))) {
+            throw new IllegalArgumentException("Expected captures or replays listing");
         }
+        boolean replay = "replays".equals(uri.getLastPathSegment());
         MatrixCursor cursor = new MatrixCursor(new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE});
         try {
-            File root = PerfCaptureFiles.directory(getContext().getExternalFilesDir(null));
+            File root = PerfCaptureFiles.directory(getContext().getExternalFilesDir(null), replay);
             String[] names = root.list();
             if (names == null) return cursor;
             Arrays.sort(names);
             for (String name : names) {
-                if (!PerfCaptureFiles.validName(name)) continue;
-                File file = PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), name);
+                if (!PerfCaptureFiles.validName(name, replay)) continue;
+                File file = PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), name, replay);
                 if (file.isFile()) cursor.addRow(new Object[] {name, file.length()});
             }
             return cursor;
