@@ -743,6 +743,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
 			header->ibo, 0, inst->numIndex, inst->offset / 2, boneOffset, atomic);
+		countGpuProfileDraw();
 		vkCmdDrawIndexed(commandBuffer, inst->numIndex, 1,
 		                 inst->offset / 2, 0, 0);
 		}

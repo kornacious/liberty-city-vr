@@ -1,4 +1,5 @@
 #pragma once
+#include "GpuPassProfile.h"
 
 #ifdef RW_VULKAN
 #include <vulkan/vulkan.h>
@@ -233,12 +234,18 @@ bool32 beginFrame(VkImage colourImage, VkImageView colourView);
 #endif
 void endFrame(void);
 
-// Native profiler support.  GPU time is measured by two Vulkan timestamp
-// queries around the complete multiview render pass and resolve.  The value
+// Native profiler support. GPU time brackets the render command buffer,
+// including wrist/scope targets and resolve/post-processing. The value
 // returned is from the latest completed submission, never a CPU-frame-time
 // estimate. Unsupported devices return false from getGpuFrameTimeMs.
 void setGpuFrameTimingEnabled(bool32 enabled);
 bool32 getGpuFrameTimeMs(float32 *milliseconds);
+// Delayed sampled results identify the CPU capture frame that submitted them.
+void setGpuProfileFrame(uint64 frameId,uint64 startNs);
+void beginGpuProfilePass(uint32 pass);
+void endGpuProfilePass(uint32 pass);
+void countGpuProfileDraw(void);
+bool32 getGpuPassProfile(GpuPassProfile::Result *out);
 
 // CPU timings for this frame's backend begin, not asynchronous GPU samples.
 // Collected only while the native profiler is enabled. A failed/skipped begin

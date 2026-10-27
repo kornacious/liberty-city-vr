@@ -1,4 +1,5 @@
 #include "../../overlay/src/skel/android/QuestPerfCapture.h"
+#include "../../librw/src/vulkan/GpuPassProfile.h"
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -76,6 +77,8 @@ int main()
     assert(!writer.Start((root/"missing"/"session").string(), ""));
     assert(writer.Start(stem, "active_model_set,CLASSIC\n"));
     Frame frame;
+    static_assert(GpuPassCount==GpuPassProfile::Count,"writer/backend GPU passes");
+    for(unsigned i=0;i<GpuPassCount;++i)assert(std::string(GpuPassName(i))==GpuPassProfile::Name(i));
     frame.player = p; frame.cpuMs = 0.123456; frame.phases[0] = 0.012345f;
     frame.player.vehicleSpeedKmh = 100;
     frame.player.vehicleSpeed3dKmh = 105;
@@ -88,6 +91,9 @@ int main()
     frame.begin.totalMs = 40; frame.begin.pipelinesCreated = 2;
     frame.begin.retiredImages = 7; frame.begin.lastPipelineKey = 123456;
     frame.phaseMask = 1; frame.runtimeGpuMs = -1; frame.events = Damage;
+    frame.gpu.frameId=1;frame.gpu.startNs=10000000;frame.gpu.status=GpuPassProfile::Complete;
+    frame.gpu.mask=1u<<GpuPassProfile::Fading;frame.gpu.frameMs=4.125f;
+    frame.gpu.ms[GpuPassProfile::Fading]=1.234567f;frame.gpu.draws[GpuPassProfile::Fading]=123;
     unsigned accepted = 0;
     constexpr unsigned attempts = 20000;
     for(unsigned i = 1; i <= attempts; ++i) {
@@ -130,13 +136,22 @@ int main()
         assert(std::stoi(row[column("vk_pipelines_created")]) == 2);
         assert(std::stoi(row[column("vk_retired_images")]) == 7);
         assert(std::stoull(row[column("vk_last_pipeline_key")]) == 123456);
+        assert(std::stoull(row[column("gpu_pass_frame_id")])==1);
+        assert(std::stoull(row[column("gpu_pass_start_monotonic_ns")])==10000000);
+        assert(std::stoi(row[column("gpu_pass_status")])==1);
+        assert(std::stoul(row[column("gpu_pass_valid_mask")])==(1u<<GpuPassProfile::Fading));
+        assert(std::stod(row[column("gpu_pass_frame_ms")])==4.125);
+        assert(std::fabs(std::stod(row[column("gpu_pass_fading_ms")])-1.234567)<.000001);
+        assert(std::stoi(row[column("gpu_pass_fading_draw_calls")])==123);
+        assert(std::stod(row[column("gpu_pass_sky_ms")])==-1);
         ++rows;
     }
     assert(rows == accepted);
     std::ifstream metadata(stem+".session.csv");
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
-    assert(all.find("schema,3\n") != std::string::npos);
+    assert(all.find("schema,4\n") != std::string::npos);
+    assert(all.find("gpu_pass_interval_frames,8\n")!=std::string::npos);
     assert(all.find("written_rows,"+std::to_string(rows)+"\n") != std::string::npos);
     assert(all.find("dropped_rows,"+std::to_string(attempts-accepted)+"\n") != std::string::npos);
     assert(all.find("closed,1\n") != std::string::npos);

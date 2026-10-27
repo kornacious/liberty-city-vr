@@ -348,6 +348,7 @@ drawIm2D(PrimitiveType primType, void *vertices, int32 numVertices,
 
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
 
+	countGpuProfileDraw();
 	if(indexCount > 0){
 		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexOffset,
 		                     VK_INDEX_TYPE_UINT16);
@@ -389,6 +390,7 @@ drawIm3D(PrimitiveType primType, void *indices, int32 numIndices)
 
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
 
+	countGpuProfileDraw();
 	if(indexCount > 0){
 		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, indexOffset,
 		                     VK_INDEX_TYPE_UINT16);

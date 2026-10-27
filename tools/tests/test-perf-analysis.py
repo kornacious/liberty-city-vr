@@ -10,6 +10,45 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_gpu_pass_source_matching_dedup_and_validity(self):
+        rows = []
+        for i in range(1, 41):
+            row = dict(frame_id=str(i), start_monotonic_ns=str(i*10000000),
+                       gpu_pass_frame_id="0", gpu_pass_start_monotonic_ns="0",
+                       gpu_pass_status="0", gpu_pass_valid_mask="0", gpu_pass_frame_ms="-1")
+            for name in analysis.GPU_PASSES:
+                row[f"gpu_pass_{name}_ms"] = "-1"
+                row[f"gpu_pass_{name}_draw_calls"] = "0"
+            rows.append(row)
+
+        def sample(readback, source, status=1):
+            rows[readback-1].update(gpu_pass_frame_id=str(source), gpu_pass_start_monotonic_ns=str(source*10000000),
+                                    gpu_pass_status=str(status), gpu_pass_valid_mask=str(1 << 5), gpu_pass_frame_ms="4.5",
+                                    gpu_pass_fading_ms="1.25", gpu_pass_fading_draw_calls="120")
+        sample(10, 8)
+        sample(11, 8)  # Repeated latest value is not a second sample.
+        sample(18, 16)  # Exclude by source gameplay state, even if readback is active.
+        sample(26, 24, 2)  # Overflow is not a zero-duration measurement.
+        sample(30, 99)  # Dropped/missing source cannot be aligned safely.
+        sample(34, 32)
+        rows[33]["gpu_pass_start_monotonic_ns"] = "1"  # Stale/cross-session identity.
+        selected = set(range(1, 41))-{10, 11, 16}  # Readback rows 10/11 are paused; source 8 is valid.
+        result = analysis.summarize_gpu_passes(rows, selected, 10000000)
+        self.assertTrue(result["available"])
+        self.assertEqual(result["unique_selected_samples"], 1)
+        self.assertEqual(result["repeated_observations_ignored"], 1)
+        self.assertEqual(result["excluded_nongameplay_sources"], 1)
+        self.assertEqual(result["unmatched_source_frames"], 1)
+        self.assertEqual(result["mismatched_source_frames"], 1)
+        self.assertEqual(result["unobserved_source_frames"], 1)  # Pending tail source 40.
+        self.assertEqual(result["passes"]["fading"]["gpu_ms"]["mean"], 1.25)
+        self.assertEqual(result["passes"]["fading"]["draw_calls"]["mean"], 120)
+        self.assertIsNone(result["passes"]["sky"]["gpu_ms"])
+        self.assertEqual(result["slow_5s_windows"][0]["source_elapsed_s"], 0)
+        self.assertIsNone(analysis.summarize_gpu_passes([{"frame_id": "1"}], {1}, 0))
+        rotating = analysis.summarize_gpu_passes(rows, set(range(1,41)), 10000000, sampling="rotating_phase_one_per_block")
+        self.assertEqual(rotating["expected_source_frames"], 5) # Sources 1,10,19,28,37.
+
     def test_percentiles_and_missing(self):
         self.assertIsNone(analysis.distribution([-1, float("nan")]))
         stats = analysis.distribution([1, 2, 3, 4])
@@ -85,6 +124,8 @@ class AnalysisTests(unittest.TestCase):
             stall = result["vk_begin_stalls_over_5ms_top10"][0]
             self.assertEqual(stall["largest_recorded_section"], "vk_begin_pipeline_ms")
             self.assertEqual(stall["counts"]["vk_pipelines_created"], 1)
+            session.write_text(session.read_text().replace("schema,3", "schema,4"))
+            self.assertIsNone(analysis.summarize(path)["gpu_pass_profile"]) # Absent fields never become zero.
             session.write_text("key,value\nschema,1\n")
             with self.assertRaises(ValueError):
                 analysis.summarize(path)

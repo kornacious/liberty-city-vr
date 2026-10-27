@@ -3,6 +3,7 @@
 #ifdef RW_VULKAN
 
 #include <vulkan/vulkan.h>
+#include "GpuPassProfile.h"
 
 namespace rw {
 namespace vulkan {
@@ -112,6 +113,9 @@ struct FrameContext
 
 	VkQueryPool timestampQueryPool;
 	bool32 timestampPending;
+	bool32 gpuTimingActive;
+	uint64 gpuEpoch,gpuSourceId,gpuSourceStartNs;
+	GpuPassProfile::Recording gpuProfile;
 
 	VkImage depthImage;
 	VkDeviceMemory depthMemory;
@@ -190,8 +194,8 @@ struct Globals
 	bool32 hasSubmittedFrame;
 	// Alias used by draw code while a frame is being recorded.
 	VkCommandBuffer frameCommands;
-	// Optional two-timestamp query for the native Quest profiler.  The backend
-	// reads a slot only after that slot's fence signals.
+	// Optional total-frame and sampled pass queries. Readback uses an already
+	// signalled frame-slot fence; no query-specific wait is introduced.
 	uint32 frameTimestampValidBits;
 	bool32 frameTimestampEnabled;
 	bool32 frameTimestampAvailable;

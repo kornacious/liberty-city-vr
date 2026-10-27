@@ -104,6 +104,19 @@ struct BeginStats {
     uint32_t framebufferCreated = 0;
     uint64_t lastPipelineKey = 0;
 };
+constexpr unsigned GpuPassCount=13;
+inline const char *GpuPassName(unsigned i){
+    static const char *names[]={"sky","roads","reflections","world","water","fading","weather","effects","ui","scope","wrist","resolve_postprocess","other"};
+    static_assert(sizeof(names)/sizeof(names[0])==GpuPassCount,"GPU capture pass names");
+    return i<GpuPassCount?names[i]:"invalid";
+}
+struct GpuPassStats {
+    uint64_t frameId=0,startNs=0;
+    uint32_t mask=0,status=0;
+    float frameMs=-1,ms[GpuPassCount];
+    uint32_t draws[GpuPassCount]={};
+    GpuPassStats(){for(float &v:ms)v=-1;}
+};
 struct Frame {
     uint64_t id = 0, startNs = 0, phaseMask = 0;
     double intervalMs = -1, cpuMs = 0;
@@ -117,6 +130,7 @@ struct Frame {
     uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
     Player player{};
     BeginStats begin{};
+    GpuPassStats gpu{};
 };
 
 class Writer {
@@ -161,11 +175,16 @@ class Writer {
             p.vehicleSpeed3dKmh, p.vehiclePeakKmh, p.vehicleHandlingCruiseKmh,
             p.vehicleTransmissionMaxKmh, f.profilerDisplayMode);
         const BeginStats &b = f.begin;
-        std::fprintf(frames, ",%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,%u,%u,%u,%u,%u,%u,%llu\n",
+        std::fprintf(frames, ",%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,%u,%u,%u,%u,%u,%u,%llu",
             b.valid, b.pipelineMs, b.fenceWaitMs, b.timestampMs, b.retirementMs,
             b.setupMs, b.wristMs, b.totalMs, b.pipelineRequests, b.pipelinesCreated,
             b.pipelineFailures, b.retiredBuffers, b.retiredImages, b.retiredDescriptors,
             b.uploadCommands, b.framebufferCreated, (unsigned long long)b.lastPipelineKey);
+        const GpuPassStats &g=f.gpu;
+        std::fprintf(frames,",%llu,%llu,%u,%u,%.6f",(unsigned long long)g.frameId,
+            (unsigned long long)g.startNs,g.status,g.mask,g.frameMs);
+        for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",%.6f,%u",g.ms[i],g.draws[i]);
+        std::fputc('\n',frames);
     }
     void Run()
     {
@@ -214,7 +233,7 @@ public:
         metadata = OpenExclusive(stem+".session.csv");
         if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,3\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
+        std::fputs("key,value\nschema,4\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,primary_multiview_lane_bottom_of_pipe_intervals\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
@@ -226,7 +245,10 @@ public:
         static_assert(sizeof(names)/sizeof(names[0]) == PhaseCount, "capture phase schema");
         for(const char *name : names) std::fprintf(frames, ",%s_ms", name);
         std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set,vehicle_speed_kmh,vehicle_speed_3d_kmh,vehicle_peak_kmh,vehicle_handling_cruise_kmh,vehicle_transmission_max_kmh,profiler_display_mode", frames);
-        std::fputs(",vk_begin_detail_valid,vk_begin_pipeline_ms,vk_begin_fence_wait_ms,vk_begin_timestamp_ms,vk_begin_retirement_ms,vk_begin_setup_ms,vk_begin_wrist_ms,vk_begin_backend_total_ms,vk_pipeline_requests,vk_pipelines_created,vk_pipeline_failures,vk_retired_buffers,vk_retired_images,vk_retired_descriptors,vk_upload_commands,vk_framebuffer_created,vk_last_pipeline_key\n", frames);
+        std::fputs(",vk_begin_detail_valid,vk_begin_pipeline_ms,vk_begin_fence_wait_ms,vk_begin_timestamp_ms,vk_begin_retirement_ms,vk_begin_setup_ms,vk_begin_wrist_ms,vk_begin_backend_total_ms,vk_pipeline_requests,vk_pipelines_created,vk_pipeline_failures,vk_retired_buffers,vk_retired_images,vk_retired_descriptors,vk_upload_commands,vk_framebuffer_created,vk_last_pipeline_key", frames);
+        std::fputs(",gpu_pass_frame_id,gpu_pass_start_monotonic_ns,gpu_pass_status,gpu_pass_valid_mask,gpu_pass_frame_ms",frames);
+        for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",gpu_pass_%s_ms,gpu_pass_%s_draw_calls",GpuPassName(i),GpuPassName(i));
+        std::fputc('\n',frames);
         if(std::ferror(frames) || std::ferror(metadata)) {
             std::fclose(frames); std::fclose(metadata);
             frames = metadata = nullptr;

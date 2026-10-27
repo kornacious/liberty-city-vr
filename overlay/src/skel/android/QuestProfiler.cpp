@@ -1184,6 +1184,7 @@ QuestProfilerBeginAppFrame(void)
 	gCaptureFrame = {};
 	gCaptureFrame.id = ++gCaptureId;
 	gCaptureFrame.startNs = NowNanoseconds();
+	rw::vulkan::setGpuProfileFrame(gCaptureFrame.id,gCaptureFrame.startNs);
 	gCaptureFrame.intervalMs = gPreviousCaptureStartNs ?
 		(double)(gCaptureFrame.startNs-gPreviousCaptureStartNs)/1000000.0 : -1.0;
 	gAppFrameOpen = true;
@@ -1213,6 +1214,7 @@ QuestProfilerBeginAppFrame(void)
 void
 QuestProfilerCancelAppFrame(void)
 {
+	rw::vulkan::setGpuProfileFrame(0,0);
 	gAppFrameOpen = false;
 	gVkBeginOpen = false;
 	gStepOpen = false;
@@ -1291,6 +1293,13 @@ QuestProfilerEndVkEnd(void)
 	gVkEndOpen = false;
 }
 
+static int GpuPassForPhase(QuestProfilerPhase phase){
+	if(phase==QUEST_PROFILER_PHASE_UI)return GpuPassProfile::Ui;
+	if(phase>=QUEST_PROFILER_PHASE_RENDER_SKY && phase<=QUEST_PROFILER_PHASE_RENDER_EFFECTS)
+		return int(phase)-QUEST_PROFILER_PHASE_RENDER_SKY;
+	return -1;
+}
+
 void
 QuestProfilerBeginPhase(QuestProfilerPhase phase)
 {
@@ -1298,6 +1307,8 @@ QuestProfilerBeginPhase(QuestProfilerPhase phase)
 	   phase < 0 || phase >= QUEST_PROFILER_PHASE_COUNT ||
 	   gPhaseOpen[phase])
 		return;
+	const int gpu=GpuPassForPhase(phase);
+	if(gpu>=0)rw::vulkan::beginGpuProfilePass((uint32)gpu);
 	gPhaseStartedMs[phase] = NowMilliseconds();
 	gPhaseOpen[phase] = true;
 }
@@ -1316,6 +1327,8 @@ QuestProfilerEndPhase(QuestProfilerPhase phase)
 		gFramePhaseMs[phase] += elapsed;
 	gPhaseOpen[phase] = false;
 	gCaptureFrame.phaseMask |= uint64(1) << phase;
+	const int gpu=GpuPassForPhase(phase);
+	if(gpu>=0)rw::vulkan::endGpuProfilePass((uint32)gpu);
 }
 
 void
@@ -1427,6 +1440,15 @@ QuestProfilerEndAppFrame(void)
 	gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
 	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
 	gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
+	static_assert(questperf::GpuPassCount==GpuPassProfile::Count,"GPU capture/backend pass count");
+	static_assert(GpuPassProfile::SampleInterval==8,"GPU capture sampling metadata");
+	static_assert(QUEST_PROFILER_PHASE_RENDER_EFFECTS-QUEST_PROFILER_PHASE_RENDER_SKY==GpuPassProfile::Effects-GpuPassProfile::Sky,"CPU/GPU pass mapping");
+	GpuPassProfile::Result passes;
+	if(rw::vulkan::getGpuPassProfile(&passes)){
+		gCaptureFrame.gpu.frameId=passes.frameId;gCaptureFrame.gpu.startNs=passes.startNs;
+		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
+		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
+	}
 	rw::vulkan::FrameBeginStats begin = {};
 	if(rw::vulkan::getFrameBeginStats(&begin)){
 		gCaptureFrame.begin.valid = 1;

@@ -76,6 +76,10 @@ alone. Opening the menu does not itself end a run; select Stop explicitly.
 
 ## What is saved
 
+Per-pass GPU intervals and draw counts are now included automatically when
+profiling. See [GPU pass profiling](GPU_PASS_PROFILING.md) for sampling, source
+frame matching and the next before/after benchmark procedure.
+
 Files are local under the application's external files directory:
 
 - `simulation-replays/<UTC>-<monotonic-ms>.sim.csv`: a versioned input tape,

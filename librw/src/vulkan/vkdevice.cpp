@@ -48,6 +48,27 @@ Globals gvk;
 RenderState gstate;
 
 static FrameBeginStats gFrameBeginStats;
+static uint64 gGpuEpoch=0,gGpuSourceId=0,gGpuSourceStartNs=0;
+static bool32 gGpuRecordingActive=0;
+static GpuPassProfile::Result gGpuPassResult;
+
+void setGpuProfileFrame(uint64 frameId,uint64 startNs){gGpuSourceId=frameId;gGpuSourceStartNs=startNs;}
+static void writeGpuPassMarker(int query){
+	if(query>=0) vkCmdWriteTimestamp(gvk.frameCommands,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+		gvk.frames[gvk.activeFrame].timestampQueryPool,(uint32)query);
+}
+static bool32 gpuPassRecording(void){
+	return gGpuRecordingActive && gvk.frameTimestampEnabled &&
+		gvk.frames[gvk.activeFrame].gpuEpoch==gGpuEpoch && gvk.frames[gvk.activeFrame].gpuProfile.sampled;
+}
+void beginGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}
+void endGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}
+void countGpuProfileDraw(void){if(gpuPassRecording())gvk.frames[gvk.activeFrame].gpuProfile.Draw();}
+bool32 getGpuPassProfile(GpuPassProfile::Result *out){
+	if(out==nil)return 0;
+	*out=gGpuPassResult;
+	return gvk.frameTimestampEnabled && out->frameId!=0;
+}
 
 static double
 frameBeginNowMs(void)
@@ -1720,26 +1741,33 @@ readCompletedFrameTimestamps(FrameContext &frame)
 	if(frame.timestampQueryPool == VK_NULL_HANDLE || !frame.timestampPending)
 		return;
 
-	uint64 timestamps[2] = { 0, 0 };
+	uint64 timestamps[GpuPassProfile::QueryCount][2] = {};
+	const uint32 count=frame.gpuProfile.sampled?2+frame.gpuProfile.markers*GpuPassProfile::QueryStride:2;
 	const VkResult result = vkGetQueryPoolResults(
-		gvk.device, frame.timestampQueryPool, 0, 2,
-		sizeof(timestamps), timestamps, sizeof(uint64),
-		VK_QUERY_RESULT_64_BIT);
+		gvk.device, frame.timestampQueryPool, 0, count,
+		sizeof(timestamps), timestamps, sizeof(timestamps[0]),
+		VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 	frame.timestampPending = 0;
-	if(result != VK_SUCCESS)
+	// Unwritten spare stereo lanes can return NOT_READY even after the fence.
+	// Decode only the primary query lane's availability, without WAIT_BIT.
+	if((result != VK_SUCCESS && result != VK_NOT_READY) || frame.gpuEpoch!=gGpuEpoch ||
+	   !gvk.frameTimestampEnabled || !timestamps[0][1] || !timestamps[1][1])
 		return;
 
 	const uint32 validBits = gvk.frameTimestampValidBits;
-	uint64 delta = timestamps[1]-timestamps[0];
+	uint64 delta = timestamps[1][0]-timestamps[0][0];
 	if(validBits > 0 && validBits < 64){
 		const uint64 mask = (1ULL << validBits)-1ULL;
-		delta = (timestamps[1]-timestamps[0]) & mask;
+		delta = (timestamps[1][0]-timestamps[0][0]) & mask;
 	}
 	gvk.frameGpuMilliseconds =
 		(float32)((double)delta*
 		          (double)gvk.deviceProperties.limits.timestampPeriod/
 		          1000000.0);
 	gvk.frameTimestampAvailable = 1;
+	if(frame.gpuProfile.sampled)
+		gGpuPassResult=frame.gpuProfile.Decode(timestamps,validBits,
+			gvk.deviceProperties.limits.timestampPeriod,frame.gpuSourceId,frame.gpuSourceStartNs);
 }
 
 static bool32
@@ -2126,6 +2154,7 @@ replayScopeDraws(const std::vector<ScopeDraw> &draws, const float32 *projection 
 			VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 			0, sizeof(draw.push), &draw.push);
 		vkCmdBindVertexBuffers(cmd, 0, 1, &draw.vertices, &draw.vertexOffset);
+		countGpuProfileDraw();
 		if(draw.indices){
 			vkCmdBindIndexBuffer(cmd, draw.indices, draw.indexOffset, VK_INDEX_TYPE_UINT16);
 			vkCmdDrawIndexed(cmd, draw.count, 1, draw.first, 0, 0);
@@ -2336,6 +2365,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	resetFrameBeginStats();
 	if(!gvk.initialised || gvk.inFrame)
 		return 0;
+	gGpuRecordingActive=0;
 	const bool measure = gvk.frameTimestampEnabled != 0;
 	const double beginStarted = measure ? frameBeginNowMs() : 0.0;
 	double sectionStarted = beginStarted;
@@ -2478,14 +2508,18 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 			0, 0, nil, 0, nil, 1, &historyWriteBarrier);
 		frame.resolvedHistoryInitialised = 1;
 	}
-	if(gvk.frameTimestampEnabled &&
-	   frame.timestampQueryPool != VK_NULL_HANDLE){
+	frame.gpuTimingActive=gvk.frameTimestampEnabled && frame.timestampQueryPool!=VK_NULL_HANDLE;
+	frame.gpuEpoch=gGpuEpoch;frame.gpuSourceId=gGpuSourceId;frame.gpuSourceStartNs=gGpuSourceStartNs;
+	frame.gpuProfile={};
+	frame.gpuProfile.sampled=frame.gpuTimingActive && GpuPassProfile::ShouldSample(frame.gpuSourceId);
+	if(frame.gpuTimingActive){
 		vkCmdResetQueryPool(gvk.frameCommands,
-		                    frame.timestampQueryPool, 0, 2);
+		                    frame.timestampQueryPool, 0, frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2);
 		vkCmdWriteTimestamp(gvk.frameCommands,
 		                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 		                    frame.timestampQueryPool, 0);
 	}
+	gGpuRecordingActive=frame.gpuTimingActive;
 
 	// Safe to rewind the immediate-mode allocator here: the fence wait above
 	// already guarantees the previous frame finished reading it.
@@ -2562,7 +2596,9 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	gScopeDrawRole = 0;
 	gScopeWorldDraws.clear();
 	gScopeLensDraws.clear();
+	beginGpuProfilePass(GpuPassProfile::Wrist);
 	renderWristPanels();
+	endGpuProfilePass(GpuPassProfile::Wrist);
 	if(measure) gFrameBeginStats.wristMs = (float32)(frameBeginNowMs()-sectionStarted);
 
 	// Open the multiview pass for the whole frame. Every draw the game issues
@@ -2664,8 +2700,11 @@ endFrame(void)
 	// Make the stored world image visible to the sampled post pass. This is a
 	// full-image dependency rather than BY_REGION because FXAA reads adjacent
 	// pixels.
+	beginGpuProfilePass(GpuPassProfile::Postprocess);
 	vkCmdEndRenderPass(gvk.frameCommands);
+	beginGpuProfilePass(GpuPassProfile::Scope);
 	renderPhysicalScope();
+	endGpuProfilePass(GpuPassProfile::Scope);
 	if(gvk.sgsrMode != SGSR_OFF){
 		prepareMotionUniform(frame);
 		VkImageMemoryBarrier depthBarrier = {};
@@ -2727,6 +2766,7 @@ endFrame(void)
 			                        VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                        gvk.sgsrConvertPipelineLayout, 0, 1,
 			                        &frame.sgsrConvertDescriptor, 0, nil);
+			countGpuProfileDraw();
 			vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
 			vkCmdEndRenderPass(gvk.frameCommands);
 		}
@@ -2789,10 +2829,11 @@ endFrame(void)
 	vkCmdPushConstants(gvk.frameCommands, gvk.postFxPipelineLayout,
 	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0,
 	                   sizeof(gvk.postFxConstants), &gvk.postFxConstants);
+	countGpuProfileDraw();
 	vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
 	vkCmdEndRenderPass(gvk.frameCommands);
-	if(gvk.frameTimestampEnabled &&
-	   frame.timestampQueryPool != VK_NULL_HANDLE)
+	endGpuProfilePass(GpuPassProfile::Postprocess);
+	if(frame.gpuTimingActive)
 		vkCmdWriteTimestamp(gvk.frameCommands,
 		                    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 		                    frame.timestampQueryPool, 1);
@@ -2816,9 +2857,7 @@ endFrame(void)
 	uploads.pop_back();
 	if(submitted == VK_SUCCESS){
 		frame.submissionPending = 1;
-		frame.timestampPending =
-			gvk.frameTimestampEnabled &&
-			frame.timestampQueryPool != VK_NULL_HANDLE;
+		frame.timestampPending = frame.gpuTimingActive;
 		gvk.lastSubmittedFrame = gvk.activeFrame;
 		gvk.hasSubmittedFrame = 1;
 		gvk.nextFrame = (gvk.activeFrame + 1) % NUM_FRAME_CONTEXTS;
@@ -2835,6 +2874,7 @@ endFrame(void)
 		gvk.hasSubmittedFrame = 0;
 	}
 	gvk.inFrame = 0;
+	gGpuRecordingActive=0;
 }
 
 void
@@ -2845,6 +2885,7 @@ setGpuFrameTimingEnabled(bool32 enabled)
 		return;
 	gvk.frameTimestampEnabled = value;
 	gvk.frameTimestampAvailable = 0;
+	++gGpuEpoch;gGpuSourceId=gGpuSourceStartNs=0;gGpuPassResult=GpuPassProfile::Result();
 }
 
 bool32
@@ -4133,7 +4174,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			queryInfo.sType =
 				VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
 			queryInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-			queryInfo.queryCount = 2;
+			queryInfo.queryCount = GpuPassProfile::QueryCount;
 			bool32 allQueryPoolsCreated = 1;
 			for(uint32 i = 0; i < NUM_FRAME_CONTEXTS; i++)
 				if(vkCreateQueryPool(gvk.device, &queryInfo, nil,
@@ -4144,9 +4185,9 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 				}
 			if(allQueryPoolsCreated)
 				VKLOG("GPU frame timestamps enabled (%u valid bits, "
-				      "%.3f ns/tick)",
+				      "%.3f ns/tick, pass interval=%u frames)",
 				      gvk.frameTimestampValidBits,
-				      gvk.deviceProperties.limits.timestampPeriod);
+				      gvk.deviceProperties.limits.timestampPeriod,GpuPassProfile::SampleInterval);
 			else{
 				for(uint32 i = 0; i < NUM_FRAME_CONTEXTS; i++){
 					if(gvk.frames[i].timestampQueryPool)
