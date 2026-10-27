@@ -2012,7 +2012,18 @@ index 2a757863..575e2c6d 100644
  bool CRenderer::m_loadingPriority;
  #ifdef GTA_PS2
  float CRenderer::ms_lodDistScale = 1.0f;
-@@ -161,6 +181,9 @@ CRenderer::RenderOneRoad(CEntity *e)
+@@ -158,9 +178,20 @@
+ void
+ CRenderer::RenderOneRoad(CEntity *e)
+ {
++	if(e == nil || e->m_rwObject == nil)
++		return;
++#if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
++	// Reject roads outside both tracked eyes before profiling or submitting.
++	// Keep the shared 360-degree list intact for subsequent head turns.
++	if(!ShouldRenderInCurrentView(e))
++		return;
++#endif
  #ifndef MASTER
  	if(gbDontRenderBuildings)
  		return;
