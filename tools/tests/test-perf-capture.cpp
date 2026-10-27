@@ -92,8 +92,8 @@ int main()
     frame.begin.retiredImages = 7; frame.begin.lastPipelineKey = 123456;
     frame.phaseMask = 1; frame.runtimeGpuMs = -1; frame.events = Damage;
     frame.gpu.frameId=1;frame.gpu.startNs=10000000;frame.gpu.status=GpuPassProfile::Complete;
-    frame.gpu.mask=1u<<GpuPassProfile::Fading;frame.gpu.frameMs=4.125f;
-    frame.gpu.ms[GpuPassProfile::Fading]=1.234567f;frame.gpu.draws[GpuPassProfile::Fading]=123;
+    frame.gpu.mask=1u<<GpuPassProfile::Scene;frame.gpu.frameMs=4.125f;
+    frame.gpu.ms[GpuPassProfile::Scene]=1.234567f;frame.gpu.draws[GpuPassProfile::Fading]=123;
     unsigned accepted = 0;
     constexpr unsigned attempts = 20000;
     for(unsigned i = 1; i <= attempts; ++i) {
@@ -139,19 +139,21 @@ int main()
         assert(std::stoull(row[column("gpu_pass_frame_id")])==1);
         assert(std::stoull(row[column("gpu_pass_start_monotonic_ns")])==10000000);
         assert(std::stoi(row[column("gpu_pass_status")])==1);
-        assert(std::stoul(row[column("gpu_pass_valid_mask")])==(1u<<GpuPassProfile::Fading));
+        assert(std::stoul(row[column("gpu_pass_valid_mask")])==(1u<<GpuPassProfile::Scene));
         assert(std::stod(row[column("gpu_pass_frame_ms")])==4.125);
-        assert(std::fabs(std::stod(row[column("gpu_pass_fading_ms")])-1.234567)<.000001);
+        assert(std::fabs(std::stod(row[column("gpu_pass_scene_ms")])-1.234567)<.000001);
         assert(std::stoi(row[column("gpu_pass_fading_draw_calls")])==123);
         assert(std::stod(row[column("gpu_pass_sky_ms")])==-1);
+        assert(std::stod(row[column("gpu_pass_fading_ms")])==-1);
         ++rows;
     }
     assert(rows == accepted);
     std::ifstream metadata(stem+".session.csv");
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
-    assert(all.find("schema,4\n") != std::string::npos);
+    assert(all.find("schema,5\n") != std::string::npos);
     assert(all.find("gpu_pass_interval_frames,8\n")!=std::string::npos);
+    assert(all.find("gpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\n")!=std::string::npos);
     assert(all.find("written_rows,"+std::to_string(rows)+"\n") != std::string::npos);
     assert(all.find("dropped_rows,"+std::to_string(attempts-accepted)+"\n") != std::string::npos);
     assert(all.find("closed,1\n") != std::string::npos);

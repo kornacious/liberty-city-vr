@@ -104,9 +104,9 @@ struct BeginStats {
     uint32_t framebufferCreated = 0;
     uint64_t lastPipelineKey = 0;
 };
-constexpr unsigned GpuPassCount=13;
+constexpr unsigned GpuPassCount=14;
 inline const char *GpuPassName(unsigned i){
-    static const char *names[]={"sky","roads","reflections","world","water","fading","weather","effects","ui","scope","wrist","resolve_postprocess","other"};
+    static const char *names[]={"sky","roads","reflections","world","water","fading","weather","effects","ui","scope","wrist","resolve_postprocess","other","scene"};
     static_assert(sizeof(names)/sizeof(names[0])==GpuPassCount,"GPU capture pass names");
     return i<GpuPassCount?names[i]:"invalid";
 }
@@ -233,7 +233,7 @@ public:
         metadata = OpenExclusive(stem+".session.csv");
         if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,4\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,primary_multiview_lane_bottom_of_pipe_intervals\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
+        std::fputs("key,value\nschema,5\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\ngpu_pass_timing_buckets,scene_scope_wrist_resolve_postprocess_other\ngpu_pass_scene_scope,whole_scene_including_msaa_resolve_and_store\ngpu_pass_draw_scope,logical_phase_independent_of_timing_mask\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);

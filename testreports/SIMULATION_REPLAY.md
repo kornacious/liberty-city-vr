@@ -76,7 +76,7 @@ alone. Opening the menu does not itself end a run; select Stop explicitly.
 
 ## What is saved
 
-Per-pass GPU intervals and draw counts are now included automatically when
+Whole-render-pass GPU intervals and logical phase draw counts are included automatically when
 profiling. See [GPU pass profiling](GPU_PASS_PROFILING.md) for sampling, source
 frame matching and the next before/after benchmark procedure.
 

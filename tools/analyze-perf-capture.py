@@ -16,10 +16,10 @@ EVENTS = {
 
 
 GPU_PASSES = ["sky", "roads", "reflections", "world", "water", "fading", "weather",
-              "effects", "ui", "scope", "wrist", "resolve_postprocess", "other"]
+              "effects", "ui", "scope", "wrist", "resolve_postprocess", "other", "scene"]
 
 
-def summarize_gpu_passes(rows, selected_ids, start_ns, interval=8, sampling="fixed"):
+def summarize_gpu_passes(rows, selected_ids, start_ns, interval=8, sampling="fixed", timing_scope="legacy_in_render_pass"):
     if "gpu_pass_frame_id" not in rows[0]:
         return None
     sources = {int(row["frame_id"]): row for row in rows}
@@ -60,7 +60,9 @@ def summarize_gpu_passes(rows, selected_ids, start_ns, interval=8, sampling="fix
         matching = [row for _, _, row, mask in samples if mask & (1 << i)]
         passes[name] = {
             "gpu_ms": distribution([float(row[f"gpu_pass_{name}_ms"]) for row in matching]),
-            "draw_calls": distribution([int(row[f"gpu_pass_{name}_draw_calls"]) for row in matching]),
+            "draw_calls": distribution([int(row[f"gpu_pass_{name}_draw_calls"])
+                                        for _, _, row, _ in samples
+                                        if f"gpu_pass_{name}_draw_calls" in row]),
         }
     bins = {}
     for _, original, row, mask in samples:
@@ -84,14 +86,20 @@ def summarize_gpu_passes(rows, selected_ids, start_ns, interval=8, sampling="fix
         expected = {source for source in selected_ids if source % interval == 0}
     return {
         "available": bool(samples), "unique_selected_samples": len(samples),
-        "sample_interval_frames": interval, "sampling": sampling, "expected_source_frames": len(expected),
+        "sample_interval_frames": interval, "sampling": sampling,
+        "timing_scope": timing_scope,
+        "timing_attribution_reliable": timing_scope == "outside_render_pass_bottom_of_pipe_intervals",
+        "expected_source_frames": len(expected),
         "unobserved_source_frames": len(expected-seen), "unique_status_counts": dict(statuses),
         "repeated_observations_ignored": repeated, "unmatched_source_frames": unmatched,
         "mismatched_source_frames": mismatched, "excluded_nongameplay_sources": excluded,
         "gpu_frame_ms": distribution([float(row["gpu_pass_frame_ms"]) for _, _, row, _ in samples]),
         "passes": passes,
         "slow_5s_windows": sorted(windows, key=lambda item: item["gpu_frame_mean_ms"], reverse=True)[:10],
-        "notes": ["Intervals are approximate primary-lane Vulkan timestamps, not exclusive shader costs.",
+        "notes": (["Legacy in-render-pass timestamps cannot reliably attribute scene cost on tiled GPUs."]
+                  if timing_scope != "outside_render_pass_bottom_of_pipe_intervals" else
+                  ["Only whole render passes are GPU-timed; logical scene phases have draw counts and CPU timings only."]) +
+                 ["Intervals are approximate primary-lane Vulkan timestamps, not exclusive shader costs.",
                   "Sampling, timestamp dependencies and tile-based execution can perturb or redistribute timings.",
                   "Pending GPU results at capture shutdown are not drained with extra waits."]}
 
@@ -120,7 +128,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     metadata_path = path.with_name(path.name.replace(".frames.csv", ".session.csv"))
     with metadata_path.open(encoding="utf-8") as stream:
         metadata = dict((row["key"], row["value"]) for row in csv.DictReader(stream))
-    if metadata.get("schema") not in ("1", "2", "3", "4"):
+    if metadata.get("schema") not in ("1", "2", "3", "4", "5"):
         raise ValueError("Unsupported capture schema")
     complete = metadata.get("closed") == "1" and metadata.get("write_error") == "0"
     if not complete and not allow_incomplete:
@@ -235,7 +243,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
              "profiler_display_mode"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
-        "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed")),
+        "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed"), metadata.get("gpu_pass_scope", "legacy_in_render_pass")),
         "vk_begin_stalls_over_5ms_top10": begin_stalls,
         "notes": [
             "GPU samples are latest asynchronous observations, not attributed to the row's CPU frame.",

@@ -13,33 +13,48 @@ closes its files. Keep assets, graphics settings, refresh rate, ghost/tracking
 mode and head direction consistent. Two comparable runs help establish normal
 variation before making a rendering optimization.
 
-This build adds measurements; it does not optimize the renderer. Use a baseline
-from this instrumented build for subsequent A/B work. Old schema 1–3 captures
+This build corrects measurement attribution; it does not optimize the renderer.
+Use a baseline from this instrumented build for subsequent A/B work. Old schema 1–3 captures
 remain readable, but have no per-pass data.
 
 ## What the pass buckets mean
 
-| Bucket | Work bracketed |
-| --- | --- |
-| sky | Clouds and horizon |
-| roads | `CRenderer::RenderRoads` |
-| reflections | Corona reflection rendering |
-| world | `RenderEverythingBarRoads`, including whatever materials that engine entry point submits |
-| water | Boats and water |
-| fading | `RenderFadingInEntities`; this is not every possible transparent draw |
-| weather | Rain streaks |
-| effects | The existing RenderEffects CPU bracket |
-| ui | Game HUD/frontend rendering inside the renderer |
-| scope | The existing physical-scope target rendering/replay |
-| wrist | The existing wrist target rendering |
-| resolve_postprocess | Scene resolve, reflection reduction, optional SGSR conversion and final post pass, excluding nested scope work |
-| other | Clears, barriers, unbracketed draws and gaps between named passes |
+Schema 5 measures **complete render passes from outside their boundaries**.
+The four initial schema 4 replay captures showed approximately 0.0006 ms in
+roads/world/fading despite hundreds of draws, while most elapsed time appeared
+in `other`. These in-render-pass timestamps do not attribute scene execution
+usefully on the Quest tiler. Do not interpret them as cheap scene rendering or
+an expensive unidentified `other` shader.
 
-These are command-stream intervals, not exclusive shader execution costs.
-The separate OpenXR debug/menu/recording quad and the runtime compositor are
-outside this render command buffer. Draw counts count actual `vkCmdDraw` or
-`vkCmdDrawIndexed` commands, including split alpha/material passes and scope
-replays, without multiplying multiview commands by the number of eyes.
+| GPU-timed bucket | Work bracketed |
+| --- | --- |
+| scene | Entire native multiview scene render pass: sky, roads, world, water, fading, weather, effects and game UI; includes attachment clear, MSAA resolve and store |
+| wrist | Wrist target rendering, outside all its render-pass boundaries |
+| scope | Physical scope rendering/replay, outside its render-pass boundaries |
+| resolve_postprocess | Remaining scene-image preparation, reflection reduction, optional SGSR conversion and final post pass, excluding nested scope work; scene MSAA resolve belongs to `scene` |
+| other | Command-stream intervals outside these timed groups |
+
+Sky, roads, reflections, world, water, fading, weather, effects and UI retain
+actual draw-command counts and their existing CPU timings. Their separate GPU
+milliseconds are **unavailable (`-1`, timing mask clear)**. The timing mask does
+not control draw-count availability. Draw buckets are exclusive logical
+submission phases; `scene` draw counts are only scene draws outside a named
+logical phase, not a duplicate of all scene draws. `other` draws are commands
+outside every named draw scope.
+
+These GPU intervals are approximate elapsed costs, not exclusive shader times.
+The separate OpenXR debug/menu/recording quad and runtime compositor are outside
+this command buffer. Draw counts count actual `vkCmdDraw`/`vkCmdDrawIndexed`
+commands, including split materials and scope replays, without multiplying a
+multiview command by the number of eyes.
+
+The locally queried personal Quest 3 device did not advertise
+`VK_QCOM_elapsed_timer_query`. This implementation uses the already supported
+ordinary timestamp queries, with no requirement for that extension. Khronos
+[documents the in-render-pass timestamp limitation on tiled GPUs](https://docs.vulkan.org/features/latest/features/proposals/VK_QCOM_elapsed_timer_query.html).
+Fine GPU phase comparisons require separate targeted experiments or supported
+hardware profiling; splitting the scene render pass solely for measurement
+would change tiling/attachment costs and is deliberately avoided.
 
 ## Sampling and GPU safety
 
@@ -51,9 +66,12 @@ replays, without multiplying multiview commands by the number of eyes.
   outside render passes. Vulkan multiview timestamps consume one slot per
   active view. The first lane supplies the interval; secondary lanes are not
   added together or treated as independent frames.
-- Markers use bottom-of-pipe boundaries, partitioning the frame's existing
-  top-to-bottom timestamp span. Repeated/nested pass intervals accumulate into
-  their buckets. The renderer's render passes and draw ordering are preserved;
+- Markers use bottom-of-pipe boundaries **outside native render passes**,
+  partitioning the frame's existing top-to-bottom timestamp span. Logical
+  scene brackets change draw attribution without emitting timestamp commands.
+  Repeated/nested timed intervals accumulate into their buckets. Scope cost is
+  excluded from its enclosing postprocessing bucket. Render passes and draw
+  ordering are preserved;
   profiling introduces no render-pass splits or new pipeline barriers.
 - Query results are read only when the normal frame-slot reuse has already
   observed its submission fence. Readback requests availability and never uses
@@ -76,10 +94,13 @@ The [Vulkan timestamp command rules](https://docs.vulkan.org/refpages/latest/ref
 define multiview slot consumption; the [official timestamp sample](https://docs.vulkan.org/samples/latest/samples/api/timestamp_queries/README.html)
 explains timestamp stages, pipeline overlap and execution dependencies.
 
-## Capture schema 4 and analysis
+## Capture schema 5 and analysis
 
 The existing `.frames.csv` / `.session.csv` export endpoints and file names
-remain unchanged. New columns are appended after schema 3's begin diagnostics:
+remain unchanged. The original schema 4 columns keep their order; `gpu_pass_scene_ms` and
+`gpu_pass_scene_draw_calls` are appended. Schema 5 session metadata records
+`gpu_pass_scope=outside_render_pass_bottom_of_pipe_intervals`, the timed buckets,
+scene resolve ownership and independent logical draw attribution:
 
 - `gpu_pass_frame_id`, `gpu_pass_start_monotonic_ns`: originating CPU capture
   frame identity, not the CPU row in which the GPU result was read back.
@@ -93,10 +114,11 @@ Session metadata records sampling interval, timestamp scope, status meanings
 and tail behavior. The latest completed sampled result can repeat in several
 CPU rows; this is intentional and must not inflate the sample count.
 
-`tools/analyze-perf-capture.py` supports schemas 1–4. Its `gpu_pass_profile`
+`tools/analyze-perf-capture.py` supports schemas 1-5. Its `gpu_pass_profile`
 summary deduplicates source IDs, verifies source monotonic timestamps, filters
 using source-frame gameplay state, and reports unavailable/unmatched samples.
-It summarizes each bucket's timings/draws and ranks slow five-second windows
+It summarizes timings using the timing mask and draw counts independently,
+labels schema 4 attribution as unreliable, and ranks slow five-second windows
 using capture-relative time from the originating frame. The replay run report
 supplies the offset from capture start to simulation playback time. A result delivered during a
 paused readback row can still describe a valid earlier gameplay frame.
@@ -112,11 +134,12 @@ source frames. Dropped CPU source rows are excluded rather than guessed.
   game data, saves and recordings are preserved, and diagnostics export responds.
 - Production backend host tests cover multiview query bounds, nonblocking
   readback with unwritten spare lanes, nested/repeated passes, draw attribution,
-  timer wrapping, query/stack overflow, unbalanced scopes, disabled/unsampled
+  timer wrapping, query/stack overflow, unbalanced scopes, deferred scene
+  execution, draw-only in-pass brackets, exclusive nested timed groups, disabled/unsampled
   paths and capture-session isolation.
-- Writer tests verify schema 4 metadata, pass names, source identity, timing
+- Writer tests verify schema 5 metadata, pass names, source identity, timing
   precision, draw counts, unknown values, bounded queue/drop accounting and
-  shutdown drain. Analyzer tests cover schemas 1–4, delayed deduplication,
+  shutdown drain. Analyzer tests cover schemas 1-5, delayed deduplication,
   source-state filtering, identity mismatch, unavailable passes and tail gaps.
 - Existing pipeline and descriptor/frame-slot regressions pass.
 

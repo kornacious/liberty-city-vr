@@ -2629,6 +2629,9 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 		(gvk.sceneSamples != VK_SAMPLE_COUNT_1_BIT ||
 		 gvk.sgsrMode != SGSR_OFF) ? 3 : 2;
 	passInfo.pClearValues = clears;
+	// Outside both ends of the render pass: in-pass timestamps can measure
+	// only one tile (or almost nothing) on the Quest tiler.
+	beginGpuProfilePass(GpuPassProfile::Scene);
 	vkCmdBeginRenderPass(gvk.frameCommands, &passInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Set 0 is the same scene buffer for every world and immediate-mode draw
@@ -2700,8 +2703,9 @@ endFrame(void)
 	// Make the stored world image visible to the sampled post pass. This is a
 	// full-image dependency rather than BY_REGION because FXAA reads adjacent
 	// pixels.
-	beginGpuProfilePass(GpuPassProfile::Postprocess);
 	vkCmdEndRenderPass(gvk.frameCommands);
+	endGpuProfilePass(GpuPassProfile::Scene);
+	beginGpuProfilePass(GpuPassProfile::Postprocess);
 	beginGpuProfilePass(GpuPassProfile::Scope);
 	renderPhysicalScope();
 	endGpuProfilePass(GpuPassProfile::Scope);

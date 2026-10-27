@@ -23,7 +23,9 @@ static bool32 gGpuRecordingActive=0;
 static GpuPassProfile::Result gGpuPassResult;
 static uint64 values[GpuPassProfile::QueryCount][2]={},tick=200;
 static unsigned writes=0,readCount=0;
+static bool renderPassOpen=false;
 static void vkCmdWriteTimestamp(int,int stage,int,unsigned query){
+    assert(!renderPassOpen); // Timestamp hooks must stay outside native render passes.
     assert(stage==VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT&&query>=2&&query%2==0);
     assert(query+2<=GpuPassProfile::QueryCount); // Safe for both active views.
     values[query][0]=tick;values[query][1]=1;tick+=100;++writes;
@@ -36,7 +38,7 @@ static VkResult vkGetQueryPoolResults(int,int,unsigned first,unsigned count,size
 }
 #include "gpu-pass-backend.inc"
 static void Start(uint64 id=8,unsigned slot=0){
-    gvk.activeFrame=int(slot);setGpuProfileFrame(id,id*1000);gGpuRecordingActive=1;
+    gvk.frameTimestampValidBits=64;gvk.activeFrame=int(slot);setGpuProfileFrame(id,id*1000);gGpuRecordingActive=1;
     auto &f=gvk.frames[slot];f.gpuEpoch=gGpuEpoch;f.gpuSourceId=gGpuSourceId;f.gpuSourceStartNs=gGpuSourceStartNs;
     f.gpuTimingActive=1;f.timestampPending=1;f.gpuProfile={};f.gpuProfile.sampled=true;
     std::memset(values,0,sizeof(values));values[0][0]=100;values[0][1]=1;values[1][0]=1100;values[1][1]=1;tick=200;writes=0;
@@ -54,28 +56,39 @@ int main(){
     }
     assert(phases==255); // Do not alias every sample to one periodic frame phase.
     setGpuFrameTimingEnabled(1);Start();
+    beginGpuProfilePass(Scene);renderPassOpen=true;
     beginGpuProfilePass(World);countGpuProfileDraw();beginGpuProfilePass(Fading);countGpuProfileDraw();countGpuProfileDraw();endGpuProfilePass(Fading);endGpuProfilePass(World);
+    // Logical brackets are draw-only, so tiled scene execution stays in one
+    // interval spanning the native render pass, including resolve/store.
+    assert(writes==1);renderPassOpen=false;endGpuProfilePass(Scene);
+    values[4][0]=1000; // Simulate scene work deferred until render-pass end.
     Decode();Result result;assert(getGpuPassProfile(&result));
-    assert(result.status==Complete&&result.frameId==8&&result.startNs==8000&&result.mask==((1u<<World)|(1u<<Fading)|(1u<<Other)));
-    assert(std::fabs(result.ms[World]-.2f)<1e-6f&&std::fabs(result.ms[Fading]-.1f)<1e-6f&&std::fabs(result.ms[Other]-.7f)<1e-6f);
-    assert(result.frameMs==1&&result.draws[World]==1&&result.draws[Fading]==2&&result.ms[Sky]==-1&&readCount==10);
+    assert(result.status==Complete&&result.frameId==8&&result.startNs==8000&&result.mask==((1u<<Scene)|(1u<<Other)));
+    assert(std::fabs(result.ms[Scene]-.8f)<1e-6f&&std::fabs(result.ms[Other]-.2f)<1e-6f);
+    assert(result.ms[World]==-1&&result.ms[Fading]==-1);
+    assert(result.frameMs==1&&result.draws[World]==1&&result.draws[Fading]==2&&result.ms[Sky]==-1&&readCount==6);
     float frame=0;assert(getGpuFrameTimeMs(&frame)&&frame==1);
     Start(16,1);beginGpuProfilePass(Sky);endGpuProfilePass(Sky);Decode();assert(getGpuPassProfile(&result)&&result.frameId==16);
-    Start();beginGpuProfilePass(World);endGpuProfilePass(World);values[2][1]=0;Decode();
+    Start();beginGpuProfilePass(Scene);endGpuProfilePass(Scene);values[2][1]=0;Decode();
     assert(getGpuPassProfile(&result)&&result.status==Unavailable&&result.mask==0&&result.ms[World]==-1);
     Start();beginGpuProfilePass(World);endGpuProfilePass(Fading);Decode();assert(getGpuPassProfile(&result)&&result.status==Unbalanced);
-    Start();for(unsigned i=0;i<MaxMarkers/2+1;++i){beginGpuProfilePass(Sky);endGpuProfilePass(Sky);}Decode();
+    Start();for(unsigned i=0;i<MaxMarkers/2+1;++i){beginGpuProfilePass(Wrist);endGpuProfilePass(Wrist);}Decode();
     assert(writes==MaxMarkers&&getGpuPassProfile(&result)&&result.status==Overflow);
     Start();beginGpuProfilePass(World);const unsigned before=writes;setGpuFrameTimingEnabled(0);endGpuProfilePass(World);countGpuProfileDraw();
     assert(writes==before&&!getGpuPassProfile(&result));
     setGpuFrameTimingEnabled(1);Decode();assert(!getGpuPassProfile(&result)); // Old session slot cannot leak.
     Start();gvk.frames[0].gpuProfile.sampled=false;beginGpuProfilePass(World);countGpuProfileDraw();endGpuProfilePass(World);Decode();
     assert(writes==0&&readCount==2&&!getGpuPassProfile(&result));
-    Start();beginGpuProfilePass(World);endGpuProfilePass(World);values[0][0]=250;values[2][0]=252;values[4][0]=5;values[1][0]=20;gvk.frameTimestampValidBits=8;Decode();
-    assert(getGpuPassProfile(&result)&&result.status==Complete&&std::fabs(result.frameMs-.026f)<1e-6f&&std::fabs(result.ms[World]-.009f)<1e-6f);
+    Start();beginGpuProfilePass(Scene);endGpuProfilePass(Scene);values[0][0]=250;values[2][0]=252;values[4][0]=5;values[1][0]=20;gvk.frameTimestampValidBits=8;Decode();
+    assert(getGpuPassProfile(&result)&&result.status==Complete&&std::fabs(result.frameMs-.026f)<1e-6f&&std::fabs(result.ms[Scene]-.009f)<1e-6f);
     assert(Milliseconds(0,0,64,1)==0&&Milliseconds(0,1,0,1)==-1&&Milliseconds(0,1,65,1)==-1);
     Start();beginGpuProfilePass(World);beginGpuProfilePass(World);countGpuProfileDraw();endGpuProfilePass(World);endGpuProfilePass(World);Decode();
-    assert(getGpuPassProfile(&result)&&result.status==Complete&&result.draws[World]==1&&writes==2);
+    assert(getGpuPassProfile(&result)&&result.status==Complete&&result.draws[World]==1&&writes==0&&result.ms[World]==-1);
     Start();for(unsigned i=0;i<StackSize+1;++i)beginGpuProfilePass(World);Decode();assert(getGpuPassProfile(&result)&&result.status==Overflow);
+    Start();beginGpuProfilePass(Postprocess);beginGpuProfilePass(Scope);countGpuProfileDraw();endGpuProfilePass(Scope);endGpuProfilePass(Postprocess);Decode();
+    assert(getGpuPassProfile(&result)&&result.status==Complete&&writes==4);
+    assert(std::fabs(result.ms[Postprocess]-.2f)<1e-6f&&std::fabs(result.ms[Scope]-.1f)<1e-6f);
+    float sum=0;for(unsigned i=0;i<Count;++i)if(result.mask&(1u<<i))sum+=result.ms[i];
+    assert(std::fabs(sum-result.frameMs)<1e-6f&&result.draws[Scope]==1);
     std::puts("PASS: GPU pass production hooks/readback, stereo query bounds, nested/repeated passes, draw attribution, availability, wrapping, overflow, disabled/sampled paths and session isolation.");
 }

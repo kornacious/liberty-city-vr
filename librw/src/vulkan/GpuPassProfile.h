@@ -6,7 +6,10 @@
 // Two query slots per marker are reserved even outside a stereo render pass:
 // multiview vkCmdWriteTimestamp consumes one query for each active view.
 namespace GpuPassProfile {
-enum Pass { Sky,Roads,Reflections,World,Water,Fading,Weather,Effects,Ui,Scope,Wrist,Postprocess,Other,Count };
+enum Pass { Sky,Roads,Reflections,World,Water,Fading,Weather,Effects,Ui,Scope,Wrist,Postprocess,Other,Scene,Count };
+// Only complete render passes can be timed reliably with ordinary timestamps
+// on a tiler. Logical scene phases still select draw-count buckets.
+inline bool Timed(unsigned pass){return pass>=Scope && pass<Count;}
 constexpr unsigned SampleInterval=8,MaxMarkers=64,QueryStride=2,QueryCount=2+MaxMarkers*QueryStride,StackSize=8;
 inline bool ShouldSample(uint64_t frameId){
     if(!frameId)return false;
@@ -15,7 +18,7 @@ inline bool ShouldSample(uint64_t frameId){
 }
 enum SampleStatus { NoSample,Complete,Overflow,Unbalanced,Unavailable };
 inline const char *Name(unsigned pass){
-    static const char *names[]={"sky","roads","reflections","world","water","fading","weather","effects","ui","scope","wrist","resolve_postprocess","other"};
+    static const char *names[]={"sky","roads","reflections","world","water","fading","weather","effects","ui","scope","wrist","resolve_postprocess","other","scene"};
     return pass<Count?names[pass]:"invalid";
 }
 struct Result {
@@ -34,26 +37,33 @@ inline double Milliseconds(uint64_t begin,uint64_t end,unsigned bits,double peri
 struct Recording {
     struct Segment {unsigned pass=Other,begin=0,end=0;};
     Segment segments[MaxMarkers+1];
-    unsigned stack[StackSize]={},depth=0,active=Other,markers=0,lastQuery=0;
+    unsigned stack[StackSize]={},depth=0,active=Other,timingActive=Other,markers=0,lastQuery=0;
     uint32_t seen=uint32_t(1)<<Other,status=NoSample,draws[Count]={};
     bool sampled=false;
     int Transition(unsigned pass){
-        if(active==pass)return -1;
+        if(timingActive==pass)return -1;
         if(markers>=MaxMarkers){status=Overflow;return -1;}
         const unsigned query=2+markers*QueryStride;
-        segments[markers++]={active,lastQuery,query};lastQuery=query;active=pass;
+        segments[markers++]={timingActive,lastQuery,query};lastQuery=query;timingActive=pass;
         return int(query);
     }
     int Begin(unsigned pass){
         if(!sampled||status!=NoSample)return -1;
         if(pass>=Count||depth>=StackSize){status=Overflow;return -1;}
-        stack[depth++]=active;seen|=uint32_t(1)<<pass;
+        stack[depth++]=active;active=pass;
+        if(!Timed(pass))return -1;
+        seen|=uint32_t(1)<<pass;
         return Transition(pass);
     }
     int End(unsigned pass){
         if(!sampled||status!=NoSample)return -1;
         if(!depth||pass!=active){status=Unbalanced;return -1;}
-        return Transition(stack[--depth]);
+        active=stack[--depth];
+        if(!Timed(pass))return -1;
+        // Restore the enclosing timed scope, skipping draw-only phases.
+        unsigned enclosing=active;
+        for(unsigned i=depth;!Timed(enclosing)&&i>0;)enclosing=stack[--i];
+        return Transition(Timed(enclosing)?enclosing:Other);
     }
     void Draw(){if(sampled&&status==NoSample)++draws[active];}
     Result Decode(const uint64_t (*queries)[2],unsigned bits,double period,uint64_t frameId,uint64_t startNs) const {
@@ -67,7 +77,7 @@ struct Recording {
         if(total<0||!std::isfinite(total)){out.status=Unavailable;return out;}
         float times[Count]={};
         for(unsigned i=0;i<=markers;++i){
-            const Segment s=i<markers?segments[i]:Segment{active,lastQuery,1};
+            const Segment s=i<markers?segments[i]:Segment{timingActive,lastQuery,1};
             if(!queries[s.begin][1]||!queries[s.end][1]){out.status=Unavailable;return out;}
             const double time=Milliseconds(queries[s.begin][0],queries[s.end][0],bits,period);
             if(time<0||time>total+0.01){out.status=Unavailable;return out;}

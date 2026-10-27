@@ -10,6 +10,34 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_whole_render_pass_timing_keeps_draw_only_phases(self):
+        row = dict(frame_id="1", start_monotonic_ns="10000000",
+                   gpu_pass_frame_id="1", gpu_pass_start_monotonic_ns="10000000",
+                   gpu_pass_status="1", gpu_pass_valid_mask=str((1 << 13) | (1 << 12)),
+                   gpu_pass_frame_ms="9")
+        for name in analysis.GPU_PASSES:
+            row[f"gpu_pass_{name}_ms"] = "-1"
+            row[f"gpu_pass_{name}_draw_calls"] = "0"
+        row.update(gpu_pass_scene_ms="8", gpu_pass_other_ms="1",
+                   gpu_pass_roads_draw_calls="970", gpu_pass_fading_draw_calls="800")
+        result = analysis.summarize_gpu_passes(
+            [row], {1}, 10000000, timing_scope="outside_render_pass_bottom_of_pipe_intervals")
+        self.assertTrue(result["timing_attribution_reliable"])
+        self.assertEqual(result["passes"]["scene"]["gpu_ms"]["mean"], 8)
+        self.assertIsNone(result["passes"]["roads"]["gpu_ms"])
+        self.assertEqual(result["passes"]["roads"]["draw_calls"]["mean"], 970)
+        self.assertEqual(result["passes"]["fading"]["draw_calls"]["mean"], 800)
+        self.assertNotIn("roads", result["slow_5s_windows"][0]["pass_mean_ms"])
+        # Old schema 4 has no appended scene columns; keep its draw counts
+        # readable and explicitly flag the unreliable timing attribution.
+        del row["gpu_pass_scene_ms"], row["gpu_pass_scene_draw_calls"]
+        row["gpu_pass_valid_mask"] = str(1 << 12)
+        legacy = analysis.summarize_gpu_passes([row], {1}, 10000000)
+        self.assertFalse(legacy["timing_attribution_reliable"])
+        self.assertIsNone(legacy["passes"]["scene"]["gpu_ms"])
+        self.assertIsNone(legacy["passes"]["scene"]["draw_calls"])
+        self.assertEqual(legacy["passes"]["roads"]["draw_calls"]["mean"], 970)
+
     def test_gpu_pass_source_matching_dedup_and_validity(self):
         rows = []
         for i in range(1, 41):
@@ -126,6 +154,8 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(stall["counts"]["vk_pipelines_created"], 1)
             session.write_text(session.read_text().replace("schema,3", "schema,4"))
             self.assertIsNone(analysis.summarize(path)["gpu_pass_profile"]) # Absent fields never become zero.
+            session.write_text(session.read_text().replace("schema,4", "schema,5"))
+            self.assertIsNone(analysis.summarize(path)["gpu_pass_profile"])
             session.write_text("key,value\nschema,1\n")
             with self.assertRaises(ValueError):
                 analysis.summarize(path)

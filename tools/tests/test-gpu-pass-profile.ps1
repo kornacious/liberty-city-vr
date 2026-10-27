@@ -13,8 +13,12 @@ function Definition([string]$name){
 $pieces=@()
 foreach($name in @('setGpuProfileFrame','writeGpuPassMarker','gpuPassRecording','beginGpuProfilePass','endGpuProfilePass','countGpuProfileDraw','getGpuPassProfile','readCompletedFrameTimestamps','setGpuFrameTimingEnabled','getGpuFrameTimeMs')){$pieces+=(Definition $name)}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'gpu-pass-backend.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
-foreach($pattern in @('queryInfo.queryCount = GpuPassProfile::QueryCount','frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2','frame.timestampPending = frame.gpuTimingActive','beginGpuProfilePass(GpuPassProfile::Wrist)','beginGpuProfilePass(GpuPassProfile::Scope)','beginGpuProfilePass(GpuPassProfile::Postprocess)')){
+foreach($pattern in @('queryInfo.queryCount = GpuPassProfile::QueryCount','frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2','frame.timestampPending = frame.gpuTimingActive','beginGpuProfilePass(GpuPassProfile::Wrist)','beginGpuProfilePass(GpuPassProfile::Scope)','beginGpuProfilePass(GpuPassProfile::Postprocess)','beginGpuProfilePass(GpuPassProfile::Scene)','endGpuProfilePass(GpuPassProfile::Scene)')){
     if(-not$source.Contains($pattern)){throw "Missing GPU integration: $pattern"}
+}
+if($source -notmatch 'beginGpuProfilePass\(GpuPassProfile::Scene\);\s*vkCmdBeginRenderPass' -or
+   $source -notmatch 'vkCmdEndRenderPass\(gvk.frameCommands\);\s*endGpuProfilePass\(GpuPassProfile::Scene\);\s*beginGpuProfilePass\(GpuPassProfile::Postprocess\)'){
+    throw 'Whole-scene GPU timestamps must bracket the native render pass from outside'
 }
 foreach($file in @('vkpipe.cpp','vkim.cpp')){
     $draw=[IO.File]::ReadAllText((Join-Path $kit ('librw/src/vulkan/'+$file)))
