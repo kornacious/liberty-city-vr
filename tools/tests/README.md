@@ -395,3 +395,9 @@ precision, CSV schema, event transitions, queue overflow accounting, shutdown
 draining and exclusive session creation. It is included in the current-source
 gate. `python tools/tests/test-perf-analysis.py` separately tests the comparison
 tool's percentiles, validity masks, activity selection and incomplete sessions.
+
+`TestPerfCaptureFiles.java` tests the Android export provider's shared filename
+and canonical-path boundary without Android dependencies. Compile it alongside
+`overlay/android/app/src/main/java/com/libertyvr/quest/PerfCaptureFiles.java`,
+then run `com.libertyvr.quest.TestPerfCaptureFiles` with a local temporary root.
+Provider listing/read is separately verified on the personal Quest 3 device.

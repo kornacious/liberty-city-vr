@@ -44,6 +44,11 @@
             android:authorities="${applicationId}.music"
             android:exported="true" android:grantUriPermissions="false" />
 
+        <!-- Read-only, shell/app-only export of specifically named profiler CSVs. -->
+        <provider android:name=".PerfCaptureProvider"
+            android:authorities="${applicationId}.performance"
+            android:exported="true" android:grantUriPermissions="false" />
+
 		<!-- Declare supported devices so Horizon OS exposes full Quest 2/Pro/3/3S
 		     capabilities (including 80Hz, 90Hz, and 120Hz display refresh rates). -->
 		<meta-data

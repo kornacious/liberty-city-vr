@@ -14,6 +14,15 @@ a unique pair of files for each session under:
 ```
 
 Copy both files locally using the headset file manager or local ADB workflow.
+Android scoped storage can deny direct `adb pull` even for a debug APK. The app
+therefore exposes a read-only ADB bridge: query
+`content://com.libertyvr.quest.performance/captures` to list names/sizes, then
+read `content://com.libertyvr.quest.performance/capture/<filename>` using
+`adb shell content query` / `adb exec-out content read`. Select the verified
+device locally and keep its identifier out of logs. Only the app, root and ADB
+shell can use this provider; only generated frame/session CSV names are accepted.
+The provider cannot modify captures or expose saves and game assets. Installing
+the export update preserves recordings made by the earlier capture build.
 New sessions never overwrite old pairs. `quest_perf.csv` retains its existing
 overwrite-on-enable behavior. Captures are excluded from Git. They include
 gameplay coordinates, but no device identifiers or original game assets.
