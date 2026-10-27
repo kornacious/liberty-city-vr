@@ -552,7 +552,7 @@ VkPipeline getPipeline(uint32 shader, VkPrimitiveTopology topology);
 
 // Compiles anything getPipeline had to defer. Must be called outside a render
 // pass; beginFrame does it before opening one.
-void compilePendingPipelines(void);
+void compilePendingPipelines(FrameBeginStats *stats = nil);
 
 // One line per frame while the counts change; silent once they settle.
 void reportImStats(void);

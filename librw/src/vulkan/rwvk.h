@@ -240,6 +240,20 @@ void endFrame(void);
 void setGpuFrameTimingEnabled(bool32 enabled);
 bool32 getGpuFrameTimeMs(float32 *milliseconds);
 
+// CPU timings for this frame's backend begin, not asynchronous GPU samples.
+// Collected only while the native profiler is enabled. A failed/skipped begin
+// leaves valid false so stale measurements cannot be attributed to a new frame.
+struct FrameBeginStats {
+	bool32 valid;
+	float32 totalMs, pipelineMs, fenceWaitMs, timestampMs, retirementMs, setupMs, wristMs;
+	uint32 pipelineRequests, pipelinesCreated, pipelineFailures;
+	uint32 retiredBuffers, retiredImages, retiredDescriptors, uploadCommands;
+	uint32 framebufferCreated;
+	uint64 lastPipelineKey;
+};
+bool32 getFrameBeginStats(FrameBeginStats *out);
+void resetFrameBeginStats(void);
+
 // True only when the most recent DEVICEOPEN failed while creating one of the
 // full-resolution colour/depth targets or its framebuffer. This lets the
 // Android shell safely distinguish a render-scale recovery case from an

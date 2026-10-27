@@ -95,6 +95,15 @@ public:
 };
 
 constexpr size_t PhaseCount = 24;
+struct BeginStats {
+    int valid = 0;
+    float totalMs = 0, pipelineMs = 0, fenceWaitMs = 0, timestampMs = 0;
+    float retirementMs = 0, setupMs = 0, wristMs = 0;
+    uint32_t pipelineRequests = 0, pipelinesCreated = 0, pipelineFailures = 0;
+    uint32_t retiredBuffers = 0, retiredImages = 0, retiredDescriptors = 0, uploadCommands = 0;
+    uint32_t framebufferCreated = 0;
+    uint64_t lastPipelineKey = 0;
+};
 struct Frame {
     uint64_t id = 0, startNs = 0, phaseMask = 0;
     double intervalMs = -1, cpuMs = 0;
@@ -107,6 +116,7 @@ struct Frame {
     float renderScale = -1;
     uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
     Player player{};
+    BeginStats begin{};
 };
 
 class Writer {
@@ -147,9 +157,15 @@ class Writer {
             p.paused, p.cutscene, p.mission, p.health, p.armour, p.x, p.y, p.z, p.speed,
             f.width, f.height, f.renderScale, f.activeModels[0], f.activeModels[1],
             f.activeModels[2], f.activeModels[3], f.activeModels[4], f.requestedModel);
-        std::fprintf(frames, ",%.6f,%.6f,%.6f,%.6f,%.6f,%d\n", p.vehicleSpeedKmh,
+        std::fprintf(frames, ",%.6f,%.6f,%.6f,%.6f,%.6f,%d", p.vehicleSpeedKmh,
             p.vehicleSpeed3dKmh, p.vehiclePeakKmh, p.vehicleHandlingCruiseKmh,
             p.vehicleTransmissionMaxKmh, f.profilerDisplayMode);
+        const BeginStats &b = f.begin;
+        std::fprintf(frames, ",%d,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,%u,%u,%u,%u,%u,%u,%llu\n",
+            b.valid, b.pipelineMs, b.fenceWaitMs, b.timestampMs, b.retirementMs,
+            b.setupMs, b.wristMs, b.totalMs, b.pipelineRequests, b.pipelinesCreated,
+            b.pipelineFailures, b.retiredBuffers, b.retiredImages, b.retiredDescriptors,
+            b.uploadCommands, b.framebufferCreated, (unsigned long long)b.lastPipelineKey);
     }
     void Run()
     {
@@ -198,7 +214,7 @@ public:
         metadata = OpenExclusive(stem+".session.csv");
         if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,2\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\n", metadata);
+        std::fputs("key,value\nschema,3\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
@@ -209,7 +225,8 @@ public:
             "render_fading", "render_weather", "render_effects"};
         static_assert(sizeof(names)/sizeof(names[0]) == PhaseCount, "capture phase schema");
         for(const char *name : names) std::fprintf(frames, ",%s_ms", name);
-        std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set,vehicle_speed_kmh,vehicle_speed_3d_kmh,vehicle_peak_kmh,vehicle_handling_cruise_kmh,vehicle_transmission_max_kmh,profiler_display_mode\n", frames);
+        std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set,vehicle_speed_kmh,vehicle_speed_3d_kmh,vehicle_peak_kmh,vehicle_handling_cruise_kmh,vehicle_transmission_max_kmh,profiler_display_mode", frames);
+        std::fputs(",vk_begin_detail_valid,vk_begin_pipeline_ms,vk_begin_fence_wait_ms,vk_begin_timestamp_ms,vk_begin_retirement_ms,vk_begin_setup_ms,vk_begin_wrist_ms,vk_begin_backend_total_ms,vk_pipeline_requests,vk_pipelines_created,vk_pipeline_failures,vk_retired_buffers,vk_retired_images,vk_retired_descriptors,vk_upload_commands,vk_framebuffer_created,vk_last_pipeline_key\n", frames);
         if(std::ferror(frames) || std::ferror(metadata)) {
             std::fclose(frames); std::fclose(metadata);
             frames = metadata = nullptr;

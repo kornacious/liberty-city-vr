@@ -83,6 +83,10 @@ int main()
     frame.player.vehicleHandlingCruiseKmh = 160;
     frame.player.vehicleTransmissionMaxKmh = 192;
     frame.profilerDisplayMode = 2;
+    frame.begin.valid = 1; frame.begin.pipelineMs = 39.125f;
+    frame.begin.fenceWaitMs = 0.125f; frame.begin.retirementMs = 0.5f;
+    frame.begin.totalMs = 40; frame.begin.pipelinesCreated = 2;
+    frame.begin.retiredImages = 7; frame.begin.lastPipelineKey = 123456;
     frame.phaseMask = 1; frame.runtimeGpuMs = -1; frame.events = Damage;
     unsigned accepted = 0;
     constexpr unsigned attempts = 20000;
@@ -118,13 +122,21 @@ int main()
         assert(std::stod(row[column("vehicle_handling_cruise_kmh")]) == 160);
         assert(std::stod(row[column("vehicle_transmission_max_kmh")]) == 192);
         assert(std::stoi(row[column("profiler_display_mode")]) == 2);
+        assert(std::stoi(row[column("vk_begin_detail_valid")]) == 1);
+        assert(std::stod(row[column("vk_begin_pipeline_ms")]) == 39.125);
+        assert(std::stod(row[column("vk_begin_fence_wait_ms")]) == 0.125);
+        assert(std::stod(row[column("vk_begin_retirement_ms")]) == 0.5);
+        assert(std::stod(row[column("vk_begin_backend_total_ms")]) == 40);
+        assert(std::stoi(row[column("vk_pipelines_created")]) == 2);
+        assert(std::stoi(row[column("vk_retired_images")]) == 7);
+        assert(std::stoull(row[column("vk_last_pipeline_key")]) == 123456);
         ++rows;
     }
     assert(rows == accepted);
     std::ifstream metadata(stem+".session.csv");
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
-    assert(all.find("schema,2\n") != std::string::npos);
+    assert(all.find("schema,3\n") != std::string::npos);
     assert(all.find("written_rows,"+std::to_string(rows)+"\n") != std::string::npos);
     assert(all.find("dropped_rows,"+std::to_string(attempts-accepted)+"\n") != std::string::npos);
     assert(all.find("closed,1\n") != std::string::npos);

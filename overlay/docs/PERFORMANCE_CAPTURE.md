@@ -75,7 +75,40 @@ per-frame active selection is authoritative. Asset names describe configured
 routing, not content hashes or proof that base files are unmodified. `saved_*`
 values can be `-1` when absent and can differ from active settings. Toggle
 profiling OFF and back to ON or MINIMAL after changing settings for fresh
-metadata. The analyzer supports both schema 1 and schema 2 recordings.
+metadata. The analyzer supports schema 1, 2 and 3 recordings.
+
+## Vulkan begin-frame investigation (schema 3)
+
+MINIMAL and ON additionally capture synchronous CPU timings for pipeline
+compilation, frame-slot fence waiting, timestamp readback, retired-resource
+destruction, wrist/scope-target preparation and remaining backend setup.
+`vk_begin_detail_valid=0` means unavailable; canceled/failed/skipped begins must
+not reuse the previous frame's measurements. Timing is collected only while
+profiling is enabled. These sections measure CPU wall time, including waiting
+and scheduling interruptions, rather than GPU pass durations.
+
+`vk_begin_backend_total_ms` covers librw's beginFrame. The older `vk_begin_ms`
+also covers its app wrapper, so they can differ. The analyzer exposes the
+nonnegative difference as `vk_begin_outside_backend_ms` in stall reports.
+Setup is the residual backend time after the separately measured sections.
+
+Counts identify pending pipeline requests, newly created pipelines, creation
+failures, retired buffers/images/descriptors, upload command buffers released
+and first-use framebuffer creation. `vk_last_pipeline_key` is the last pending
+pipeline state key processed, not a device identifier or a unique frame ID.
+The comparison tool reports the ten largest selected begin-frame intervals
+over 5 ms, with section timings and counts. Older schemas report these fields
+as unavailable, not zero.
+
+The first begin-frame optimization pass warms standard depth-test/depth-write
+combinations independently and reuses opaque pipeline keys when only ignored
+blend factors change. An in-memory Vulkan pipeline cache shares driver results
+within the device lifetime, with an uncached fallback if creation fails. No
+cache binaries are persisted. More variants are prepared at startup, trading
+startup work and pipeline memory for fewer standard first-use compilations.
+The existing frame fences, retirement safety and render-pass compile deferral
+remain in place. New captures must establish which section explains the measured
+37–41 ms stalls and whether their frequency/duration improves.
 
 Coarse streaming/scripts/population/car/world-process/particle timers now have
 producer hooks. Detailed physics channels without producer hooks remain

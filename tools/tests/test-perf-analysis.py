@@ -64,6 +64,27 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(vehicle["recorded_occupancy_peak_kmh"]["max"], 110)
             self.assertEqual(vehicle["handling_cruise_kmh"], [160])
             self.assertEqual(vehicle["transmission_max_kmh"], [192])
+            for row in vehicle_rows:
+                row.update(vk_begin_detail_valid="1", vk_begin_ms="40",
+                           vk_begin_pipeline_ms="39", vk_begin_fence_wait_ms="0.1",
+                           vk_begin_timestamp_ms="0.1", vk_begin_retirement_ms="0.2",
+                           vk_begin_setup_ms="0.4", vk_begin_wrist_ms="0.2",
+                           vk_begin_backend_total_ms="40", vk_pipeline_requests="1",
+                           vk_pipelines_created="1", vk_pipeline_failures="0", vk_retired_buffers="2",
+                           vk_retired_images="3", vk_retired_descriptors="4", vk_upload_commands="5",
+                           vk_framebuffer_created="0", vk_last_pipeline_key="12345")
+            vehicle_rows[0]["vk_begin_detail_valid"] = "0" # stale/unavailable sections excluded
+            with path.open("w", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(vehicle_rows[0]))
+                writer.writeheader()
+                writer.writerows(vehicle_rows)
+            session.write_text(session.read_text().replace("schema,2", "schema,3"))
+            result = analysis.summarize(path)
+            self.assertEqual(result["timings_ms"]["vk_begin_pipeline_ms"]["samples"], 2)
+            self.assertEqual(len(result["vk_begin_stalls_over_5ms_top10"]), 2)
+            stall = result["vk_begin_stalls_over_5ms_top10"][0]
+            self.assertEqual(stall["largest_recorded_section"], "vk_begin_pipeline_ms")
+            self.assertEqual(stall["counts"]["vk_pipelines_created"], 1)
             session.write_text("key,value\nschema,1\n")
             with self.assertRaises(ValueError):
                 analysis.summarize(path)

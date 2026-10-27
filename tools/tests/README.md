@@ -404,3 +404,13 @@ and canonical-path boundary without Android dependencies. Compile it alongside
 `overlay/android/app/src/main/java/com/libertyvr/quest/PerfCaptureFiles.java`,
 then run `com.libertyvr.quest.TestPerfCaptureFiles` with a local temporary root.
 Provider listing/read is separately verified on the personal Quest 3 device.
+
+`test-vulkan-pipelines.ps1` executes production pipeline-key, standard warm-up
+and deferred-compilation code with a mocked driver. It checks ignored opaque
+blend-state reuse, independent depth-test/write coverage, strict HUD/effects
+isolation, compile counts/failure reporting, state restoration and cleared
+begin-frame snapshots. It is included in the current-source gate. The existing
+descriptor suite continues to check fence-based resource lifetime safety.
+Recorder/analysis tests cover schema 3 begin-frame columns, validity and stall
+attribution while retaining schema 1/2 compatibility. Host tests do not measure
+on-headset compilation latency, startup time or the resulting frame pacing.

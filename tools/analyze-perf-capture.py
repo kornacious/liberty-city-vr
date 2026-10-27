@@ -39,7 +39,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     metadata_path = path.with_name(path.name.replace(".frames.csv", ".session.csv"))
     with metadata_path.open(encoding="utf-8") as stream:
         metadata = dict((row["key"], row["value"]) for row in csv.DictReader(stream))
-    if metadata.get("schema") not in ("1", "2"):
+    if metadata.get("schema") not in ("1", "2", "3"):
         raise ValueError("Unsupported capture schema")
     complete = metadata.get("closed") == "1" and metadata.get("write_error") == "0"
     if not complete and not allow_incomplete:
@@ -96,8 +96,14 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     for key in ["frame_interval_ms", "cpu_local_ms", "vk_begin_ms", "step_ms",
                 "recorder_prepare_ms", "runtime_cpu_ms", "runtime_gpu_ms", "vulkan_gpu_ms",
                 "game_ms", "streaming_ms", "script_ms", "population_ms", "car_ms",
-                "world_process_ms", "world_list_ms", "world_render_ms", "render_fading_ms"]:
+                "world_process_ms", "world_list_ms", "world_render_ms", "render_fading_ms",
+                "vk_begin_pipeline_ms", "vk_begin_fence_wait_ms", "vk_begin_timestamp_ms",
+                "vk_begin_retirement_ms", "vk_begin_setup_ms", "vk_begin_wrist_ms",
+                "vk_begin_backend_total_ms"]:
         values = []
+        if key not in rows[0]:
+            timings[key] = None
+            continue
         phase_keys = ["game", "streaming", "population", "car", "audio", "world_list",
                       "pre_render", "scene_setup", "world_render", "ui", "particle_update",
                       "particle_render", "script", "pre_world_misc", "world_process",
@@ -105,12 +111,35 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
                       "render_world", "render_water", "render_fading", "render_weather", "render_effects"]
         phase_name = key.removesuffix("_ms")
         for row in selected:
+            if key.startswith("vk_begin_") and key != "vk_begin_ms" and row.get("vk_begin_detail_valid") != "1":
+                continue
             if key == "frame_interval_ms" and int(row["frame_id"]) not in interval_ids:
                 continue
             if phase_name in phase_keys and not int(row["phase_valid_mask"]) & (1 << phase_keys.index(phase_name)):
                 continue
             values.append(float(row[key]))
         timings[key] = distribution(values)
+    begin_parts = ["vk_begin_pipeline_ms", "vk_begin_fence_wait_ms", "vk_begin_timestamp_ms",
+                   "vk_begin_retirement_ms", "vk_begin_setup_ms", "vk_begin_wrist_ms"]
+    begin_stalls = []
+    for row in sorted(selected, key=lambda item: float(item["vk_begin_ms"]), reverse=True):
+        if row.get("vk_begin_detail_valid") != "1" or float(row["vk_begin_ms"]) < 5:
+            continue
+        parts = {key: float(row[key]) for key in begin_parts}
+        parts["vk_begin_outside_backend_ms"] = max(0.0,
+            float(row["vk_begin_ms"])-float(row["vk_begin_backend_total_ms"]))
+        begin_stalls.append({
+            "frame_id": int(row["frame_id"]),
+            "elapsed_s": (int(row["start_monotonic_ns"])-starts[0])/1e9,
+            "outer_begin_ms": float(row["vk_begin_ms"]), "parts_ms": parts,
+            "largest_recorded_section": max(parts, key=parts.get),
+            "counts": {key: int(row[key]) for key in ["vk_pipeline_requests", "vk_pipelines_created",
+                "vk_pipeline_failures", "vk_retired_buffers", "vk_retired_images",
+                "vk_retired_descriptors", "vk_upload_commands", "vk_framebuffer_created",
+                "vk_last_pipeline_key"]},
+        })
+        if len(begin_stalls) == 10:
+            break
     return {
         "file": str(path.resolve()), "metadata": metadata, "complete": complete,
         "rows": len(rows), "selected_rows": len(selected), "partial_rows_ignored": partial_rows,
@@ -125,11 +154,13 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
              "profiler_display_mode"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
+        "vk_begin_stalls_over_5ms_top10": begin_stalls,
         "notes": [
             "GPU samples are latest asynchronous observations, not attributed to the row's CPU frame.",
             "Frame intervals include pacing; they are not compositor missed-frame counts.",
             "Drops, canceled frames and selection gaps limit tail comparisons; inspect them before comparing.",
             "Recorder preparation excludes queue submission and disk-worker contention; measure total overhead separately.",
+            "Begin subphase timers are synchronous CPU wall times; waits/preemption can contribute to any section.",
         ],
     }
 

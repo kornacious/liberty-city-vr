@@ -120,6 +120,7 @@ struct State
 	VkDescriptorSetLayout textureLayout;
 	VkDescriptorSetLayout boneLayout;
 	VkPipelineLayout pipelineLayout;
+	VkPipelineCache pipelineCache;
 	VkDescriptorPool descriptorPool;
 
 	VkDeviceSize boneAlignment;
@@ -320,8 +321,10 @@ makePipelineKey(uint32 shader, VkPrimitiveTopology topology)
 	key |= (uint64)(shader & 0x7);
 	key |= (uint64)(topology & 0xF) << 3;
 	key |= (uint64)(blend ? 1 : 0) << 7;
-	key |= (uint64)(gstate.srcBlend & 0xF) << 8;
-	key |= (uint64)(gstate.dstBlend & 0xF) << 12;
+	// Blend factors have no effect when blending is disabled. Do not compile
+	// duplicate opaque pipelines for factors left over by shadows/coronas.
+	key |= (uint64)((blend ? gstate.srcBlend : BLENDSRCALPHA) & 0xF) << 8;
+	key |= (uint64)((blend ? gstate.dstBlend : BLENDINVSRCALPHA) & 0xF) << 12;
 	key |= (uint64)(gstate.zTestEnabled ? 1 : 0) << 16;
 	key |= (uint64)(gstate.zWriteEnabled ? 1 : 0) << 17;
 	key |= (uint64)(gstate.cullMode & 0x3) << 18;
@@ -645,6 +648,30 @@ createWhiteTexture(void)
 
 // ---------------------------------------------------------------------------
 
+static void
+warmStandardPipelines(void)
+{
+	const RenderState saved = gstate;
+	gstate.srcBlend = BLENDSRCALPHA;
+	gstate.dstBlend = BLENDINVSRCALPHA;
+	// Test and write are independent: fading/glass/particles commonly test
+	// existing depth without writing it. The old paired loop missed them.
+	for(int blend = 0; blend < 2; blend++)
+	for(int depthTest = 0; depthTest < 2; depthTest++)
+	for(int depthWrite = 0; depthWrite < 2; depthWrite++)
+	for(int alphaTest = 0; alphaTest < 2; alphaTest++)
+	for(int cull = 0; cull < 2; cull++){
+		gstate.vertexAlphaEnabled = blend;
+		gstate.zTestEnabled = depthTest;
+		gstate.zWriteEnabled = depthWrite;
+		gstate.cullMode = cull ? CULLBACK : CULLNONE;
+		gstate.alphaTestFunction = alphaTest ? ALPHAGREATEREQUAL : ALPHAALWAYS;
+		for(uint32 shader = 0; shader < SHADER_COUNT; shader++)
+			getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	}
+	gstate = saved;
+}
+
 bool32
 stateInit(void)
 {
@@ -907,6 +934,14 @@ stateInit(void)
 	if(!createWhiteTexture())
 		return 0;
 
+	// Share driver compilation results between related variants in this device
+	// lifetime. Failure is nonfatal: VK_NULL_HANDLE preserves the old path.
+	VkPipelineCacheCreateInfo cacheInfo = {};
+	cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+	if(vkCreatePipelineCache(gvk.device, &cacheInfo, nil, &gs.pipelineCache) != VK_SUCCESS){
+		gs.pipelineCache = VK_NULL_HANDLE;
+		VKERR("pipeline cache unavailable; using uncached creation");
+	}
 	gs.initialised = 1;
 
 	// Build the pipelines here rather than on first use.
@@ -929,25 +964,7 @@ stateInit(void)
 			getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 		}
 
-		// Every combination the fixed-function state can produce. Guessing one
-		// at a time was not converging, and the whole matrix costs well under
-		// a second: 16 state combinations across the shader variants, at
-		// roughly 15 ms each, once, at startup.
-		for(int blend = 0; blend < 2; blend++)
-		for(int depth = 0; depth < 2; depth++)
-		for(int alphaTest = 0; alphaTest < 2; alphaTest++)
-		for(int cull = 0; cull < 2; cull++){
-			gstate.vertexAlphaEnabled = blend;
-			gstate.zTestEnabled = depth;
-			gstate.zWriteEnabled = depth;
-			gstate.cullMode = cull ? CULLBACK : CULLNONE;
-			gstate.alphaTestFunction = alphaTest ? ALPHAGREATEREQUAL : ALPHAALWAYS;
-			for(uint32 shader = 0; shader < SHADER_COUNT; shader++){
-				VKLOG("warm blend=%d depth=%d alpha=%d cull=%d shader=%u",
-				      blend, depth, alphaTest, cull, shader);
-				getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-			}
-		}
+		warmStandardPipelines();
 
 		// Two extra Im2D pipelines reproduce the radar's depth mask. Warm them
 		// before the first frame so opening the HUD never causes a dropped draw.
@@ -998,6 +1015,8 @@ stateShutdown(void)
 	for(size_t i = 0; i < gs.pipelines.size(); i++)
 		vkDestroyPipeline(gvk.device, gs.pipelines[i].pipeline, nil);
 	gs.pipelines.clear();
+	if(gs.pipelineCache) vkDestroyPipelineCache(gvk.device, gs.pipelineCache, nil);
+	gs.pipelineCache = VK_NULL_HANDLE;
 
 	// SHADER_IM3D's fragment module aliases SHADER_WORLD's, so it must not be
 	// destroyed twice.
@@ -1407,7 +1426,7 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	PipelineEntry entry;
 	entry.key = key;
 	entry.pipeline = VK_NULL_HANDLE;
-	if(vkCreateGraphicsPipelines(gvk.device, VK_NULL_HANDLE, 1, &info, nil,
+	if(vkCreateGraphicsPipelines(gvk.device, gs.pipelineCache, 1, &info, nil,
 	                             &entry.pipeline) != VK_SUCCESS){
 		VKERR("vkCreateGraphicsPipelines failed for key %llu",
 		      (unsigned long long)key);
@@ -1428,7 +1447,7 @@ getPipeline(uint32 shader, VkPrimitiveTopology topology)
 }
 
 void
-compilePendingPipelines(void)
+compilePendingPipelines(FrameBeginStats *stats)
 {
 	if(gs.pending.empty() || gvk.inFrame)
 		return;
@@ -1436,9 +1455,16 @@ compilePendingPipelines(void)
 	const RenderState saved = gstate;
 	std::vector<PendingPipeline> work;
 	work.swap(gs.pending);
+	if(stats) stats->pipelineRequests = (uint32)work.size();
 	for(size_t i = 0; i < work.size(); i++){
 		gstate = work[i].state;
-		getPipelineForKey(work[i].shader, work[i].topology, work[i].key);
+		const size_t before = gs.pipelines.size();
+		const VkPipeline pipeline = getPipelineForKey(work[i].shader, work[i].topology, work[i].key);
+		if(stats){
+			stats->pipelinesCreated += (uint32)(gs.pipelines.size()-before);
+			stats->pipelineFailures += pipeline == VK_NULL_HANDLE ? 1 : 0;
+			stats->lastPipelineKey = work[i].key;
+		}
 	}
 	gstate = saved;
 }

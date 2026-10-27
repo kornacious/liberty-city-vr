@@ -1167,6 +1167,7 @@ QuestProfilerBeginAppFrame(void)
 {
 	if(!gProfilerEnabled)
 		return;
+	rw::vulkan::resetFrameBeginStats();
 	gAppFrameStartedMs = NowMilliseconds();
 	gCaptureFrame = {};
 	gCaptureFrame.id = ++gCaptureId;
@@ -1414,6 +1415,26 @@ QuestProfilerEndAppFrame(void)
 	gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
 	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
 	gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
+	rw::vulkan::FrameBeginStats begin = {};
+	if(rw::vulkan::getFrameBeginStats(&begin)){
+		gCaptureFrame.begin.valid = 1;
+		gCaptureFrame.begin.totalMs = begin.totalMs;
+		gCaptureFrame.begin.pipelineMs = begin.pipelineMs;
+		gCaptureFrame.begin.fenceWaitMs = begin.fenceWaitMs;
+		gCaptureFrame.begin.timestampMs = begin.timestampMs;
+		gCaptureFrame.begin.retirementMs = begin.retirementMs;
+		gCaptureFrame.begin.setupMs = begin.setupMs;
+		gCaptureFrame.begin.wristMs = begin.wristMs;
+		gCaptureFrame.begin.pipelineRequests = begin.pipelineRequests;
+		gCaptureFrame.begin.pipelinesCreated = begin.pipelinesCreated;
+		gCaptureFrame.begin.pipelineFailures = begin.pipelineFailures;
+		gCaptureFrame.begin.retiredBuffers = begin.retiredBuffers;
+		gCaptureFrame.begin.retiredImages = begin.retiredImages;
+		gCaptureFrame.begin.retiredDescriptors = begin.retiredDescriptors;
+		gCaptureFrame.begin.uploadCommands = begin.uploadCommands;
+		gCaptureFrame.begin.framebufferCreated = begin.framebufferCreated;
+		gCaptureFrame.begin.lastPipelineKey = begin.lastPipelineKey;
+	}
 	for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT; ++category)
 		gCaptureFrame.activeModels[category] = (int)ModelSets::GetActiveForCategory((ModelSets::eModelCategory)category);
 	gCaptureFrame.requestedModel = (int)ModelSets::GetRequested();

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include <time.h>
 #include <vector>
 
 #include "../rwbase.h"
@@ -45,6 +46,24 @@ static bool32 gLastDeviceOpenRenderTargetFailure;
 
 Globals gvk;
 RenderState gstate;
+
+static FrameBeginStats gFrameBeginStats;
+
+static double
+frameBeginNowMs(void)
+{
+	timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	return (double)now.tv_sec*1000.0+(double)now.tv_nsec/1000000.0;
+}
+
+void resetFrameBeginStats(void) { gFrameBeginStats = {}; }
+bool32 getFrameBeginStats(FrameBeginStats *out)
+{
+	if(out == nil) return 0;
+	*out = gFrameBeginStats;
+	return gFrameBeginStats.valid;
+}
 
 static VkRenderPass gScopeStorePass, gScopeLoadPass;
 static bool32 gScopeWanted, gScopeCapture, gScopeFrameValid;
@@ -2314,8 +2333,12 @@ getWristPanelRaster(int32 panel)
 bool32
 beginFrame(VkImage colourImage, VkImageView colourView)
 {
+	resetFrameBeginStats();
 	if(!gvk.initialised || gvk.inFrame)
 		return 0;
+	const bool measure = gvk.frameTimestampEnabled != 0;
+	const double beginStarted = measure ? frameBeginNowMs() : 0.0;
+	double sectionStarted = beginStarted;
 	// DoFade supplies this frame's opacity. Menus/early returns must not
 	// inherit an opaque loading mask from a previous frame.
 	gvk.postFxConstants.screenFade[3] = 0.0f;
@@ -2323,21 +2346,34 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 
 	// Anything a previous frame had to defer is built here, before a render
 	// pass is open. Compiling inside one does not return on this driver.
-	compilePendingPipelines();
+	compilePendingPipelines(measure ? &gFrameBeginStats : nil);
+	if(measure) gFrameBeginStats.pipelineMs = (float32)(frameBeginNowMs()-sectionStarted);
 
 	const uint32 frameIndex = gvk.nextFrame;
 	FrameContext &frame = gvk.frames[frameIndex];
 	if(frame.submissionPending){
 		// Wait only when this particular slot comes around again. The other
 		// slot remains on the GPU while the CPU records the new frame.
+		if(measure) sectionStarted = frameBeginNowMs();
 		if(vkWaitForFences(gvk.device, 1, &frame.fence, VK_TRUE,
 		                   UINT64_MAX) != VK_SUCCESS)
 			return 0;
+		if(measure) gFrameBeginStats.fenceWaitMs = (float32)(frameBeginNowMs()-sectionStarted);
 		frame.submissionPending = 0;
 		// Both timestamp readback and deferred resource destruction are now
 		// non-blocking and safe for this retired slot.
+		if(measure) sectionStarted = frameBeginNowMs();
 		readCompletedFrameTimestamps(frame);
+		if(measure){
+			gFrameBeginStats.timestampMs = (float32)(frameBeginNowMs()-sectionStarted);
+			gFrameBeginStats.retiredBuffers = (uint32)retiredBuffers[frameIndex].size();
+			gFrameBeginStats.retiredImages = (uint32)retiredImages[frameIndex].size();
+			gFrameBeginStats.retiredDescriptors = (uint32)retiredDescriptorSets[frameIndex].size();
+			gFrameBeginStats.uploadCommands = (uint32)frameUploadCommands[frameIndex].size();
+			sectionStarted = frameBeginNowMs();
+		}
 		flushRetired(frameIndex);
+		if(measure) gFrameBeginStats.retirementMs = (float32)(frameBeginNowMs()-sectionStarted);
 	}
 	gvk.activeFrame = frameIndex;
 	frame.reflectionCoverageComplete = 1;
@@ -2381,6 +2417,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 		frame.framebufferColourViews[cacheSlot] = colourView;
 		frame.framebuffers[cacheSlot] = framebuffer;
 		frame.framebuffer = framebuffer;
+		if(measure) gFrameBeginStats.framebufferCreated = 1;
 		VKLOG("cached OpenXR framebuffer frame=%u image=%u",
 		      frameIndex, cacheSlot);
 	}
@@ -2519,12 +2556,14 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	// The wrist panels render into their own targets here, while the frame is
 	// recording but no pass is open yet. It cannot be done later: the frame
 	// opens exactly one pass and runs every game draw inside it.
+	if(measure) sectionStarted = frameBeginNowMs();
 	gScopeCapture = gScopeWanted && ensureWristPanelTarget(WRIST_PANEL_COUNT);
 	gScopeFrameValid = 0;
 	gScopeDrawRole = 0;
 	gScopeWorldDraws.clear();
 	gScopeLensDraws.clear();
 	renderWristPanels();
+	if(measure) gFrameBeginStats.wristMs = (float32)(frameBeginNowMs()-sectionStarted);
 
 	// Open the multiview pass for the whole frame. Every draw the game issues
 	// has to land inside a render pass; without this they are recorded outside
@@ -2594,6 +2633,14 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 
 	gvk.inFrame = 1;
+	if(measure){
+		gFrameBeginStats.totalMs = (float32)(frameBeginNowMs()-beginStarted);
+		gFrameBeginStats.setupMs = gFrameBeginStats.totalMs-gFrameBeginStats.pipelineMs-
+			gFrameBeginStats.fenceWaitMs-gFrameBeginStats.timestampMs-
+			gFrameBeginStats.retirementMs-gFrameBeginStats.wristMs;
+		if(gFrameBeginStats.setupMs < 0) gFrameBeginStats.setupMs = 0;
+		gFrameBeginStats.valid = 1;
+	}
 	return 1;
 }
 
