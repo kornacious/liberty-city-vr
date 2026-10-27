@@ -61,9 +61,16 @@ static bool32 gpuPassRecording(void){
 	return gGpuRecordingActive && gvk.frameTimestampEnabled &&
 		gvk.frames[gvk.activeFrame].gpuEpoch==gGpuEpoch && gvk.frames[gvk.activeFrame].gpuProfile.sampled;
 }
+bool32 gpuProfileSampling(void){return gpuPassRecording();}
 void beginGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}
 void endGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}
-void countGpuProfileDraw(void){if(gpuPassRecording())gvk.frames[gvk.activeFrame].gpuProfile.Draw();}
+void countGpuProfileDraw(uint32 count,uint32 topology,uint32 flags){if(gpuPassRecording())gvk.frames[gvk.activeFrame].gpuProfile.Draw(count,topology,flags);}
+bool32 beginGpuProfileEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
+	if(!gpuPassRecording())return 0;
+	gvk.frames[gvk.activeFrame].gpuProfile.geometry.Begin(DrawProfile::Entity(model,entityClass,name,flags));
+	return 1;
+}
+void endGpuProfileEntity(void){if(gpuPassRecording())gvk.frames[gvk.activeFrame].gpuProfile.geometry.End();}
 bool32 getGpuPassProfile(GpuPassProfile::Result *out){
 	if(out==nil)return 0;
 	*out=gGpuPassResult;
@@ -2510,8 +2517,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	}
 	frame.gpuTimingActive=gvk.frameTimestampEnabled && frame.timestampQueryPool!=VK_NULL_HANDLE;
 	frame.gpuEpoch=gGpuEpoch;frame.gpuSourceId=gGpuSourceId;frame.gpuSourceStartNs=gGpuSourceStartNs;
-	frame.gpuProfile={};
-	frame.gpuProfile.sampled=frame.gpuTimingActive && GpuPassProfile::ShouldSample(frame.gpuSourceId);
+	frame.gpuProfile.Reset(frame.gpuTimingActive && GpuPassProfile::ShouldSample(frame.gpuSourceId));
 	if(frame.gpuTimingActive){
 		vkCmdResetQueryPool(gvk.frameCommands,
 		                    frame.timestampQueryPool, 0, frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2);
@@ -2770,7 +2776,7 @@ endFrame(void)
 			                        VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                        gvk.sgsrConvertPipelineLayout, 0, 1,
 			                        &frame.sgsrConvertDescriptor, 0, nil);
-			countGpuProfileDraw();
+			countGpuProfileDraw(3,3,0);
 			vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
 			vkCmdEndRenderPass(gvk.frameCommands);
 		}
@@ -2833,7 +2839,7 @@ endFrame(void)
 	vkCmdPushConstants(gvk.frameCommands, gvk.postFxPipelineLayout,
 	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0,
 	                   sizeof(gvk.postFxConstants), &gvk.postFxConstants);
-	countGpuProfileDraw();
+	countGpuProfileDraw(3,3,0);
 	vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
 	vkCmdEndRenderPass(gvk.frameCommands);
 	endGpuProfilePass(GpuPassProfile::Postprocess);

@@ -11,7 +11,7 @@ function Definition([string]$name){
     return $source.Substring($match.Index,$end-$match.Index)
 }
 $pieces=@()
-foreach($name in @('setGpuProfileFrame','writeGpuPassMarker','gpuPassRecording','beginGpuProfilePass','endGpuProfilePass','countGpuProfileDraw','getGpuPassProfile','readCompletedFrameTimestamps','setGpuFrameTimingEnabled','getGpuFrameTimeMs')){$pieces+=(Definition $name)}
+foreach($name in @('setGpuProfileFrame','writeGpuPassMarker','gpuPassRecording','gpuProfileSampling','beginGpuProfilePass','endGpuProfilePass','countGpuProfileDraw','beginGpuProfileEntity','endGpuProfileEntity','getGpuPassProfile','readCompletedFrameTimestamps','setGpuFrameTimingEnabled','getGpuFrameTimeMs')){$pieces+=(Definition $name)}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'gpu-pass-backend.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
 foreach($pattern in @('queryInfo.queryCount = GpuPassProfile::QueryCount','frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2','frame.timestampPending = frame.gpuTimingActive','beginGpuProfilePass(GpuPassProfile::Wrist)','beginGpuProfilePass(GpuPassProfile::Scope)','beginGpuProfilePass(GpuPassProfile::Postprocess)','beginGpuProfilePass(GpuPassProfile::Scene)','endGpuProfilePass(GpuPassProfile::Scene)')){
     if(-not$source.Contains($pattern)){throw "Missing GPU integration: $pattern"}
@@ -22,7 +22,7 @@ if($source -notmatch 'beginGpuProfilePass\(GpuPassProfile::Scene\);\s*vkCmdBegin
 }
 foreach($file in @('vkpipe.cpp','vkim.cpp')){
     $draw=[IO.File]::ReadAllText((Join-Path $kit ('librw/src/vulkan/'+$file)))
-    if(-not$draw.Contains('countGpuProfileDraw();')){throw "Missing actual draw accounting: $file"}
+    if(-not$draw.Contains('countGpuProfileDraw(')){throw "Missing actual draw accounting: $file"}
 }
 if((Definition 'readCompletedFrameTimestamps')-match'VK_QUERY_RESULT_WAIT_BIT'){throw 'GPU profiler must never wait for queries'}
 & (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir $OutDir -Sources @('test-gpu-pass-profile.cpp')

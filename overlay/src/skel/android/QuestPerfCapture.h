@@ -2,6 +2,8 @@
 
 // No engine objects cross the writer boundary. The game thread only copies
 // numeric samples into a bounded queue; formatting and disk I/O run elsewhere.
+#include "vulkan/DrawProfile.h"
+#include <memory>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -115,6 +117,7 @@ struct GpuPassStats {
     uint32_t mask=0,status=0;
     float frameMs=-1,ms[GpuPassCount];
     uint32_t draws[GpuPassCount]={};
+    std::shared_ptr<const DrawProfile::Stats> geometry;
     GpuPassStats(){for(float &v:ms)v=-1;}
 };
 struct Frame {
@@ -135,13 +138,14 @@ struct Frame {
 
 class Writer {
     static constexpr size_t Capacity = 1024;
-    std::array<Frame, Capacity> queue{};
+    std::unique_ptr<std::array<Frame,Capacity>> queue;
     size_t head = 0, count = 0;
     std::mutex mutex;
     std::condition_variable ready;
     std::thread worker;
     bool stopping = false;
-    FILE *frames = nullptr, *metadata = nullptr;
+    FILE *frames = nullptr, *metadata = nullptr, *draws = nullptr;
+    uint64_t lastDrawFrame=0,drawRows=0,drawSamples=0;
     std::atomic<uint64_t> dropped{0};
     uint64_t written = 0;
 
@@ -181,14 +185,33 @@ class Writer {
             b.pipelineFailures, b.retiredBuffers, b.retiredImages, b.retiredDescriptors,
             b.uploadCommands, b.framebufferCreated, (unsigned long long)b.lastPipelineKey);
         const GpuPassStats &g=f.gpu;
+        static const DrawProfile::Stats emptyGeometry;
+        const auto &geometry=g.geometry?*g.geometry:emptyGeometry;
         std::fprintf(frames,",%llu,%llu,%u,%u,%.6f",(unsigned long long)g.frameId,
             (unsigned long long)g.startNs,g.status,g.mask,g.frameMs);
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",%.6f,%u",g.ms[i],g.draws[i]);
         std::fputc('\n',frames);
+        if(g.frameId && g.frameId!=lastDrawFrame){
+            lastDrawFrame=g.frameId;
+            if(g.status==1){
+                ++drawSamples;
+                auto row=[&](const char *kind,unsigned pass,int model,int entityClass,const char *name,const uint32_t *counters){
+                    std::fprintf(draws,"%llu,%llu,%s,%s,%d,%d,%s,%u,%u",
+                        (unsigned long long)g.frameId,(unsigned long long)g.startNs,kind,GpuPassName(pass),
+                        model,entityClass,name,geometry.overflowDraws,geometry.contextOverflows);
+                    for(unsigned j=0;j<DrawProfile::CounterCount;++j)std::fprintf(draws,",%u",counters[j]);
+                    std::fputc('\n',draws);++drawRows;
+                };
+                for(unsigned i=0;i<GpuPassCount;++i)row("phase",i,-1,4,"all",geometry.passes[i]);
+                for(unsigned i=0;i<geometry.modelCount;++i){const auto &m=geometry.models[i];
+                    row("model",m.pass,m.entity.model,m.entity.entityClass,m.entity.name,m.counters);}
+            }
+        }
     }
     void Run()
     {
-        std::array<Frame, 128> batch{};
+        auto batchStorage=std::make_unique<std::array<Frame,128>>();
+        auto &batch=*batchStorage;
         bool failed = false;
         auto lastFlush = std::chrono::steady_clock::now();
         for(;;) {
@@ -198,7 +221,7 @@ class Writer {
                 ready.wait_for(lock, std::chrono::milliseconds(200), [this]{return count || stopping;});
                 n = count < batch.size() ? count : batch.size();
                 for(size_t i = 0; i < n; ++i) {
-                    batch[i] = queue[head];
+                    batch[i] = (*queue)[head];
                     head = (head+1)%Capacity;
                 }
                 count -= n;
@@ -207,19 +230,20 @@ class Writer {
             for(size_t i = 0; i < n; ++i) {
                 if(!failed) {
                     Write(batch[i]);
-                    failed = std::ferror(frames) != 0;
+                    failed = std::ferror(frames) != 0 || std::ferror(draws) != 0;
                 }
                 if(failed) ++dropped;
                 else ++written;
             }
             const auto now = std::chrono::steady_clock::now();
             if(now-lastFlush >= std::chrono::seconds(1)) {
-                if(std::fflush(frames) != 0) failed = true;
+                if(std::fflush(frames) != 0 || std::fflush(draws) != 0) failed = true;
                 lastFlush = now;
             }
         }
-        if(std::fflush(frames) != 0) failed = true;
-        std::fprintf(metadata, "written_rows,%llu\ndropped_rows,%llu\nwrite_error,%d\nclosed,1\n",
+        if(std::fflush(frames) != 0 || std::fflush(draws) != 0) failed = true;
+        std::fprintf(metadata, "draw_rows,%llu\ndraw_samples,%llu\nwritten_rows,%llu\ndropped_rows,%llu\nwrite_error,%d\nclosed,1\n",
+            (unsigned long long)drawRows,(unsigned long long)drawSamples,
             (unsigned long long)written, (unsigned long long)dropped.load(), failed ? 1 : 0);
     }
 public:
@@ -232,8 +256,14 @@ public:
         if(!frames) return false;
         metadata = OpenExclusive(stem+".session.csv");
         if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
+        draws = OpenExclusive(stem+".draws.csv");
+        if(!draws){std::fclose(frames);std::fclose(metadata);frames=metadata=nullptr;return false;}
+        std::setvbuf(draws,nullptr,_IOFBF,64*1024);
+        std::fputs("source_frame_id,source_start_ns,kind,phase,model_id,entity_class,model_name,model_overflow_draws,context_overflows",draws);
+        for(unsigned i=0;i<DrawProfile::CounterCount;++i)std::fprintf(draws,",%s",DrawProfile::Name(i));
+        std::fputc('\n',draws);
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,5\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\ngpu_pass_timing_buckets,scene_scope_wrist_resolve_postprocess_other\ngpu_pass_scene_scope,whole_scene_including_msaa_resolve_and_store\ngpu_pass_draw_scope,logical_phase_independent_of_timing_mask\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
+        std::fputs("key,value\nschema,6\ndraw_profile,sampled_source_matched_companion_draws_csv\ndraw_model_capacity,512\ndraw_entity_classes,0_building_1_vehicle_2_ped_3_object_4_unknown\ndraw_triangles,submitted_including_split_passes_strip_degenerates_not_removed_not_multiplied_by_eyes\ndraw_reasons,overlapping_draw_flags_not_exclusive_pixel_costs\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\ngpu_pass_timing_buckets,scene_scope_wrist_resolve_postprocess_other\ngpu_pass_scene_scope,whole_scene_including_msaa_resolve_and_store\ngpu_pass_draw_scope,logical_phase_independent_of_timing_mask\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
@@ -249,12 +279,14 @@ public:
         std::fputs(",gpu_pass_frame_id,gpu_pass_start_monotonic_ns,gpu_pass_status,gpu_pass_valid_mask,gpu_pass_frame_ms",frames);
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",gpu_pass_%s_ms,gpu_pass_%s_draw_calls",GpuPassName(i),GpuPassName(i));
         std::fputc('\n',frames);
-        if(std::ferror(frames) || std::ferror(metadata)) {
-            std::fclose(frames); std::fclose(metadata);
-            frames = metadata = nullptr;
+        if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
+            std::fclose(frames); std::fclose(metadata); std::fclose(draws);
+            frames = metadata = draws = nullptr;
             return false;
         }
+        lastDrawFrame=drawRows=drawSamples=0;
         head = count = 0; written = 0; dropped = 0; stopping = false;
+        queue=std::make_unique<std::array<Frame,Capacity>>();
         worker = std::thread(&Writer::Run, this);
         return true;
     }
@@ -263,7 +295,7 @@ public:
         if(!worker.joinable()) return false;
         std::unique_lock<std::mutex> lock(mutex, std::try_to_lock);
         if(!lock.owns_lock() || count == Capacity) { ++dropped; return false; }
-        queue[(head+count)%Capacity] = frame;
+        (*queue)[(head+count)%Capacity] = frame;
         ++count;
         if(count >= 64) ready.notify_one();
         return true;
@@ -277,7 +309,9 @@ public:
         }
         if(frames) std::fclose(frames);
         if(metadata) std::fclose(metadata);
-        frames = metadata = nullptr;
+        if(draws) std::fclose(draws);
+        frames = metadata = draws = nullptr;
+        queue.reset();
     }
 };
 } // namespace questperf

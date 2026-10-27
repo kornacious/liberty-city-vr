@@ -2033,7 +2033,7 @@ index 2a757863..575e2c6d 100644
  	if(gbShowCollisionPolys)
  		CCollision::DrawColModel_Coloured(e->GetMatrix(), *CModelInfo::GetColModel(e->GetModelIndex()), e->GetModelIndex());
  	else
-@@ -174,23 +197,36 @@ CRenderer::RenderOneRoad(CEntity *e)
+@@ -174,23 +197,39 @@ CRenderer::RenderOneRoad(CEntity *e)
  #ifdef EXTRA_MODEL_FLAGS
  	if(!e->IsBuilding() || CModelInfo::GetModelInfo(e->GetModelIndex())->RenderDoubleSided()){
  		BACKFACE_CULLING_OFF;
@@ -2061,6 +2061,9 @@ index 2a757863..575e2c6d 100644
 +	// Apply the same tracked-view rejection as the other submission points.
 +	if(!ShouldRenderInCurrentView(e))
 +		return;
++#endif
++#ifdef RW_VULKAN
++	GameRender::ProfileEntity profile(e);
 +#endif
 +
  	CPed *ped;
@@ -3606,12 +3609,13 @@ diff --git a/src/rw/VisibilityPlugins.cpp b/src/rw/VisibilityPlugins.cpp
 index 40f719a4..cce1d58c 100644
 --- a/src/rw/VisibilityPlugins.cpp
 +++ b/src/rw/VisibilityPlugins.cpp
-@@ -12,6 +12,13 @@
+@@ -12,6 +12,14 @@
  #include "World.h"
  #include "custompipes.h"
  #include "MemoryHeap.h"
 +#ifdef RW_VULKAN
 +#include "vulkan/rwvk.h"
++#include "GameRenderCommand.h"
 +#ifdef __ANDROID__
 +#include "QuestProfiler.h"
 +#include "VrRagdoll.h"
@@ -3698,11 +3702,12 @@ index 40f719a4..cce1d58c 100644
  #ifdef EXTENDED_PIPELINES
  		if(CustomPipes::bRenderingEnvMap && (e->IsPed() || e->IsVehicle()))
  			continue;
-@@ -324,6 +373,10 @@ CVisibilityPlugins::RenderFadingEntities(void)
+@@ -324,6 +373,11 @@ CVisibilityPlugins::RenderFadingEntities(void)
  #endif
  
  		if(e->bDistanceFade){
 +#if defined(RW_VULKAN) && defined(__ANDROID__)
++			GameRender::ProfileEntity profile(e);
 +			if(e->IsBuilding())
 +				androidgame::QuestProfilerCountVisibleBuilding(e);
 +#endif

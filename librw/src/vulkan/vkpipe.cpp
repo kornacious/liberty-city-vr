@@ -660,6 +660,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			gstate.zWriteEnabled = 0;
 		const uint32 savedAlphaFunction = gstate.alphaTestFunction;
 		if(vehicleSplit) gstate.alphaTestFunction = ALPHAGREATEREQUAL;
+		const bool profileDepthWrite = gstate.zWriteEnabled != 0;
+		const bool profileAlphaTest = gstate.alphaTestFunction != ALPHAALWAYS;
 		VkPipeline pipeline = getPipeline(shader,
 		                                  (VkPrimitiveTopology)header->primType);
 		gstate.zWriteEnabled = savedZWrite;
@@ -743,7 +745,17 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
 			header->ibo, 0, inst->numIndex, inst->offset / 2, boneOffset, atomic);
-		countGpuProfileDraw();
+		countGpuProfileDraw(inst->numIndex, header->primType,
+            (gsPass==0?DrawProfile::Mesh:DrawProfile::Extra) |
+            (wantsBlend?DrawProfile::HasAlpha:0) |
+            (textureAlpha?DrawProfile::HasTextureAlpha:0) |
+            (inst->vertexAlpha?DrawProfile::HasVertexAlpha:0) |
+            (material&&material->color.alpha!=255?DrawProfile::HasMaterialAlpha:0) |
+            (profileAlphaTest?DrawProfile::HasAlphaTest:0) |
+            (profileDepthWrite?DrawProfile::WritesDepth:0) |
+            (gsSplit&&!vehicleSplit?DrawProfile::Ps2:0) |
+            (vehicleSplit?DrawProfile::Vehicle:0) |
+            (boneOffset?DrawProfile::Skin:0));
 		vkCmdDrawIndexed(commandBuffer, inst->numIndex, 1,
 		                 inst->offset / 2, 0, 0);
 		}

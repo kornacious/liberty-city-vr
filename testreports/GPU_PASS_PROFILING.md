@@ -94,7 +94,7 @@ The [Vulkan timestamp command rules](https://docs.vulkan.org/refpages/latest/ref
 define multiview slot consumption; the [official timestamp sample](https://docs.vulkan.org/samples/latest/samples/api/timestamp_queries/README.html)
 explains timestamp stages, pipeline overlap and execution dependencies.
 
-## Capture schema 5 and analysis
+## Capture schemas 5-6 and analysis
 
 The existing `.frames.csv` / `.session.csv` export endpoints and file names
 remain unchanged. The original schema 4 columns keep their order; `gpu_pass_scene_ms` and
@@ -114,7 +114,11 @@ Session metadata records sampling interval, timestamp scope, status meanings
 and tail behavior. The latest completed sampled result can repeat in several
 CPU rows; this is intentional and must not inflate the sample count.
 
-`tools/analyze-perf-capture.py` supports schemas 1-5. Its `gpu_pass_profile`
+Schema 6 additionally writes sampled geometry, material reasons and model-owner
+detail to a `.draws.csv` companion without changing the frame columns. See
+[draw profiling](DRAW_PROFILE_PROFILING.md) for counters and export instructions.
+
+`tools/analyze-perf-capture.py` supports schemas 1-6. Its `gpu_pass_profile`
 summary deduplicates source IDs, verifies source monotonic timestamps, filters
 using source-frame gameplay state, and reports unavailable/unmatched samples.
 It summarizes timings using the timing mask and draw counts independently,

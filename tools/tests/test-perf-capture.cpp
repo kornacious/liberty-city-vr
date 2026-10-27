@@ -94,6 +94,12 @@ int main()
     frame.gpu.frameId=1;frame.gpu.startNs=10000000;frame.gpu.status=GpuPassProfile::Complete;
     frame.gpu.mask=1u<<GpuPassProfile::Scene;frame.gpu.frameMs=4.125f;
     frame.gpu.ms[GpuPassProfile::Scene]=1.234567f;frame.gpu.draws[GpuPassProfile::Fading]=123;
+    DrawProfile::Recording detail;
+    detail.Begin(DrawProfile::Entity(10,0,"test_model",DrawProfile::Distance));
+    for(unsigned i=0;i<123;++i)detail.Draw(GpuPassProfile::Fading,12,3,
+        i%2?DrawProfile::Extra|DrawProfile::Ps2:DrawProfile::Mesh|DrawProfile::Ps2);
+    detail.End();
+    frame.gpu.geometry=std::make_shared<const DrawProfile::Stats>(detail.stats);
     unsigned accepted = 0;
     constexpr unsigned attempts = 20000;
     for(unsigned i = 1; i <= attempts; ++i) {
@@ -101,6 +107,7 @@ int main()
         if(writer.Submit(frame)) ++accepted;
     }
     writer.Stop(); writer.Stop();
+    frame.gpu.geometry.reset(); // Queued immutable snapshots owned their data.
     assert(accepted > 0);
     assert(!writer.Start(stem, "overwrite_attempt,1\n"));
     std::ifstream input(stem+".frames.csv");
@@ -151,12 +158,32 @@ int main()
     std::ifstream metadata(stem+".session.csv");
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
-    assert(all.find("schema,5\n") != std::string::npos);
+    assert(all.find("schema,6\n") != std::string::npos);
     assert(all.find("gpu_pass_interval_frames,8\n")!=std::string::npos);
     assert(all.find("gpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\n")!=std::string::npos);
     assert(all.find("written_rows,"+std::to_string(rows)+"\n") != std::string::npos);
     assert(all.find("dropped_rows,"+std::to_string(attempts-accepted)+"\n") != std::string::npos);
     assert(all.find("closed,1\n") != std::string::npos);
+    assert(all.find("draw_samples,1\n") != std::string::npos);
+    assert(all.find("draw_rows,15\n") != std::string::npos); // 14 phases + one model; no repeated payloads.
+    std::ifstream drawFile(stem+".draws.csv");
+    assert(bool(std::getline(drawFile,line)));
+    const auto drawHeader=Cells(line);
+    auto drawColumn=[&](const char *name){return size_t(std::find(drawHeader.begin(),drawHeader.end(),name)-drawHeader.begin());};
+    unsigned detailRows=0;
+    while(std::getline(drawFile,line)){
+        const auto cells=Cells(line);assert(cells.size()==drawHeader.size());++detailRows;
+        assert(cells[0]=="1"&&cells[1]=="10000000");
+        if(cells[2]=="model"){
+            assert(cells[3]=="fading"&&cells[4]=="10"&&cells[6]=="test_model");
+            assert(std::stoul(cells[drawColumn("draws")])==123);
+            assert(std::stoul(cells[drawColumn("triangles")])==492);
+            assert(std::stoul(cells[drawColumn("mesh_passes")])==62);
+            assert(std::stoul(cells[drawColumn("extra_split_draws")])==61);
+            assert(std::stoul(cells[drawColumn("distance_fade_draws")])==123);
+        }
+    }
+    assert(detailRows==15);
     assert(all.find("write_error,0\n") != std::string::npos);
     assert(all.find("overwrite_attempt") == std::string::npos);
     std::printf("PASS: player transitions, raw timing precision, CSV schema, bounded writer accounting, shutdown drain and exclusive sessions (%u rows).\n", rows);

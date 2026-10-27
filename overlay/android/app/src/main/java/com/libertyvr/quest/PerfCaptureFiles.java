@@ -11,7 +11,7 @@ final class PerfCaptureFiles {
 
     static boolean validName(String name, boolean replay) {
         return name != null && name.length() <= 128 && name.matches(
-                "[0-9]{8}T[0-9]{6}Z-[0-9]+\\." + (replay ? "(sim|run)" : "(frames|session)") + "\\.csv");
+                "[0-9]{8}T[0-9]{6}Z-[0-9]+\\." + (replay ? "(sim|run)" : "(frames|session|draws)") + "\\.csv");
     }
 
     static File directory(File externalRoot) throws IOException {

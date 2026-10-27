@@ -2,6 +2,10 @@
 
 #include "Entity.h"
 #include "GameRenderCommand.h"
+#ifdef RW_VULKAN
+#include "ModelInfo.h"
+#include "vulkan/rwvk.h"
+#endif
 
 #ifdef RW_D3D12
 namespace rw { namespace d3d12 {
@@ -18,6 +22,21 @@ int32 setPhysicalScopeDrawRole(int32 role);
 
 namespace GameRender
 {
+ProfileEntity::ProfileEntity(CEntity *entity){
+#ifdef RW_VULKAN
+	if(entity&&rw::vulkan::gpuProfileSampling())active=rw::vulkan::beginGpuProfileEntity(entity->GetModelIndex(),
+		entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
+		CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),
+		entity->bDistanceFade?DrawProfile::Distance:0)!=0;
+#else
+	(void)entity;
+#endif
+}
+ProfileEntity::~ProfileEntity(){
+#ifdef RW_VULKAN
+	if(active)rw::vulkan::endGpuProfileEntity();
+#endif
+}
 namespace
 {
 class RenderWareBackend : public IBackend
@@ -27,6 +46,7 @@ public:
 	{
 		if(command.entity == nil || command.entity->m_rwObject == nil)
 			return;
+		ProfileEntity profile(command.entity);
 		command.entity->Render();
 	}
 

@@ -1446,6 +1446,16 @@ QuestProfilerEndAppFrame(void)
 	GpuPassProfile::Result passes;
 	if(rw::vulkan::getGpuPassProfile(&passes)){
 		gCaptureFrame.gpu.frameId=passes.frameId;gCaptureFrame.gpu.startNs=passes.startNs;
+		// One immutable allocation per sampled result, shared by repeated
+        // readbacks and the async writer instead of copying the model table
+        // into every CPU frame/queue slot. IDs plus clock reject new sessions.
+        static uint64 geometryId=0,geometryNs=0;
+        static std::shared_ptr<const DrawProfile::Stats> geometry;
+        if(geometryId!=passes.frameId||geometryNs!=passes.startNs){
+            geometry=std::make_shared<const DrawProfile::Stats>(passes.geometry);
+            geometryId=passes.frameId;geometryNs=passes.startNs;
+        }
+        gCaptureFrame.gpu.geometry=geometry;
 		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
 		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
 	}

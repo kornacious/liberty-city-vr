@@ -10,6 +10,55 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_draw_companion_alignment_reconciliation_and_missing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"test.frames.csv"
+            rows=[dict(frame_id=str(i),start_monotonic_ns=str(i*10000000)) for i in range(1,5)]
+            for readback,source in [(3,1),(4,2)]:
+                rows[readback-1].update(gpu_pass_frame_id=str(source),gpu_pass_status="1",
+                    gpu_pass_start_monotonic_ns=str(source*10000000),gpu_pass_frame_ms="9")
+                for phase in analysis.GPU_PASSES:
+                    rows[readback-1][f"gpu_pass_{phase}_draw_calls"]="3" if phase=="world" else "0"
+            missing=analysis.summarize_draw_details(path,rows,{1,2},{})
+            self.assertFalse(missing["available"])
+            companion=path.with_name("test.draws.csv")
+            fields=["source_frame_id","source_start_ns","kind","phase","model_id","entity_class",
+                    "model_name","model_overflow_draws","context_overflows"]+analysis.DRAW_COUNTERS
+            def write(corrupt=False,overflow=False):
+                with companion.open("w",newline="") as stream:
+                    writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader()
+                    for source in [1,2]:
+                        for phase in analysis.GPU_PASSES:
+                            row=dict.fromkeys(analysis.DRAW_COUNTERS,0)
+                            row.update(source_frame_id=source,source_start_ns=source*10000000,kind="phase",
+                                phase=phase,model_id=-1,entity_class=4,model_name="all",
+                                model_overflow_draws=1 if overflow else 0,context_overflows=0)
+                            if phase=="world":row.update(draws=3,triangles=12,geometry_known_draws=3,mesh_passes=3)
+                            writer.writerow(row)
+                        row.update(kind="model",phase="world",model_id=10,entity_class=0,model_name="building",
+                            draws=2 if overflow else 3,triangles=8 if overflow else 12,
+                            geometry_known_draws=2 if overflow else 3,mesh_passes=2 if overflow else 3)
+                        if corrupt and source==1:row["source_start_ns"]=1
+                        writer.writerow(row)
+            write()
+            result=analysis.summarize_draw_details(path,rows,{1},{"draw_rows":"30"})
+            self.assertEqual(result["samples"],1)
+            self.assertEqual(result["excluded_nongameplay_sources"],1)
+            self.assertEqual(result["invalid_source_groups"],0)
+            self.assertEqual(result["phases"]["world"]["mean_per_sample"]["triangles"],12)
+            self.assertEqual(result["top_models_by_draws"][0]["mean_draws_per_sample"],3)
+            self.assertEqual(result["slow_5s_windows"][0]["source_elapsed_s"],0)
+            self.assertTrue(result["row_count_matches_metadata"])
+            write(corrupt=True)
+            result=analysis.summarize_draw_details(path,rows,{1,2},{})
+            self.assertEqual(result["invalid_source_groups"],1)
+            self.assertEqual(result["missing_gpu_sources"],1)
+            write(overflow=True)
+            result=analysis.summarize_draw_details(path,rows,{1,2},{})
+            self.assertEqual(result["model_overflow_draws"],2)
+            self.assertEqual(result["phases"]["world"]["mean_per_sample"]["draws"],3)
+            self.assertEqual(result["top_models_by_draws"][0]["mean_draws_per_sample"],2)
+
     def test_whole_render_pass_timing_keeps_draw_only_phases(self):
         row = dict(frame_id="1", start_monotonic_ns="10000000",
                    gpu_pass_frame_id="1", gpu_pass_start_monotonic_ns="10000000",

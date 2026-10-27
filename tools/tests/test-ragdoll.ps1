@@ -54,6 +54,7 @@ foreach ($sourceName in $Sources) {
     $obj = Join-Path $OutDir ($stem + '.obj')
     & $compiler /nologo /EHsc /W4 /WX /std:c++17 /MT /O2 `
         ('/I' + $physicsDir) ('/I' + $PSScriptRoot) `
+        ('/I' + (Join-Path $KitRoot 'librw/src')) `
         ('/I' + (Join-Path $vc 'include')) `
         ('/I' + (Join-Path $sdk ('Include\' + $sdkVersion + '\ucrt'))) `
         $source ('/Fo' + $obj) ('/Fe' + $exe) /link `

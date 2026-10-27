@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-using uint64=uint64_t;using uint32=uint32_t;using bool32=int;using float32=float;
+using uint64=uint64_t;using uint32=uint32_t;using int32=int;using bool32=int;using float32=float;
 #define nil nullptr
 enum {VK_NULL_HANDLE=0,VK_SUCCESS=0,VK_NOT_READY=1,VK_QUERY_RESULT_64_BIT=1,VK_QUERY_RESULT_WITH_AVAILABILITY_BIT=2,VK_QUERY_RESULT_WAIT_BIT=4,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT=8};
 using VkResult=int;
@@ -36,11 +36,12 @@ static VkResult vkGetQueryPoolResults(int,int,unsigned first,unsigned count,size
     std::memcpy(out,values,count*sizeof(values[0]));readCount=count;
     return VK_NOT_READY; // Spare mono query lanes are intentionally unwritten.
 }
+void countGpuProfileDraw(uint32 count=0,uint32 topology=~0u,uint32 flags=0);
 #include "gpu-pass-backend.inc"
 static void Start(uint64 id=8,unsigned slot=0){
     gvk.frameTimestampValidBits=64;gvk.activeFrame=int(slot);setGpuProfileFrame(id,id*1000);gGpuRecordingActive=1;
     auto &f=gvk.frames[slot];f.gpuEpoch=gGpuEpoch;f.gpuSourceId=gGpuSourceId;f.gpuSourceStartNs=gGpuSourceStartNs;
-    f.gpuTimingActive=1;f.timestampPending=1;f.gpuProfile={};f.gpuProfile.sampled=true;
+    f.gpuTimingActive=1;f.timestampPending=1;f.gpuProfile.Reset(true);
     std::memset(values,0,sizeof(values));values[0][0]=100;values[0][1]=1;values[1][0]=1100;values[1][1]=1;tick=200;writes=0;
 }
 static void Decode(){readCompletedFrameTimestamps(gvk.frames[gvk.activeFrame]);}
@@ -90,5 +91,39 @@ int main(){
     assert(std::fabs(result.ms[Postprocess]-.2f)<1e-6f&&std::fabs(result.ms[Scope]-.1f)<1e-6f);
     float sum=0;for(unsigned i=0;i<Count;++i)if(result.mask&(1u<<i))sum+=result.ms[i];
     assert(std::fabs(sum-result.frameMs)<1e-6f&&result.draws[Scope]==1);
+    Start();beginGpuProfilePass(Scene);beginGpuProfilePass(Fading);
+    assert(gpuProfileSampling());
+    assert(beginGpuProfileEntity(10,0,"road,\"name",DrawProfile::Distance));
+    countGpuProfileDraw(12,3,DrawProfile::Mesh|DrawProfile::HasAlpha|DrawProfile::Ps2);
+    countGpuProfileDraw(12,3,DrawProfile::Extra|DrawProfile::HasAlpha|DrawProfile::Ps2);
+    beginGpuProfileEntity(20,1,"car",0);countGpuProfileDraw(8,4,DrawProfile::Mesh|DrawProfile::Skin);endGpuProfileEntity();
+    countGpuProfileDraw(6,3,DrawProfile::Mesh);endGpuProfileEntity();
+    endGpuProfilePass(Fading);endGpuProfilePass(Scene);Decode();
+    assert(getGpuPassProfile(&result)&&result.status==Complete);
+    const auto &details=result.geometry;
+    assert(details.modelCount==2&&details.overflowDraws==0);
+    assert(details.passes[Fading][DrawProfile::Draws]==4&&result.draws[Fading]==4);
+    assert(details.passes[Fading][DrawProfile::Triangles]==16);
+    assert(details.passes[Fading][DrawProfile::MeshPasses]==3&&details.passes[Fading][DrawProfile::ExtraSplit]==1);
+    assert(details.models[0].counters[DrawProfile::DistanceFade]==3&&details.models[1].counters[DrawProfile::DistanceFade]==0);
+    assert(std::strcmp(details.models[0].entity.name,"road__name")==0);
+    DrawProfile::Recording bounded;
+    for(unsigned i=0;i<DrawProfile::MaxModels+10;++i){
+        bounded.Begin(DrawProfile::Entity(int(i),0,"model",0));bounded.Draw(World,3,3,0);bounded.End();
+    }
+    assert(bounded.stats.modelCount==DrawProfile::MaxModels&&bounded.stats.overflowDraws==10);
+    assert(bounded.stats.passes[World][DrawProfile::Draws]==DrawProfile::MaxModels+10);
+    // Overflow doesn't prevent later updates to an already tracked model.
+    bounded.Begin(DrawProfile::Entity(0,0,"model",0));bounded.Draw(World,2,1,0);bounded.End();
+    assert(bounded.stats.models[0].counters[DrawProfile::Draws]==2&&bounded.stats.models[0].counters[DrawProfile::Triangles]==1);
+    for(unsigned i=0;i<DrawProfile::ContextDepth+2;++i)bounded.Begin(DrawProfile::Entity(int(i),0,"nested",0));
+    assert(bounded.entity.model==-1&&bounded.stats.contextOverflows==2);
+    bounded.End();bounded.End();assert(bounded.entity.model==int(DrawProfile::ContextDepth-1));
+    for(unsigned i=0;i<DrawProfile::ContextDepth;++i)bounded.End();
+    assert(bounded.depth==0&&bounded.entity.model==-1);
+    Start();gvk.frames[0].gpuProfile.sampled=false;
+    assert(!gpuProfileSampling()&&!beginGpuProfileEntity(1,0,"disabled",0));
+    countGpuProfileDraw(900,3,DrawProfile::Mesh);endGpuProfileEntity();
+    assert(gvk.frames[0].gpuProfile.geometry.stats.modelCount==0&&writes==0);
     std::puts("PASS: GPU pass production hooks/readback, stereo query bounds, nested/repeated passes, draw attribution, availability, wrapping, overflow, disabled/sampled paths and session isolation.");
 }

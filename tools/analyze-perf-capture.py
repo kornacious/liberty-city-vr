@@ -17,6 +17,148 @@ EVENTS = {
 
 GPU_PASSES = ["sky", "roads", "reflections", "world", "water", "fading", "weather",
               "effects", "ui", "scope", "wrist", "resolve_postprocess", "other", "scene"]
+DRAW_COUNTERS = ["draws", "elements", "triangles", "geometry_known_draws", "mesh_passes",
+                 "extra_split_draws", "alpha_requested_draws", "texture_alpha_draws",
+                 "vertex_alpha_draws", "material_alpha_draws", "alpha_test_draws",
+                 "depth_write_draws", "ps2_split_draws", "vehicle_split_draws",
+                 "distance_fade_draws", "skinned_draws"]
+
+
+def summarize_draw_details(path, rows, selected_ids, metadata):
+    companion = path.with_name(path.name.replace(".frames.csv", ".draws.csv"))
+    if not companion.is_file():
+        return {"available": False, "reason": "Missing .draws.csv companion", "file": str(companion)}
+    sources = {int(r["frame_id"]): r for r in rows}
+    gpu = {}
+    for r in rows:
+        source = int(r.get("gpu_pass_frame_id", 0))
+        if (r.get("gpu_pass_status") == "1" and source in sources and source <= int(r["frame_id"])
+                and r["gpu_pass_start_monotonic_ns"] == sources[source]["start_monotonic_ns"]
+                and math.isfinite(float(r["gpu_pass_frame_ms"])) and float(r["gpu_pass_frame_ms"]) >= 0):
+            gpu[source] = r
+    accepted, seen = set(), set()
+    phases, models, windows = {}, {}, {}
+    invalid = excluded = unmatched = count_rows = overflow = contexts = unattributed = 0
+    start_ns = int(rows[0]["start_monotonic_ns"])
+
+    def accumulate(target, key, values):
+        target.setdefault(key, Counter()).update(values)
+
+    def consume(group):
+        nonlocal invalid, excluded, unmatched, overflow, contexts, unattributed
+        try:
+            source = int(group[0]["source_frame_id"])
+            if source in seen:
+                raise ValueError("Repeated source group")
+            seen.add(source)
+            if source not in sources or source not in gpu:
+                unmatched += 1
+                return
+            if any(int(r["source_start_ns"]) != int(sources[source]["start_monotonic_ns"]) for r in group):
+                raise ValueError("Source timestamp mismatch")
+            if source not in selected_ids:
+                excluded += 1
+                return
+            totals, detail, keys = {}, [], set()
+            lost = int(group[0]["model_overflow_draws"])
+            context = int(group[0]["context_overflows"])
+            if lost < 0 or context < 0:
+                raise ValueError("Negative loss counts")
+            for r in group:
+                phase = r["phase"]
+                values = {k: int(r[k]) for k in DRAW_COUNTERS}
+                if phase not in GPU_PASSES or any(v < 0 for v in values.values()):
+                    raise ValueError("Invalid counters")
+                if int(r["model_overflow_draws"]) != lost or int(r["context_overflows"]) != context:
+                    raise ValueError("Inconsistent source loss counts")
+                if r["kind"] == "phase":
+                    key = ("phase", phase)
+                    totals[phase] = values
+                elif r["kind"] == "model":
+                    key = (phase, int(r["model_id"]), int(r["entity_class"]), r["model_name"])
+                    detail.append((key, values))
+                else:
+                    raise ValueError("Invalid record kind")
+                if key in keys:
+                    raise ValueError("Repeated source bucket")
+                keys.add(key)
+            if set(totals) != set(GPU_PASSES):
+                raise ValueError("Incomplete phase group")
+            sums = {phase: Counter() for phase in GPU_PASSES}
+            for key, values in detail:
+                sums[key[0]].update(values)
+            for phase in GPU_PASSES:
+                if totals[phase]["draws"] != int(gpu[source][f"gpu_pass_{phase}_draw_calls"]):
+                    raise ValueError("Draw counts disagree with GPU payload")
+                if any(sums[phase][k] > totals[phase][k] for k in DRAW_COUNTERS):
+                    raise ValueError("Model counters exceed phase totals")
+                if not lost and any(sums[phase][k] != totals[phase][k] for k in DRAW_COUNTERS):
+                    raise ValueError("Unaccounted model counters")
+            if sum(v["draws"] for v in totals.values())-sum(v["draws"] for _, v in detail) != lost:
+                raise ValueError("Overflow does not reconcile")
+            second = int(((int(sources[source]["start_monotonic_ns"])-start_ns)/1e9)//5)*5
+            window = windows.setdefault(second, {"samples": 0, "gpu_sum": 0, "phases": {}, "models": {}})
+            window["samples"] += 1
+            window["gpu_sum"] += float(gpu[source]["gpu_pass_frame_ms"])
+            for phase, values in totals.items():
+                accumulate(phases, phase, values)
+                accumulate(window["phases"], phase, values)
+            for key, values in detail:
+                accumulate(models, key, values)
+                accumulate(window["models"], key, values)
+                if key[1] < 0:
+                    unattributed += values["draws"]
+            overflow += lost
+            contexts += context
+            accepted.add(source)
+        except (KeyError, ValueError, TypeError):
+            invalid += 1
+
+    with companion.open(newline="", encoding="utf-8") as stream:
+        group, identity = [], None
+        for row in csv.DictReader(stream):
+            count_rows += 1
+            next_id = row.get("source_frame_id")
+            if group and next_id != identity:
+                consume(group)
+                group = []
+            identity = next_id
+            group.append(row)
+        if group:
+            consume(group)
+
+    def phase_summary(data, n):
+        return {phase: {"totals": dict(values), "mean_per_sample": {k: v/n for k, v in values.items()}}
+                for phase, values in data.items()} if n else {}
+
+    def model_summary(data, n, rank="draws"):
+        return [{"phase": key[0], "model_id": key[1], "entity_class": key[2], "name": key[3],
+                 "totals": dict(values), "mean_draws_per_sample": values["draws"]/n,
+                 "mean_triangles_per_sample": values["triangles"]/n}
+                for key, values in sorted(data.items(), key=lambda item: item[1][rank], reverse=True)[:20]] if n else []
+
+    n = len(accepted)
+    total_draws = sum(v["draws"] for v in phases.values())
+    return {"available": bool(n), "file": str(companion.resolve()), "samples": n,
+            "rows": count_rows, "row_count_matches_metadata": count_rows == int(metadata.get("draw_rows", count_rows)),
+            "invalid_source_groups": invalid, "unmatched_sources": unmatched, "excluded_nongameplay_sources": excluded,
+            "missing_gpu_sources": len((set(gpu) & selected_ids)-accepted),
+            "model_overflow_draws": overflow, "context_overflows": contexts,
+            "unattributed_draw_fraction": unattributed/total_draws if total_draws else None,
+            "attributed_draw_fraction": (total_draws-unattributed-overflow)/total_draws if total_draws else None,
+            "phases": phase_summary(phases, n), "top_models_by_draws": model_summary(models, n),
+            "top_models_by_triangles": model_summary(models, n, "triangles"),
+            "slow_5s_windows": [{"source_elapsed_s": second, "samples": w["samples"],
+                "gpu_frame_mean_ms": w["gpu_sum"]/w["samples"],
+                "phases": phase_summary(w["phases"], w["samples"]),
+                "top_models_by_draws": model_summary(w["models"], w["samples"]),
+                "top_models_by_triangles": model_summary(w["models"], w["samples"], "triangles")}
+                for second, w in sorted(windows.items(), key=lambda item: item[1]["gpu_sum"]/item[1]["samples"], reverse=True)[:10]],
+            "notes": ["Triangles count submitted primitives, including split passes; strip/fan degenerates are not removed.",
+                      "Multiview draw and triangle counts are not multiplied by eye count.",
+                      "Reasons overlap and indicate submitted features, not pixel coverage or exclusive GPU cost.",
+                      "Model scope includes descendants rendered inside the entity; unscopeable draws are explicitly unattributed.",
+                      "Model histogram overflow leaves phase totals intact and limits model rankings."]}
 
 
 def summarize_gpu_passes(rows, selected_ids, start_ns, interval=8, sampling="fixed", timing_scope="legacy_in_render_pass"):
@@ -128,7 +270,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     metadata_path = path.with_name(path.name.replace(".frames.csv", ".session.csv"))
     with metadata_path.open(encoding="utf-8") as stream:
         metadata = dict((row["key"], row["value"]) for row in csv.DictReader(stream))
-    if metadata.get("schema") not in ("1", "2", "3", "4", "5"):
+    if metadata.get("schema") not in ("1", "2", "3", "4", "5", "6"):
         raise ValueError("Unsupported capture schema")
     complete = metadata.get("closed") == "1" and metadata.get("write_error") == "0"
     if not complete and not allow_incomplete:
@@ -244,6 +386,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "profiler_display_mode"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed"), metadata.get("gpu_pass_scope", "legacy_in_render_pass")),
+        "draw_profile": summarize_draw_details(path, rows, selected_ids, metadata) if metadata.get("schema") == "6" else None,
         "vk_begin_stalls_over_5ms_top10": begin_stalls,
         "notes": [
             "GPU samples are latest asynchronous observations, not attributed to the row's CPU frame.",

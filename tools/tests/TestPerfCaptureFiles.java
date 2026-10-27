@@ -9,6 +9,8 @@ public final class TestPerfCaptureFiles {
         String valid = "20261027T001530Z-123456789.frames.csv";
         check(PerfCaptureFiles.validName(valid));
         check(PerfCaptureFiles.validName(valid.replace("frames", "session")));
+        check(PerfCaptureFiles.validName(valid.replace("frames", "draws")));
+        check(!PerfCaptureFiles.validName(valid.replace("frames", "draws"), true));
         for (String invalid : new String[] {"../quest_perf.csv", "quest_perf.csv", "/data/private",
                 "20261027T001530Z-1.frames.csv/../../saves", "20261027T001530Z-1.frames.csv.tmp", "", "name.csv"}) {
             check(!PerfCaptureFiles.validName(invalid));

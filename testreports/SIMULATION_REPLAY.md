@@ -76,6 +76,10 @@ alone. Opening the menu does not itself end a run; select Stop explicitly.
 
 ## What is saved
 
+Sampled geometry and model-owner detail are also recorded in a `.draws.csv`
+companion; copy it with the frame/session files. See
+[draw profiling](DRAW_PROFILE_PROFILING.md).
+
 Whole-render-pass GPU intervals and logical phase draw counts are included automatically when
 profiling. See [GPU pass profiling](GPU_PASS_PROFILING.md) for sampling, source
 frame matching and the next before/after benchmark procedure.

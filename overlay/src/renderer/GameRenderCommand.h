@@ -8,6 +8,15 @@ class CEntity;
 // render state.  A modern backend can later consume the same command boundary.
 namespace GameRender
 {
+// Scoped attribution also wraps direct distance-fade callbacks.
+class ProfileEntity {
+    bool active=false;
+public:
+    explicit ProfileEntity(CEntity *entity);
+    ~ProfileEntity();
+    ProfileEntity(const ProfileEntity &)=delete;
+    ProfileEntity &operator=(const ProfileEntity &)=delete;
+};
 enum eEntityDrawRole
 {
 	ENTITY_DRAW_WORLD,

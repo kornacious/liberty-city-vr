@@ -1,12 +1,14 @@
 #pragma once
 #include <cstdint>
 #include <cmath>
+#include "DrawProfile.h"
 
 // Portable bookkeeping/decoding shared by the Vulkan backend and host tests.
 // Two query slots per marker are reserved even outside a stereo render pass:
 // multiview vkCmdWriteTimestamp consumes one query for each active view.
 namespace GpuPassProfile {
 enum Pass { Sky,Roads,Reflections,World,Water,Fading,Weather,Effects,Ui,Scope,Wrist,Postprocess,Other,Scene,Count };
+static_assert(Count==DrawProfile::PassCount,"geometry/timing phase count");
 // Only complete render passes can be timed reliably with ordinary timestamps
 // on a tiler. Logical scene phases still select draw-count buckets.
 inline bool Timed(unsigned pass){return pass>=Scope && pass<Count;}
@@ -26,6 +28,7 @@ struct Result {
     uint32_t mask=0,status=NoSample;
     float frameMs=-1,ms[Count];
     uint32_t draws[Count]={};
+    DrawProfile::Stats geometry;
     Result(){for(float &v:ms)v=-1;}
 };
 inline double Milliseconds(uint64_t begin,uint64_t end,unsigned bits,double period){
@@ -40,6 +43,13 @@ struct Recording {
     unsigned stack[StackSize]={},depth=0,active=Other,timingActive=Other,markers=0,lastQuery=0;
     uint32_t seen=uint32_t(1)<<Other,status=NoSample,draws[Count]={};
     bool sampled=false;
+    DrawProfile::Recording geometry;
+    void Reset(bool enable){
+        depth=markers=lastQuery=0;active=timingActive=Other;
+        seen=uint32_t(1)<<Other;status=NoSample;sampled=enable;
+        for(auto &v:draws)v=0;
+        if(enable)geometry={}; // No model-table clearing on unsampled/off frames.
+    }
     int Transition(unsigned pass){
         if(timingActive==pass)return -1;
         if(markers>=MaxMarkers){status=Overflow;return -1;}
@@ -65,12 +75,15 @@ struct Recording {
         for(unsigned i=depth;!Timed(enclosing)&&i>0;)enclosing=stack[--i];
         return Transition(Timed(enclosing)?enclosing:Other);
     }
-    void Draw(){if(sampled&&status==NoSample)++draws[active];}
+    void Draw(unsigned count=0,unsigned topology=~0u,unsigned flags=0){
+        if(sampled&&status==NoSample){++draws[active];geometry.Draw(active,count,topology,flags);}
+    }
     Result Decode(const uint64_t (*queries)[2],unsigned bits,double period,uint64_t frameId,uint64_t startNs) const {
         Result out;out.frameId=frameId;out.startNs=startNs;
         if(!sampled)return out;
         out.status=status!=NoSample?status:depth?Unbalanced:Complete;
         for(unsigned i=0;i<Count;++i)out.draws[i]=draws[i];
+        out.geometry=geometry.stats;
         if(out.status!=Complete)return out;
         if(!queries[0][1]||!queries[1][1]){out.status=Unavailable;return out;}
         const double total=Milliseconds(queries[0][0],queries[1][0],bits,period);

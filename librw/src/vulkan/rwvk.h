@@ -244,7 +244,10 @@ bool32 getGpuFrameTimeMs(float32 *milliseconds);
 void setGpuProfileFrame(uint64 frameId,uint64 startNs);
 void beginGpuProfilePass(uint32 pass);
 void endGpuProfilePass(uint32 pass);
-void countGpuProfileDraw(void);
+void countGpuProfileDraw(uint32 count=0,uint32 topology=~0u,uint32 flags=0);
+bool32 gpuProfileSampling(void);
+bool32 beginGpuProfileEntity(int32 model,int32 entityClass,const char *name,uint32 flags);
+void endGpuProfileEntity(void);
 bool32 getGpuPassProfile(GpuPassProfile::Result *out);
 
 // CPU timings for this frame's backend begin, not asynchronous GPU samples.
