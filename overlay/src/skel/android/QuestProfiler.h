@@ -6,6 +6,8 @@ namespace androidgame {
 
 // Successful player weapon activations, counted on the game thread.
 void QuestProfilerCountPlayerWeaponUse(void);
+// OFF stops recording; full and minimal select a display while recording.
+void QuestProfilerSetDisplayMode(int mode);
 
 enum QuestProfilerPhase
 {

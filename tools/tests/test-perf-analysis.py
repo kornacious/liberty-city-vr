@@ -46,6 +46,24 @@ class AnalysisTests(unittest.TestCase):
             self.assertIsNone(result["timings_ms"]["runtime_gpu_ms"])
             self.assertEqual(result["timings_ms"]["game_ms"]["samples"], 3)
             self.assertEqual(analysis.summarize(path, True)["selected_rows"], 4)
+            self.assertEqual(result["vehicle_speeds_by_model"], {}) # original schema 1
+            with path.open() as stream:
+                vehicle_rows = list(csv.DictReader(stream))
+            for i, row in enumerate(vehicle_rows):
+                row.update(in_vehicle="1", vehicle_model="119", vehicle_speed_kmh=str(90+i*10),
+                           vehicle_speed_3d_kmh=str(95+i*10), vehicle_peak_kmh="110",
+                           vehicle_handling_cruise_kmh="160", vehicle_transmission_max_kmh="192")
+            with path.open("w", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=list(vehicle_rows[0]))
+                writer.writeheader()
+                writer.writerows(vehicle_rows)
+            session.write_text(session.read_text().replace("schema,1", "schema,2"))
+            vehicle = analysis.summarize(path)["vehicle_speeds_by_model"]["119"]
+            self.assertEqual(vehicle["speed_kmh"]["max"], 110) # paused sample excluded
+            self.assertEqual(vehicle["observed_top_kmh"], 110)
+            self.assertEqual(vehicle["recorded_occupancy_peak_kmh"]["max"], 110)
+            self.assertEqual(vehicle["handling_cruise_kmh"], [160])
+            self.assertEqual(vehicle["transmission_max_kmh"], [192])
             session.write_text("key,value\nschema,1\n")
             with self.assertRaises(ValueError):
                 analysis.summarize(path)

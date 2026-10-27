@@ -395,6 +395,9 @@ precision, CSV schema, event transitions, queue overflow accounting, shutdown
 draining and exclusive session creation. It is included in the current-source
 gate. `python tools/tests/test-perf-analysis.py` separately tests the comparison
 tool's percentiles, validity masks, activity selection and incomplete sessions.
+Capture tests also cover mode switching policy, vehicle speed conversion and
+per-occupancy peak resets. Analysis tests cover schema 1 compatibility and schema
+2 speed summaries with filtered gameplay selection.
 
 `TestPerfCaptureFiles.java` tests the Android export provider's shared filename
 and canonical-path boundary without Android dependencies. Compile it alongside

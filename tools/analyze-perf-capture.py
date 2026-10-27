@@ -39,11 +39,11 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     metadata_path = path.with_name(path.name.replace(".frames.csv", ".session.csv"))
     with metadata_path.open(encoding="utf-8") as stream:
         metadata = dict((row["key"], row["value"]) for row in csv.DictReader(stream))
-    if metadata.get("schema") != "1":
+    if metadata.get("schema") not in ("1", "2"):
         raise ValueError("Unsupported capture schema")
     complete = metadata.get("closed") == "1" and metadata.get("write_error") == "0"
     if not complete and not allow_incomplete:
-        raise ValueError("Capture was not cleanly closed; disable full profiling first, or use --allow-incomplete")
+        raise ValueError("Capture was not cleanly closed; set profiling OFF first, or use --allow-incomplete")
     with path.open(encoding="utf-8") as stream:
         reader = csv.DictReader(stream)
         rows = list(reader)
@@ -73,6 +73,25 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
     for row in rows:
         mask = int(row["event_mask"])
         events.update(name for flag, name in EVENTS.items() if mask & flag)
+    vehicle_speeds = {}
+    for row in selected:
+        if row.get("in_vehicle") != "1" or "vehicle_speed_kmh" not in row:
+            continue
+        model = row["vehicle_model"]
+        vehicle_speeds.setdefault(model, []).append(row)
+    vehicle_summary = {}
+    for model, samples in vehicle_speeds.items():
+        speeds = distribution([float(row["vehicle_speed_kmh"]) for row in samples])
+        vehicle_summary[model] = {
+            "speed_kmh": speeds,
+            "observed_top_kmh": speeds["max"] if speeds else None,
+            "speed_3d_kmh": distribution([float(row["vehicle_speed_3d_kmh"]) for row in samples]),
+            "recorded_occupancy_peak_kmh": distribution([float(row["vehicle_peak_kmh"]) for row in samples]),
+            "handling_cruise_kmh": sorted({float(row["vehicle_handling_cruise_kmh"]) for row in samples
+                                            if float(row["vehicle_handling_cruise_kmh"]) >= 0}),
+            "transmission_max_kmh": sorted({float(row["vehicle_transmission_max_kmh"]) for row in samples
+                                             if float(row["vehicle_transmission_max_kmh"]) >= 0}),
+        }
     timings = {}
     for key in ["frame_interval_ms", "cpu_local_ms", "vk_begin_ms", "step_ms",
                 "recorder_prepare_ms", "runtime_cpu_ms", "runtime_gpu_ms", "vulkan_gpu_ms",
@@ -100,9 +119,11 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "missing_ids_between_rows": sum(b-a-1 for a, b in zip(ids, ids[1:])),
         "dropped_rows": int(metadata.get("dropped_rows", rows[-1]["dropped_rows"])),
         "activity_frames": dict(Counter(row["activity"] for row in selected)),
+        "vehicle_speeds_by_model": vehicle_summary,
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
-             "render_width", "render_height", "render_scale_effective", "refresh_hz"] if key in rows[0]},
+             "render_width", "render_height", "render_scale_effective", "refresh_hz",
+             "profiler_display_mode"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "notes": [
             "GPU samples are latest asynchronous observations, not attributed to the row's CPU frame.",

@@ -27,6 +27,7 @@
 #include "PlayerPed.h"
 #include "PlayerInfo.h"
 #include "Vehicle.h"
+#include "HandlingMgr.h"
 #include "Wanted.h"
 #include "World.h"
 #include "Weapon.h"
@@ -40,6 +41,7 @@ namespace androidgame {
 namespace {
 
 bool gProfilerEnabled;
+int gCaptureDisplayMode;
 bool gAppFrameOpen;
 bool gVkBeginOpen;
 bool gStepOpen;
@@ -101,6 +103,7 @@ char gCaptureDirectory[512];
 questperf::Writer gCaptureWriter;
 questperf::Frame gCaptureFrame;
 questperf::PlayerEvents gCaptureEvents;
+questperf::VehicleSpeedPeak gVehicleSpeedPeak;
 uint64 gCaptureId, gPreviousCaptureStartNs;
 uint32 gPlayerWeaponUses;
 static_assert(QUEST_PROFILER_PHASE_COUNT == questperf::PhaseCount,
@@ -196,7 +199,10 @@ CapturePlayer(void)
 	result.cutscene = CCutsceneMgr::IsRunning();
 	result.mission = CTheScripts::IsPlayerOnAMission();
 	CPlayerPed *player = FindPlayerPed();
-	if(player == nil) return result;
+	if(player == nil){
+		gVehicleSpeedPeak.Update(nullptr, -1);
+		return result;
+	}
 	result.valid = 1;
 	result.pedState = player->GetPedState();
 	result.moveState = player->m_nMoveState;
@@ -208,7 +214,18 @@ CapturePlayer(void)
 	result.x = position.x; result.y = position.y; result.z = position.z;
 	result.speed = player->GetMoveSpeed().Magnitude();
 	result.wanted = player->m_pWanted ? player->m_pWanted->GetWantedLevel() : 0;
-	if(result.inVehicle) result.vehicleModel = player->m_pMyVehicle->GetModelIndex();
+	if(result.inVehicle){
+		CVehicle *vehicle = player->m_pMyVehicle;
+		result.vehicleModel = vehicle->GetModelIndex();
+		const CVector velocity = vehicle->GetMoveSpeed();
+		result.vehicleSpeedKmh = questperf::SpeedKmh(sqrtf(velocity.x*velocity.x+velocity.y*velocity.y));
+		result.vehicleSpeed3dKmh = questperf::SpeedKmh(velocity.Magnitude());
+		result.vehiclePeakKmh = gVehicleSpeedPeak.Update(vehicle, result.vehicleSpeedKmh);
+		if(vehicle->pHandling != nil){
+			result.vehicleHandlingCruiseKmh = questperf::SpeedKmh(vehicle->pHandling->Transmission.fMaxCruiseVelocity);
+			result.vehicleTransmissionMaxKmh = questperf::SpeedKmh(vehicle->pHandling->Transmission.fMaxVelocity);
+		}
+	}else gVehicleSpeedPeak.Update(nullptr, -1);
 	CWeapon *weapon = player->GetWeapon();
 	if(weapon){
 		result.weapon = weapon->m_eWeaponType;
@@ -235,6 +252,7 @@ StartFrameCapture(void)
 	gCaptureId = gPreviousCaptureStartNs = 0;
 	gPlayerWeaponUses = 0;
 	gCaptureEvents = {};
+	gVehicleSpeedPeak = {};
 	if(gCaptureDirectory[0] == '\0') return;
 	mkdir(gCaptureDirectory, 0700);
 	const time_t utc = time(nil);
@@ -247,6 +265,7 @@ StartFrameCapture(void)
 	timespec realtime;
 	clock_gettime(CLOCK_REALTIME, &realtime);
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
+	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "profiler_compiled," __DATE__ " " __TIME__ "\n";
 	snprintf(value, sizeof(value), "start_unix_ns,%llu\nstart_monotonic_ns,%llu\n",
 		(unsigned long long)realtime.tv_sec*1000000000ULL+realtime.tv_nsec,
@@ -778,6 +797,15 @@ QuestProfilerSetLogDirectory(const char *directory)
 		return;
 	snprintf(gLogPath, sizeof(gLogPath), "%s/quest_perf.csv", directory);
 	snprintf(gCaptureDirectory, sizeof(gCaptureDirectory), "%s/perf-captures", directory);
+}
+
+void
+QuestProfilerSetDisplayMode(int mode)
+{
+	gCaptureDisplayMode = questperf::RecordsDisplayMode(mode) ? mode : 0;
+	// SetEnabled is idempotent: switching full <-> minimal preserves the
+	// same recording, frame IDs, events and observed vehicle peak.
+	QuestProfilerSetEnabled(questperf::RecordsDisplayMode(gCaptureDisplayMode));
 }
 
 void
@@ -1385,6 +1413,7 @@ QuestProfilerEndAppFrame(void)
 	gCaptureFrame.runtimeGpuMs = runtime.appGpuFrameValid ? runtime.appGpuFrameMs : -1;
 	gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
 	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
+	gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
 	for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT; ++category)
 		gCaptureFrame.activeModels[category] = (int)ModelSets::GetActiveForCategory((ModelSets::eModelCategory)category);
 	gCaptureFrame.requestedModel = (int)ModelSets::GetRequested();

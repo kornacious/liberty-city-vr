@@ -1321,7 +1321,7 @@ LoadVrSettings(void)
 	// come up already showing it. Off for everyone else.
 	gProfilerDisplayMode = clamp((int)(int32)GetPrivateProfileIntA("VR",
 		"ShowProfiler", 0, ".\\vr_settings.ini"), 0, 2);
-	QuestProfilerSetEnabled(gProfilerDisplayMode == 1);
+	QuestProfilerSetDisplayMode(gProfilerDisplayMode);
 	gSpatialAaMode = GetPrivateProfileIntA("VR", "AntiAliasing", 1,
 		".\\vr_settings.ini") != 0;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
@@ -2873,7 +2873,7 @@ VrDebugUpdate(const PadInput &in)
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_PROFILER){
 				const int direction = decreasePulse ? -1 : 1;
 				gProfilerDisplayMode = (gProfilerDisplayMode+direction+3)%3;
-				QuestProfilerSetEnabled(gProfilerDisplayMode == 1);
+				QuestProfilerSetDisplayMode(gProfilerDisplayMode);
 				SaveVrInteger("ShowProfiler", gProfilerDisplayMode);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_CPU_PERFORMANCE){
 				if(xrvk::isPerformanceModeSupported()){

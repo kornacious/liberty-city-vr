@@ -1,10 +1,12 @@
 # Recording and comparing performance
 
-In **Graphics → Performance Profiler (FPS)** select **ON**, the full diagnostic
-mode. MINIMAL does not record detailed captures. Turn full profiling OFF after
-the route to drain accepted samples and close the files.
+In **Graphics → Performance Profiler (FPS)** select **MINIMAL** for FPS/frame time
+only, or **ON** for the full diagnostic display. **Both modes record the same
+performance metrics.** Switching ON ↔ MINIMAL preserves one continuous session,
+frame IDs, events and vehicle-speed peaks. Select **OFF** after the route to
+drain accepted samples and close the files; only OFF stops recording.
 
-Full profiling keeps the existing one-second `quest_perf.csv` and also writes
+Recording keeps the existing one-second `quest_perf.csv` and also writes
 a unique pair of files for each session under:
 
 ```text
@@ -47,6 +49,22 @@ gameplay coordinates, but no device identifiers or original game assets.
   vehicle model, position, engine speed, and pause/cutscene/on-mission flags.
   `speed_game_units` is the engine speed magnitude, not m/s. Activity reflects
   engine state, not a headset-motion classifier.
+- Schema 2 adds actual vehicle velocity: `vehicle_speed_kmh` is horizontal speed,
+  while `vehicle_speed_3d_kmh` includes vertical motion. Both use the vehicle's
+  move-speed vector, not the seated player's. Conversion is engine magnitude ×
+  180, the inverse of re3's km/h-to-50-Hz handling conversion. These are nominal
+  simulation speeds, not wall-clock travel speeds during slow motion.
+- `vehicle_peak_kmh` is the highest observed horizontal speed for the current
+  vehicle occupancy during this capture. It resets on exiting/changing vehicles
+  or starting a new capture, but survives switching ON ↔ MINIMAL. It is not a
+  previously saved lifetime record or a guarantee of maximum achievable speed.
+- `vehicle_handling_cruise_kmh` and `vehicle_transmission_max_kmh` are the
+  converted runtime handling cruise estimate and transmission maximum. The
+  engine derives them from handling/drag; they are not the original unconverted
+  handling-file value or guaranteed road top speed. Slopes, collisions, tuning
+  and cheats can change achieved speed. Vehicle values are `-1` when unavailable.
+- `profiler_display_mode` records `1=ON` / `2=MINIMAL` per frame, so display
+  changes can be identified without splitting the session.
 - Entity-render call counts for vehicles, pedestrians and static objects.
   These are **not** Vulkan draw-call counts or final visible-object counts.
 
@@ -55,8 +73,9 @@ game version, profiler compilation time, UTC/monotonic clock anchors and selecte
 saved graphics values. Early startup metadata can precede model initialization;
 per-frame active selection is authoritative. Asset names describe configured
 routing, not content hashes or proof that base files are unmodified. `saved_*`
-values can be `-1` when absent and can differ from active settings. Toggle full
-profiling OFF/ON after changing settings for fresh metadata.
+values can be `-1` when absent and can differ from active settings. Toggle
+profiling OFF and back to ON or MINIMAL after changing settings for fresh
+metadata. The analyzer supports both schema 1 and schema 2 recordings.
 
 Coarse streaming/scripts/population/car/world-process/particle timers now have
 producer hooks. Detailed physics channels without producer hooks remain
@@ -98,6 +117,8 @@ requires an alive, present player outside pause/cutscenes; events cover all rows
 `--include-nongameplay` includes all states. Phase distributions require their
 validity bit. GPU percentiles describe asynchronous observations, not uniquely
 measured GPU frames. Frame intervals include pacing, not compositor missed counts.
+Schema 2 results also group speed distributions, highest observed speeds and
+handling limits by vehicle model. Older recordings have no vehicle-speed data.
 
 Clean close adds `closed`, `written_rows`, `dropped_rows` and `write_error` to
 session metadata. Incomplete/error captures are normally rejected; after a crash,
@@ -109,10 +130,11 @@ IDs, drops and selection transitions must be checked before tail comparisons.
 A bounded 1024-frame queue feeds a background writer. The game thread uses a
 nonblocking enqueue and drops samples instead of waiting on a contended/full
 queue. Formatting/disk I/O run on the worker, with periodic flushing. Disabling
-full profiling drains accepted samples and closes the pair; force-stop can lose
+profiling drains accepted samples and closes the pair; force-stop can lose
 the last buffered portion. Disk errors are recorded in session metadata.
 
 `recorder_prepare_ms` excludes enqueue, legacy logging and worker contention.
-Measure total overhead with matched full-profiling ON/OFF OVR recordings.
+Measure total overhead with matched recording OFF versus MINIMAL/ON OVR runs.
+MINIMAL reduces display clutter; it still incurs the metric collection cost.
 Files grow with session length and are not automatically deleted. Disable full
 profiling when finished and remove unwanted recordings locally.

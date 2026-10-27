@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
@@ -13,6 +14,30 @@
 #include <thread>
 
 namespace questperf {
+
+// Display mode affects presentation only. Both visible modes record.
+inline bool RecordsDisplayMode(int mode) { return mode == 1 || mode == 2; }
+
+inline float SpeedKmh(float engineSpeed)
+{
+    // re3 velocities use game units per 50 Hz reference step. Handling data
+    // converts km/h with the inverse of this factor (HandlingMgr.cpp).
+    const float kmh = engineSpeed*180.0f;
+    return std::isfinite(kmh) && kmh >= 0 ? kmh : -1.0f;
+}
+
+class VehicleSpeedPeak {
+    const void *current = nullptr; // Never serialized or exposed in diagnostics.
+    float peak = -1;
+public:
+    float Update(const void *vehicle, float speedKmh)
+    {
+        if(vehicle != current) { current = vehicle; peak = -1; }
+        if(!vehicle) { peak = -1; return -1; }
+        if(std::isfinite(speedKmh) && speedKmh >= 0 && speedKmh > peak) peak = speedKmh;
+        return peak;
+    }
+};
 
 enum Event : uint32_t {
     Damage = 1, Died = 2, Recovered = 4, EnteredVehicle = 8,
@@ -33,6 +58,8 @@ struct Player {
     int vehicleModel = -1, weapon = -1, weaponState = -1, ammo = -1, wanted = -1;
     int dead = 0, inVehicle = 0, paused = 0, cutscene = 0, mission = 0;
     float health = 0, armour = 0, x = 0, y = 0, z = 0, speed = 0;
+    float vehicleSpeedKmh = -1, vehicleSpeed3dKmh = -1, vehiclePeakKmh = -1;
+    float vehicleHandlingCruiseKmh = -1, vehicleTransmissionMaxKmh = -1;
 };
 class PlayerEvents {
     Player previous{};
@@ -75,6 +102,7 @@ struct Frame {
     float phases[PhaseCount]{};
     float runtimeCpuMs = -1, runtimeGpuMs = -1, vulkanGpuMs = -1, refreshHz = 0;
     int width = 0, height = 0;
+    int profilerDisplayMode = 0;
     int activeModels[5]{}, requestedModel = 0;
     float renderScale = -1;
     uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
@@ -112,13 +140,16 @@ class Writer {
             f.runtimeCpuMs, f.runtimeGpuMs, f.vulkanGpuMs, f.refreshHz,
             (unsigned long long)f.phaseMask, (unsigned long long)dropped.load());
         for(float phase : f.phases) std::fprintf(frames, ",%.6f", phase);
-        std::fprintf(frames, ",%u,%u,%u,%u,%u,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.6f,%d,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
+        std::fprintf(frames, ",%u,%u,%u,%u,%u,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.6f,%d,%d,%.3f,%d,%d,%d,%d,%d,%d",
             f.renderCalls[0], f.renderCalls[1], f.renderCalls[2], f.events, f.weaponUses,
             p.valid, ActivityName(p.activity), p.pedState, p.moveState, p.vehicleModel,
             p.weapon, p.weaponState, p.ammo, p.wanted, p.dead, p.inVehicle,
             p.paused, p.cutscene, p.mission, p.health, p.armour, p.x, p.y, p.z, p.speed,
             f.width, f.height, f.renderScale, f.activeModels[0], f.activeModels[1],
             f.activeModels[2], f.activeModels[3], f.activeModels[4], f.requestedModel);
+        std::fprintf(frames, ",%.6f,%.6f,%.6f,%.6f,%.6f,%d\n", p.vehicleSpeedKmh,
+            p.vehicleSpeed3dKmh, p.vehiclePeakKmh, p.vehicleHandlingCruiseKmh,
+            p.vehicleTransmissionMaxKmh, f.profilerDisplayMode);
     }
     void Run()
     {
@@ -167,7 +198,7 @@ public:
         metadata = OpenExclusive(stem+".session.csv");
         if(!metadata) { std::fclose(frames); frames = nullptr; return false; }
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,1\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\n", metadata);
+        std::fputs("key,value\nschema,2\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
@@ -178,7 +209,7 @@ public:
             "render_fading", "render_weather", "render_effects"};
         static_assert(sizeof(names)/sizeof(names[0]) == PhaseCount, "capture phase schema");
         for(const char *name : names) std::fprintf(frames, ",%s_ms", name);
-        std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set\n", frames);
+        std::fputs(",vehicle_render_calls,ped_render_calls,static_render_calls,event_mask,weapon_uses,player_valid,activity,ped_state,move_state,vehicle_model,weapon,weapon_state,ammo,wanted,dead,in_vehicle,paused,cutscene,mission,health,armour,x,y,z,speed_game_units,render_width,render_height,render_scale_effective,active_world,active_vegetation,active_vehicles,active_peds,active_weapons,requested_model_set,vehicle_speed_kmh,vehicle_speed_3d_kmh,vehicle_peak_kmh,vehicle_handling_cruise_kmh,vehicle_transmission_max_kmh,profiler_display_mode\n", frames);
         if(std::ferror(frames) || std::ferror(metadata)) {
             std::fclose(frames); std::fclose(metadata);
             frames = metadata = nullptr;

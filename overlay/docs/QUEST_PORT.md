@@ -117,8 +117,9 @@ Classic while allowing Modern world textures and weapons. See
 
 ## Logs and updates
 
-Full profiling records raw per-frame timings, active model sets and player
-state/events in unique sessions. See [performance capture and comparison](PERFORMANCE_CAPTURE.md).
+Both MINIMAL and ON profiling record raw per-frame timings, active model sets,
+player state/events and vehicle speeds in unique sessions. Only OFF stops the
+recording. See [performance capture and comparison](PERFORMANCE_CAPTURE.md).
 
 Useful runtime log:
 
