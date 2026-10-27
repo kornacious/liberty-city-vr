@@ -40,8 +40,8 @@ struct tHandlingData {
     } Transmission;
 };
 struct CMatrix {void UpdateRW(){}};
-class CEntity {public: virtual ~CEntity()=default;int kind=0;bool IsPed(){return kind==1;}bool IsVehicle(){return kind==2;}};
-class CVehicle:public CEntity {public:CVehicle(){kind=2;}int status=STATUS_PLAYER,model=100;bool IsCar(){return true;}int GetStatus(){return status;}int GetModelIndex(){return model;}};
+class CEntity {public: virtual ~CEntity()=default;int kind=0,model=0;int GetModelIndex(){return model;}bool IsPed(){return kind==1;}bool IsVehicle(){return kind==2;}bool IsObject(){return kind==3;}bool IsDummy(){return kind==4;}};
+class CVehicle:public CEntity {public:CVehicle(){kind=2;model=100;}int status=STATUS_PLAYER;bool IsCar(){return true;}int GetStatus(){return status;}};
 class CPed:public CEntity {public:CPed(){kind=1;}CVehicle *m_pMyVehicle=nullptr;};
 class CAutomobile:public CVehicle {
 public:
@@ -50,8 +50,8 @@ public:
     float m_fMass=1200,m_fTurnMass=2500,m_fGasPedal=0,m_fBrakePedal=0,m_fSteerAngle=0,m_fHealth=1000,m_fChangeGearTime=0,m_fFireBlowUpTimer=0,m_fDamageImpulse=0;
     float m_aSuspensionSpringRatioPrev[4]={},m_aWheelSpeed[4]={};CAutomobile *m_aGroundPhysical[4]={};CVector m_aGroundOffset[4];
     bool bIsHandbrakeOn=false,bIsStuck=false,bHasContacted=false,bHasHitWall=false;unsigned char m_nStaticFrames=0,m_nCurrentGear=1;unsigned repairs=0;
-    CVector &GetPosition(){return pos;}CVector &GetRight(){return right;}CVector &GetForward(){return forward;}CVector &GetUp(){return up;}
-    CMatrix &GetMatrix(){return matrix;}void UpdateRwFrame(){}void Teleport(CVector p){pos=p;}void Fix(){++repairs;}void ExtinguishCarFire(){}
+    const CVector &GetPosition(){return pos;}void SetPosition(CVector p){pos=p;}CVector &GetRight(){return right;}CVector &GetForward(){return forward;}CVector &GetUp(){return up;}
+    CMatrix &GetMatrix(){return matrix;}void UpdateRwFrame(){}void Teleport(CVector p){pos=p;}void Fix(){++repairs;}void ExtinguishCarFire(){}void ResetSuspension(){}void RemoveAndAdd(){}
 };
 static CAutomobile car;static CVehicle *selectedCar=&car;static int poolHandle=5;static CPed player;
 static CVehicle *FindPlayerVehicle(){return selectedCar;}
@@ -65,6 +65,10 @@ struct CGame {static int currLevel;};int CGame::currLevel=0;
 struct CTheZones {static int GetLevelFromPosition(const CVector *){return 2;}};
 struct CCollision {static int loads;static void SortOutCollisionAfterLoad(){++loads;}};int CCollision::loads=0;
 struct CStreaming {static int loads;static CVector loaded;static void LoadScene(const CVector &p){++loads;loaded=p;}};int CStreaming::loads=0;CVector CStreaming::loaded;
+static bool IsStreetLight(int id){return id==2001;}
+static bool IsTreeModel(int id){return id==2002;}
+static bool IsFence(int id){return id==2003;}
+struct CCarCtrl {static bool ThisRoadObjectCouldMove(int id){return id==2004 || id==2005;}};
 namespace ModelSets {enum eModelCategory {World,Vegetation,Vehicles,Peds,Weapons};static int asset=0;static int GetActiveForCategory(eModelCategory){return asset;}}
 namespace androidgame {
 static int profilerMode=0;static unsigned profileStarts=0,profileStops=0;static std::string profileContext;
@@ -115,6 +119,7 @@ static void CoreTests(){
     Check(C::Write(f,s),"second sample");std::fputs("END,20000\n",f);std::rewind(f);C::Tape t;
     Check(t.Load(f),"completed tape loads");std::fclose(f);
     C::Sample out;Check(t.At(5000,out)&&out.input.gas==.5f&&out.position[0]==5&&out.speed==25,"hold inputs while interpolating route at different replay frame rate");
+    C::RouteState route;Check(!t.Route(out,route),"implausible path velocity rejected by assistance");
     Check(t.At(10000,out)&&out.input.gas==1,"input boundary");Check(!t.At(0,out)&&!t.At(20000,out),"backward time and exact end rejected");
     f=Temporary();C::Header(f,initial);std::rewind(f);char header[1024];Check(std::fgets(header,sizeof(header),f)!=nullptr,"V2 header fixture");std::fclose(f);
     std::string legacy=header;legacy.replace(0,11,"LCVR_SIM_V1");legacy.erase(legacy.rfind(','));legacy+='\n';
@@ -128,6 +133,10 @@ static void CoreTests(){
     s=MakeSample(0);float p[]={3,4,0},forward[]={0,1,0};C::Drift drift;
     Check(drift.Add(s,p,forward,10)&&drift.Rms()==5&&drift.maxSpeed==10,"drift uses meters and kmh");p[0]=51;
     Check(!drift.Add(s,p,forward,0),"large drift abort threshold");
+    p[0]=std::numeric_limits<float>::quiet_NaN();Check(!drift.Add(s,p,forward,0)&&drift.invalid,"nonfinite drift state is distinguished from ordinary divergence");
+    C::Tape path;auto first=MakeSample(0),second=MakeSample(1000000);second.position[0]=-10;path.samples={first,second};path.endUs=2000000;
+    Check(path.At(500000,out)&&path.Route(out,route)&&route.position[0]==-5&&std::fabs(route.move[0]+.2f)<.00001f,"route assistance derives signed world velocity from recorded positions");
+    Check(std::fabs(route.right[0]-1)<.00001f&&std::fabs(route.up[2]-1)<.00001f,"route basis stays orthonormal");
     for(int a=0;a<2;++a)for(int b=0;b<2;++b)for(int da=0;da<2;++da)for(int db=0;db<2;++db){
         Check(C::IgnorePair(true,a!=0,b!=0,da!=0,db!=0)==C::IgnorePair(true,b!=0,a!=0,db!=0,da!=0),"ghost collision policy symmetric");
         Check(!C::IgnorePair(false,a!=0,b!=0,da!=0,db!=0),"ghost off always retains collision");
@@ -148,6 +157,11 @@ static void RuntimeTests(){
     SimulationReplayBeginFrame();char hud[128];Check(SimulationReplayRecordingText(hud,sizeof(hud))&&std::strcmp(hud,"0.0S RECORDED / 120.0S")==0,"recording HUD starts at zero with selected limit");
     CVehicle recordingTraffic;CPed recordingPed;CEntity scenery;
     Check(SimulationReplayIgnoreCollision(&car,&recordingTraffic)&&SimulationReplayIgnoreCollision(&recordingPed,&car)&&!SimulationReplayIgnoreCollision(&car,&scenery),"default ghost recording ignores traffic both ways and retains scenery");
+    CEntity prop;prop.kind=3;
+    Check(SimulationReplayIgnoreCollision(&car,&prop)&&SimulationReplayIgnoreCollision(&prop,&car)&&!SimulationReplayIgnoreCollision(&recordingTraffic,&prop),"recording ignores physical props both ways without altering ambient interactions");
+    prop.kind=4;Check(SimulationReplayIgnoreCollision(&prop,&car),"dummy props are ghost obstacles too");
+    prop.kind=0;for(int id:{2001,2002,2003}){prop.model=id;Check(SimulationReplayIgnoreCollision(&car,&prop),"static street lights, trees and fences are ignored");}
+    prop.kind=3;for(int id:{2004,2005}){prop.model=id;Check(!SimulationReplayIgnoreCollision(&car,&prop),"moving road/bridge objects retain contact");}
     textRects.clear();Check(VrSimulationRecordingPixels()!=nullptr,"recording panel works with profiling off");
     Check(textRects.size()==2&&textRects[0].left>=0&&textRects[1].right<=512&&textRects[1].bottom<=64,"timer glyphs fit compact panel");
     for(int i=0;i<130;++i)Frame();Check(sampleCount==130,"one sample per simulation frame despite repeated input hook");
@@ -161,6 +175,7 @@ static void RuntimeTests(){
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost does not affect ordinary gameplay");
     SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&!profilerMode,"preparation excluded from automatic capture");
     Check(SimulationReplayIgnoreCollision(&car,&ambient)&&SimulationReplayIgnoreCollision(&ambient,&car)&&SimulationReplayIgnoreCollision(&ped,&car),"car and ped contacts ignored in both directions");
+    prop.model=0;Check(SimulationReplayIgnoreCollision(&car,&prop)&&SimulationReplayIgnoreCollision(&prop,&car),"playback ghosts props symmetrically too");
     Check(!SimulationReplayIgnoreCollision(&car,&building)&&!SimulationReplayIgnoreCollision(&ambient,&ped),"terrain and ambient mutual collisions retained");
     Check(SimulationReplayIgnoreDamage(&car,&ped)&&SimulationReplayIgnoreDamage(&ped,&player)&&!SimulationReplayIgnoreDamage(&ped,&ambient),"damage isolated around protected replay group");
     Prepare();Check(profilerMode==2&&profileStarts==1&&profileContext.find("ghost=1")!=std::string::npos,"playback starts minimal capture with linked context");
@@ -175,7 +190,7 @@ static void RuntimeTests(){
     SimulationReplayMenuAction(2,1);Frame();captureAvailable=false;
     for(int i=0;i<220 && mode!=Idle;++i)Frame();
     Check(mode==Idle&&result.find("COULD NOT START")!=std::string::npos,"capture creation failure aborts benchmark");captureAvailable=true;
-    SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"route drift aborts without snapping");car.pos.x=0;
+    SimulationReplayMenuAction(9,1);SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"input-only mode retains drift abort without corrections");car.pos.x=0;SimulationReplayMenuAction(9,1);
     SimulationReplayMenuAction(4,1);SimulationReplayMenuAction(5,1);SimulationReplayMenuAction(2,1);Frame();
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost toggle respected");Prepare();Check(!profilerMode,"automatic capture can be disabled");Stop();
     car.model=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"CAR MODEL"),"wrong car model produces useful visible failure");car.model=100;
@@ -195,4 +210,47 @@ static void RuntimeTests(){
     SimulationReplayMenuAction(8,1);Check(!std::filesystem::exists(maximumPath)&&std::filesystem::exists(reportPath),"delete removes only selected tape and retains reports");
     std::printf("Runtime artifacts: %s\n",captureRoot.c_str());
 }
-int main(){CoreTests();RuntimeTests();androidgame::LayoutTests();std::printf("PASS: %u simulation replay checks\n",checks);}
+static void LongRoute(){
+    using namespace androidgame;
+    namespace C=SimulationReplayCore;
+    selectedCar=&car;car.m_vecMoveSpeed=CVector(0,0,0);car.m_vecTurnSpeed=CVector(0,0,0);
+    auto start=Initial(&car);start.vehicle.pose[0]=100;start.vehicle.pose[1]=100;start.vehicle.pose[2]=20;
+    const std::string name=Unique();FILE *f=std::fopen(Path(name+".sim.csv").c_str(),"wx");Check(f!=nullptr,"create 120-second route");C::Header(f,start);
+    bool wrote=true;
+    for(unsigned i=0;i<12000;++i){
+        const float t=float(i)*.01f;auto s=MakeSample(uint64_t(i)*10000);
+        s.position[0]=100+10*t;s.position[1]=100+20*std::sin(t*.25f);s.position[2]=20;
+        s.forward[0]=10;s.forward[1]=5*std::cos(t*.25f);C::Normalize(s.forward);
+        s.input.gas=.7f;s.input.steer=.2f*std::sin(t*.25f);s.speed=36;
+        wrote=wrote&&C::Write(f,s);
+    }
+    Check(wrote,"write all route frames");
+    std::fputs("END,120000000\n",f);std::fclose(f);Refresh();selectedDemo=int(std::find(demos.begin(),demos.end(),name)-demos.begin());
+    ghost=routeAssistance=autoProfile=true;CTimer::step=.01f;SimulationReplayMenuAction(2,1);Frame();Prepare();
+    const unsigned repairsAtStart=car.repairs;unsigned frames=0;
+    while(mode==Playing && frames<30000){
+        // Deliberately different step lengths, delayed acceleration/turning,
+        // and large disturbances must not end assisted benchmark playback.
+        const float steps[]={.007f,.013f,.020f,.008f};CTimer::step=steps[frames%4];
+        car.pos.x+=frames%100==0?80.0f:.3f;car.forward=CVector(-1,0,0);car.m_vecMoveSpeed=CVector(0,0,0);
+        Frame();++frames;
+    }
+    Check(mode==Idle&&result=="COMPLETE"&&elapsed>=120000000,"assisted playback completes the full 120 seconds under mixed frame times and large drift");
+    Check(corrections>5000&&correctionMax>=79.0f&&drift.maxPosition>=79.0f,"correction counts and pre-correction divergence remain visible");
+    Check(car.repairs==repairsAtStart&&!profilerMode,"assistance does not repeatedly repair the car and closes profiling normally");
+    f=std::fopen(Path(runId+".run.csv").c_str(),"r");char report[4096]={};Check(f!=nullptr,"assisted report persisted");std::fread(report,1,sizeof(report)-1,f);std::fclose(f);
+    Check(std::strstr(report,"tracking,route_assisted")&&std::strstr(report,"route_corrections,")&&std::strstr(report,"estimated_path_velocity"),"assisted captures cannot be mistaken for unmodified simulation replay");
+}
+static void ExternalTape(const char *path){
+    FILE *f=std::fopen(path,"r");SimulationReplayCore::Tape input;
+    Check(f&&input.Load(f),"external replay tape loads");if(f)std::fclose(f);
+    unsigned frames=0;bool valid=true;
+    for(uint64_t time=0;time<input.endUs;){
+        SimulationReplayCore::Sample s;SimulationReplayCore::RouteState r;
+        if(!input.At(time,s)||!input.Route(s,r)){valid=false;break;}
+        const unsigned steps[]={5000,11000,17000,7000};time+=steps[frames%4];++frames;
+    }
+    Check(valid,"external tape supports route assistance over its entire duration at mixed frame rates");
+    std::printf("External tape: %.3f seconds, %zu source samples, %u route frames validated.\n",double(input.endUs)/1000000,input.samples.size(),frames);
+}
+int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}

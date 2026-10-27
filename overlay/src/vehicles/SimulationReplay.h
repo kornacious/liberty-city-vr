@@ -12,8 +12,8 @@ bool SimulationReplayProtected(CEntity *entity);
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
 // Rows: record, demo, play, stop, playback ghost, auto profile, limit,
-// recording ghost, delete, back.
-constexpr int SimulationReplayMenuRows=10;
+// recording ghost, delete, route assistance, back.
+constexpr int SimulationReplayMenuRows=11;
 void SimulationReplayMenuRow(int row,char *text,size_t capacity);
 bool SimulationReplayMenuAction(int row,int direction);
 const char *SimulationReplayStatus();

@@ -15,6 +15,8 @@
 #include "Game.h"
 #include "Zones.h"
 #include "Collision.h"
+#include "ModelIndices.h"
+#include "CarCtrl.h"
 #include <algorithm>
 #include <dirent.h>
 #include <memory>
@@ -34,6 +36,9 @@ int request=0,reference=-1,selectedDemo=0;
 unsigned model=0,signature=0,duration=120,sampleCount=0;
 bool ghost=true,autoProfile=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
 bool recordingGhost=true,startFailed=false;
+bool routeAssistance=true,runAssisted=false;
+unsigned corrections=0;
+float correctionMax=0;
 std::string deleteArmed;
 FILE *output=nullptr;
 std::unique_ptr<Core::Tape> tape;
@@ -133,6 +138,27 @@ void Restore(CAutomobile *c){
     c->m_fDamageImpulse=0;c->bIsStuck=false;c->bHasContacted=false;c->bHasHitWall=false;
     c->GetMatrix().UpdateRW(); c->UpdateRwFrame(); CWorld::Add(c);
 }
+bool FollowRoute(CAutomobile *c){
+    Core::RouteState state;
+    if(!tape->Route(applied,state)) return false;
+    const float distance=(c->GetPosition()-Vec(state.position)).Magnitude();
+    if(!std::isfinite(distance)) return false;
+    correctionMax=std::max(correctionMax,distance);++corrections;
+    // Relink sectors without toggling audio or moving-list membership, repairing
+    // the car, or resetting suspension every frame. Physics still executes next.
+    c->SetPosition(Vec(state.position));c->GetRight()=Vec(state.right);
+    c->GetForward()=Vec(state.forward);c->GetUp()=Vec(state.up);
+    c->m_vecMoveSpeed=Vec(state.move);c->m_vecTurnSpeed=Vec(state.turn);
+    c->m_vecMoveFriction=c->m_vecTurnFriction=CVector(0,0,0);
+    c->m_vecMoveSpeedAvg=c->m_vecMoveSpeed;c->m_vecTurnSpeedAvg=c->m_vecTurnSpeed;c->m_nStaticFrames=0;
+    if(distance>2){
+        c->ResetSuspension();
+        for(int i=0;i<4;++i){c->m_aGroundPhysical[i]=nullptr;c->m_aGroundOffset[i]=CVector(0,0,0);c->m_aSuspensionSpringRatioPrev[i]=1;}
+        c->m_fDamageImpulse=0;c->bIsStuck=false;c->bHasContacted=false;c->bHasHitWall=false;
+    }
+    c->GetMatrix().UpdateRW();c->UpdateRwFrame();c->RemoveAndAdd();
+    return true;
+}
 void Finish(const char *reason){
     if(mode==Idle || mode==Finishing) return;
     result=reason;
@@ -156,6 +182,9 @@ void WriteReport(){
         drift.count,drift.Rms(),double(drift.maxPosition),double(drift.maxSpeed),double(drift.maxHeading),__DATE__,__TIME__);
     for(int i=0;i<5;++i) std::fprintf(f,"assets_%d,%d\n",i,initial.assets[i]);
     std::fprintf(f,"recording_ghost,%d\n",initial.recordingGhost);
+    std::fprintf(f,"ghost_policy,traffic_props_preserve_roads\n");
+    std::fprintf(f,"tracking,%s\nroute_corrections,%u\nroute_correction_max_m,%.9g\nreference_state,%s\n",
+        runAssisted?"route_assisted":"input_only",corrections,double(correctionMax),runAssisted?"position_heading_and_estimated_path_velocity":"unmodified_simulation");
     std::fprintf(f,"playback_start_monotonic_ns,%llu\nplayback_end_monotonic_ns,%llu\nprofile_start_simulation_us,%llu\n",
         (unsigned long long)playbackStartNs,(unsigned long long)playbackEndNs,(unsigned long long)profileStartUs);
     if(std::fclose(f)!=0) Status("RUN REPORT CLOSE FAILED");
@@ -190,6 +219,7 @@ bool Start(int operation){
     sampleCount=0; elapsed=lastInput=0; gameTime=warmTime=0; drift={}; wallStart=Now();
     playbackStartNs=playbackEndNs=profileStartUs=0;
     runGhost=operation==1?recordingGhost:ghost;runAutoProfile=autoProfile;profileStarted=false;profile.clear();runId.clear();
+    runAssisted=operation==2 && routeAssistance && runGhost;corrections=0;correctionMax=0;
     if(operation==2){
         runId=Unique();
         if(runAutoProfile) QuestProfilerSetDisplayMode(0);
@@ -216,9 +246,18 @@ bool Protected(CEntity *e){
 } // namespace
 
 bool SimulationReplayProtected(CEntity *e){return Protected(e);}
+static bool GhostObstacle(CEntity *e){
+    // Buildings/terrain remain solid. Props can be physical objects, unloaded
+    // dummy objects, or known street furniture represented as static buildings.
+    if(CCarCtrl::ThisRoadObjectCouldMove(e->GetModelIndex())) return false;
+    return e->IsPed()||e->IsVehicle()||e->IsObject()||e->IsDummy()||
+        IsStreetLight(e->GetModelIndex())||IsTreeModel(e->GetModelIndex())||IsFence(e->GetModelIndex());
+}
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b){
     if(!a || !b || !runGhost || mode==Idle) return false;
-    return Core::IgnorePair(true,Protected(a),Protected(b),a->IsPed()||a->IsVehicle(),b->IsPed()||b->IsVehicle());
+    const bool protectedA=Protected(a),protectedB=Protected(b);
+    if(!protectedA&&!protectedB) return false;
+    return Core::IgnorePair(true,protectedA,protectedB,GhostObstacle(a),GhostObstacle(b));
 }
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker){return Protected(victim)||Protected(attacker);}
 void SimulationReplayBeginFrame(){
@@ -230,12 +269,16 @@ void SimulationReplayBeginFrame(){
     if(Now()-wallStart>300000000000ULL){Finish("ABORTED - WALL TIME LIMIT");return;}
     frameDt=CTimer::GetTimeStepInSeconds();sampled=false;
     if(!std::isfinite(frameDt) || frameDt<0 || frameDt>0.25f){Finish("ABORTED - INVALID SIMULATION TIMESTEP");return;}
-    if(mode==Preparing && warmTime>=2){Restore(c);mode=Playing;playbackStartNs=Now();Status("PLAYING - OPEN THIS MENU TO STOP");}
+    if(mode==Preparing && warmTime>=2){Restore(c);mode=Playing;playbackStartNs=Now();Status(runAssisted?"PLAYING - ROUTE ASSISTANCE ACTIVE":"PLAYING - INPUT ONLY, DRIFT LIMIT 50M");}
     if(mode==Playing){
         if(!tape->At(elapsed,applied)){Finish("COMPLETE");return;}
         const CVector p=c->GetPosition(),f=c->GetForward();
         const float position[]={p.x,p.y,p.z},forward[]={f.x,f.y,f.z};
-        if(!drift.Add(applied,position,forward,c->m_vecMoveSpeed.Magnitude()*180.0f)){Finish("ABORTED - ROUTE DRIFT EXCEEDED 50 METERS");return;}
+        const bool withinLimit=drift.Add(applied,position,forward,c->m_vecMoveSpeed.Magnitude()*180.0f);
+        if(drift.invalid){Finish("ABORTED - INVALID VEHICLE STATE");return;}
+        if(runAssisted){
+            if(!FollowRoute(c)){Finish("ABORTED - INVALID ROUTE REFERENCE OR VEHICLE STATE");return;}
+        }else if(!withinLimit){Finish("ABORTED - ROUTE DRIFT EXCEEDED 50 METERS");return;}
     }
 }
 void SimulationReplayInputs(CAutomobile *c){
@@ -267,7 +310,7 @@ void SimulationReplayAfterAppFrame(){
     if(request==3){request=0;Finish(mode==Recording?"RECORDING SAVED":"ABORTED - STOPPED BY USER");}
     if(mode!=Idle && mode!=Finishing && Now()-wallStart>300000000000ULL) Finish("ABORTED - WALL TIME LIMIT");
     if(mode==Playing && runAutoProfile && !profileStarted){
-        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";run="+runId;
+        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";run="+runId;
         QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetDisplayMode(2);
         profileStartUs=elapsed;
         profile=QuestProfilerGetCaptureStem();profileStarted=true;
@@ -304,6 +347,7 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 6:std::snprintf(text,capacity,"RECORDING LIMIT  < %u SECONDS >",duration);break;
     case 7:std::snprintf(text,capacity,"RECORDING GHOST  < %s >",recordingGhost?"ON":"OFF");break;
     case 8:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
+    case 9:std::snprintf(text,capacity,"ROUTE ASSISTANCE  < %s >",ghost?(routeAssistance?"ON":"OFF"):"OFF - PLAYBACK GHOST REQUIRED");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
@@ -320,6 +364,7 @@ bool SimulationReplayMenuAction(int row,int direction){
     case 5:autoProfile=!autoProfile;break;
     case 6:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
     case 7:recordingGhost=!recordingGhost;break;
+    case 9:routeAssistance=!routeAssistance;break;
     case 8:{
         Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
         const std::string name=demos[selectedDemo];

@@ -18,6 +18,18 @@ struct Sample {
     VehicleCaptureCore::Input input;
     float position[3] = {}, forward[3] = {}, speed = 0;
 };
+struct RouteState {
+    float position[3]={},right[3]={},forward[3]={},up[3]={},move[3]={},turn[3]={};
+};
+inline bool Normalize(float *v){
+    const float n=std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    if(!std::isfinite(n)||n<0.0001f) return false;
+    for(int i=0;i<3;++i) v[i]/=n;
+    return true;
+}
+inline void Cross(const float *a,const float *b,float *out){
+    out[0]=a[1]*b[2]-a[2]*b[1];out[1]=a[2]*b[0]-a[0]*b[2];out[2]=a[0]*b[1]-a[1]*b[0];
+}
 inline bool Valid(const Sample &s) {
     if(!VehicleCaptureCore::Valid(s.input) || !std::isfinite(s.speed) || s.speed < 0 || s.speed > 1800) return false;
     float norm = 0;
@@ -101,19 +113,49 @@ public:
         }
         return true;
     }
+    // Route assistance is deliberately separate from input replay. Legacy tapes
+    // record position/forward, so velocity and upright basis are estimates from
+    // the path, not a claim to restore the original complete physics state.
+    bool Route(const Sample &reference,RouteState &out) const {
+        if(samples.empty()||cursor>=samples.size()) return false;
+        out={};
+        for(int i=0;i<3;++i){out.position[i]=reference.position[i];out.forward[i]=reference.forward[i];}
+        if(!Normalize(out.forward)){
+            for(int i=0;i<3;++i) out.forward[i]=samples[cursor].forward[i];
+            if(!Normalize(out.forward)) return false;
+        }
+        const float worldUp[]={0,0,1},sideUp[]={1,0,0};
+        Cross(out.forward,std::fabs(out.forward[2])<0.95f?worldUp:sideUp,out.right);
+        if(!Normalize(out.right)) return false;
+        Cross(out.right,out.forward,out.up);
+        if(samples.size()>1){
+            const size_t a=cursor+1<samples.size()?cursor:cursor-1,b=a+1;
+            const float dt=float(samples[b].input.us-samples[a].input.us)/1000000.0f;
+            float derivative[3];
+            if(dt<=0) return false;
+            for(int i=0;i<3;++i){
+                out.move[i]=(samples[b].position[i]-samples[a].position[i])/(dt*50.0f);
+                derivative[i]=(samples[b].forward[i]-samples[a].forward[i])/(dt*50.0f);
+            }
+            Cross(out.forward,derivative,out.turn);
+        }
+        for(int i=0;i<3;++i) if(!std::isfinite(out.move[i])||std::fabs(out.move[i])>10||!std::isfinite(out.turn[i])||std::fabs(out.turn[i])>10) return false;
+        return true;
+    }
 };
 // The same symmetric policy is used by sector broad phase and entity narrow phase.
 inline bool IgnorePair(bool enabled,bool protectedA,bool protectedB,bool dynamicA,bool dynamicB) {
     return enabled && ((protectedA && dynamicB) || (protectedB && dynamicA));
 }
 struct Drift {
+    bool invalid=false;
     double squared=0;
     unsigned count=0;
     float maxPosition=0,maxSpeed=0,maxHeading=0;
     bool Add(const Sample &reference,const float *position,const float *forward,float speed) {
         float d=0,dot=0,norm=0;
         for(int i=0;i<3;++i) { const float v=position[i]-reference.position[i]; d+=v*v; dot+=forward[i]*reference.forward[i]; norm+=reference.forward[i]*reference.forward[i]; }
-        if(!std::isfinite(d) || !std::isfinite(dot) || !std::isfinite(speed)) return false;
+        if(!std::isfinite(d) || !std::isfinite(dot) || !std::isfinite(speed)){invalid=true;return false;}
         const float meters=std::sqrt(d);
         const float cosine=norm>0.0001f?dot/std::sqrt(norm):1.0f;
         maxPosition=std::max(maxPosition,meters); maxSpeed=std::max(maxSpeed,std::fabs(speed-reference.speed));

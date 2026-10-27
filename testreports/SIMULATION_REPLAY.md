@@ -28,14 +28,32 @@ a reference route, then runs those controls through the live simulation.
 
 **Recording Ghost** and **Playback Ghost** are independent options, both on by
 default. During the corresponding operation, the car, player and occupants ignore
-pedestrian/vehicle collisions in both processing directions. Ambient entities
-still collide with each other; roads, curbs, buildings and objects retain
-collision physics. Ghost playback suppresses incoming damage, explosions,
+pedestrian/vehicle/prop collisions in both processing directions. Physical and
+dummy props, known static street lights, trees and fences are ignored. Ambient
+entities still collide with each other. Roads, curbs, ordinary buildings and the
+game's moving bridge road sections retain collision physics. Ghost playback suppresses incoming damage, explosions,
 fire, tyre damage and carjacking, and blocks outgoing weapons/melee and vehicle
 impacts against pedestrians. It also suppresses collision damage to the replay
 car, including damage from scenery. No persistent collision/proof flags are
 changed; these filters expire when the run ends. Playback ghost also applies
 during preparation. Neither option changes ordinary gameplay outside a run.
+
+**Route Assistance** defaults on for ghost playback. It anchors the automobile
+to the interpolated recorded route before each simulation step, restoring route
+position/heading and estimating linear/angular velocity from adjacent path
+samples. Native automobile controls, physics, road/building collisions, ambient
+simulation and rendering still execute. Sector membership is updated without
+removing/readding the moving entity or toggling its audio. The car is not repaired
+on each correction. Large corrections clear stale suspension contacts.
+
+This makes long benchmark routes usable despite input replay divergence. It is
+an assisted route benchmark, not an unmodified vehicle-physics accuracy test.
+Existing V1/V2 recordings work; their path supplies an estimated upright basis
+and velocity, not a complete recorded physics snapshot or exact banking/roll.
+Turning assistance off keeps the original input-only simulation and 50-metre
+drift abort. Disabling playback ghost also disables assistance. Use the same
+tracking mode in before/after comparisons, and use input-only mode when testing
+the uncorrected dynamics themselves.
 
 **Delete Selected Demo** asks for a second press on the same row, then removes
 only the selected input tape. Run reports and performance captures are kept.
@@ -69,6 +87,11 @@ Files are local under the application's external files directory:
   ghost/auto-profile settings, linked profiler stem, game duration, comparison
   sample count, RMS/maximum position error, maximum heading/speed errors,
   build timestamp and profiler timing alignment.
+  `tracking` identifies `route_assisted` versus `input_only`; `route_corrections`
+  counts applied route anchors and `route_correction_max_m` reports the largest
+  position adjustment. Drift statistics are measured before correction, so
+  assisted completion does not conceal divergence. `reference_state` labels the
+  estimated reference state, and `ghost_policy` identifies prop filtering.
 - Existing `perf-captures/*.frames.csv` and `*.session.csv`: normal full
   profiling data. Session metadata now links the replay demo, run ID and ghost
   settings for recording and playback. The run report's `profile_start_simulation_us` identifies the initial
@@ -101,10 +124,11 @@ snapshot of every internal car field.
 
 Reference positions/speeds/heading are interpolated for comparison, while
 controls are held until their next sample. Playback never corrects its route by
-snapping. It aborts when position error exceeds 50 metres, vehicle ownership or
-handling changes, a cutscene/native replay begins, a required input hook is
+snapping in input-only mode. In that mode it aborts when position error exceeds
+50 metres. Both modes abort if vehicle ownership or handling changes, a cutscene/native replay begins, a required input hook is
 lost, an automatic capture fails/is interrupted, or five wall-clock minutes
-elapse. User stops are reported as aborted playback. Completed runs can still
+elapse. Assistance also rejects nonfinite state or implausible reference
+velocities rather than applying corrupt path data. User stops are reported as aborted playback. Completed runs can still
 have substantial error: inspect the run report before treating two captures as
 comparable. Use the same settings, car, route and ghost option for before/after
 tests, and repeat runs to account for the live world and cache differences.
@@ -122,6 +146,11 @@ and the Android toolchain, not original game assets.
   vehicle handles, recording/playback ghost symmetry/scope/cleanup, V1/V2 tape
   compatibility, deletion scope/confirmation, failed-start feedback, recording
   HUD lifetime/text bounds, file persistence and menu geometry.
+  A full 120-second assisted regression uses changing timesteps and injected
+  80-metre disturbances, checks completion and profiler shutdown, and verifies
+  that reports retain correction counts and pre-correction divergence. Prop
+  tests cover both entity orders, static furniture, dummy objects, ambient pairs
+  and preserved moving bridge roads. Input-only drift abort remains covered.
 - The minimal-profiler placement suite checks recording panels both alone and
   below FPS across asymmetric/canted binocular views, including narrow FOVs.
 - Integration checks verify the World/input/physics/damage/fire/weapon/menu/app
