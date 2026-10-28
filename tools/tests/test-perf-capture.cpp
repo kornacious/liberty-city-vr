@@ -159,6 +159,7 @@ int main()
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
     assert(all.find("schema,6\n") != std::string::npos);
+    assert(all.find("opaque_world_alpha_fast_path,guarded_opaque_positive_alpha_test_ref\n") != std::string::npos);
     assert(all.find("draw_model_capacity,dynamic\n") != std::string::npos);
     assert(all.find("gpu_pass_interval_frames,8\n")!=std::string::npos);
     assert(all.find("gpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\n")!=std::string::npos);

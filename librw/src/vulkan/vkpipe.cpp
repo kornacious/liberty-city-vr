@@ -461,6 +461,20 @@ selectAtomicAlphaPasses(const InstanceData *inst,const Material *material,
 	return UniformAlphaPolicy::Select(alpha,reference);
 }
 
+static bool
+useOpaqueWorldPipeline(const InstanceData *inst,const Material *material,
+                      const Raster *raster,const Geometry *geometry,uint32 shader,
+                      const uint32 *boneOffset,bool gsSplit,bool wantsBlend,
+                      bool textureAlpha)
+{
+	if(gsSplit||wantsBlend||gstate.vertexAlphaEnabled)
+		return false;
+	// Probe the same conservative opacity/threshold proof without enabling a
+	// split. This draw uses the normal positive alphaTestRef, not gsAlphaTestRef.
+	return selectAtomicAlphaPasses(inst,material,raster,geometry,shader,boneOffset,
+		true,false,textureAlpha,gstate.alphaTestRef/255.0f)==UniformAlphaPolicy::Solid;
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -689,6 +703,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		const uint32 alphaPasses=selectAtomicAlphaPasses(inst,material,raster,geometry,
 			shader,boneOffset,gsSplit,vehicleSplit,textureAlpha,splitReference);
 		const int firstGsPass=(alphaPasses&UniformAlphaPolicy::Solid)?0:1;
+		const bool opaqueWorldPipeline=useOpaqueWorldPipeline(inst,material,raster,
+			geometry,shader,boneOffset,gsSplit,wantsBlend,textureAlpha);
 		for(int gsPass = 0; gsPass < (gsSplit ? 2 : 1); gsPass++){
 		// Skip before state changes/binds: the complementary shader test is
 		// guaranteed to discard every fragment, including motion outputs.
@@ -697,6 +713,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			gstate.zWriteEnabled = 0;
 		const uint32 savedAlphaFunction = gstate.alphaTestFunction;
 		if(vehicleSplit) gstate.alphaTestFunction = ALPHAGREATEREQUAL;
+		else if(opaqueWorldPipeline) gstate.alphaTestFunction = ALPHAALWAYS;
 		const bool profileDepthWrite = gstate.zWriteEnabled != 0;
 		const bool profileAlphaTest = gstate.alphaTestFunction != ALPHAALWAYS;
 		VkPipeline pipeline = getPipeline(shader,

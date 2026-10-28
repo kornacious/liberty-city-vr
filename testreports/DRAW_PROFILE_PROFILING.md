@@ -55,6 +55,11 @@ contributing half of a PS2 split. Its sole submitted half counts as the primary
 mesh pass; PS2 policy flags still apply to it. Use `extra_split_draws` for actual
 additional submissions rather than dividing `ps2_split_draws` by two.
 
+The [opaque-world pipeline](OPAQUE_WORLD_ALPHA.md) additionally selects the
+existing shader variant without alpha testing for proven opaque unsplit world
+meshes. `alpha_test_draws` counts the selected variant rather than the restored
+engine state, allowing its coverage to be checked against total draw counts.
+
 Triangles are not multiplied by eye count. List counts use index/vertex count
 divided by three; strips/fans use count minus two and include degenerates.
 Submitted triangles are not rasterized/visible triangles or unique geometry.
