@@ -159,6 +159,7 @@ int main()
     std::string all((std::istreambuf_iterator<char>(metadata)), std::istreambuf_iterator<char>());
     assert(all.find("active_model_set,CLASSIC\n") != std::string::npos);
     assert(all.find("schema,6\n") != std::string::npos);
+    assert(all.find("draw_model_capacity,dynamic\n") != std::string::npos);
     assert(all.find("gpu_pass_interval_frames,8\n")!=std::string::npos);
     assert(all.find("gpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\n")!=std::string::npos);
     assert(all.find("written_rows,"+std::to_string(rows)+"\n") != std::string::npos);
@@ -181,10 +182,29 @@ int main()
             assert(std::stoul(cells[drawColumn("mesh_passes")])==62);
             assert(std::stoul(cells[drawColumn("extra_split_draws")])==61);
             assert(std::stoul(cells[drawColumn("distance_fade_draws")])==123);
+            assert(std::stoul(cells[drawColumn("model_buckets")])==1);
+            assert(std::stoul(cells[drawColumn("model_capacity")])>=DrawProfile::InitialModels);
+            assert(std::stoul(cells[drawColumn("model_allocation_failures")])==0);
         }
     }
     assert(detailRows==15);
     assert(all.find("write_error,0\n") != std::string::npos);
     assert(all.find("overwrite_attempt") == std::string::npos);
+    // Serialize a census well above the old cap and the new initial reserve.
+    DrawProfile::Recording large;large.Reset();
+    const unsigned owners=DrawProfile::InitialModels+257;
+    for(unsigned i=0;i<owners;++i)for(unsigned phase:{unsigned(GpuPassProfile::World),unsigned(GpuPassProfile::Fading),unsigned(GpuPassProfile::Effects)}){
+        large.Begin(DrawProfile::Entity(int(i),0,"large_model",0));large.Draw(phase,3,3,DrawProfile::Mesh);large.End();
+    }
+    frame.id=frame.gpu.frameId=1;frame.startNs=frame.gpu.startNs=10000000;
+    frame.gpu.geometry=std::make_shared<const DrawProfile::Stats>(large.stats);
+    for(unsigned i=0;i<GpuPassCount;++i)frame.gpu.draws[i]=large.stats.passes[i][DrawProfile::Draws];
+    assert(writer.Start(stem+"-large", "active_model_set,CLASSIC\n"));
+    bool submitted=false;
+    for(unsigned retry=0;retry<1000&&!submitted;++retry){submitted=writer.Submit(frame);if(!submitted)std::this_thread::yield();}
+    assert(submitted);writer.Stop();
+    std::ifstream largeRows(stem+"-large.draws.csv");
+    unsigned exported=0;while(std::getline(largeRows,line))++exported;
+    assert(exported==1+GpuPassCount+owners*3);
     std::printf("PASS: player transitions, raw timing precision, CSV schema, bounded writer accounting, shutdown drain and exclusive sessions (%u rows).\n", rows);
 }

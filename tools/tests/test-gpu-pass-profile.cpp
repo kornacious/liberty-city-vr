@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 using uint64=uint64_t;using uint32=uint32_t;using int32=int;using bool32=int;using float32=float;
 #define nil nullptr
 enum {VK_NULL_HANDLE=0,VK_SUCCESS=0,VK_NOT_READY=1,VK_QUERY_RESULT_64_BIT=1,VK_QUERY_RESULT_WITH_AVAILABILITY_BIT=2,VK_QUERY_RESULT_WAIT_BIT=4,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT=8};
@@ -100,22 +101,49 @@ int main(){
     countGpuProfileDraw(6,3,DrawProfile::Mesh);endGpuProfileEntity();
     endGpuProfilePass(Fading);endGpuProfilePass(Scene);Decode();
     assert(getGpuPassProfile(&result)&&result.status==Complete);
-    const auto &details=result.geometry;
+    const auto savedGeometry=result.geometry;
+    const auto &details=*savedGeometry;
     assert(details.modelCount==2&&details.overflowDraws==0);
     assert(details.passes[Fading][DrawProfile::Draws]==4&&result.draws[Fading]==4);
     assert(details.passes[Fading][DrawProfile::Triangles]==16);
     assert(details.passes[Fading][DrawProfile::MeshPasses]==3&&details.passes[Fading][DrawProfile::ExtraSplit]==1);
     assert(details.models[0].counters[DrawProfile::DistanceFade]==3&&details.models[1].counters[DrawProfile::DistanceFade]==0);
     assert(std::strcmp(details.models[0].entity.name,"road__name")==0);
-    DrawProfile::Recording bounded;
-    for(unsigned i=0;i<DrawProfile::MaxModels+10;++i){
-        bounded.Begin(DrawProfile::Entity(int(i),0,"model",0));bounded.Draw(World,3,3,0);bounded.End();
+    // Census exceeds the old 512 cap and forces multiple transactional
+    // rehashes, with the same owner appearing in three logical phases.
+    DrawProfile::Recording bounded;bounded.Reset();
+    const unsigned ownerCount=DrawProfile::InitialModels+257;
+    for(unsigned i=0;i<ownerCount;++i){
+        for(unsigned phase:{unsigned(World),unsigned(Fading),unsigned(Effects)}){
+            bounded.Begin(DrawProfile::Entity(int(i),int(i%5),"model",0));
+            bounded.Draw(phase,3,3,DrawProfile::Mesh);bounded.End();
+        }
     }
-    assert(bounded.stats.modelCount==DrawProfile::MaxModels&&bounded.stats.overflowDraws==10);
-    assert(bounded.stats.passes[World][DrawProfile::Draws]==DrawProfile::MaxModels+10);
-    // Overflow doesn't prevent later updates to an already tracked model.
-    bounded.Begin(DrawProfile::Entity(0,0,"model",0));bounded.Draw(World,2,1,0);bounded.End();
-    assert(bounded.stats.models[0].counters[DrawProfile::Draws]==2&&bounded.stats.models[0].counters[DrawProfile::Triangles]==1);
+    assert(bounded.stats.modelCount==ownerCount*3&&bounded.stats.overflowDraws==0);
+    assert(bounded.stats.models.size()==bounded.stats.modelCount&&bounded.stats.tableGrowths>=3);
+    assert(bounded.stats.passes[World][DrawProfile::Draws]==ownerCount);
+    for(const auto &model:bounded.stats.models){
+        assert(model.counters[DrawProfile::Draws]==1&&model.counters[DrawProfile::Triangles]==1);
+    }
+    bounded.Begin(DrawProfile::Entity(0,0,"model",0));bounded.Draw(World,6,3,DrawProfile::Extra);bounded.End();
+    assert(bounded.stats.models[0].counters[DrawProfile::Draws]==2&&bounded.stats.models[0].counters[DrawProfile::Triangles]==3);
+    const auto retained=bounded.stats.models.data();const unsigned capacity=bounded.stats.modelCapacity;
+    bounded.Reset();assert(bounded.stats.models.data()==retained&&bounded.stats.modelCapacity==capacity);
+    assert(bounded.stats.modelCount==0&&bounded.stats.tableGrowths==0&&bounded.stats.overflowDraws==0);
+    bounded.Begin(DrawProfile::Entity(0,0,"model",0));bounded.Draw(World,3,3,0);bounded.End();
+    assert(bounded.stats.models[0].counters[DrawProfile::Draws]==1); // no previous-frame counters
+    // Exhaustion keeps existing owners and complete phase totals intact.
+    DrawProfile::Recording failed;failed.Reset();
+    for(unsigned i=0;i<DrawProfile::InitialModels;++i){
+        failed.Begin(DrawProfile::Entity(int(i),0,"model",0));failed.Draw(World,3,3,0);failed.End();
+    }
+    assert(!failed.Reserve(std::numeric_limits<size_t>::max()));
+    failed.Begin(DrawProfile::Entity(0,0,"model",0));failed.Draw(World,3,3,0);failed.End();
+    failed.Begin(DrawProfile::Entity(int(DrawProfile::InitialModels),0,"new",0));failed.Draw(World,3,3,0);failed.End();
+    assert(failed.stats.allocationFailures==1&&failed.stats.overflowDraws==1);
+    assert(failed.stats.modelCount==DrawProfile::InitialModels&&failed.stats.models[0].counters[DrawProfile::Draws]==2);
+    assert(failed.stats.passes[World][DrawProfile::Draws]==DrawProfile::InitialModels+2);
+    assert(savedGeometry->models[0].counters[DrawProfile::Draws]==3); // immutable result survives recorder growth/reset
     for(unsigned i=0;i<DrawProfile::ContextDepth+2;++i)bounded.Begin(DrawProfile::Entity(int(i),0,"nested",0));
     assert(bounded.entity.model==-1&&bounded.stats.contextOverflows==2);
     bounded.End();bounded.End();assert(bounded.entity.model==int(DrawProfile::ContextDepth-1));

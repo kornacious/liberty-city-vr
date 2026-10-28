@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cmath>
+#include <memory>
 #include "DrawProfile.h"
 
 // Portable bookkeeping/decoding shared by the Vulkan backend and host tests.
@@ -28,7 +29,7 @@ struct Result {
     uint32_t mask=0,status=NoSample;
     float frameMs=-1,ms[Count];
     uint32_t draws[Count]={};
-    DrawProfile::Stats geometry;
+    std::shared_ptr<const DrawProfile::Stats> geometry;
     Result(){for(float &v:ms)v=-1;}
 };
 inline double Milliseconds(uint64_t begin,uint64_t end,unsigned bits,double period){
@@ -48,7 +49,7 @@ struct Recording {
         depth=markers=lastQuery=0;active=timingActive=Other;
         seen=uint32_t(1)<<Other;status=NoSample;sampled=enable;
         for(auto &v:draws)v=0;
-        if(enable)geometry={}; // No model-table clearing on unsampled/off frames.
+        if(enable)geometry.Reset(); // Reuse storage; leave unsampled/off frames alone.
     }
     int Transition(unsigned pass){
         if(timingActive==pass)return -1;
@@ -83,7 +84,6 @@ struct Recording {
         if(!sampled)return out;
         out.status=status!=NoSample?status:depth?Unbalanced:Complete;
         for(unsigned i=0;i<Count;++i)out.draws[i]=draws[i];
-        out.geometry=geometry.stats;
         if(out.status!=Complete)return out;
         if(!queries[0][1]||!queries[1][1]){out.status=Unavailable;return out;}
         const double total=Milliseconds(queries[0][0],queries[1][0],bits,period);
@@ -98,6 +98,9 @@ struct Recording {
         }
         out.frameMs=float(total);out.mask=seen;
         for(unsigned i=0;i<Count;++i)if(seen&(uint32_t(1)<<i))out.ms[i]=times[i];
+        // Readback and writer share this immutable snapshot. Later frame-slot
+        // resets/growth cannot mutate a queued sample or force per-frame copies.
+        out.geometry=std::make_shared<const DrawProfile::Stats>(geometry.stats);
         return out;
     }
 };

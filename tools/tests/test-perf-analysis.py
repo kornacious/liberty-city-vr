@@ -24,9 +24,10 @@ class AnalysisTests(unittest.TestCase):
             companion=path.with_name("test.draws.csv")
             fields=["source_frame_id","source_start_ns","kind","phase","model_id","entity_class",
                     "model_name","model_overflow_draws","context_overflows"]+analysis.DRAW_COUNTERS
-            def write(corrupt=False,overflow=False):
+            capacity_fields=["model_buckets","model_capacity","model_table_growths","model_allocation_failures"]
+            def write(corrupt=False,overflow=False,capacity=False,bad_capacity=False):
                 with companion.open("w",newline="") as stream:
-                    writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader()
+                    writer=csv.DictWriter(stream,fieldnames=fields+(capacity_fields if capacity else []));writer.writeheader()
                     for source in [1,2]:
                         for phase in analysis.GPU_PASSES:
                             row=dict.fromkeys(analysis.DRAW_COUNTERS,0)
@@ -34,11 +35,14 @@ class AnalysisTests(unittest.TestCase):
                                 phase=phase,model_id=-1,entity_class=4,model_name="all",
                                 model_overflow_draws=1 if overflow else 0,context_overflows=0)
                             if phase=="world":row.update(draws=3,triangles=12,geometry_known_draws=3,mesh_passes=3)
+                            if capacity:row.update(model_buckets=1,model_capacity=2048,
+                                model_table_growths=1,model_allocation_failures=0)
                             writer.writerow(row)
                         row.update(kind="model",phase="world",model_id=10,entity_class=0,model_name="building",
                             draws=2 if overflow else 3,triangles=8 if overflow else 12,
                             geometry_known_draws=2 if overflow else 3,mesh_passes=2 if overflow else 3)
                         if corrupt and source==1:row["source_start_ns"]=1
+                        if bad_capacity and source==1:row["model_buckets"]=2
                         writer.writerow(row)
             write()
             result=analysis.summarize_draw_details(path,rows,{1},{"draw_rows":"30"})
@@ -58,6 +62,18 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["model_overflow_draws"],2)
             self.assertEqual(result["phases"]["world"]["mean_per_sample"]["draws"],3)
             self.assertEqual(result["top_models_by_draws"][0]["mean_draws_per_sample"],2)
+            self.assertTrue(result["model_rankings_truncated"])
+            self.assertEqual(result["omitted_model_draws_by_phase"]["world"],2)
+            write(capacity=True)
+            result=analysis.summarize_draw_details(path,rows,{1,2},{})
+            self.assertFalse(result["model_rankings_truncated"])
+            self.assertEqual(result["peak_model_buckets"],1)
+            self.assertEqual(result["peak_model_capacity"],2048)
+            self.assertEqual(result["model_table_growths"],2)
+            self.assertEqual(result["model_allocation_failures"],0)
+            write(capacity=True,bad_capacity=True)
+            result=analysis.summarize_draw_details(path,rows,{1,2},{})
+            self.assertEqual(result["invalid_source_groups"],1)
 
     def test_whole_render_pass_timing_keeps_draw_only_phases(self):
         row = dict(frame_id="1", start_monotonic_ns="10000000",

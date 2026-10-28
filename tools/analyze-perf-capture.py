@@ -39,6 +39,8 @@ def summarize_draw_details(path, rows, selected_ids, metadata):
     accepted, seen = set(), set()
     phases, models, windows = {}, {}, {}
     invalid = excluded = unmatched = count_rows = overflow = contexts = unattributed = 0
+    peak_models = peak_capacity = growths = allocation_failures = overflow_samples = 0
+    omitted_by_phase = Counter()
     start_ns = int(rows[0]["start_monotonic_ns"])
 
     def accumulate(target, key, values):
@@ -46,6 +48,7 @@ def summarize_draw_details(path, rows, selected_ids, metadata):
 
     def consume(group):
         nonlocal invalid, excluded, unmatched, overflow, contexts, unattributed
+        nonlocal peak_models, peak_capacity, growths, allocation_failures, overflow_samples
         try:
             source = int(group[0]["source_frame_id"])
             if source in seen:
@@ -96,13 +99,26 @@ def summarize_draw_details(path, rows, selected_ids, metadata):
                     raise ValueError("Unaccounted model counters")
             if sum(v["draws"] for v in totals.values())-sum(v["draws"] for _, v in detail) != lost:
                 raise ValueError("Overflow does not reconcile")
+            capacity_fields = ["model_buckets", "model_capacity", "model_table_growths", "model_allocation_failures"]
+            capacity_info = None
+            if any(k in group[0] for k in capacity_fields):
+                capacity_info = tuple(int(group[0][k]) for k in capacity_fields)
+                buckets, capacity, expanded, failures = capacity_info
+                if min(capacity_info) < 0 or buckets != len(detail) or capacity < buckets:
+                    raise ValueError("Invalid model capacity accounting")
+                if any(tuple(int(r[k]) for k in capacity_fields) != capacity_info for r in group):
+                    raise ValueError("Inconsistent capacity accounting")
             second = int(((int(sources[source]["start_monotonic_ns"])-start_ns)/1e9)//5)*5
-            window = windows.setdefault(second, {"samples": 0, "gpu_sum": 0, "phases": {}, "models": {}})
+            window = windows.setdefault(second, {"samples": 0, "gpu_sum": 0, "phases": {}, "models": {},
+                                                "model_overflow_draws": 0, "peak_model_buckets": 0})
             window["samples"] += 1
             window["gpu_sum"] += float(gpu[source]["gpu_pass_frame_ms"])
+            window["model_overflow_draws"] += lost
+            window["peak_model_buckets"] = max(window["peak_model_buckets"], len(detail))
             for phase, values in totals.items():
                 accumulate(phases, phase, values)
                 accumulate(window["phases"], phase, values)
+                omitted_by_phase[phase] += values["draws"]-sums[phase]["draws"]
             for key, values in detail:
                 accumulate(models, key, values)
                 accumulate(window["models"], key, values)
@@ -110,6 +126,12 @@ def summarize_draw_details(path, rows, selected_ids, metadata):
                     unattributed += values["draws"]
             overflow += lost
             contexts += context
+            overflow_samples += int(lost > 0)
+            peak_models = max(peak_models, len(detail))
+            if capacity_info:
+                peak_capacity = max(peak_capacity, capacity)
+                growths += expanded
+                allocation_failures += failures
             accepted.add(source)
         except (KeyError, ValueError, TypeError):
             invalid += 1
@@ -144,12 +166,17 @@ def summarize_draw_details(path, rows, selected_ids, metadata):
             "invalid_source_groups": invalid, "unmatched_sources": unmatched, "excluded_nongameplay_sources": excluded,
             "missing_gpu_sources": len((set(gpu) & selected_ids)-accepted),
             "model_overflow_draws": overflow, "context_overflows": contexts,
+            "model_rankings_truncated": bool(overflow), "overflow_samples": overflow_samples,
+            "peak_model_buckets": peak_models, "peak_model_capacity": peak_capacity or None,
+            "model_table_growths": growths, "model_allocation_failures": allocation_failures,
+            "omitted_model_draws_by_phase": dict(omitted_by_phase),
             "unattributed_draw_fraction": unattributed/total_draws if total_draws else None,
             "attributed_draw_fraction": (total_draws-unattributed-overflow)/total_draws if total_draws else None,
             "phases": phase_summary(phases, n), "top_models_by_draws": model_summary(models, n),
             "top_models_by_triangles": model_summary(models, n, "triangles"),
             "slow_5s_windows": [{"source_elapsed_s": second, "samples": w["samples"],
                 "gpu_frame_mean_ms": w["gpu_sum"]/w["samples"],
+                "model_overflow_draws": w["model_overflow_draws"], "peak_model_buckets": w["peak_model_buckets"],
                 "phases": phase_summary(w["phases"], w["samples"]),
                 "top_models_by_draws": model_summary(w["models"], w["samples"]),
                 "top_models_by_triangles": model_summary(w["models"], w["samples"], "triangles")}
