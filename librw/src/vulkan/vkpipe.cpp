@@ -1,4 +1,5 @@
 #include "VehicleAlphaPolicy.h"
+#include "UniformAlphaPolicy.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -430,6 +431,36 @@ pointSegmentDistSq(const float32 point[3], const float32 a[3],
 // Shared by the default and skin pipelines: same material walk, same state,
 // only the shader variant and the extra bone descriptor differ. boneOffset is
 // nil for unskinned geometry.
+static uint32
+selectAtomicAlphaPasses(const InstanceData *inst,const Material *material,
+                       const Raster *raster,const Geometry *geometry,uint32 shader,
+                       const uint32 *boneOffset,bool gsSplit,bool vehicleSplit,
+                       bool textureAlpha,float reference)
+{
+	if(!gsSplit||vehicleSplit||vehicleAlphaPass||dynamicObjectPass||
+	   shader!=SHADER_WORLD||boneOffset!=nil||inst->vertexAlpha||
+	   gstate.alphaTestFunction==ALPHAALWAYS)
+		return UniformAlphaPolicy::Both;
+	// Transparent border samples can vary alpha even for an opaque image or
+	// the white fallback. Test actual state, including inherited sampler state.
+	const uint32 u=gstate.textureAddressU,v=gstate.textureAddressV;
+	if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
+	   (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP))
+		return UniformAlphaPolicy::Both;
+	// A false alpha hint from an unsupported/subraster is not proof of
+	// uniform sampled alpha. Untextured draws bind the opaque white texture.
+	if(textureAlpha||(raster!=nil&&
+	   (raster->platform!=PLATFORM_VULKAN||
+	    (raster->type&0xF)!=Raster::TEXTURE||
+	    (raster->parent!=nil&&raster->parent!=raster))))
+		return UniformAlphaPolicy::Both;
+	// Match the actual shader multiplier, including ignored material colour
+	// on geometry without MODULATE. Vertex and texture alpha are both 1 here.
+	const float alpha=material&&(geometry->flags&Geometry::MODULATE)?
+		material->color.alpha/255.0f:1.0f;
+	return UniformAlphaPolicy::Select(alpha,reference);
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -655,7 +686,13 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		const bool blendedMask = wantsBlend && !vehicleAlphaPass &&
 			gstate.alphaTestFunction != ALPHAALWAYS;
 		gstate.mipLodBias = blendedMask ? getMaskedMipBias() : 0;
+		const uint32 alphaPasses=selectAtomicAlphaPasses(inst,material,raster,geometry,
+			shader,boneOffset,gsSplit,vehicleSplit,textureAlpha,splitReference);
+		const int firstGsPass=(alphaPasses&UniformAlphaPolicy::Solid)?0:1;
 		for(int gsPass = 0; gsPass < (gsSplit ? 2 : 1); gsPass++){
+		// Skip before state changes/binds: the complementary shader test is
+		// guaranteed to discard every fragment, including motion outputs.
+		if(!(alphaPasses&(1u<<gsPass)))continue;
 		if((vehicleAlphaPass && wantsBlend && !vehicleSplit) || (gsSplit && gsPass == 1))
 			gstate.zWriteEnabled = 0;
 		const uint32 savedAlphaFunction = gstate.alphaTestFunction;
@@ -746,7 +783,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
 			header->ibo, 0, inst->numIndex, inst->offset / 2, boneOffset, atomic);
 		countGpuProfileDraw(inst->numIndex, header->primType,
-            (gsPass==0?DrawProfile::Mesh:DrawProfile::Extra) |
+            (gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra) |
             (wantsBlend?DrawProfile::HasAlpha:0) |
             (textureAlpha?DrawProfile::HasTextureAlpha:0) |
             (inst->vertexAlpha?DrawProfile::HasVertexAlpha:0) |

@@ -50,6 +50,11 @@ and postprocessing draws contribute geometry counts but not atomic material
 reason flags. Scope replay commands currently retain unknown geometry and
 owner; `geometry_known_draws` makes that limitation explicit.
 
+The [uniform-alpha fast path](UNIFORM_ALPHA_FAST_PATH.md) can retain only the
+contributing half of a PS2 split. Its sole submitted half counts as the primary
+mesh pass; PS2 policy flags still apply to it. Use `extra_split_draws` for actual
+additional submissions rather than dividing `ps2_split_draws` by two.
+
 Triangles are not multiplied by eye count. List counts use index/vertex count
 divided by three; strips/fans use count minus two and include degenerates.
 Submitted triangles are not rasterized/visible triangles or unique geometry.
