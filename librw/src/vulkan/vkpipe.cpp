@@ -467,7 +467,7 @@ useOpaqueWorldPipeline(const InstanceData *inst,const Material *material,
                       const uint32 *boneOffset,bool gsSplit,bool wantsBlend,
                       bool textureAlpha)
 {
-	if(gsSplit||wantsBlend||gstate.vertexAlphaEnabled)
+	if(!getOpaqueWorldAlphaFastPathEnabled()||gsSplit||wantsBlend||gstate.vertexAlphaEnabled)
 		return false;
 	// Probe the same conservative opacity/threshold proof without enabling a
 	// split. This draw uses the normal positive alphaTestRef, not gsAlphaTestRef.

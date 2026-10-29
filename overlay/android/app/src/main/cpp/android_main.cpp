@@ -461,6 +461,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
 	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
 	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
+	rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(androidgame::VrOpaqueWorldAlphaFastPath());
 	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
 	rw::vulkan::setRenderDiagnostics(androidgame::VrRenderDiagnostics());
 	rw::vulkan::setMaskedMipBias(

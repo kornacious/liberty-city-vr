@@ -410,7 +410,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
-             "profiler_display_mode"] if key in rows[0]},
+             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed"), metadata.get("gpu_pass_scope", "legacy_in_render_pass")),
         "draw_profile": summarize_draw_details(path, rows, selected_ids, metadata) if metadata.get("schema") == "6" else None,

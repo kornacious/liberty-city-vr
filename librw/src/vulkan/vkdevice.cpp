@@ -3818,6 +3818,21 @@ setFxaaEnabled(bool32 enabled)
 	gvk.postFxConstants.mode[1] = enabled ? 1u : 0u;
 }
 
+// Live benchmark control: leaves all other alpha policies unchanged.
+static bool32 gOpaqueWorldAlphaFastPathEnabled = 1;
+
+void
+setOpaqueWorldAlphaFastPathEnabled(bool32 enabled)
+{
+	gOpaqueWorldAlphaFastPathEnabled = enabled != 0;
+}
+
+bool32
+getOpaqueWorldAlphaFastPathEnabled(void)
+{
+	return gOpaqueWorldAlphaFastPathEnabled;
+}
+
 static bool32 gPs2AlphaTestEnabled = 1;
 
 void

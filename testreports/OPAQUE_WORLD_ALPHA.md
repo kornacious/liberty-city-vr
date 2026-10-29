@@ -69,3 +69,25 @@ Check opaque surfaces, fading transitions, foliage and masked edges visually.
 ```powershell
 ./tools/tests/test-uniform-alpha.ps1 -OutDir <new-output-directory>
 ```
+
+## Live A/B benchmark control
+
+VR overlay -> Graphics -> OPAQUE WORLD FAST PATH switches only the proven-opaque
+pipeline selection. ON is the existing optimized behavior; OFF restores the
+previous alpha-tested pipeline for these draws. Both reuse existing warmed
+pipeline variants. No restart is needed; the selection is saved as
+`VR/OpaqueWorldAlphaFastPath` (default ON) and restored at renderer startup.
+The earlier uniform-alpha split optimization remains enabled in both modes.
+
+Captures add `opaque_world_alpha_fast_path_at_start` to session metadata and
+`opaque_world_alpha_fast_path_enabled` (0/1) to every frame row. The analyzer
+reports all observed selected-frame values under `recorded_configuration`;
+a capture with both values is mixed and should not be treated as one A/B state.
+The additive column keeps schema 6 and all existing columns in their old order.
+GPU timings still belong to their delayed source frame, not the delivery row;
+compare stable whole runs rather than transition frames.
+
+For comparison replay the same demo OFF -> ON -> OFF -> ON, setting the option
+before starting each replay. Keep 1512 x 1584, 120 Hz, other game/SideQuest
+settings and head direction fixed. Let playback finish and auto-profiling stop
+before changing the option. Minimal profiler display records the same data.

@@ -17,6 +17,8 @@ static bool vehicleAlphaPass=false,dynamicObjectPass=false;
 static struct {unsigned alphaTestFunction=ALPHAGREATEREQUAL,alphaTestRef=2;
     bool vertexAlphaEnabled=false;unsigned zWriteEnabled=1;
     unsigned textureAddressU=Texture::WRAP,textureAddressV=Texture::WRAP;}gstate;
+static bool opaqueFastPathEnabled=true;
+static bool getOpaqueWorldAlphaFastPathEnabled(){return opaqueFastPathEnabled;}
 #include "uniform-alpha-production.inc"
 using VkPipeline=unsigned;
 using VkPrimitiveTopology=unsigned;
@@ -126,6 +128,8 @@ int main(){
         return useOpaqueWorldPipeline(&inst,&material,&raster,&geometry,shader,boneData,split,blend,textureAlpha);
     };
     assert(opaque());
+    opaqueFastPathEnabled=false;assert(!opaque());
+    opaqueFastPathEnabled=true;assert(opaque());
     assert(!opaque(true)&&!opaque(false,true)&&!opaque(false,false,true));
     gstate.vertexAlphaEnabled=true;assert(!opaque());gstate.vertexAlphaEnabled=false;
     inst.vertexAlpha=true;assert(!opaque());inst.vertexAlpha=false;

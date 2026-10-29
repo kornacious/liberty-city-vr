@@ -104,6 +104,7 @@ int main()
     constexpr unsigned attempts = 20000;
     for(unsigned i = 1; i <= attempts; ++i) {
         frame.id = i; frame.startNs = uint64_t(i)*10000000;
+        frame.opaqueWorldAlphaFastPathEnabled = i%2;
         if(writer.Submit(frame)) ++accepted;
     }
     writer.Stop(); writer.Stop();
@@ -135,6 +136,7 @@ int main()
         assert(std::stod(row[column("vehicle_handling_cruise_kmh")]) == 160);
         assert(std::stod(row[column("vehicle_transmission_max_kmh")]) == 192);
         assert(std::stoi(row[column("profiler_display_mode")]) == 2);
+        assert(std::stoi(row[column("opaque_world_alpha_fast_path_enabled")]) == int(id%2));
         assert(std::stoi(row[column("vk_begin_detail_valid")]) == 1);
         assert(std::stod(row[column("vk_begin_pipeline_ms")]) == 39.125);
         assert(std::stod(row[column("vk_begin_fence_wait_ms")]) == 0.125);

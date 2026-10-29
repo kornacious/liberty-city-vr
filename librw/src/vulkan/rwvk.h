@@ -450,6 +450,9 @@ void setSpatialAaMode(uint32 mode);
 // Build a mip chain for textures whose TXD shipped a single level.
 // Read when a raster is created, so it applies to what streams in next.
 void setGenerateMipmaps(bool32 enabled);
+// Immediate A/B control for proven-opaque world pipeline selection.
+void setOpaqueWorldAlphaFastPathEnabled(bool32 enabled);
+bool32 getOpaqueWorldAlphaFastPathEnabled(void);
 // The PS2 two-pass alpha rule. On by default: without it masked
 // geometry writes depth for colour it never draws.
 void setPs2AlphaTestEnabled(bool32 enabled);
