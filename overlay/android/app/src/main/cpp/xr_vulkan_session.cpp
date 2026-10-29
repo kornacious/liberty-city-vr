@@ -8,6 +8,10 @@
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
 #include "minimal_profiler_layout.h"
+#include "replay_benchmark_view.h"
+#ifndef MIAMIVR_BRINGUP
+#include "SimulationReplay.h"
+#endif
 
 #include <math.h>
 #include <stdlib.h>
@@ -369,6 +373,7 @@ struct State
 
 	FrameRenderer frameRenderer = nullptr;
 	bool headPoseTrackedForFrame = false;
+	bool replayForwardViewActive = false;
 	bool theaterMode = true;
 	bool theaterAnchorValid = false;
 	XrSpace theaterSpace = XR_NULL_HANDLE;
@@ -1892,8 +1897,24 @@ drawScene(VkCommandBuffer commandBuffer)
 // never acquired makes the compositor drop the frame, and Horizon OS replaces
 // the app with its "still running" panel.
 bool
-renderLayer(const XrView views[2])
+renderLayer(const XrView trackedViews[2])
 {
+	const XrView *views = trackedViews;
+#ifndef MIAMIVR_BRINGUP
+	static ReplayBenchmark::ForwardView<XrView> benchmarkView;
+	XrView benchmarkViews[2];
+	float neutral[3], neutralYaw = 0;
+	const auto run = androidgame::SimulationReplayForwardViewRun();
+	g.replayForwardViewActive = !g.theaterMode && run &&
+		androidgame::SimulationReplayForwardViewNeutralPose(neutral, &neutralYaw) &&
+		benchmarkView.Apply(trackedViews, benchmarkViews, run, neutral, neutralYaw);
+	if(g.replayForwardViewActive) views = benchmarkViews;
+	else benchmarkView.Reset();
+#endif
+	// Everything below, including culling eye poses and the HUD, shares this
+	// synthetic view. The caller submits its untouched runtime poses so the
+	// compositor does not undo the deliberately head-independent camera.
+
 	uint32_t imageIndex = 0;
 	XrSwapchainImageAcquireInfo acquireInfo = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
 	const XrResult acquired = xrAcquireSwapchainImage(g.swapchain, &acquireInfo,
@@ -2705,6 +2726,12 @@ setFrameRenderer(FrameRenderer renderer)
 	g.frameRenderer = renderer;
 }
 
+bool
+isReplayForwardViewActive(void)
+{
+	return g.replayForwardViewActive;
+}
+
 void
 setTheaterMode(bool enabled)
 {
@@ -2984,6 +3011,7 @@ renderFrame(void)
 	// Also invalidate samples if waiting/beginning this frame fails.
 	clearInput();
 	g.headPoseTrackedForFrame = false;
+	g.replayForwardViewActive = false;
 	if(!g.running)
 		return;
 

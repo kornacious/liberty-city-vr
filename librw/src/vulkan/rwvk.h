@@ -339,6 +339,8 @@ bool32 getImmediate2DStrictDepth(void);
 // of around the Guardian origin.
 void setHeadPose(const float32 position[3], float32 yaw,
                  const float32 quat[4]);
+// Cockpit neutral tracking pose, independent of current physical head motion.
+bool32 getFirstPersonNeutralPose(float32 position[3], float32 *yaw);
 
 // The current first person VIEW expressed in game world axes: where the
 // player is actually looking, head orientation composed onto the anchor.

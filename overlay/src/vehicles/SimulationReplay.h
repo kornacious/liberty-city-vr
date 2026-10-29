@@ -12,8 +12,11 @@ bool SimulationReplayProtected(CEntity *entity);
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
 // Rows: record, demo, play, stop, playback ghost, auto profile, limit,
-// recording ghost, delete, route assistance, back.
-constexpr int SimulationReplayMenuRows=11;
+// recording ghost, delete, route assistance, benchmark forward view, back.
+constexpr int SimulationReplayMenuRows=12;
+// Nonzero only during the playback preparation/playback belonging to this run.
+unsigned long long SimulationReplayForwardViewRun();
+bool SimulationReplayForwardViewNeutralPose(float position[3],float *yaw);
 void SimulationReplayMenuRow(int row,char *text,size_t capacity);
 bool SimulationReplayMenuAction(int row,int direction);
 const char *SimulationReplayStatus();
@@ -24,6 +27,8 @@ inline void SimulationReplayBeginFrame(){}
 inline void SimulationReplayEndFrame(){}
 inline void SimulationReplayInputs(CAutomobile *){}
 inline void SimulationReplayAfterAppFrame(){}
+inline unsigned long long SimulationReplayForwardViewRun(){return 0;}
+inline bool SimulationReplayForwardViewNeutralPose(float[3],float *){return false;}
 inline bool SimulationReplayProtected(CEntity *){return false;}
 inline bool SimulationReplayIgnoreCollision(CEntity *,CEntity *){return false;}
 inline bool SimulationReplayIgnoreDamage(CEntity *,CEntity *){return false;}

@@ -3384,6 +3384,16 @@ setHeadPose(const float32 position[3], float32 yaw, const float32 quat[4])
 }
 
 bool32
+getFirstPersonNeutralPose(float32 position[3], float32 *yaw)
+{
+	if(!gvk.firstPersonActive || position == nil || yaw == nil)
+		return 0;
+	memcpy(position, gvk.fpLatchedHeadPos, sizeof(gvk.fpLatchedHeadPos));
+	*yaw = gvk.fpLatchedHeadYaw;
+	return 1;
+}
+
+bool32
 getFirstPersonViewFrame(float32 rwRight[3], float32 rwUp[3],
                         float32 rwAt[3], float32 position[3])
 {

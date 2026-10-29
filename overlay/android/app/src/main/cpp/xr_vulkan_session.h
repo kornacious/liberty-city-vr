@@ -187,6 +187,8 @@ void setFrameRenderer(FrameRenderer renderer);
 // the stereo projection layer; frontend and cinematic frames use array layer
 // zero as one shared image on a world-locked cinema quad.
 void setTheaterMode(bool enabled);
+// Actual synthetic benchmark render mode, distinct from the menu preference.
+bool isReplayForwardViewActive(void);
 
 // Predicted display time of the frame currently being rendered, in
 // nanoseconds. Zero before the first frame. Vsync-quantised, which makes it

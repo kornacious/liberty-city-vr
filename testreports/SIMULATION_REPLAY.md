@@ -24,7 +24,8 @@ a reference route, then runs those controls through the live simulation.
    restriction. Scene loading is excluded from automatic playback profiling.
 4. Playback prepares for two simulation seconds, restores the starting car
    state again, then applies the recorded accelerator, brake, steering and
-   handbrake values. Head tracking stays live. Use **Stop** to interrupt it.
+   handbrake values. **Benchmark Forward View** defaults ON for a fixed cockpit
+   forward view; turn it OFF for live head tracking. Use **Stop** to interrupt it.
 
 **Recording Ghost** and **Playback Ghost** are independent options, both on by
 default. During the corresponding operation, the car, player and occupants ignore
@@ -176,3 +177,43 @@ Reproduce the focused suite with:
 ```powershell
 ./tools/tests/test-simulation-replay.ps1 -StageRoot <assembled-source> -OutDir <new-output-directory>
 ```
+
+## Fixed forward benchmark view
+
+Simulation Replay -> BENCHMARK FORWARD VIEW defaults ON. The preference is
+latched when playback starts and cannot be changed during an active run.
+It affects playback preparation and playback only; route recording and normal
+play remain head tracked. Existing demo files need no conversion.
+
+The synthetic stereo camera uses the cockpit's neutral tracking position and
+yaw, so its view follows the vehicle's forward direction rather than the user's
+physical head direction. Physical yaw, pitch, roll and room-scale displacement
+cannot change that camera during the run. Eye spacing, relative eye orientation
+and per-eye FOV are retained from the first eligible frame. The same synthetic
+eye/head poses feed projection, culling and in-world HUD placement. No extra
+scene pass or render target is introduced. Invalid initial stereo poses or an
+unavailable cockpit neutral pose fall back to normal tracking.
+
+The OpenXR projection submission and overlay retain the real runtime poses.
+This is an intentional head-independent game camera, not a tracking replacement:
+the menu remains head tracked and live game views resume on the next frame
+after completion, abort or stop. The standalone bring-up target is excluded.
+
+Run reports include the requested `view_policy` and automatic profiling context
+includes `view=fixed_forward` or `view=live_head_tracking`. Session metadata adds
+`replay_forward_view_at_start`; the additive `replay_forward_view_active` frame
+column records the effective 0/1 mode, including fallback. Schema 6 and existing
+column order are preserved. The analyzer exposes every observed state in
+`recorded_configuration`; verify a stable 1 for fixed-view benchmark captures.
+
+For the opaque-world A/B comparison, leave BENCHMARK FORWARD VIEW ON for all
+four runs and change only OPAQUE WORLD FAST PATH OFF -> ON -> OFF -> ON. Use the
+same demo, 1512 x 1584 at 120 Hz, and fixed graphics/SideQuest settings. This new
+camera establishes a fresh comparison set rather than making older manual-head
+captures equivalent to it. Other live-world and controller variation remains.
+
+Host checks cover 625 initial yaw/pitch/roll combinations and translations,
+stereo spacing/cant, unchanged tracked inputs and FOV, run changes, OFF/reset and
+invalid inputs. Replay runtime tests cover default-on, recording exclusion,
+active-run policy immutability, OFF, completion and capture provenance. Writer
+and analyzer tests cover both effective states and legacy CSV compatibility.

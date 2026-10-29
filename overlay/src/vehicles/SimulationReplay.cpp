@@ -11,6 +11,7 @@
 #include "Ped.h"
 #include "ModelSets.h"
 #include "QuestProfiler.h"
+#include "vulkan/rwvk.h"
 #include "Streaming.h"
 #include "Game.h"
 #include "Zones.h"
@@ -37,6 +38,7 @@ unsigned model=0,signature=0,duration=120,sampleCount=0;
 bool ghost=true,autoProfile=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
 bool recordingGhost=true,startFailed=false;
 bool routeAssistance=true,runAssisted=false;
+bool forwardView=true,runForwardView=false;
 unsigned corrections=0;
 float correctionMax=0;
 std::string deleteArmed;
@@ -182,6 +184,7 @@ void WriteReport(){
         drift.count,drift.Rms(),double(drift.maxPosition),double(drift.maxSpeed),double(drift.maxHeading),__DATE__,__TIME__);
     for(int i=0;i<5;++i) std::fprintf(f,"assets_%d,%d\n",i,initial.assets[i]);
     std::fprintf(f,"recording_ghost,%d\n",initial.recordingGhost);
+    std::fprintf(f,"view_policy,%s\n",runForwardView?"fixed_forward":"live_head_tracking");
     std::fprintf(f,"ghost_policy,traffic_props_preserve_roads\n");
     std::fprintf(f,"tracking,%s\nroute_corrections,%u\nroute_correction_max_m,%.9g\nreference_state,%s\n",
         runAssisted?"route_assisted":"input_only",corrections,double(correctionMax),runAssisted?"position_heading_and_estimated_path_velocity":"unmodified_simulation");
@@ -220,6 +223,7 @@ bool Start(int operation){
     playbackStartNs=playbackEndNs=profileStartUs=0;
     runGhost=operation==1?recordingGhost:ghost;runAutoProfile=autoProfile;profileStarted=false;profile.clear();runId.clear();
     runAssisted=operation==2 && routeAssistance && runGhost;corrections=0;correctionMax=0;
+    runForwardView=operation==2 && forwardView;
     if(operation==2){
         runId=Unique();
         if(runAutoProfile) QuestProfilerSetDisplayMode(0);
@@ -234,7 +238,7 @@ bool Start(int operation){
             CStreaming::LoadScene(start);
             CTimer::Update();
         }
-        Restore(c); mode=Preparing; Status("PREPARING PLAYBACK - LIVE WORLD, LIVE HEAD TRACKING");
+        Restore(c); mode=Preparing; Status(runForwardView?"PREPARING PLAYBACK - FIXED FORWARD VIEW":"PREPARING PLAYBACK - LIVE HEAD TRACKING");
     }else{Restore(c);mode=Recording;Status("RECORDING - OPEN THIS MENU TO STOP");}
     return true;
 }
@@ -310,7 +314,7 @@ void SimulationReplayAfterAppFrame(){
     if(request==3){request=0;Finish(mode==Recording?"RECORDING SAVED":"ABORTED - STOPPED BY USER");}
     if(mode!=Idle && mode!=Finishing && Now()-wallStart>300000000000ULL) Finish("ABORTED - WALL TIME LIMIT");
     if(mode==Playing && runAutoProfile && !profileStarted){
-        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";run="+runId;
+        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";view="+(runForwardView?"fixed_forward":"live_head_tracking")+";run="+runId;
         QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetDisplayMode(2);
         profileStartUs=elapsed;
         profile=QuestProfilerGetCaptureStem();profileStarted=true;
@@ -328,6 +332,12 @@ void SimulationReplayAfterAppFrame(){
             if(found!=demos.end()) selectedDemo=int(found-demos.begin());
         }
     }
+}
+unsigned long long SimulationReplayForwardViewRun(){
+    return runForwardView && (mode==Preparing || mode==Playing)?wallStart:0;
+}
+bool SimulationReplayForwardViewNeutralPose(float position[3],float *yaw){
+    return SimulationReplayForwardViewRun() && rw::vulkan::getFirstPersonNeutralPose(position,yaw);
 }
 const char *SimulationReplayStatus(){return status;}
 bool SimulationReplayConsumeStartFailure(){const bool failed=startFailed;startFailed=false;return failed;}
@@ -348,6 +358,7 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 7:std::snprintf(text,capacity,"RECORDING GHOST  < %s >",recordingGhost?"ON":"OFF");break;
     case 8:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
     case 9:std::snprintf(text,capacity,"ROUTE ASSISTANCE  < %s >",ghost?(routeAssistance?"ON":"OFF"):"OFF - PLAYBACK GHOST REQUIRED");break;
+    case 10:std::snprintf(text,capacity,"BENCHMARK FORWARD VIEW  < %s >",forwardView?"ON":"OFF");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
@@ -365,6 +376,7 @@ bool SimulationReplayMenuAction(int row,int direction){
     case 6:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
     case 7:recordingGhost=!recordingGhost;break;
     case 9:routeAssistance=!routeAssistance;break;
+    case 10:forwardView=!forwardView;break;
     case 8:{
         Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
         const std::string name=demos[selectedDemo];

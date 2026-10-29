@@ -78,6 +78,9 @@ static void QuestProfilerSetCaptureContext(const char *s){profileContext=s;}
 static const char *QuestProfilerGetCaptureStem(){return captureAvailable?"test-profile":"";}
 static bool QuestProfilerIsEnabled(){return profilerMode!=0;}
 }
+namespace rw { namespace vulkan {
+static bool getFirstPersonNeutralPose(float p[3],float *yaw){p[0]=1;p[1]=2;p[2]=3;*yaw=.5f;return true;}
+}}
 #include "simulation-replay-runtime.inc"
 static unsigned checks=0;
 static void Check(bool ok,const char *why){++checks;if(!ok){std::fprintf(stderr,"FAIL: %s\n",why);std::exit(1);}}
@@ -149,12 +152,13 @@ static void RuntimeTests(){
     using namespace androidgame;
     captureRoot=(std::filesystem::current_path()/".cache"/("simulation-host-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))).string();
     Frame();Check(!std::filesystem::exists(captureRoot),"idle runtime does not write files");
+    Check(forwardView && !SimulationReplayForwardViewRun(),"forward benchmark defaults on but idle retains live tracking");
     Check(!SimulationReplayMenuAction(2,1)&&std::strstr(SimulationReplayStatus(),"NO RECORDED"),"missing playback keeps menu open with a useful message");
     Check(!SimulationReplayConsumeStartFailure(),"synchronous menu failure does not request a reopen");
     selectedCar=nullptr;Check(!SimulationReplayMenuAction(0,1)&&std::strstr(SimulationReplayStatus(),"ENTER AN AUTOMOBILE"),"on-foot start stays in menu with explanation");selectedCar=&car;
     SimulationReplayMenuAction(0,1);fakeNs+=4000000000ULL;SimulationReplayAfterAppFrame();Check(SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"RESUME"),"paused gameplay cannot silently strand a queued start");
     Check(SimulationReplayMenuAction(0,1),"record queued from overlay");car.m_fGasPedal=.5f;
-    SimulationReplayBeginFrame();char hud[128];Check(SimulationReplayRecordingText(hud,sizeof(hud))&&std::strcmp(hud,"0.0S RECORDED / 120.0S")==0,"recording HUD starts at zero with selected limit");
+    SimulationReplayBeginFrame();Check(!SimulationReplayForwardViewRun(),"recording retains live head tracking");char hud[128];Check(SimulationReplayRecordingText(hud,sizeof(hud))&&std::strcmp(hud,"0.0S RECORDED / 120.0S")==0,"recording HUD starts at zero with selected limit");
     CVehicle recordingTraffic;CPed recordingPed;CEntity scenery;
     Check(SimulationReplayIgnoreCollision(&car,&recordingTraffic)&&SimulationReplayIgnoreCollision(&recordingPed,&car)&&!SimulationReplayIgnoreCollision(&car,&scenery),"default ghost recording ignores traffic both ways and retains scenery");
     CEntity prop;prop.kind=3;
@@ -179,12 +183,20 @@ static void RuntimeTests(){
     Check(!SimulationReplayIgnoreCollision(&car,&building)&&!SimulationReplayIgnoreCollision(&ambient,&ped),"terrain and ambient mutual collisions retained");
     Check(SimulationReplayIgnoreDamage(&car,&ped)&&SimulationReplayIgnoreDamage(&ped,&player)&&!SimulationReplayIgnoreDamage(&ped,&ambient),"damage isolated around protected replay group");
     Prepare();Check(profilerMode==2&&profileStarts==1&&profileContext.find("ghost=1")!=std::string::npos,"playback starts minimal capture with linked context");
+    Check(SimulationReplayForwardViewRun() && profileContext.find("view=fixed_forward")!=std::string::npos,"playback snapshots default forward view into capture provenance");
+    const auto viewRun=SimulationReplayForwardViewRun();float neutral[3],yaw=0;
+    Check(SimulationReplayForwardViewNeutralPose(neutral,&yaw)&&neutral[1]==2&&yaw==.5f,"view uses backend cockpit neutral pose");
+    SimulationReplayMenuAction(10,1);Check(SimulationReplayForwardViewRun()==viewRun&&forwardView,"view policy cannot change halfway through a replay");
     car.m_fGasPedal=0;Frame();Check(car.m_fGasPedal==.5f,"playback overrides live driving controls");
     while(mode==Playing)Frame(false);
     Check(mode==Finishing&&profilerMode==2,"final playback frame remains measured before app frame completion");
+    Check(!SimulationReplayForwardViewRun(),"ending replay releases benchmark view request");
     SimulationReplayAfterAppFrame();Check(mode==Idle&&profilerMode==0&&profileStops==1,"after final app frame capture closes");
     Check(std::filesystem::exists(Path(runId+".run.csv")),"run report persisted");
     Check(!SimulationReplayProtected(&car)&&!SimulationReplayProtected(&player),"ghost fully clears after playback");
+    SimulationReplayMenuAction(10,1);SimulationReplayMenuAction(2,1);Frame();Prepare();
+    Check(!SimulationReplayForwardViewRun()&&profileContext.find("view=live_head_tracking")!=std::string::npos,"OFF retains live head tracking and labels capture");Stop();
+    SimulationReplayMenuAction(10,1);
     SimulationReplayMenuAction(2,1);Frame();Prepare();QuestProfilerSetDisplayMode(0);Frame();
     Check(mode==Idle&&result.find("INTERRUPTED")!=std::string::npos,"manual profiler interruption marks playback aborted");
     SimulationReplayMenuAction(2,1);Frame();captureAvailable=false;
