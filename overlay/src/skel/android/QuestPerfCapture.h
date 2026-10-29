@@ -3,6 +3,7 @@
 // No engine objects cross the writer boundary. The game thread only copies
 // numeric samples into a bounded queue; formatting and disk I/O run elsewhere.
 #include "vulkan/DrawProfile.h"
+#include "vulkan/AtomicSubmission.h"
 #include <memory>
 #include <array>
 #include <atomic>
@@ -135,6 +136,7 @@ struct Frame {
     uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
     Player player{};
     BeginStats begin{};
+    AtomicSubmission::Stats atomicSubmission{};
     GpuPassStats gpu{};
 };
 
@@ -192,7 +194,10 @@ class Writer {
         std::fprintf(frames,",%llu,%llu,%u,%u,%.6f",(unsigned long long)g.frameId,
             (unsigned long long)g.startNs,g.status,g.mask,g.frameMs);
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",%.6f,%u",g.ms[i],g.draws[i]);
-        std::fprintf(frames,",%d,%d\n",f.opaqueWorldAlphaFastPathEnabled,f.replayForwardViewActive);
+        std::fprintf(frames,",%d,%d",f.opaqueWorldAlphaFastPathEnabled,f.replayForwardViewActive);
+        const auto &a=f.atomicSubmission;
+        std::fprintf(frames,",%u,%u,%u,%u,%u,%u\n",a.atomics,a.pipelineRequests,a.pipelineBinds,
+            a.textureRequests,a.textureBinds,a.textureLookups);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -266,7 +271,7 @@ public:
         for(unsigned i=0;i<DrawProfile::CounterCount;++i)std::fprintf(draws,",%s",DrawProfile::Name(i));
         std::fputs(",model_buckets,model_capacity,model_table_growths,model_allocation_failures\n",draws);
         std::setvbuf(frames, nullptr, _IOFBF, 64*1024);
-        std::fputs("key,value\nschema,6\ndraw_profile,sampled_source_matched_companion_draws_csv\nps2_uniform_alpha_fast_path,world_constant_alpha_margin_1_over_1024\nopaque_world_alpha_fast_path,guarded_opaque_positive_alpha_test_ref\ndraw_model_capacity,dynamic\ndraw_model_initial_capacity,2048\ndraw_model_growth,automatic_double_with_storage_reuse\ndraw_entity_classes,0_building_1_vehicle_2_ped_3_object_4_unknown\ndraw_triangles,submitted_including_split_passes_strip_degenerates_not_removed_not_multiplied_by_eyes\ndraw_reasons,overlapping_draw_flags_not_exclusive_pixel_costs\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\ngpu_pass_timing_buckets,scene_scope_wrist_resolve_postprocess_other\ngpu_pass_scene_scope,whole_scene_including_msaa_resolve_and_store\ngpu_pass_draw_scope,logical_phase_independent_of_timing_mask\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
+        std::fputs("key,value\nschema,6\ndraw_profile,sampled_source_matched_companion_draws_csv\nps2_uniform_alpha_fast_path,world_constant_alpha_margin_1_over_1024\nopaque_world_alpha_fast_path,guarded_opaque_positive_alpha_test_ref\nstatic_atomic_submission,local_bind_cache_and_split_descriptor_reuse_v1\nstatic_atomic_submission_scope,world_shader_non_dynamic_non_vehicle_non_skinned\nstatic_atomic_submission_validity,vk_begin_detail_valid\ndraw_model_capacity,dynamic\ndraw_model_initial_capacity,2048\ndraw_model_growth,automatic_double_with_storage_reuse\ndraw_entity_classes,0_building_1_vehicle_2_ped_3_object_4_unknown\ndraw_triangles,submitted_including_split_passes_strip_degenerates_not_removed_not_multiplied_by_eyes\ndraw_reasons,overlapping_draw_flags_not_exclusive_pixel_costs\nclock,CLOCK_MONOTONIC\ngpu_samples,asynchronous_latest_not_matched_to_frame\ngpu_pass_samples,delayed_source_frame_id_and_start_ns\ngpu_pass_interval_frames,8\ngpu_pass_sampling,rotating_phase_one_per_block\ngpu_pass_scope,outside_render_pass_bottom_of_pipe_intervals\ngpu_pass_timing_buckets,scene_scope_wrist_resolve_postprocess_other\ngpu_pass_scene_scope,whole_scene_including_msaa_resolve_and_store\ngpu_pass_draw_scope,logical_phase_independent_of_timing_mask\ngpu_pass_tail,pending_tail_not_drained_no_extra_wait\ngpu_pass_status,0_none_1_complete_2_overflow_3_unbalanced_4_unavailable\nvehicle_speed_units,km/h_simulation_velocity\nvehicle_peak_scope,current_vehicle_occupancy_in_capture\nvk_begin_scope,synchronous_backend_cpu\n", metadata);
         std::fputs(details.c_str(), metadata);
         std::fflush(metadata);
         std::fputs("frame_id,start_monotonic_ns,frame_interval_ms,cpu_local_ms,pre_ms,vk_begin_ms,step_ms,post_ms,vk_end_ms,recorder_prepare_ms,runtime_cpu_ms,runtime_gpu_ms,vulkan_gpu_ms,refresh_hz,phase_valid_mask,dropped_rows", frames);
@@ -281,7 +286,7 @@ public:
         std::fputs(",vk_begin_detail_valid,vk_begin_pipeline_ms,vk_begin_fence_wait_ms,vk_begin_timestamp_ms,vk_begin_retirement_ms,vk_begin_setup_ms,vk_begin_wrist_ms,vk_begin_backend_total_ms,vk_pipeline_requests,vk_pipelines_created,vk_pipeline_failures,vk_retired_buffers,vk_retired_images,vk_retired_descriptors,vk_upload_commands,vk_framebuffer_created,vk_last_pipeline_key", frames);
         std::fputs(",gpu_pass_frame_id,gpu_pass_start_monotonic_ns,gpu_pass_status,gpu_pass_valid_mask,gpu_pass_frame_ms",frames);
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",gpu_pass_%s_ms,gpu_pass_%s_draw_calls",GpuPassName(i),GpuPassName(i));
-        std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active\n",frames);
+        std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

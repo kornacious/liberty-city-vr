@@ -31,6 +31,9 @@ namespace vulkan {
 
 static bool32 vehicleAlphaPass;
 static bool32 dynamicObjectPass;
+static AtomicSubmissionStats gAtomicSubmissionStats;
+void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};}
+AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 
 struct AtomicMotionRecord
 {
@@ -608,6 +611,14 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		}
 	}
 
+	// The cache is local to this atomic: no other command writer runs between
+	// its meshes. Dynamic/skinned/vehicle paths retain their original binds.
+	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
+		!dynamicObjectPass && !vehicleAlphaPass;
+	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled;
+	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout>
+		bindings(cacheBindings,measureBindings);
+	const VkPipelineLayout layout = getPipelineLayout();
 	const VkDeviceSize vertexOffset = 0;
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &header->vbo, &vertexOffset);
 	vkCmdBindIndexBuffer(commandBuffer, header->ibo, 0, VK_INDEX_TYPE_UINT16);
@@ -705,6 +716,10 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		const int firstGsPass=(alphaPasses&UniformAlphaPolicy::Solid)?0:1;
 		const bool opaqueWorldPipeline=useOpaqueWorldPipeline(inst,material,raster,
 			geometry,shader,boneOffset,gsSplit,wantsBlend,textureAlpha);
+		// Sampler/raster state is identical across this mesh's split halves.
+		// Resolve lazily, after a pipeline succeeds, and never reuse over a mesh.
+		VkDescriptorSet textureSet = VK_NULL_HANDLE;
+		bool textureResolved = false;
 		for(int gsPass = 0; gsPass < (gsSplit ? 2 : 1); gsPass++){
 		// Skip before state changes/binds: the complementary shader test is
 		// guaranteed to discard every fragment, including motion outputs.
@@ -722,11 +737,16 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		gstate.alphaTestFunction = savedAlphaFunction;
 		if(pipeline == VK_NULL_HANDLE)
 			continue;
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-		VkDescriptorSet textureSet = getTextureDescriptor(raster);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-		                        getPipelineLayout(), 1, 1, &textureSet, 0, nil);
+		if(bindings.PipelineBind(pipeline))
+			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+		if(!cacheBindings || !textureResolved){
+			textureSet = getTextureDescriptor(raster);
+			textureResolved = true;
+			bindings.TextureLookup();
+		}
+		if(bindings.TextureBind(layout,textureSet))
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+			                        layout, 1, 1, &textureSet, 0, nil);
 
 		if(material && (geometry->flags & Geometry::MODULATE)){
 			push.materialColour[0] = material->color.red / 255.0f;
@@ -815,6 +835,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		}
 	}
 	}
+	if(measureBindings) gAtomicSubmissionStats.Add(bindings.stats);
 }
 
 void

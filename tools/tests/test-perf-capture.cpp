@@ -86,6 +86,7 @@ int main()
     frame.player.vehicleHandlingCruiseKmh = 160;
     frame.player.vehicleTransmissionMaxKmh = 192;
     frame.profilerDisplayMode = 2;
+    frame.atomicSubmission = {4,20,5,20,7,12};
     frame.begin.valid = 1; frame.begin.pipelineMs = 39.125f;
     frame.begin.fenceWaitMs = 0.125f; frame.begin.retirementMs = 0.5f;
     frame.begin.totalMs = 40; frame.begin.pipelinesCreated = 2;
@@ -139,6 +140,12 @@ int main()
         assert(std::stoi(row[column("profiler_display_mode")]) == 2);
         assert(std::stoi(row[column("opaque_world_alpha_fast_path_enabled")]) == int(id%2));
         assert(std::stoi(row[column("replay_forward_view_active")]) == int((id/2)%2));
+        assert(std::stoi(row[column("vk_static_atomic_calls")]) == 4);
+        assert(std::stoi(row[column("vk_static_atomic_pipeline_requests")]) == 20);
+        assert(std::stoi(row[column("vk_static_atomic_pipeline_binds")]) == 5);
+        assert(std::stoi(row[column("vk_static_atomic_texture_requests")]) == 20);
+        assert(std::stoi(row[column("vk_static_atomic_texture_binds")]) == 7);
+        assert(std::stoi(row[column("vk_static_atomic_texture_lookups")]) == 12);
         assert(std::stoi(row[column("vk_begin_detail_valid")]) == 1);
         assert(std::stod(row[column("vk_begin_pipeline_ms")]) == 39.125);
         assert(std::stod(row[column("vk_begin_fence_wait_ms")]) == 0.125);

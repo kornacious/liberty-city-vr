@@ -1,5 +1,6 @@
 #pragma once
 #include "GpuPassProfile.h"
+#include "AtomicSubmission.h"
 
 #ifdef RW_VULKAN
 #include <vulkan/vulkan.h>
@@ -263,6 +264,9 @@ struct FrameBeginStats {
 };
 bool32 getFrameBeginStats(FrameBeginStats *out);
 void resetFrameBeginStats(void);
+using AtomicSubmissionStats = AtomicSubmission::Stats;
+void resetAtomicSubmissionStats(void);
+AtomicSubmissionStats getAtomicSubmissionStats(void);
 
 // True only when the most recent DEVICEOPEN failed while creating one of the
 // full-resolution colour/depth targets or its framebuffer. This lets the

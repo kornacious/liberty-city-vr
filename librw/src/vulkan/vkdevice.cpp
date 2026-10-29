@@ -2370,6 +2370,7 @@ bool32
 beginFrame(VkImage colourImage, VkImageView colourView)
 {
 	resetFrameBeginStats();
+	resetAtomicSubmissionStats();
 	if(!gvk.initialised || gvk.inFrame)
 		return 0;
 	gGpuRecordingActive=0;

@@ -1460,6 +1460,7 @@ QuestProfilerEndAppFrame(void)
 	rw::vulkan::FrameBeginStats begin = {};
 	if(rw::vulkan::getFrameBeginStats(&begin)){
 		gCaptureFrame.begin.valid = 1;
+		gCaptureFrame.atomicSubmission = rw::vulkan::getAtomicSubmissionStats();
 		gCaptureFrame.begin.totalMs = begin.totalMs;
 		gCaptureFrame.begin.pipelineMs = begin.pipelineMs;
 		gCaptureFrame.begin.fenceWaitMs = begin.fenceWaitMs;

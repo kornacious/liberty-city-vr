@@ -142,6 +142,25 @@ class AnalysisTests(unittest.TestCase):
         rotating = analysis.summarize_gpu_passes(rows, set(range(1,41)), 10000000, sampling="rotating_phase_one_per_block")
         self.assertEqual(rotating["expected_source_frames"], 5) # Sources 1,10,19,28,37.
 
+    def test_atomic_submission_counters_and_legacy(self):
+        self.assertIsNone(analysis.summarize_atomic_submission([{}]))
+        values = [4, 20, 5, 20, 7, 12]
+        row = dict(zip(analysis.ATOMIC_SUBMISSION_COLUMNS, map(str, values)))
+        row["vk_begin_detail_valid"] = "1"
+        result = analysis.summarize_atomic_submission([row, row])
+        self.assertEqual(result["valid_frames"], 2)
+        self.assertEqual(result["pipeline_binds_skipped"], 30)
+        self.assertEqual(result["texture_binds_skipped"], 26)
+        self.assertEqual(result["texture_lookups_avoided"], 16)
+        self.assertEqual(result["pipeline_skip_percent"], 75)
+        self.assertEqual(result["mean_per_frame"]["vk_static_atomic_calls"], 4)
+        invalid = dict(row, vk_static_atomic_texture_binds="21")
+        result = analysis.summarize_atomic_submission([row, invalid, dict(row, vk_begin_detail_valid="0")])
+        self.assertEqual((result["valid_frames"], result["invalid_frames"]), (1, 1))
+        empty = dict.fromkeys(analysis.ATOMIC_SUBMISSION_COLUMNS, "0")
+        empty["vk_begin_detail_valid"] = "1"
+        self.assertIsNone(analysis.summarize_atomic_submission([empty])["pipeline_skip_percent"])
+
     def test_percentiles_and_missing(self):
         self.assertIsNone(analysis.distribution([-1, float("nan")]))
         stats = analysis.distribution([1, 2, 3, 4])
@@ -172,6 +191,7 @@ class AnalysisTests(unittest.TestCase):
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
             result = analysis.summarize(path)
             self.assertEqual(result["rows"], 4)
+            self.assertIsNone(result["atomic_submission"])
             self.assertEqual(result["selected_rows"], 3)
             self.assertEqual(result["recorded_configuration"]["opaque_world_alpha_fast_path_enabled"], ["0", "1"])
             self.assertEqual(result["recorded_configuration"]["replay_forward_view_active"], ["0", "1"])

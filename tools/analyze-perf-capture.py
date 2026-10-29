@@ -24,6 +24,37 @@ DRAW_COUNTERS = ["draws", "elements", "triangles", "geometry_known_draws", "mesh
                  "distance_fade_draws", "skinned_draws"]
 
 
+ATOMIC_SUBMISSION_COLUMNS = ["vk_static_atomic_calls", "vk_static_atomic_pipeline_requests",
+    "vk_static_atomic_pipeline_binds", "vk_static_atomic_texture_requests",
+    "vk_static_atomic_texture_binds", "vk_static_atomic_texture_lookups"]
+
+
+def summarize_atomic_submission(rows):
+    if not rows or any(key not in rows[0] for key in ATOMIC_SUBMISSION_COLUMNS):
+        return None
+    totals = Counter()
+    valid = invalid = 0
+    for row in rows:
+        if row.get("vk_begin_detail_valid") != "1":
+            continue
+        values = {key: int(row[key]) for key in ATOMIC_SUBMISSION_COLUMNS}
+        p, pb, t, tb, lookups = (values[key] for key in ATOMIC_SUBMISSION_COLUMNS[1:])
+        if min(values.values()) < 0 or pb > p or tb > t or lookups > t or p != t:
+            invalid += 1
+            continue
+        valid += 1
+        totals.update(values)
+    if not valid:
+        return {"valid_frames": 0, "invalid_frames": invalid}
+    p, pb, t, tb, lookups = (totals[key] for key in ATOMIC_SUBMISSION_COLUMNS[1:])
+    return {"valid_frames": valid, "invalid_frames": invalid, "totals": dict(totals),
+        "mean_per_frame": {key: value/valid for key, value in totals.items()},
+        "pipeline_binds_skipped": p-pb, "texture_binds_skipped": t-tb,
+        "texture_lookups_avoided": t-lookups,
+        "pipeline_skip_percent": 100*(p-pb)/p if p else None,
+        "texture_skip_percent": 100*(t-tb)/t if t else None}
+
+
 def summarize_draw_details(path, rows, selected_ids, metadata):
     companion = path.with_name(path.name.replace(".frames.csv", ".draws.csv"))
     if not companion.is_file():
@@ -412,6 +443,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
              "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
+        "atomic_submission": summarize_atomic_submission(selected),
         "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed"), metadata.get("gpu_pass_scope", "legacy_in_render_pass")),
         "draw_profile": summarize_draw_details(path, rows, selected_ids, metadata) if metadata.get("schema") == "6" else None,
         "vk_begin_stalls_over_5ms_top10": begin_stalls,
