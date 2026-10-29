@@ -346,6 +346,12 @@ bool SimulationReplayRecordingText(char *text,size_t capacity){
     std::snprintf(text,capacity,"%.1fS RECORDED / %.1fS",double(elapsed)/1000000,double(duration));
     return true;
 }
+bool SimulationReplayPlaybackText(char *text,size_t capacity){
+    if(mode!=Playing || !tape || !tape->endUs) return false;
+    std::snprintf(text,capacity,"PLAYING %.1fS OUT OF %.1fS",
+        double(std::min(elapsed,tape->endUs))/1000000,double(tape->endUs)/1000000);
+    return true;
+}
 void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     switch(row){
     case 0:std::snprintf(text,capacity,"RECORD ROUTE  < REPAIRS CAR >");break;

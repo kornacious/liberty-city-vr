@@ -77,6 +77,7 @@ static void QuestProfilerSetDisplayMode(int m){if(m && !profilerMode)++profileSt
 static void QuestProfilerSetCaptureContext(const char *s){profileContext=s;}
 static const char *QuestProfilerGetCaptureStem(){return captureAvailable?"test-profile":"";}
 static bool QuestProfilerIsEnabled(){return profilerMode!=0;}
+static int QuestProfilerGetDisplayMode(){return profilerMode;}
 }
 namespace rw { namespace vulkan {
 static bool getFirstPersonNeutralPose(float p[3],float *yaw){p[0]=1;p[1]=2;p[2]=3;*yaw=.5f;return true;}
@@ -88,6 +89,7 @@ namespace androidgame {
 enum {VR_MENU_WIDTH=1024,VR_MENU_HEIGHT=768};
 enum {VR_DEBUG_WIDTH=512};
 static uint8 gDebugPixels[512*64*4]={};
+static bool gVrMenuVisible=false;
 #define nil nullptr
 struct Rect {int left,top,right,bottom;};
 static std::vector<Rect> textRects,highlightRects;
@@ -253,6 +255,24 @@ static void LongRoute(){
     f=std::fopen(Path(runId+".run.csv").c_str(),"r");char report[4096]={};Check(f!=nullptr,"assisted report persisted");std::fread(report,1,sizeof(report)-1,f);std::fclose(f);
     Check(std::strstr(report,"tracking,route_assisted")&&std::strstr(report,"route_corrections,")&&std::strstr(report,"estimated_path_velocity"),"assisted captures cannot be mistaken for unmodified simulation replay");
 }
+static void PlaybackHudTests(){
+    using namespace androidgame;
+    char text[80];Check(!SimulationReplayPlaybackText(text,sizeof(text)),"idle has no playback timer");
+    tape.reset(new Core::Tape);tape->endUs=120000000;mode=Playing;elapsed=37200000;duration=30;
+    Check(SimulationReplayPlaybackText(text,sizeof(text))&&std::strcmp(text,"PLAYING 37.2S OUT OF 120.0S")==0,"playback timer uses simulation time and recorded duration, not selected recording limit");
+    for(uint64_t at:{0ULL,37200000ULL,119900000ULL,120100000ULL}){
+        elapsed=at;profilerMode=2;textRects.clear();
+        Check(VrSimulationRecordingPixels()!=nullptr&&textRects.size()==1,"minimal playback adds exactly one timer line");
+        const Rect r=textRects[0];Check(r.left>=0&&r.right<=512&&r.top>=0&&r.bottom<=64,"longest playback time fits compact strip");
+    }
+    Check(SimulationReplayPlaybackText(text,sizeof(text))&&std::strcmp(text,"PLAYING 120.0S OUT OF 120.0S")==0,"display clamps elapsed time to recorded end");
+    elapsed=37200000;tape->endUs=51114948;
+    Check(SimulationReplayPlaybackText(text,sizeof(text))&&std::strcmp(text,"PLAYING 37.2S OUT OF 51.1S")==0,"early-stopped recordings display actual total duration");
+    for(int display:{0,1}){profilerMode=display;Check(!VrSimulationRecordingPixels(),"playback strip only accompanies minimal profiling");}
+    profilerMode=2;gVrMenuVisible=true;Check(!VrSimulationRecordingPixels(),"full menu hides playback strip");gVrMenuVisible=false;
+    for(Mode inactive:{Preparing,Finishing,Idle}){mode=inactive;Check(!SimulationReplayPlaybackText(text,sizeof(text))&&!VrSimulationRecordingPixels(),"timer hidden during warmup and after stop/completion");}
+    tape.reset();profilerMode=0;duration=120;elapsed=0;
+}
 static void ExternalTape(const char *path){
     FILE *f=std::fopen(path,"r");SimulationReplayCore::Tape input;
     Check(f&&input.Load(f),"external replay tape loads");if(f)std::fclose(f);
@@ -265,4 +285,4 @@ static void ExternalTape(const char *path){
     Check(valid,"external tape supports route assistance over its entire duration at mixed frame rates");
     std::printf("External tape: %.3f seconds, %zu source samples, %u route frames validated.\n",double(input.endUs)/1000000,input.samples.size(),frames);
 }
-int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}
+int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}

@@ -26,6 +26,14 @@ a reference route, then runs those controls through the live simulation.
    state again, then applies the recorded accelerator, brake, steering and
    handbrake values. **Benchmark Forward View** defaults ON for a fixed cockpit
    forward view; turn it OFF for live head tracking. Use **Stop** to interrupt it.
+   With minimal profiling active, a separate line immediately below FPS/frame
+   time shows `PLAYING 37.2S OUT OF 120.0S`. It uses elapsed simulation playback
+   time and the selected demo's actual recorded duration, including recordings
+   stopped early. It excludes preparation time, does not advance while the
+   simulation is paused, and disappears on stop, completion or abort. The timer
+   is hidden by the full menu and is not added to the full profiler display.
+   Its compact panel reuses the recording HUD strip and binocular-safe placement;
+   the independent recording timer keeps its existing behavior.
 
 **Recording Ghost** and **Playback Ghost** are independent options, both on by
 default. During the corresponding operation, the car, player and occupants ignore

@@ -22,6 +22,7 @@ bool SimulationReplayMenuAction(int row,int direction);
 const char *SimulationReplayStatus();
 bool SimulationReplayConsumeStartFailure();
 bool SimulationReplayRecordingText(char *text,size_t capacity);
+bool SimulationReplayPlaybackText(char *text,size_t capacity);
 #else
 inline void SimulationReplayBeginFrame(){}
 inline void SimulationReplayEndFrame(){}

@@ -5048,16 +5048,24 @@ const unsigned char *
 VrSimulationRecordingPixels(void)
 {
 	char text[80];
-	if(!SimulationReplayRecordingText(text,sizeof(text))) return nil;
+	const bool recording = SimulationReplayRecordingText(text,sizeof(text));
+	const bool playback = !recording && !gVrMenuVisible &&
+		QuestProfilerGetDisplayMode() == 2 && SimulationReplayPlaybackText(text,sizeof(text));
+	if(!recording && !playback) return nil;
 	// Reuse the bitmap font, then retain a separate strip before the profiler
-	// paints its own surface. This panel is visible independently of profiling.
+	// paints its own surface. Recording is independent of profiling; playback
+	// adds one line below the minimal profiler through the same stereo-safe strip.
 	static uint8 pixels[VR_DEBUG_WIDTH*64*4];
 	for(int i=0;i<VR_DEBUG_WIDTH*64;++i){
 		gDebugPixels[i*4+0]=5;gDebugPixels[i*4+1]=4;
 		gDebugPixels[i*4+2]=12;gDebugPixels[i*4+3]=225;
 	}
-	DrawDebugText("RECORDING",VR_DEBUG_WIDTH/2,8,3,255,170,80);
-	DrawDebugText(text,VR_DEBUG_WIDTH/2,36,3,255,230,145);
+	if(recording){
+		DrawDebugText("RECORDING",VR_DEBUG_WIDTH/2,8,3,255,170,80);
+		DrawDebugText(text,VR_DEBUG_WIDTH/2,36,3,255,230,145);
+	}else{
+		DrawDebugText(text,VR_DEBUG_WIDTH/2,22,3,255,230,145);
+	}
 	memcpy(pixels,gDebugPixels,sizeof(pixels));
 	return pixels;
 }
