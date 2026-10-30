@@ -414,3 +414,9 @@ descriptor suite continues to check fence-based resource lifetime safety.
 Recorder/analysis tests cover schema 3 begin-frame columns, validity and stall
 attribution while retaining schema 1/2 compatibility. Host tests do not measure
 on-headset compilation latency, startup time or the resulting frame pacing.
+
+
+`test-renderdoc-export.py` checks capture listing validation, rejection of empty
+or truncated/error transfers before creating placeholders, traversal rejection,
+verified writes and protection of existing local captures. `TestPerfCaptureFiles`
+also covers the .rdc provider boundary and rejection of arbitrary game files.

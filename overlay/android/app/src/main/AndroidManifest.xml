@@ -44,7 +44,7 @@
             android:authorities="${applicationId}.music"
             android:exported="true" android:grantUriPermissions="false" />
 
-        <!-- Read-only, shell/app-only export of specifically named profiler CSVs. -->
+        <!-- Read-only, shell/app-only export of diagnostics and local RenderDoc captures. -->
         <provider android:name=".PerfCaptureProvider"
             android:authorities="${applicationId}.performance"
             android:exported="true" android:grantUriPermissions="false" />

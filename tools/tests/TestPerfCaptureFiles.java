@@ -34,7 +34,22 @@ public final class TestPerfCaptureFiles {
             try { PerfCaptureFiles.resolve(external, invalid, true); throw new AssertionError(); }
             catch (IOException expected) { }
         }
-        System.out.println("PASS: profiler export filename and canonical-path boundaries");
+        String rdc = "20261027T001530Z-123456789_capture.rdc";
+        check(PerfCaptureFiles.validRenderDocName(rdc));
+        check(PerfCaptureFiles.validRenderDocName(rdc.replace("_capture", "_frame123")));
+        check(!PerfCaptureFiles.validName(rdc));
+        File capture = PerfCaptureFiles.resolveRenderDoc(external, rdc);
+        check(capture.getParentFile().equals(new File(external, "renderdoc-captures")));
+        for (String invalid : new String[] {null, "", "../"+rdc, "/sdcard/"+rdc,
+                "name.rdc", rdc+".tmp", "20261030T145630Z-1_../gta3.img", "gta3.img",
+                "20261030T145630Z-1_capture%2frdc", "20261030T145630Z-1_capture..rdc"}) {
+            check(!PerfCaptureFiles.validRenderDocName(invalid));
+            try { PerfCaptureFiles.resolveRenderDoc(external, invalid); throw new AssertionError(); }
+            catch (IOException expected) { }
+        }
+        try { PerfCaptureFiles.renderDocDirectory(null); throw new AssertionError(); }
+        catch (IOException expected) { }
+        System.out.println("PASS: profiler/replay/RenderDoc export filename and canonical-path boundaries");
     }
     private static void check(boolean value) { if (!value) throw new AssertionError(); }
 }

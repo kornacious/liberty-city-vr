@@ -14,7 +14,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
 
-/** ADB export of profiler and simulation diagnostics; never exposes game assets or mutation. */
+/** Read-only ADB diagnostics export. RenderDoc files can contain game resources;
+ * they are restricted to the app's capture folder and must remain local. */
 public final class PerfCaptureProvider extends ContentProvider {
     private void enforce() {
         int caller = Binder.getCallingUid();
@@ -28,6 +29,9 @@ public final class PerfCaptureProvider extends ContentProvider {
     private File capture(Uri uri) throws IOException {
         if (uri.getPathSegments().size() != 2) throw new IOException("Expected diagnostics/name");
         String scope = uri.getPathSegments().get(0);
+        if ("renderdoc".equals(scope)) {
+            return PerfCaptureFiles.resolveRenderDoc(getContext().getExternalFilesDir(null), uri.getLastPathSegment());
+        }
         if (!"capture".equals(scope) && !"replay".equals(scope)) {
             throw new IOException("Expected capture/name or replay/name");
         }
@@ -50,19 +54,23 @@ public final class PerfCaptureProvider extends ContentProvider {
             String[] selectionArgs, String sortOrder) {
         enforce();
         if (uri.getPathSegments().size() != 1 ||
-                (!"captures".equals(uri.getLastPathSegment()) && !"replays".equals(uri.getLastPathSegment()))) {
-            throw new IllegalArgumentException("Expected captures or replays listing");
+                (!"captures".equals(uri.getLastPathSegment()) && !"replays".equals(uri.getLastPathSegment()) &&
+                 !"renderdocs".equals(uri.getLastPathSegment()))) {
+            throw new IllegalArgumentException("Expected captures, replays or renderdocs listing");
         }
         boolean replay = "replays".equals(uri.getLastPathSegment());
+        boolean renderdoc = "renderdocs".equals(uri.getLastPathSegment());
         MatrixCursor cursor = new MatrixCursor(new String[] {OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE});
         try {
-            File root = PerfCaptureFiles.directory(getContext().getExternalFilesDir(null), replay);
+            File root = renderdoc ? PerfCaptureFiles.renderDocDirectory(getContext().getExternalFilesDir(null)) :
+                    PerfCaptureFiles.directory(getContext().getExternalFilesDir(null), replay);
             String[] names = root.list();
             if (names == null) return cursor;
             Arrays.sort(names);
             for (String name : names) {
-                if (!PerfCaptureFiles.validName(name, replay)) continue;
-                File file = PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), name, replay);
+                if (renderdoc ? !PerfCaptureFiles.validRenderDocName(name) : !PerfCaptureFiles.validName(name, replay)) continue;
+                File file = renderdoc ? PerfCaptureFiles.resolveRenderDoc(getContext().getExternalFilesDir(null), name) :
+                        PerfCaptureFiles.resolve(getContext().getExternalFilesDir(null), name, replay);
                 if (file.isFile()) cursor.addRow(new Object[] {name, file.length()});
             }
             return cursor;
@@ -71,7 +79,11 @@ public final class PerfCaptureProvider extends ContentProvider {
         }
     }
 
-    @Override public String getType(Uri uri) { enforce(); return "text/csv"; }
+    @Override public String getType(Uri uri) {
+        enforce();
+        return uri.getPathSegments().size() == 2 && "renderdoc".equals(uri.getPathSegments().get(0)) ?
+                "application/octet-stream" : "text/csv";
+    }
     @Override public Uri insert(Uri uri, ContentValues values) { throw new UnsupportedOperationException("Read-only"); }
     @Override public int update(Uri uri, ContentValues values, String s, String[] a) { throw new UnsupportedOperationException("Read-only"); }
     @Override public int delete(Uri uri, String s, String[] a) { throw new UnsupportedOperationException("Read-only"); }

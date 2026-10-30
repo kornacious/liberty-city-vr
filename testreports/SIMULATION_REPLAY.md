@@ -280,3 +280,38 @@ APK built successfully in 75 seconds and its merged manifest is debuggable.
 All eleven modified production sources match the assembled build. Deployment
 was skipped because no authorized, responsive Quest 3 was connected. A real
 injected capture and headset visual verification remain pending.
+
+## Recovering a remote capture after the app closes
+
+A RenderDoc remote capture entry/thumbnail can remain visible after its target
+connection closes. A failed transfer may leave a zero-byte PC file and opening
+that file reports an I/O error reading the magic number. Save/copy the remote
+capture before closing the game when using the GUI's target connection.
+
+The original capture may still be valid in the app-owned external capture folder,
+which Android can deny to both the shell and run-as. Do not erase app data or
+change game-data storage permissions. The shell/app-only performance provider
+now exposes read-only `renderdocs` listing and `renderdoc/<name>` streams for
+strictly generated .rdc filenames inside `renderdoc-captures`. It rejects path
+traversal, other file types, redirected files/directories and all writes. Other
+applications remain excluded by the existing UID check. CSV/replay exports are
+unchanged. These captures include game resources and must remain local.
+
+Use the local helper, with ADB on PATH or an explicit --adb path:
+
+```powershell
+python tools/export-renderdoc-capture.py --output .cache/renderdoc-recovered --latest 2
+```
+
+It selects exactly one authorized, responsive personal Quest 3 device privately,
+checks the provider's full byte count and RDOC signature before creating a file,
+computes SHA256 and refuses to overwrite different existing contents. Open the
+recovered local file through File -> Open Capture in a compatible headset
+profiling replay context; do not reopen an empty placeholder or stale remote
+entry. Header/thumbnail parsing is distinct from full GPU replay validation.
+
+Validated locally on 30 October 2026: Java filename/path boundary tests and
+three export tests passed; the full APK built in 57 seconds and installed with
+app data preserved. The exporter recovered two non-empty originals with matching
+source sizes and valid signatures, and RenderDoc parsed both embedded thumbnails.
+GPU profiling replay is not included in that validation.
