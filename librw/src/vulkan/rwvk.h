@@ -1,6 +1,7 @@
 #pragma once
 #include "GpuPassProfile.h"
 #include "AtomicSubmission.h"
+#include "OpaqueOrder.h"
 
 #ifdef RW_VULKAN
 #include <vulkan/vulkan.h>
@@ -131,6 +132,8 @@ struct InstanceDataHeader : rw::InstanceDataHeader
 #endif
 
 	InstanceData *inst;
+	float32 orderMin[3], orderMax[3];
+	bool32 orderBoundsValid;
 };
 
 class ObjPipeline : public rw::ObjPipeline
@@ -459,6 +462,11 @@ void setGenerateMipmaps(bool32 enabled);
 // Immediate A/B control for proven-opaque world pipeline selection.
 void setOpaqueWorldAlphaFastPathEnabled(bool32 enabled);
 bool32 getOpaqueWorldAlphaFastPathEnabled(void);
+void setOpaqueOrderEnabled(bool32 enabled);
+bool32 getOpaqueOrderEnabled(void);
+bool32 getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth);
+void recordOpaqueOrderSwaps(uint32 swaps);
+OpaqueOrder::Stats getOpaqueOrderStats(void);
 // The PS2 two-pass alpha rule. On by default: without it masked
 // geometry writes depth for colour it never draws.
 void setPs2AlphaTestEnabled(bool32 enabled);

@@ -55,6 +55,15 @@ def summarize_atomic_submission(rows):
         "texture_skip_percent": 100*(t-tb)/t if t else None}
 
 
+def summarize_opaque_order(rows):
+    keys = ["opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps"]
+    if not rows or any(key not in rows[0] for key in keys):
+        return None
+    return {"per_frame": {key: distribution([float(row[key]) for row in rows]) for key in keys},
+            "frames_with_swaps": sum(int(row["opaque_order_swaps"]) > 0 for row in rows),
+            "note": "Swaps are adjacent exchanges within groups of at most 32 visible slots; not draw-call savings."}
+
+
 def summarize_draw_details(path, rows, selected_ids, metadata):
     companion = path.with_name(path.name.replace(".frames.csv", ".draws.csv"))
     if not companion.is_file():
@@ -441,9 +450,10 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
-             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active"] if key in rows[0]},
+             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
+        "opaque_order": summarize_opaque_order(selected),
         "renderdoc_capture": {
             "diagnostic_run": metadata.get("renderdoc_attached_at_start") == "1" or
                 ";renderdoc=1;" in metadata.get("simulation_replay", "") or

@@ -172,7 +172,8 @@ class AnalysisTests(unittest.TestCase):
             path = Path(folder)/"run.frames.csv"
             fields = ["frame_id", "start_monotonic_ns", "player_valid", "paused", "cutscene", "dead",
                       "event_mask", "dropped_rows", "activity", "phase_valid_mask",
-                      "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active", "renderdoc_capture_active"]
+                      "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active", "renderdoc_capture_active",
+                      "opaque_order_experiment_enabled", "opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps"]
             timings = ["frame_interval_ms", "cpu_local_ms", "vk_begin_ms", "step_ms", "recorder_prepare_ms",
                        "runtime_cpu_ms", "runtime_gpu_ms", "vulkan_gpu_ms", "game_ms", "streaming_ms",
                        "script_ms", "population_ms", "car_ms", "world_process_ms", "world_list_ms",
@@ -185,7 +186,8 @@ class AnalysisTests(unittest.TestCase):
                     row.update(frame_id=i, start_monotonic_ns=i*10000000, player_valid=1,
                                paused=int(i == 4), cutscene=0, dead=0, event_mask=1 if i == 2 else 0,
                                dropped_rows=0, activity="walking", phase_valid_mask=1,
-                               runtime_gpu_ms=-1, opaque_world_alpha_fast_path_enabled=i%2, replay_forward_view_active=i%2, renderdoc_capture_active=int(i==2))
+                               runtime_gpu_ms=-1, opaque_world_alpha_fast_path_enabled=i%2, replay_forward_view_active=i%2, renderdoc_capture_active=int(i==2),
+                               opaque_order_experiment_enabled=i%2, opaque_order_candidates=40, opaque_order_eligible=20, opaque_order_swaps=i%2)
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
@@ -195,6 +197,10 @@ class AnalysisTests(unittest.TestCase):
             self.assertTrue(result["renderdoc_capture"]["diagnostic_run"])
             self.assertEqual(result["renderdoc_capture"]["active_frame_ids"], [2])
             self.assertEqual(result["selected_rows"], 3)
+            self.assertEqual(result["recorded_configuration"]["opaque_order_experiment_enabled"], ["0", "1"])
+            self.assertEqual(result["opaque_order"]["frames_with_swaps"], 2)
+            self.assertEqual(result["opaque_order"]["per_frame"]["opaque_order_eligible"]["mean"], 20)
+            self.assertIsNone(analysis.summarize_opaque_order([{"frame_id": "1"}]))
             self.assertEqual(result["recorded_configuration"]["opaque_world_alpha_fast_path_enabled"], ["0", "1"])
             self.assertEqual(result["recorded_configuration"]["replay_forward_view_active"], ["0", "1"])
             self.assertEqual(result["metadata"]["active_model_set"], "CLASSIC")

@@ -32,7 +32,13 @@ namespace vulkan {
 static bool32 vehicleAlphaPass;
 static bool32 dynamicObjectPass;
 static AtomicSubmissionStats gAtomicSubmissionStats;
-void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};}
+static bool32 gOpaqueOrderEnabled;
+static OpaqueOrder::Stats gOpaqueOrderStats;
+void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
+bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
+OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
+void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
+void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 
 struct AtomicMotionRecord
@@ -203,6 +209,8 @@ instanceMesh(rw::ObjPipeline *, Geometry *geo)
 	MeshHeader *meshh = geo->meshHeader;
 	geo->instData = header;
 	header->platform = PLATFORM_VULKAN;
+	// Custom instancers share this header but do not establish ordering bounds.
+	header->orderBoundsValid = 0;
 
 	header->serialNumber = meshh->serialNum;
 	header->numMeshes = meshh->numMeshes;
@@ -340,12 +348,22 @@ defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 	V3d *normals = geo->morphTargets[0].normals;
 	TexCoords *texCoords = hasTexCoords ? geo->texCoords[0] : nil;
 	RGBA *colours = isPrelit ? geo->colors : nil;
+	header->orderBoundsValid = header->totalNumVertex > 0 && positions != nil;
 
 	for(uint32 i = 0; i < header->totalNumVertex; i++){
 		WorldVertex &v = vertices[i];
 		v.position[0] = positions[i].x;
 		v.position[1] = positions[i].y;
 		v.position[2] = positions[i].z;
+		for(int axis=0;axis<3;++axis){
+			const float value=v.position[axis];
+			if(!isfinite(value)) header->orderBoundsValid=0;
+			if(i==0) header->orderMin[axis]=header->orderMax[axis]=value;
+			else{
+				header->orderMin[axis]=fminf(header->orderMin[axis],value);
+				header->orderMax[axis]=fmaxf(header->orderMax[axis],value);
+			}
+		}
 
 		if(hasNormals && normals != nil){
 			v.normal[0] = normals[i].x;
@@ -845,6 +863,65 @@ defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	   header->ibo == VK_NULL_HANDLE)
 		return;
 	drawAtomicMeshes(atomic, header, SHADER_WORLD, nil);
+}
+
+bool32
+getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth)
+{
+	++gOpaqueOrderStats.candidates;
+	if(!gOpaqueOrderEnabled || !gvk.inFrame || !atomic ||
+	   atomic->renderCB != Atomic::defaultRenderCB || dynamicObjectPass || vehicleAlphaPass ||
+	   !gstate.zTestEnabled || !gstate.zWriteEnabled || gstate.alphaTestRef>=254)
+		return 0;
+	rw::ObjPipeline *base=atomic->getPipeline();
+	if(!base || base->platform!=PLATFORM_VULKAN) return 0;
+	ObjPipeline *pipe=(ObjPipeline*)base;
+	if(pipe->instanceCB!=defaultInstanceCB || pipe->renderCB!=defaultRenderCB) return 0;
+	Geometry *geo=atomic->geometry;
+	if(!geo || geo->numMorphTargets!=1 || geo->lockedSinceInst ||
+	   (geo->flags&(Geometry::NATIVE|Geometry::LIGHT)) || !geo->meshHeader ||
+	   !geo->instData || geo->instData->platform!=PLATFORM_VULKAN) return 0;
+	InstanceDataHeader *header=(InstanceDataHeader*)geo->instData;
+	if(!header->orderBoundsValid || !header->inst || header->numMeshes==0 ||
+	   header->numMeshes>64 || header->serialNumber!=geo->meshHeader->serialNum) return 0;
+	for(uint32 i=0;i<header->numMeshes;++i){
+		const InstanceData &inst=header->inst[i];
+		Material *m=inst.material;
+		if(inst.vertexAlpha || !m || m->color.alpha!=255 ||
+		   MatFX::getEffects(m)!=MatFX::NOTHING) return 0;
+		Raster *r=m->texture ? m->texture->raster : nil;
+		if(r && (r->platform!=PLATFORM_VULKAN || (r->type&0xF)!=Raster::TEXTURE ||
+		   (r->parent && r->parent!=r) || rasterHasAlpha(r))) return 0;
+		if(m->texture){
+			const uint32 u=m->texture->getAddressU(),v=m->texture->getAddressV();
+			if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
+			   (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP)) return 0;
+		}
+	}
+	Matrix *ltm=atomic->getFrame()->getLTM();
+	float object[16]={ltm->right.x,ltm->right.y,ltm->right.z,0,
+		ltm->up.x,ltm->up.y,ltm->up.z,0,ltm->at.x,ltm->at.y,ltm->at.z,0,
+		ltm->pos.x,ltm->pos.y,ltm->pos.z,1};
+	float model[16],clipMatrix[16];
+	multiplyMatrix(model,gvk.worldToPlay,object);
+	const SceneData *scene=getSceneData();
+	for(int eye=0;eye<2;++eye){
+		multiplyMatrix(clipMatrix,scene->viewProj[eye],model);
+		depth.nearDepth[eye]=1;depth.farDepth[eye]=0;
+		for(int corner=0;corner<8;++corner){
+			float p[3];for(int axis=0;axis<3;++axis)
+				p[axis]=(corner&(1<<axis)) ? header->orderMax[axis] : header->orderMin[axis];
+			const float w=clipMatrix[3]*p[0]+clipMatrix[7]*p[1]+clipMatrix[11]*p[2]+clipMatrix[15];
+			const float z=clipMatrix[2]*p[0]+clipMatrix[6]*p[1]+clipMatrix[10]*p[2]+clipMatrix[14];
+			if(!isfinite(w)||!isfinite(z)||w<=0.001f) return 0;
+			const float d=z/w;
+			if(!isfinite(d)||d<0||d>1) return 0;
+			depth.nearDepth[eye]=fminf(depth.nearDepth[eye],d);
+			depth.farDepth[eye]=fmaxf(depth.farDepth[eye],d);
+		}
+	}
+	++gOpaqueOrderStats.eligible;
+	return 1;
 }
 
 void

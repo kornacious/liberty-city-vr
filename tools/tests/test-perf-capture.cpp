@@ -108,6 +108,8 @@ int main()
         frame.opaqueWorldAlphaFastPathEnabled = i%2;
         frame.replayForwardViewActive = (i/2)%2;
         frame.renderdocCaptureActive = i==10?1:0;
+        frame.opaqueOrderExperimentEnabled=i%2;
+        frame.opaqueOrder={40,30,i%7};
         if(writer.Submit(frame)) ++accepted;
     }
     writer.Stop(); writer.Stop();
@@ -142,6 +144,10 @@ int main()
         assert(std::stoi(row[column("opaque_world_alpha_fast_path_enabled")]) == int(id%2));
         assert(std::stoi(row[column("replay_forward_view_active")]) == int((id/2)%2));
         assert(std::stoi(row[column("renderdoc_capture_active")]) == (id==10?1:0));
+        assert(std::stoi(row[column("opaque_order_experiment_enabled")]) == int(id%2));
+        assert(std::stoi(row[column("opaque_order_candidates")]) == 40);
+        assert(std::stoi(row[column("opaque_order_eligible")]) == 30);
+        assert(std::stoi(row[column("opaque_order_swaps")]) == int(id%7));
         assert(std::stoi(row[column("vk_static_atomic_calls")]) == 4);
         assert(std::stoi(row[column("vk_static_atomic_pipeline_requests")]) == 20);
         assert(std::stoi(row[column("vk_static_atomic_pipeline_binds")]) == 5);

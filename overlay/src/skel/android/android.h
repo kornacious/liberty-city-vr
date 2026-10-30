@@ -169,6 +169,7 @@ bool VrFxaaEnabled(void);
 bool VrGenerateMipmaps(void);
 // Saved benchmark control for proven-opaque world pipeline selection.
 bool VrOpaqueWorldAlphaFastPath(void);
+bool VrOpaqueOrderExperiment(void);
 // The PS2 two-pass alpha rule for masked geometry.
 bool VrPs2AlphaTest(void);
 // Hands the backend the game's point lights for per-pixel lighting; call

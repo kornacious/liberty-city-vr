@@ -1,0 +1,79 @@
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -21,6 +21,8 @@
+ #include "Shadows.h"
+ #include "PointLights.h"
+ #include "Renderer.h"
++#include <vector>
++#include <algorithm>
+ #include "Frontend.h"
+ #include "custompipes.h"
+ #include "Debug.h"
+@@ -466,6 +468,37 @@
+ 
+ inline bool IsRoad(CEntity *e) { return e->IsBuilding() && ((CBuilding*)e)->GetIsATreadable(); }
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++// Local remapping only: never mutate visibility or transparent submission lists.
++static CEntity **OrderOpaqueBuildings(CEntity **source, int count, bool roads)
++{
++    if(!rw::vulkan::getOpaqueOrderEnabled() || count<=0) return source;
++#ifndef MASTER
++    if(gbShowCarRoadGroups || gbShowPedRoadGroups) return source;
++#endif
++    static std::vector<CEntity*> ordered;
++    ordered.assign(source, source+count);
++    struct Entry { CEntity *entity; OpaqueOrder::Interval depth{}; bool eligible=false; };
++    for(int start=0;start<count;start+=32){
++        Entry entries[32];
++        const int size=std::min(32,count-start);
++        for(int i=0;i<size;++i){
++            CEntity *e=entries[i].entity=source[start+i];
++            if(!e || !e->IsBuilding() || !e->m_rwObject ||
++               RwObjectGetType(e->m_rwObject)!=rpATOMIC || IsRoad(e)!=roads ||
++               e->bDistanceFade || e->bDrawLast || e->bRenderScorched || e->bRenderDamaged)
++                continue;
++            entries[i].eligible=rw::vulkan::getOpaqueOrderInterval(
++                (rw::Atomic*)e->m_rwObject,entries[i].depth)!=0;
++        }
++        rw::vulkan::recordOpaqueOrderSwaps(OpaqueOrder::Sort(entries,size));
++        for(int i=0;i<size;++i) ordered[start+i]=entries[i].entity;
++    }
++    return ordered.data();
++}
++#endif
++
++
+ void
+ CRenderer::RenderRoads(void)
+ {
+@@ -478,8 +511,13 @@
+ 	DeActivateDirectional();
+ 	SetAmbientColours();
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++    CEntity **phaseEntities=OrderOpaqueBuildings(ms_aVisibleEntityPtrs,ms_nNoOfVisibleEntities,true);
++#else
++    CEntity **phaseEntities=ms_aVisibleEntityPtrs;
++#endif
+ 	for(i = 0; i < ms_nNoOfVisibleEntities; i++){
+-		t = (CTreadable*)ms_aVisibleEntityPtrs[i];
++		t = (CTreadable*)phaseEntities[i];
+ 		if(IsRoad(t)){
+ #ifndef MASTER
+ 			if(gbShowCarRoadGroups || gbShowPedRoadGroups){
+@@ -513,8 +551,13 @@
+ 	BACKFACE_CULLING_ON;
+ 	gSortedVehiclesAndPeds.Clear();
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++    CEntity **phaseEntities=OrderOpaqueBuildings(ms_aVisibleEntityPtrs,ms_nNoOfVisibleEntities,false);
++#else
++    CEntity **phaseEntities=ms_aVisibleEntityPtrs;
++#endif
+ 	for(i = 0; i < ms_nNoOfVisibleEntities; i++){
+-		e = ms_aVisibleEntityPtrs[i];
++		e = phaseEntities[i];
+ 		if(e == nil || e->m_rwObject == nil)
+ 			continue;
+ #if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
