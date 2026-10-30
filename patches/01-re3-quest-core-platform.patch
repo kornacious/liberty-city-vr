@@ -652,7 +652,7 @@ index 2acb7991..1335ef9b 100644
  void BlowUpCarsCheat()
  {
  	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-@@ -348,6 +365,552 @@ void AltDodoCheat(void)
+@@ -348,6 +365,610 @@ void AltDodoCheat(void)
  }
  #endif
  
@@ -679,14 +679,14 @@ index 2acb7991..1335ef9b 100644
 +	VR_SPECIAL_CHEAT_COUNT
 +};
 +
-+static void
++static CVehicle *
 +VrBoatCheat(int model)
 +{
 +	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
 +	CStreaming::RequestModel(model, STREAMFLAGS_DONT_REMOVE);
 +	CStreaming::LoadAllRequestedModels(false);
 +	if(CStreaming::ms_aInfoForModel[model].m_loadState != STREAMSTATE_LOADED)
-+		return;
++		return nil;
 +	if(!(CStreaming::ms_aInfoForModel[model].m_loadState & STREAMFLAGS_DONT_REMOVE)){
 +		CStreaming::SetModelIsDeletable(model);
 +		CStreaming::SetModelTxdIsDeletable(model);
@@ -714,15 +714,16 @@ index 2acb7991..1335ef9b 100644
 +		}
 +	}
 +	if(!found)
-+		return;
++		return nil;
 +	CBoat *boat = new CBoat(model, RANDOM_VEHICLE);
 +	if(boat == nil)
-+		return;
++		return nil;
 +	boat->SetPosition(spawn);
 +	boat->SetOrientation(0.0f, 0.0f, DEGTORAD(200.0f));
 +	boat->SetStatus(STATUS_ABANDONED);
 +	boat->m_nDoorLock = CARLOCK_UNLOCKED;
 +	CWorld::Add(boat);
++	return boat;
 +}
 +
 +static const int gVrCycleBoatModels[] = {
@@ -924,6 +925,63 @@ index 2acb7991..1335ef9b 100644
 +		CModelInfo::GetModelInfo(model) : nil;
 +	return modelInfo && modelInfo->GetModelName() ?
 +		modelInfo->GetModelName() : "UNKNOWN";
++}
++
++// Rank by name and model ID without caching metadata across game loads.
++int GetVrSpawnVehicleCount(void)
++{
++	int count = 0;
++	for(int model = MI_FIRST_VEHICLE; model <= MI_LAST_VEHICLE; ++model)
++		if(IsVrCycleCarModel(model) || CModelInfo::IsBoatModel(model)) ++count;
++	return count;
++}
++
++int GetVrSpawnVehicleModel(int index)
++{
++	for(int model = MI_FIRST_VEHICLE; model <= MI_LAST_VEHICLE; ++model){
++		if(!IsVrCycleCarModel(model) && !CModelInfo::IsBoatModel(model)) continue;
++		int rank = 0;
++		for(int other = MI_FIRST_VEHICLE; other <= MI_LAST_VEHICLE; ++other){
++			if(!IsVrCycleCarModel(other) && !CModelInfo::IsBoatModel(other)) continue;
++			const int order = strcasecmp(GetVrVehicleModelName(other), GetVrVehicleModelName(model));
++			if(order < 0 || (order == 0 && other < model)) ++rank;
++		}
++		if(rank == index) return model;
++	}
++	return -1;
++}
++
++bool SpawnVrVehicle(int model, bool inside)
++{
++	CPlayerPed *player = FindPlayerPed();
++	if(!player || (inside && (player->bInVehicle || !player->IsPedInControl()))) return false;
++	if(model < MI_FIRST_VEHICLE || model > MI_LAST_VEHICLE) return false;
++	CVehicle *vehicle = nil;
++	if(CModelInfo::IsBoatModel(model)){
++		vehicle = VrBoatCheat(model);
++	}else{
++		if(!IsVrCycleCarModel(model)) return false;
++		CStreaming::RequestModel(model, 0);
++		CStreaming::LoadAllRequestedModels(false);
++		if(CStreaming::ms_aInfoForModel[model].m_loadState != STREAMSTATE_LOADED) return false;
++		const int32 node = ThePaths.FindNodeClosestToCoors(FindPlayerCoors(), PATH_CAR, 100.0f);
++		if(node < 0) return false;
++		vehicle = new CAutomobile(model, RANDOM_VEHICLE);
++		if(!vehicle) return false;
++		CVector position = ThePaths.m_pathNodes[node].GetPosition();
++		position.z += inside ? 0.5f : 4.0f;
++		vehicle->SetPosition(position);
++		vehicle->SetOrientation(0.0f, 0.0f, DEGTORAD(200.0f));
++		vehicle->SetStatus(STATUS_ABANDONED);
++		vehicle->m_nDoorLock = CARLOCK_UNLOCKED;
++		CWorld::Add(vehicle);
++	}
++	if(!vehicle) return false;
++	if(inside){
++		player->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, vehicle);
++		player->WarpPedIntoCar(vehicle);
++	}
++	return true;
 +}
 +
 +int GetVrCheatCount(void)

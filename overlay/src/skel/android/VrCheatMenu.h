@@ -49,7 +49,7 @@ inline const char *CategoryName(int category)
 	case WEAPONS: return "WEAPONS";
 	case APPEARANCE: return "PLAYER APPEARANCE";
 	case WEATHER: return "WEATHER / TIME";
-	case VEHICLE_SELECTOR: return "VEHICLE SELECTOR";
+	case VEHICLE_SELECTOR: return "VEHICLE SPAWN";
 	case SPECIAL_VEHICLES: return "SPECIAL VEHICLES";
 	case VEHICLE_EFFECTS: return "VEHICLE EFFECTS";
 	case PEDESTRIANS: return "PEDESTRIANS";

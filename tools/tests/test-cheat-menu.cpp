@@ -62,6 +62,18 @@ static bool CycleVrCheatSelection(int source, int direction)
 	cycleDirection = direction;
 	return true;
 }
+static int spawnCount = 22, spawnedModel = -1;
+static bool spawnedInside;
+static int GetVrSpawnVehicleCount() { return spawnCount; }
+static int GetVrSpawnVehicleModel(int index) { return index >= 0 && index < spawnCount ? 100+index : -1; }
+static const char *GetVrVehicleModelName(int model) {
+ static char name[32];
+ std::snprintf(name, sizeof(name), "VEHICLE %03d", model);
+ return name;
+}
+static bool SpawnVrVehicle(int model, bool inside) {
+ spawnedModel = model; spawnedInside = inside; return model >= 100;
+}
 struct DrawnRow { std::string text; int y; bool selected, off, on; };
 static std::vector<DrawnRow> rows;
 static std::string title;
@@ -74,6 +86,17 @@ static void DrawFullVrMenuRow(const char *text, int y, int, bool selected,
 	bool = true, bool off = false, bool on = false)
 { rows.push_back({text, y, selected, off, on}); }
 
+namespace VehicleCatalogFixture {
+static const int MI_FIRST_VEHICLE = 0, MI_LAST_VEHICLE = 5;
+static bool IsVrCycleCarModel(int model) { return model == 0 || model == 2 || model == 4; }
+struct CModelInfo { static bool IsBoatModel(int model) { return model == 1; } };
+static const char *GetVrVehicleModelName(int model) {
+ static const char *names[] = {"zebra", "Alpha", "Bravo", "excluded", "alpha", "excluded"};
+ return names[model];
+}
+static int strcasecmp(const char *a, const char *b) { return _stricmp(a, b); }
+}
+static const int SimulationReplayMenuRows = 8;
 #include "cheat-menu-production.inc"
 
 static const char *GetVrCheatName(int source)
@@ -95,6 +118,12 @@ static void CheckDrawSelection(int selected)
 int main()
 {
 	using namespace VrCheatMenu;
+ Check(VehicleCatalogFixture::GetVrSpawnVehicleCount() == 4, "catalog contains eligible cars and boats only");
+ const int sortedModels[] = {1, 4, 2, 0};
+ for(int i = 0; i < 4; ++i)
+  Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(i) == sortedModels[i], "production catalog sorts case-insensitively and breaks ties by model ID");
+ Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(-1) == -1 && VehicleCatalogFixture::GetVrSpawnVehicleModel(4) == -1, "invalid catalog rows have no model");
+
 	const int expectedCounts[] = {6, 3, 1, 1, 7, 2, 1, 5, 3};
 	int seen[29] = {};
 	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 29 retained cheats");
@@ -107,6 +136,7 @@ int main()
 		"General begins with God Mode");
 	Check((int)sizeof(kSourceCategories) == GetVrCheatCount(), "all backend cheats are categorised");
 	for(int category = 0; category < CATEGORY_COUNT; ++category){
+		if(category == VEHICLE_SELECTOR){ seen[0] = seen[1] = 1; continue; }
 		Check(Count(category, nativeCount) == expectedCounts[category], "expected category size");
 		Check(Count(category, nativeCount)+1 <= VR_CHEAT_ITEMS_PER_PAGE, "every category and Back fit one page");
 		OpenCheatMenu();
@@ -171,7 +201,48 @@ int main()
 		Check(gVrMenuPage == VR_MENU_PAGE_SETTINGS && gVrMenuSelection == VR_MAIN_CHEATS, "second B returns to settings cheat row");
 	}
 	for(int source = 0; source < nativeCount; ++source) Check(seen[source] == 1, "each of 29 native cheats appears exactly once");
-	Check(activationCount == nativeCount, "all 29 cheats dispatched exactly once");
+	Check(activationCount == nativeCount-2, "all 29 cheats dispatched exactly once");
+ // Every page repeats the toggle and blank row, with direct model dispatch.
+ OpenCheatMenu();
+ gVrCheatCategorySelection = VEHICLE_SELECTOR;
+ ActivateQuestCheatMenuSelection();
+ Check(SpawnVehiclePageCount() == 3, "22 vehicles span three pages");
+ for(int page = 0; page < 3; ++page){
+  Check(gVrSpawnVehiclePage == page, "next page selects expected page");
+  const int count = page == 2 ? 4 : 9;
+  Check(CurrentMenuItemCount() == count+4, "page input includes toggle, vehicles, navigation and Back");
+  DrawQuestCheatPage();
+  CheckDrawSelection(0);
+  Check(rows[0].text == "SPAWN INSIDE VEHICLE", "toggle is first on every page");
+  Check(rows[1].y-rows[0].y == 74, "blank row separates toggle and vehicles");
+  const bool oldInside = gVrSpawnInsideVehicle;
+  ActivateQuestCheatMenuSelection();
+  Check(gVrSpawnInsideVehicle != oldInside, "toggle can change on every page");
+  DrawQuestCheatPage();
+  Check(rows[0].on == gVrSpawnInsideVehicle && rows[0].off != gVrSpawnInsideVehicle, "toggle renders its shared state");
+  for(int row = 1; row <= count; ++row){
+   gVrCheatSelection = row;
+   DrawQuestCheatPage();
+   CheckDrawSelection(row);
+   Check(rows[row].text == GetVrVehicleModelName(100+page*9+row-1), "row shows exact page model");
+   ActivateQuestCheatMenuSelection();
+   Check(spawnedModel == 100+page*9+row-1 && spawnedInside == gVrSpawnInsideVehicle, "A spawns displayed vehicle with toggle state");
+  }
+  gVrCheatSelection = count+2;
+  ActivateQuestCheatMenuSelection();
+ }
+ Check(gVrSpawnVehiclePage == 0, "next page wraps to first");
+ gVrCheatSelection = SpawnVehiclePageSize()+1;
+ ActivateQuestCheatMenuSelection();
+ Check(gVrSpawnVehiclePage == 2 && gVrCheatSelection == 0, "previous page wraps and selects persistent toggle");
+ gVrCheatSelection = SpawnVehiclePageSize()+3;
+ ActivateQuestCheatMenuSelection();
+ Check(gVrCheatCategory == -1, "vehicle Back returns to categories");
+ spawnCount = 0;
+ gVrCheatCategory = VEHICLE_SELECTOR;
+ gVrSpawnVehiclePage = 0;
+ Check(SpawnVehiclePageCount() == 1 && CurrentMenuItemCount() == 4, "empty catalog still has toggle and navigation");
+ spawnCount = 22;
 	OpenCheatMenu();
 	gVrCheatCategorySelection = CATEGORY_COUNT;
 	ActivateQuestCheatMenuSelection();
@@ -238,5 +309,5 @@ int main()
 	}
 	ReturnFromCurrentMenuPage();
 	Check(gVrMenuPage==VR_MENU_PAGE_WEAPONS,"calibration root Back returns to Weapons");
-	std::printf("PASS: %d checks; all 29 retained cheats, no mission-pass entry, nine submenus, rendering, toggle/model dispatch, Back and navigation.\n", checks);
+	std::printf("PASS: %d checks; cheat categories, alphabetical vehicle catalog, paginated spawning, persistent toggle, rendering, Back and navigation.\n", checks);
 }

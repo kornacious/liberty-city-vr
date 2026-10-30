@@ -57,6 +57,10 @@ static inline T clamp(T val, T low, T high) {
 extern int GetVrCheatCount(void);
 extern const char *GetVrCheatName(int index);
 extern bool ActivateVrCheat(int index);
+extern int GetVrSpawnVehicleCount(void);
+extern int GetVrSpawnVehicleModel(int index);
+extern const char *GetVrVehicleModelName(int model);
+extern bool SpawnVrVehicle(int model, bool inside);
 extern bool CycleVrCheatSelection(int index, int direction);
 extern bool GetVrCheatToggleState(int index, bool *enabled);
 extern int GetVrMissionCategoryCount(void);
@@ -492,6 +496,8 @@ static int gVrRagdollSelection;
 static int gVrDeformationSelection;
 static int gVrModelAssetsSelection;
 static int gVrCheatSelection;
+static int gVrSpawnVehiclePage;
+static bool gVrSpawnInsideVehicle;
 static int gVrCheatCategory = -1;
 static int gVrCheatCategorySelection;
 static int gVrVehicleSelection;
@@ -2154,9 +2160,28 @@ ReturnFromCheatMenu(void)
 	ResetMenuNavigationRepeat();
 }
 
+static int
+SpawnVehiclePageCount(void)
+{
+	return Max(1, (GetVrSpawnVehicleCount()+8)/9);
+}
+
+static int
+SpawnVehiclePageSize(void)
+{
+	return Max(0, Min(9, GetVrSpawnVehicleCount()-gVrSpawnVehiclePage*9));
+}
+
 static bool
 CycleQuestCheatMenuSelection(int direction)
 {
+	if(gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR){
+		if(direction == 0) return false;
+		const int pages = SpawnVehiclePageCount();
+		gVrSpawnVehiclePage = (gVrSpawnVehiclePage+pages+(direction > 0 ? 1 : -1))%pages;
+		gVrCheatSelection = 0;
+		return true;
+	}
 	const int source = VrCheatMenu::SourceIndex(gVrCheatCategory,
 		gVrCheatSelection, GetVrCheatCount());
 	if(source < 0 || !CycleVrCheatSelection(source, direction))
@@ -2180,10 +2205,30 @@ ActivateQuestCheatMenuSelection(void)
 		}else if(gVrCheatCategorySelection >= 0 &&
 		         gVrCheatCategorySelection < VrCheatMenu::CATEGORY_COUNT){
 			gVrCheatCategory = gVrCheatCategorySelection;
+			gVrSpawnVehiclePage = 0;
 			gVrCheatSelection = 0;
 		}
 		gVrCheatStatusFrames = 0;
 		ResetMenuNavigationRepeat();
+		return;
+	}
+	if(gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR){
+		const int vehicles = SpawnVehiclePageSize();
+		if(gVrCheatSelection == 0){
+			gVrSpawnInsideVehicle = !gVrSpawnInsideVehicle;
+		}else if(gVrCheatSelection <= vehicles){
+			const int model = GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+gVrCheatSelection-1);
+			const bool spawned = SpawnVrVehicle(model, gVrSpawnInsideVehicle);
+			snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
+				spawned ? "VEHICLE SPAWNED" : "UNAVAILABLE RIGHT NOW");
+			gVrCheatStatusFrames = 120;
+		}else if(gVrCheatSelection == vehicles+1){
+			CycleQuestCheatMenuSelection(-1);
+		}else if(gVrCheatSelection == vehicles+2){
+			CycleQuestCheatMenuSelection(1);
+		}else{
+			ReturnFromCheatMenu();
+		}
 		return;
 	}
 	const int count = VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount());
@@ -2261,7 +2306,8 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_HOLSTERS:
 		return OculusVR::GetQuestHolsterPointCount()+1;
 	case VR_MENU_PAGE_CHEATS:
-		return gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
+		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+4 :
+			gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
 			VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount())+1;
 	case VR_MENU_PAGE_MISSIONS:
 		return Max(1, gVrMissionCategory < 0 ?
@@ -4861,6 +4907,26 @@ DrawQuestCheatPage(void)
 				item == gVrCheatCategorySelection);
 		}
 		DrawVrMenuText("STICK UP/DOWN SELECT   A OPEN   B BACK TO SETTINGS",
+			VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+		return;
+	}
+	if(gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR){
+		BeginFullVrMenuPage("CHEATS / VEHICLE SPAWN");
+		DrawFullVrMenuRow("SPAWN INSIDE VEHICLE", 158, 2,
+			gVrCheatSelection == 0, true, !gVrSpawnInsideVehicle, gVrSpawnInsideVehicle);
+		const int vehicles = SpawnVehiclePageSize();
+		for(int row = 0; row < vehicles+3; ++row){
+			const char *name = row < vehicles ?
+				GetVrVehicleModelName(GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+row)) :
+				row == vehicles ? "PREVIOUS PAGE" :
+				row == vehicles+1 ? "NEXT PAGE" : "BACK TO CHEAT CATEGORIES";
+			DrawFullVrMenuRow(name, 232+row*37, 2, gVrCheatSelection == row+1);
+		}
+		char page[48];
+		snprintf(page, sizeof(page), "PAGE %d OF %d", gVrSpawnVehiclePage+1, SpawnVehiclePageCount());
+		DrawVrMenuText(page, VR_MENU_WIDTH/2, 680, 2, 240, 178, 48);
+		DrawVrMenuText(gVrCheatStatusFrames > 0 ? gVrCheatStatus :
+			"STICK SELECT   LEFT/RIGHT PAGE   A SPAWN/TOGGLE   B BACK",
 			VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 		return;
 	}

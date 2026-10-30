@@ -66,7 +66,7 @@ foreach ($match in [regex]::Matches($source, '(?ms)^enum eVr\w*MenuItem \{.*?^\}
 $functions = [Collections.Generic.List[string]]::new()
 foreach ($name in @(
     'MenuRepeatPulse', 'MenuNavigationPulse', 'ResetMenuNavigationRepeat',
-    'OpenCheatMenu', 'ReturnFromCheatMenu', 'CycleQuestCheatMenuSelection',
+    'OpenCheatMenu', 'ReturnFromCheatMenu', 'SpawnVehiclePageCount', 'SpawnVehiclePageSize', 'CycleQuestCheatMenuSelection',
     'ActivateQuestCheatMenuSelection', 'CurrentMenuSelection',
     'CurrentMenuItemCount', 'CurrentMenuValueRepeats', 'ReturnFromRagdollMenu', 'ReturnFromDeformationMenu',
     'ReturnFromCurrentMenuPage', 'DrawQuestCheatPage', 'DrawQuestWeaponCalibrationPage'
@@ -82,6 +82,13 @@ foreach ($variable in $variables) {
     if (-not $match.Success) { throw "Cannot extract variable: $variable" }
     $pieces.Add($match.Value)
 }
+$pieces.Add('namespace VehicleCatalogFixture {')
+foreach ($name in @('GetVrSpawnVehicleCount', 'GetVrSpawnVehicleModel')) {
+    $match = [regex]::Match($pad, '(?ms)^int ' + $name + '\(.*?^\}')
+    if (-not $match.Success) { throw "Cannot extract vehicle catalog: $name" }
+    $pieces.Add($match.Value)
+}
+$pieces.Add('}')
 $pieces.Add($functionText)
 $generated = Join-Path $PSScriptRoot 'cheat-menu-production.inc'
 [IO.File]::WriteAllText($generated, ($pieces -join "`r`n`r`n") + "`r`n", [Text.UTF8Encoding]::new($false))
