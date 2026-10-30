@@ -2854,7 +2854,8 @@ endFrame(void)
 	const bool nativePostFx = useNativePostFx(gvk.width, gvk.height,
 		gvk.sceneWidth, gvk.sceneHeight, gvk.postFxConstants.mode,
 		gvk.postFxConstants.upscale, gvk.sgsrMode,
-		gvk.postFxNativePipeline != VK_NULL_HANDLE);
+		gvk.postFxNativePipeline != VK_NULL_HANDLE,
+		gvk.postFxConstants.blurColour);
 	vkCmdBindPipeline(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		nativePostFx ? gvk.postFxNativePipeline : gvk.postFxPipeline);
 	vkCmdBindDescriptorSets(gvk.frameCommands,

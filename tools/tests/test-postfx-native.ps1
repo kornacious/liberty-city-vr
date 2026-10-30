@@ -8,6 +8,9 @@ $output = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $output) { throw 'Choose a new output directory.' }
 New-Item -ItemType Directory -Path $output | Out-Null
 $shader = Join-Path $root 'librw/src/vulkan/shaders/rw_postfx.frag'
+$gain=[regex]::Match([IO.File]::ReadAllText($shader),'(?ms)^float ColourFilterGain\(.*?^\}')
+if(-not $gain.Success){throw 'Production colour gain helper missing.'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'postfx-colour-gain.inc'),$gain.Value)
 foreach ($native in @(0, 1)) {
     $binary = Join-Path $output "postfx-$native.spv"
     & (Join-Path $ShaderTools 'glslc.exe') --target-env=vulkan1.1 -O "-DRW_POSTFX_NATIVE=$native" -o $binary $shader
@@ -26,6 +29,6 @@ foreach ($native in @(0, 1)) {
         throw 'General postprocess lost temporal/upscale support.'
     }
 }
-& (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir (Join-Path $output 'host') -Sources @('test-postfx-native.cpp')
+& (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir (Join-Path $output 'host') -Sources @('test-postfx-native.cpp','test-postfx-colour.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Postprocess policy tests failed.' }
 Write-Host 'PASS: both postprocess shaders validate; native mode retains FXAA without temporal resources; fallback policy checked.'

@@ -444,6 +444,20 @@ vec3 ApplyOfficialSgsr2(vec2 uv)
 	return mix(history, upsample.rgb, alpha);
 }
 
+#if RW_POSTFX_NATIVE
+// The native pipeline's CPU eligibility check proves normalized input and
+// coefficients. Evaluate the uniform recurrence independently of source RGB;
+// the driver can move this gain into its preamble instead of repeating five
+// clamped colour steps at every pixel. Keep the general path unchanged.
+float ColourFilterGain(float colour, float alpha)
+{
+	float gain = 1.0f;
+	for(int i = 0; i < 5; i++)
+		gain = (1.0f-alpha) + gain*(colour*alpha);
+	return gain;
+}
+#endif
+
 void main()
 {
 	if(postFx.mode.x == 2u){
@@ -515,6 +529,12 @@ void main()
 
 	// Exact POSTFX_NORMAL colour filter used by re3 (GTA III colourfilterIII).
 	float alpha = postFx.blurColour.a;
+#if RW_POSTFX_NATIVE
+	vec3 gain = vec3(ColourFilterGain(postFx.blurColour.r, alpha),
+	                 ColourFilterGain(postFx.blurColour.g, alpha),
+	                 ColourFilterGain(postFx.blurColour.b, alpha));
+	vec4 previous = vec4(source.rgb*gain, 1.0);
+#else
 	vec4 destination = source;
 	vec4 previous = destination;
 	for(int i = 0; i < 5; i++){
@@ -522,6 +542,7 @@ void main()
 		                previous * postFx.blurColour * alpha;
 		previous = clamp(filtered, 0.0, 1.0);
 	}
+#endif
 	// History remains in linear game colour so the Liberty City colour filter is
 	// never applied twice when the result comes back on the next frame.
 	outResolvedHistory = vec4(source.rgb, 1.0);
