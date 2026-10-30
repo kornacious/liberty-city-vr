@@ -183,6 +183,9 @@ if(NOT LIBERTYVR_BRINGUP)
 		"${RE3_ROOT}/src/skel/android/QuestProfiler.cpp")
 	list(REMOVE_ITEM GAME_SOURCES "${QUEST_PROFILER_SOURCE}")
 	list(APPEND GAME_SOURCES "${QUEST_PROFILER_SOURCE}")
+	set(QUEST_RENDERDOC_SOURCE "${RE3_ROOT}/src/skel/android/QuestRenderDoc.cpp")
+	list(REMOVE_ITEM GAME_SOURCES "${QUEST_RENDERDOC_SOURCE}")
+	list(APPEND GAME_SOURCES "${QUEST_RENDERDOC_SOURCE}")
 	# Like QuestProfiler, keep the newly introduced source explicit so an
 	# already-configured Ninja graph notices it immediately.
 	set(PHYSICS_DIRECTOR_SOURCE
@@ -301,6 +304,7 @@ target_link_libraries(libertyvr
 	vulkan
 	android
 	aaudio
+	dl
 	log)
 
 # NativeActivity resolves ANativeActivity_onCreate from the glue; without this

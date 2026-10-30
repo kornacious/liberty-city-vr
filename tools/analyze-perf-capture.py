@@ -444,6 +444,13 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
+        "renderdoc_capture": {
+            "diagnostic_run": metadata.get("renderdoc_attached_at_start") == "1" or
+                ";renderdoc=1;" in metadata.get("simulation_replay", "") or
+                any(row.get("renderdoc_capture_active") == "1" for row in rows),
+            "active_frame_ids": [int(row["frame_id"]) for row in rows if row.get("renderdoc_capture_active") == "1"],
+            "note": "Capture instrumentation and file writing can affect this and neighboring frames; use an unhooked run for benchmarking.",
+        } if "renderdoc_capture_active" in rows[0] or ";renderdoc=" in metadata.get("simulation_replay", "") or metadata.get("renderdoc_attached_at_start") == "1" else None,
         "gpu_pass_profile": summarize_gpu_passes(rows, selected_ids, starts[0], int(metadata.get("gpu_pass_interval_frames", "8")), metadata.get("gpu_pass_sampling", "fixed"), metadata.get("gpu_pass_scope", "legacy_in_render_pass")),
         "draw_profile": summarize_draw_details(path, rows, selected_ids, metadata) if metadata.get("schema") == "6" else None,
         "vk_begin_stalls_over_5ms_top10": begin_stalls,

@@ -3858,7 +3858,7 @@ DrawQuestSimulationPage(void)
 	char row[160];
 	for(int i=0;i<SimulationReplayMenuRows;++i){
 		SimulationReplayMenuRow(i,row,sizeof(row));
-		DrawFullVrMenuRow(row,180+i*31,2,i==*CurrentMenuSelection(),true);
+		DrawFullVrMenuRow(row,180+i*27,2,i==*CurrentMenuSelection(),true);
 	}
 	DrawVrMenuText(SimulationReplayStatus(), VR_MENU_WIDTH/2, 580, 2, 255, 222, 145);
 	DrawVrMenuText("START STOPPED IN A CAR. PLAYBACK TELEPORTS TO THE START.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);

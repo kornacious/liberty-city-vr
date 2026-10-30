@@ -12,8 +12,9 @@ bool SimulationReplayProtected(CEntity *entity);
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
 // Rows: record, demo, play, stop, playback ghost, auto profile, limit,
-// recording ghost, delete, route assistance, benchmark forward view, back.
-constexpr int SimulationReplayMenuRows=12;
+// recording ghost, delete, route assistance, benchmark forward view,
+// RenderDoc capture, capture time, back.
+constexpr int SimulationReplayMenuRows=14;
 // Nonzero only during the playback preparation/playback belonging to this run.
 unsigned long long SimulationReplayForwardViewRun();
 bool SimulationReplayForwardViewNeutralPose(float position[3],float *yaw);
@@ -23,6 +24,9 @@ const char *SimulationReplayStatus();
 bool SimulationReplayConsumeStartFailure();
 bool SimulationReplayRecordingText(char *text,size_t capacity);
 bool SimulationReplayPlaybackText(char *text,size_t capacity);
+// Called only at complete OpenXR frame boundaries, outside GPU command recording.
+void SimulationReplayBeginCaptureFrame(void *vkInstance);
+void SimulationReplayEndCaptureFrame(bool rendered);
 #else
 inline void SimulationReplayBeginFrame(){}
 inline void SimulationReplayEndFrame(){}

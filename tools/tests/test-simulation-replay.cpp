@@ -10,12 +10,15 @@
 #include <sys/stat.h>
 #define __ANDROID__
 #include "../../overlay/src/vehicles/SimulationReplay.h"
+#include "../../overlay/src/skel/android/QuestRenderDoc.h"
+#include <cerrno>
 static unsigned long long fakeNs=1000000000ULL;
 #define CLOCK_MONOTONIC 0
 static int clock_gettime(int,timespec *t){t->tv_sec=static_cast<time_t>(fakeNs/1000000000ULL);t->tv_nsec=long(fakeNs%1000000000ULL);return 0;}
 static tm *gmtime_r(const time_t *t,tm *out){return gmtime_s(out,t)==0?out:nullptr;}
 static std::string captureRoot;
 #define LCVR_SIMULATION_REPLAY_ROOT captureRoot.c_str()
+#define LCVR_RENDERDOC_CAPTURE_ROOT captureRoot.c_str()
 static int mkdir(const char *path,int){std::error_code ec;std::filesystem::create_directories(path,ec);return ec? -1:0;}
 static int lstat(const char *p,struct stat *s){return stat(p,s);}
 #define S_ISREG(mode) (((mode)&S_IFMT)==S_IFREG)
@@ -60,7 +63,7 @@ struct CPools {static CVehicle *GetVehicle(int ref){return ref==poolHandle?&car:
 struct CWorld {static bool bProcessCutsceneOnly;static void Remove(CVehicle *){}static void Add(CVehicle *){}};
 bool CWorld::bProcessCutsceneOnly;
 struct CReplay {static bool playing;static bool IsPlayingBack(){return playing;}};bool CReplay::playing;
-struct CTimer {static float step;static float GetTimeStepInSeconds(){return step;}static void Stop(){}static void Update(){}};float CTimer::step=.01f;
+struct CTimer {static float step;static float GetTimeStepInSeconds(){return step;}static bool GetIsPaused(){return step==0;}static void Stop(){}static void Update(){}};float CTimer::step=.01f;
 struct CGame {static int currLevel;};int CGame::currLevel=0;
 struct CTheZones {static int GetLevelFromPosition(const CVector *){return 2;}};
 struct CCollision {static int loads;static void SortOutCollisionAfterLoad(){++loads;}};int CCollision::loads=0;
@@ -76,6 +79,19 @@ static bool captureAvailable=true;
 static void QuestProfilerSetDisplayMode(int m){if(m && !profilerMode)++profileStarts;if(!m && profilerMode)++profileStops;profilerMode=m;}
 static void QuestProfilerSetCaptureContext(const char *s){profileContext=s;}
 static const char *QuestProfilerGetCaptureStem(){return captureAvailable?"test-profile":"";}
+static bool rdocAvailable=false,rdocActive=false,rdocBusy=false;
+static unsigned rdocStarts=0,rdocEnds=0;
+bool QuestRenderDocAvailable(){return rdocAvailable;}
+questcapture::RenderDocFrame::Result QuestRenderDocBegin(void*,const char*){
+    if(!rdocAvailable)return questcapture::RenderDocFrame::Unavailable;
+    if(rdocBusy)return questcapture::RenderDocFrame::Busy;
+    ++rdocStarts;rdocActive=true;return questcapture::RenderDocFrame::Started;
+}
+questcapture::RenderDocFrame::Result QuestRenderDocEnd(bool keep){
+    ++rdocEnds;rdocActive=false;return keep?questcapture::RenderDocFrame::Saved:questcapture::RenderDocFrame::Discarded;
+}
+bool QuestRenderDocActive(){return rdocActive;}
+const char *QuestRenderDocCapturePath(){return "/local/test_frame.rdc";}
 static bool QuestProfilerIsEnabled(){return profilerMode!=0;}
 static int QuestProfilerGetDisplayMode(){return profilerMode;}
 }
@@ -102,6 +118,8 @@ static void DrawDebugText(const char *s,int x,int y,int scale,uint8 r,uint8 g,ui
 #include "simulation-replay-hud.inc"
 static bool Overlap(Rect a,Rect b){return a.left<b.right&&b.left<a.right&&a.top<b.bottom&&b.top<a.bottom;}
 static void LayoutTests(){
+    for(int scenario=0;scenario<4;++scenario){
+    renderdocCapture=scenario!=0;rdocAvailable=scenario==1||scenario==3;captureResult=scenario==3?"saved":"off";
     for(int row=0;row<SimulationReplayMenuRows;++row){
         textRects.clear();highlightRects.clear();menuSelection=row;DrawQuestSimulationPage();
         Check(highlightRects.size()==1,"one selected replay row");
@@ -111,6 +129,8 @@ static void LayoutTests(){
             if(i<3 || i>=3+SimulationReplayMenuRows) Check(!Overlap(a,highlightRects[0]),"selected row does not cover heading or footer");
         }
     }
+    }
+    renderdocCapture=false;rdocAvailable=false;
 }
 }
 static FILE *Temporary(){FILE *f=nullptr;tmpfile_s(&f);Check(f!=nullptr,"temporary file");return f;}
@@ -273,6 +293,41 @@ static void PlaybackHudTests(){
     for(Mode inactive:{Preparing,Finishing,Idle}){mode=inactive;Check(!SimulationReplayPlaybackText(text,sizeof(text))&&!VrSimulationRecordingPixels(),"timer hidden during warmup and after stop/completion");}
     tape.reset();profilerMode=0;duration=120;elapsed=0;
 }
+static void RenderDocReplayTests(){
+    using namespace androidgame;
+    selectedCar=&car;car.m_vecMoveSpeed=CVector(0,0,0);car.m_vecTurnSpeed=CVector(0,0,0);
+    Check(!renderdocCapture,"RenderDoc defaults OFF for normal benchmarks");
+    captureAtUs=0;SimulationReplayMenuAction(12,-1);Check(captureAtUs==119500000,"capture time wraps downward");
+    SimulationReplayMenuAction(12,1);Check(captureAtUs==0,"capture time wraps upward in half seconds");
+    SimulationReplayMenuAction(11,1);SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(status,"THROUGH RENDERDOC"),"unattached capture run fails visibly before teleporting");
+    rdocAvailable=true;captureAtUs=120000000;SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Idle&&std::strstr(status,"BEFORE THE DEMO END"),"capture beyond tape end rejected");
+    captureAtUs=500000;SimulationReplayMenuAction(2,1);Frame();
+    SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==0,"no capture during warmup");Prepare();
+    Check(profileContext.find("renderdoc=1")!=std::string::npos,"capture run marked diagnostic before target");
+    while(elapsed<runCaptureAtUs)Frame();
+    CTimer::step=0;SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==0,"paused playback does not trigger");CTimer::step=.01f;
+    SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==1&&captureFrameActive&&capturedAtUs>=500000,"first eligible frame starts at target");
+    SimulationReplayBeginCaptureFrame(&car);SimulationReplayMenuAction(12,1);
+    Check(rdocStarts==1&&captureAtUs==500000,"one-shot capture and frozen run options");
+    SimulationReplayEndCaptureFrame(true);Check(captureResult=="saved"&&captureFile=="/local/test_frame.rdc"&&!captureFrameActive,"successful full frame records output");
+    SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==1,"later frames cannot retrigger");Stop();
+    FILE *f=std::fopen(Path(runId+".run.csv").c_str(),"r");char report[4096]={};Check(f!=nullptr,"capture run report exists");std::fread(report,1,sizeof(report)-1,f);std::fclose(f);
+    Check(std::strstr(report,"renderdoc_result,saved")&&std::strstr(report,"renderdoc_target_us,500000"),"capture result and requested time persisted");
+    car.m_vecMoveSpeed=CVector(0,0,0);captureAtUs=0;SimulationReplayMenuAction(2,1);Frame();Prepare();SimulationReplayBeginCaptureFrame(&car);
+    SimulationReplayMenuAction(3,1);SimulationReplayAfterAppFrame();
+    Check(mode==Finishing&&captureFrameActive,"report cleanup waits for XR capture end");
+    SimulationReplayEndCaptureFrame(true);Check(mode==Idle&&captureResult=="saved","stop during capture finalizes safely after XR end");
+    car.m_vecMoveSpeed=CVector(0,0,0);SimulationReplayMenuAction(2,1);Frame();Prepare();rdocBusy=true;
+    const auto oldEnds=rdocEnds;SimulationReplayBeginCaptureFrame(&car);SimulationReplayEndCaptureFrame(true);
+    Check(captureResult=="busy"&&!captureFrameActive&&rdocEnds==oldEnds,"foreign capture is not ended or discarded");rdocBusy=false;Stop();
+    car.m_vecMoveSpeed=CVector(0,0,0);SimulationReplayMenuAction(2,1);Frame();Prepare();SimulationReplayBeginCaptureFrame(&car);SimulationReplayEndCaptureFrame(false);
+    Check(captureResult=="discarded"&&!captureFrameActive,"non-rendered/teardown frame discards owned capture");Stop();
+    car.m_vecMoveSpeed=CVector(0,0,0);captureAtUs=37000000;SimulationReplayMenuAction(2,1);Frame();Stop();
+    Check(captureResult=="not_reached","early stop reports target not reached");
+    renderdocCapture=false;rdocAvailable=false;captureAtUs=37000000;
+}
 static void ExternalTape(const char *path){
     FILE *f=std::fopen(path,"r");SimulationReplayCore::Tape input;
     Check(f&&input.Load(f),"external replay tape loads");if(f)std::fclose(f);
@@ -285,4 +340,4 @@ static void ExternalTape(const char *path){
     Check(valid,"external tape supports route assistance over its entire duration at mixed frame rates");
     std::printf("External tape: %.3f seconds, %zu source samples, %u route frames validated.\n",double(input.endUs)/1000000,input.samples.size(),frames);
 }
-int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}
+int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();RenderDocReplayTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}

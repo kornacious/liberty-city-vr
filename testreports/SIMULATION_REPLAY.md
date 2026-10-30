@@ -225,3 +225,58 @@ stereo spacing/cant, unchanged tracked inputs and FOV, run changes, OFF/reset an
 invalid inputs. Replay runtime tests cover default-on, recording exclusion,
 active-run policy immutability, OFF, completion and capture provenance. Writer
 and analyzer tests cover both effective states and legacy CSV compatibility.
+
+## Replay-timed RenderDoc capture
+
+Launch the debug APK through RenderDoc Meta Fork, then open Simulation Replay.
+Set RENDERDOC CAPTURE ON and choose CAPTURE AT (default 37.0 seconds, adjusted
+in 0.5-second steps from 0 to 119.5 seconds). Start the selected demo normally.
+One capture is attempted on the first rendered, unpaused playback frame whose
+pre-step simulation clock reaches that time. Preparation time is excluded.
+The target must precede the loaded demo's actual end, including short demos.
+The option defaults OFF on application startup and is latched per run.
+
+The integration passively obtains API 1.4+ from an already injected RenderDoc
+module; it does not load or enable a capture layer in normal gameplay. If that
+API is unavailable, starting a timed-capture replay reports a visible failure
+before teleporting the car. Existing GUI-owned captures are left untouched;
+a busy capture at the target is recorded as busy, without automatic retries.
+
+Explicit capture boundaries run after xrBeginFrame and before any frame Vulkan
+commands, through xrEndFrame after app submission. They use the Vulkan instance
+dispatch pointer required by RenderDoc, with no window/present dependency.
+Non-rendered/failed frames and teardown discard only a capture owned by this
+integration. Replay completion/stop cleanup waits for capture finalization.
+The standalone bring-up renderer has no replay capture hooks.
+
+Files remain in the app-local `files/renderdoc-captures/` directory, prefixed by
+the run identifier. RenderDoc's previous capture filename template is restored
+after success, failure or discard. A saved capture appears in the connected
+RenderDoc capture list; use its normal save/copy workflow to retain it on this
+computer. Captures contain game resources and must remain local.
+
+Run reports include requested/actual trigger times, start/end monotonic clocks,
+result and local filename. The capture context includes `renderdoc=1` and the
+requested time. The additive frame column `renderdoc_capture_active` identifies
+the captured source CPU frame. Session metadata also records `renderdoc_attached_at_start`, so an injected
+session is marked diagnostic even with the timed capture option OFF.
+The analyzer marks these as diagnostic runs;
+capture interception and file writing can affect neighboring frames too. Use
+RENDERDOC CAPTURE OFF in an unhooked game session for ordinary performance
+comparisons. The capture flag does not attempt to label individual delayed GPU
+results as originating from the delivery row. Schema 6 remains supported.
+
+API-table tests cover passive/unavailable API behavior, exclusive capture
+ownership, instance dispatch selection contract, capture path reporting,
+template restoration, start/end failures and discard. Replay tests cover clock
+thresholds, warmup/pause exclusions, one attempt per run, frozen options, invalid
+times, visible attachment errors, stop during capture, report finalization and
+discard. CSV/analyzer checks cover diagnostic frame marking and legacy data.
+Actual Meta-fork capture/replay validation requires the injected first demo run.
+
+Local validation on 30 October 2026: the RenderDoc API-table tests, 13,563 replay
+runtime/menu checks, CSV writer and six analyzer tests passed. The full debug
+APK built successfully in 75 seconds and its merged manifest is debuggable.
+All eleven modified production sources match the assembled build. Deployment
+was skipped because no authorized, responsive Quest 3 was connected. A real
+injected capture and headset visual verification remain pending.

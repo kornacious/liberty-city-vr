@@ -8,6 +8,7 @@
 
 #include "QuestProfiler.h"
 #include "QuestPerfCapture.h"
+#include "QuestRenderDoc.h"
 #include "xr_vulkan_session.h"
 #include "vulkan/rwvk.h"
 #include "CarCtrl.h"
@@ -273,6 +274,7 @@ StartFrameCapture(void)
 		std::to_string(rw::vulkan::getOpaqueWorldAlphaFastPathEnabled() ? 1 : 0) + "\n";
 	details += "replay_forward_view_at_start," +
 		std::to_string(xrvk::isReplayForwardViewActive() ? 1 : 0) + "\n";
+	details += "renderdoc_attached_at_start," + std::to_string(QuestRenderDocAvailable() ? 1 : 0) + "\n";
 	details += "simulation_replay," + gCaptureContext + "\n";
 	details += "profiler_compiled," __DATE__ " " __TIME__ "\n";
 	snprintf(value, sizeof(value), "start_unix_ns,%llu\nstart_monotonic_ns,%llu\n",
@@ -1445,6 +1447,7 @@ QuestProfilerEndAppFrame(void)
 	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
 	gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
 	gCaptureFrame.replayForwardViewActive = xrvk::isReplayForwardViewActive() ? 1 : 0;
+	gCaptureFrame.renderdocCaptureActive = QuestRenderDocActive() ? 1 : 0;
 	gCaptureFrame.opaqueWorldAlphaFastPathEnabled =
 		rw::vulkan::getOpaqueWorldAlphaFastPathEnabled() ? 1 : 0;
 	static_assert(questperf::GpuPassCount==GpuPassProfile::Count,"GPU capture/backend pass count");

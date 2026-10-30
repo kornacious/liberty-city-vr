@@ -3073,6 +3073,9 @@ renderFrame(void)
 	uint32_t layerCount = 0;
 
 	if(frameState.shouldRender){
+#ifndef MIAMIVR_BRINGUP
+		androidgame::SimulationReplayBeginCaptureFrame(g.vkInstance);
+#endif
 		XrViewState viewState = { XR_TYPE_VIEW_STATE };
 		XrViewLocateInfo locateInfo = { XR_TYPE_VIEW_LOCATE_INFO };
 		locateInfo.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -3267,6 +3270,9 @@ renderFrame(void)
 	endInfo.layerCount = layerCount;
 	endInfo.layers = layers;
 	const XrResult ended = xrEndFrame(g.session, &endInfo);
+#ifndef MIAMIVR_BRINGUP
+	androidgame::SimulationReplayEndCaptureFrame(XR_SUCCEEDED(ended) && layerCount>0);
+#endif
 	if(XR_FAILED(ended)){
 		static int reportedEnd = 0;
 		if(reportedEnd < 5){
@@ -3314,6 +3320,9 @@ renderFrame(void)
 void
 destroy(void)
 {
+#ifndef MIAMIVR_BRINGUP
+	androidgame::SimulationReplayEndCaptureFrame(false);
+#endif
 	if(g.device != VK_NULL_HANDLE)
 		vkDeviceWaitIdle(g.device);
 
