@@ -34,7 +34,7 @@
 +               e->bDistanceFade || e->bDrawLast || e->bRenderScorched || e->bRenderDamaged)
 +                continue;
 +            entries[i].eligible=rw::vulkan::getOpaqueOrderInterval(
-+                (rw::Atomic*)e->m_rwObject,entries[i].depth)!=0;
++                (rw::Atomic*)e->m_rwObject,entries[i].depth,true)!=0;
 +        }
 +        rw::vulkan::recordOpaqueOrderSwaps(OpaqueOrder::Sort(entries,size));
 +        for(int i=0;i<size;++i) ordered[start+i]=entries[i].entity;

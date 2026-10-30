@@ -5,11 +5,13 @@
 namespace OpaqueOrder {
 struct Interval { float nearDepth[2], farDepth[2]; };
 enum Rejection { Inactive, Callback, PassState, Pipeline, Geometry, Lighting,
-    Instance, MeshAlpha, MatFx, Texture, Address, Projection, RejectionCount };
+    Instance, MeshAlpha, MatFx, Texture, Address, Projection, StaticEntity, RejectionCount };
 inline const char *RejectionName(unsigned reason)
 {
     static const char *names[]={"inactive","callback","pass_state","pipeline","geometry",
-        "lighting","instance","mesh_alpha","matfx","texture","address","projection"};
+        "lighting","instance","mesh_alpha","matfx","texture","address","projection","static_entity"};
+    // Keep the legacy lighting column for older captures; LIGHT is not motion.
+    static_assert(sizeof(names)/sizeof(names[0])==RejectionCount,"Rejection names must match counters");
     return reason<RejectionCount ? names[reason] : "unknown";
 }
 struct Stats {

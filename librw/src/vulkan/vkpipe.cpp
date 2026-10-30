@@ -868,12 +868,13 @@ defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 }
 
 bool32
-getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth)
+getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth, bool32 staticBuilding)
 {
 	++gOpaqueOrderStats.candidates;
 	using namespace OpaqueOrder;
 	if(!gOpaqueOrderEnabled || !gvk.inFrame || !atomic)
 		return Reject(gOpaqueOrderStats,Inactive);
+	if(!staticBuilding) return Reject(gOpaqueOrderStats,StaticEntity);
 	if(!IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper))
 		return Reject(gOpaqueOrderStats,Callback);
 	if(dynamicObjectPass || vehicleAlphaPass ||
@@ -888,7 +889,9 @@ getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth)
 	if(!geo || geo->numMorphTargets!=1 || geo->lockedSinceInst ||
 	   (geo->flags&rw::Geometry::NATIVE) || !geo->meshHeader)
 		return Reject(gOpaqueOrderStats,OpaqueOrder::Geometry);
-	if(geo->flags&rw::Geometry::LIGHT) return Reject(gOpaqueOrderStats,Lighting);
+	// LIGHT enables per-atomic lighting; it does not imply animation or motion.
+	// The game has already proved a static building, and the default pipeline
+	// resolves lighting per draw. Preserve that flag and all lighting inputs.
 	if(!geo->instData || geo->instData->platform!=PLATFORM_VULKAN)
 		return Reject(gOpaqueOrderStats,Instance);
 	InstanceDataHeader *header=(InstanceDataHeader*)geo->instData;

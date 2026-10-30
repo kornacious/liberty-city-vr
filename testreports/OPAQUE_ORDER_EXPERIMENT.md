@@ -18,7 +18,7 @@ comparator.
 
 Eligibility requires a non-fading, non-draw-last, non-damaged, non-scorched
 building atomic with default-equivalent callbacks and default pipeline, previously instanced static
-single-morph geometry, LIGHT unset, no pending reinstance, and at most 64
+single-morph geometry, explicit static-building eligibility, no pending reinstance, and at most 64
 meshes. Every mesh must have opaque vertices/material/texture, ordinary texture
 addressing and no MatFX. Custom callbacks, mixed-alpha atomics, vehicles,
 pedestrians, props and entries from the other render phase are barriers.
@@ -125,3 +125,52 @@ perform a short ON replay capture (about 15–20 seconds along the usual route),
 then turn profiling OFF. Confirm nonzero real eligibility/swaps from its CSV
 before spending time on another complete OFF/ON/OFF/ON sequence. This task does
 not automatically drive the player's session or alter the fixed settings.
+
+## Lighting-enabled static buildings (2026-10-31)
+
+The newest 30-second verification of the wrapper build had 1,639,704 candidate
+checks: zero callback rejections, 1,639,696 LIGHT-flag rejections, eight projection
+rejections, and no eligible objects/swaps. Candidate accounting reconciled and
+no capture rows were dropped. That recording established the second eligibility
+blocker, not a performance result for ordering.
+
+The classifier now requires an explicit `staticBuilding` argument. The only
+game call supplies it after proving `IsBuilding()` and the existing phase,
+atomic and entity-state conditions. Missing/false eligibility fails closed in
+the new `static_entity` rejection bucket. Dynamic/vehicle passes, unknown
+callbacks, nondefault pipelines, pending/unknown geometry, alpha and MatFX,
+unsupported textures, and ambiguous stereo-depth bounds remain excluded.
+
+`Geometry::LIGHT` no longer rejects an otherwise proven static building. The
+flag is neither cleared nor rewritten. The existing draw path still resolves
+ambient/directional lighting per atomic. `CEntity::SetupLighting` establishes
+the same ambient-only world state for each building, so this change does not
+introduce a new lighting calculation or carry lighting between reordered
+buildings. Roads use their existing ambient state. No shaders, lighting effects
+settings, alpha rules, 32-slot grouping or depth margins change.
+
+Policy metadata advances to `v3_lit_buildings`. The old `lighting` rejection
+column is retained at zero for stable column meaning and historical comparison;
+`static_entity` is appended. The generic writer/analyzer handle both old and
+new reason sets, including candidate accounting.
+
+Validation:
+
+- The extracted production classifier accepts both lit and unlit static
+  fixtures with identical depth bounds and preserves the LIGHT flag.
+- Two classified lit buildings produce an adjacent front-to-back swap.
+- False static-building eligibility and lit dynamic/vehicle passes fail.
+- All existing unsafe fixture cases now run with LIGHT enabled: custom/null
+  callbacks, invalid pass/pipeline, dirty/native geometry, unknown bounds,
+  alpha vertex/material/texture, MatFX, unsupported addressing and bad
+  projection remain rejected; candidate accounting and resets pass.
+- Integration check verifies the assembled renderer gates the explicit
+  eligibility argument on building type.
+- Randomized ordering, CSV recorder and all six Python analysis tests pass.
+- Full arm64 Quest debug APK build passes. Installed this task's APK with
+  `install -r` on the verified **personal Quest 3 device**; existing game data
+  and saves preserved, read-only performance diagnostics accessible.
+
+Real-world nonzero eligibility/swaps, visual correctness in both eyes and GPU
+benefit still require a new short capture using the latest 30-second demo.
+Keep the full OFF/ON/OFF/ON benchmark pending until that capture is checked.

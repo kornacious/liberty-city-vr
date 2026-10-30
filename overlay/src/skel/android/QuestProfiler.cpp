@@ -270,7 +270,7 @@ StartFrameCapture(void)
 	clock_gettime(CLOCK_REALTIME, &realtime);
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
-	details += "opaque_order_policy,bounded_32_adjacent_disjoint_stereo_depth_static_opaque_v2_audited_wrapper\n";
+	details += "opaque_order_policy,bounded_32_adjacent_disjoint_stereo_depth_static_opaque_v3_lit_buildings\n";
 	details += "opaque_order_experiment_at_start," + std::to_string(rw::vulkan::getOpaqueOrderEnabled() ? 1 : 0) + "\n";
 	details += "opaque_world_alpha_fast_path_at_start," +
 		std::to_string(rw::vulkan::getOpaqueWorldAlphaFastPathEnabled() ? 1 : 0) + "\n";

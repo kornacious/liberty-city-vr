@@ -467,7 +467,9 @@ bool32 getOpaqueOrderEnabled(void);
 // Register only a game callback audited to delegate unchanged to the default
 // renderer. Unknown/custom callbacks remain barriers; nil clears registration.
 void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback);
-bool32 getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth);
+// The game must prove this is a static building before calling; geometry
+// lighting flags do not establish entity type or motion. False fails closed.
+bool32 getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth, bool32 staticBuilding);
 void recordOpaqueOrderSwaps(uint32 swaps);
 OpaqueOrder::Stats getOpaqueOrderStats(void);
 // The PS2 two-pass alpha rule. On by default: without it masked

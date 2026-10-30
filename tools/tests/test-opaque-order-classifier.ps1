@@ -1,12 +1,18 @@
 param([string]$KitRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
-      [string]$StageRoot=(Join-Path $KitRoot '.cache/opaque-wrapper-build'),
+      [string]$StageRoot=(Join-Path $KitRoot '.cache/opaque-lit-build'),
       [string]$OutDir=(Join-Path $KitRoot '.cache/opaque-wrapper-classifier-tests'))
 $ErrorActionPreference='Stop'
 $source=[IO.File]::ReadAllText((Join-Path $KitRoot 'librw/src/vulkan/vkpipe.cpp'))
 $visibility=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/rw/VisibilityPlugins.cpp'))
+$renderer=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/renderer/Renderer.cpp'))
 function Extract($s,$pattern){$match=[regex]::Match($s,$pattern);if(-not $match.Success){throw 'Production function missing'};return $match.Value}
 $wrapper=Extract $visibility '(?ms)^RpAtomic\*\r?\nDefaultRenderCB_pushid\(.*?^\}'
 $classifier=Extract $source '(?ms)^bool32\r?\ngetOpaqueOrderInterval\(.*?^\}'
+$ordering=Extract $renderer '(?ms)^static CEntity \*\*OrderOpaqueBuildings\(.*?^\}'
+if($ordering -notmatch 'if\(!e \|\| !e->IsBuilding\(\)' -or
+   $ordering -notmatch 'getOpaqueOrderInterval\(\s*\(rw::Atomic\*\)e->m_rwObject,entries\[i\]\.depth,true\)'){
+    throw 'Game layer must prove building type before passing static eligibility'
+}
 $registration=Extract $visibility '(?ms)#ifndef GTA_PS2\r?\n    // This wrapper.*?#endif'
 if($registration -notmatch '\(rw::Atomic::RenderCB\)DefaultRenderCB_pushid' -or
    $registration -notmatch '#else\s+rw::vulkan::setOpaqueOrderDefaultRenderWrapper\(nil\)'){
