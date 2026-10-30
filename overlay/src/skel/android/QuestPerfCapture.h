@@ -200,9 +200,12 @@ class Writer {
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",%.6f,%u",g.ms[i],g.draws[i]);
         std::fprintf(frames,",%d,%d",f.opaqueWorldAlphaFastPathEnabled,f.replayForwardViewActive);
         const auto &a=f.atomicSubmission;
-        std::fprintf(frames,",%u,%u,%u,%u,%u,%u,%d,%d,%u,%u,%u\n",a.atomics,a.pipelineRequests,a.pipelineBinds,
+        std::fprintf(frames,",%u,%u,%u,%u,%u,%u,%d,%d,%u,%u,%u",a.atomics,a.pipelineRequests,a.pipelineBinds,
             a.textureRequests,a.textureBinds,a.textureLookups,f.renderdocCaptureActive,
             f.opaqueOrderExperimentEnabled,f.opaqueOrder.candidates,f.opaqueOrder.eligible,f.opaqueOrder.swaps);
+        for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
+            std::fprintf(frames,",%u",f.opaqueOrder.rejected[i]);
+        std::fputc('\n',frames);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -291,7 +294,10 @@ public:
         std::fputs(",vk_begin_detail_valid,vk_begin_pipeline_ms,vk_begin_fence_wait_ms,vk_begin_timestamp_ms,vk_begin_retirement_ms,vk_begin_setup_ms,vk_begin_wrist_ms,vk_begin_backend_total_ms,vk_pipeline_requests,vk_pipelines_created,vk_pipeline_failures,vk_retired_buffers,vk_retired_images,vk_retired_descriptors,vk_upload_commands,vk_framebuffer_created,vk_last_pipeline_key", frames);
         std::fputs(",gpu_pass_frame_id,gpu_pass_start_monotonic_ns,gpu_pass_status,gpu_pass_valid_mask,gpu_pass_frame_ms",frames);
         for(unsigned i=0;i<GpuPassCount;++i)std::fprintf(frames,",gpu_pass_%s_ms,gpu_pass_%s_draw_calls",GpuPassName(i),GpuPassName(i));
-        std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups,renderdoc_capture_active,opaque_order_experiment_enabled,opaque_order_candidates,opaque_order_eligible,opaque_order_swaps\n",frames);
+        std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups,renderdoc_capture_active,opaque_order_experiment_enabled,opaque_order_candidates,opaque_order_eligible,opaque_order_swaps",frames);
+        for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
+            std::fprintf(frames,",opaque_order_reject_%s",OpaqueOrder::RejectionName(i));
+        std::fputc('\n',frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

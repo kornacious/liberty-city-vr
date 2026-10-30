@@ -1,0 +1,21 @@
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -171,6 +171,18 @@
+ void
+ CVisibilityPlugins::Initialise(void)
+ {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++#ifndef GTA_PS2
++    // This wrapper adds memory-ID bookkeeping only and delegates unchanged to
++    // AtomicDefaultRenderCallBack. Do not register the PS2 pre-instancer or
++    // RenderObjNormalAtomic (which performs additional visibility decisions).
++    rw::vulkan::setOpaqueOrderDefaultRenderWrapper(
++        (rw::Atomic::RenderCB)DefaultRenderCB_pushid);
++#else
++    rw::vulkan::setOpaqueOrderDefaultRenderWrapper(nil);
++#endif
++#endif
++
+ 	m_alphaList.Init(NUMALPHALIST);
+ 	m_alphaList.head.item.sort = 0.0f;
+ 	m_alphaList.tail.item.sort = 100000000.0f;

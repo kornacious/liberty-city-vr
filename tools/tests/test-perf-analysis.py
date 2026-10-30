@@ -201,6 +201,14 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["opaque_order"]["frames_with_swaps"], 2)
             self.assertEqual(result["opaque_order"]["per_frame"]["opaque_order_eligible"]["mean"], 20)
             self.assertIsNone(analysis.summarize_opaque_order([{"frame_id": "1"}]))
+            self.assertIsNone(result["opaque_order"]["candidate_accounting_valid"])
+            self.assertEqual(result["opaque_order"]["rejection_totals"], {})
+            reasons = [{"opaque_order_candidates": "8", "opaque_order_eligible": "2", "opaque_order_swaps": "1",
+                        "opaque_order_reject_callback": "5", "opaque_order_reject_projection": "1"}]
+            self.assertTrue(analysis.summarize_opaque_order(reasons)["candidate_accounting_valid"])
+            self.assertEqual(analysis.summarize_opaque_order(reasons)["rejection_totals"]["opaque_order_reject_callback"], 5)
+            reasons[0]["opaque_order_candidates"] = "9"
+            self.assertFalse(analysis.summarize_opaque_order(reasons)["candidate_accounting_valid"])
             self.assertEqual(result["recorded_configuration"]["opaque_world_alpha_fast_path_enabled"], ["0", "1"])
             self.assertEqual(result["recorded_configuration"]["replay_forward_view_active"], ["0", "1"])
             self.assertEqual(result["metadata"]["active_model_set"], "CLASSIC")

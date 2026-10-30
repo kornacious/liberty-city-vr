@@ -4,7 +4,24 @@
 
 namespace OpaqueOrder {
 struct Interval { float nearDepth[2], farDepth[2]; };
-struct Stats { uint32_t candidates=0,eligible=0,swaps=0; };
+enum Rejection { Inactive, Callback, PassState, Pipeline, Geometry, Lighting,
+    Instance, MeshAlpha, MatFx, Texture, Address, Projection, RejectionCount };
+inline const char *RejectionName(unsigned reason)
+{
+    static const char *names[]={"inactive","callback","pass_state","pipeline","geometry",
+        "lighting","instance","mesh_alpha","matfx","texture","address","projection"};
+    return reason<RejectionCount ? names[reason] : "unknown";
+}
+struct Stats {
+    uint32_t candidates=0,eligible=0,swaps=0;
+    uint32_t rejected[RejectionCount]{};
+};
+inline bool Reject(Stats &stats,Rejection reason) { ++stats.rejected[reason];return false; }
+template<class CallbackType>
+inline bool IsDefaultCallback(CallbackType callback,CallbackType raw,CallbackType auditedWrapper)
+{
+    return callback && (callback==raw || (auditedWrapper && callback==auditedWrapper));
+}
 inline bool Before(const Interval &a,const Interval &b)
 {
     for(int eye=0;eye<2;++eye){

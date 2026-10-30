@@ -110,6 +110,8 @@ int main()
         frame.renderdocCaptureActive = i==10?1:0;
         frame.opaqueOrderExperimentEnabled=i%2;
         frame.opaqueOrder={40,30,i%7};
+        for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason)
+            frame.opaqueOrder.rejected[reason]=(i+reason)%11;
         if(writer.Submit(frame)) ++accepted;
     }
     writer.Stop(); writer.Stop();
@@ -148,6 +150,10 @@ int main()
         assert(std::stoi(row[column("opaque_order_candidates")]) == 40);
         assert(std::stoi(row[column("opaque_order_eligible")]) == 30);
         assert(std::stoi(row[column("opaque_order_swaps")]) == int(id%7));
+        for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason){
+            std::string key="opaque_order_reject_";key+=OpaqueOrder::RejectionName(reason);
+            assert(std::stoi(row[column(key.c_str())]) == int((id+reason)%11));
+        }
         assert(std::stoi(row[column("vk_static_atomic_calls")]) == 4);
         assert(std::stoi(row[column("vk_static_atomic_pipeline_requests")]) == 20);
         assert(std::stoi(row[column("vk_static_atomic_pipeline_binds")]) == 5);

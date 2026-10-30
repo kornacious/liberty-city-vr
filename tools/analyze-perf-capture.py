@@ -59,7 +59,13 @@ def summarize_opaque_order(rows):
     keys = ["opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps"]
     if not rows or any(key not in rows[0] for key in keys):
         return None
+    rejection_keys = [key for key in rows[0] if key.startswith("opaque_order_reject_")]
+    totals = {key: sum(int(row[key]) for row in rows) for key in rejection_keys}
+    accounted = (all(int(row["opaque_order_candidates"]) == int(row["opaque_order_eligible"]) +
+                     sum(int(row[key]) for key in rejection_keys) for row in rows)
+                 if rejection_keys else None)
     return {"per_frame": {key: distribution([float(row[key]) for row in rows]) for key in keys},
+            "rejection_totals": totals, "candidate_accounting_valid": accounted,
             "frames_with_swaps": sum(int(row["opaque_order_swaps"]) > 0 for row in rows),
             "note": "Swaps are adjacent exchanges within groups of at most 32 visible slots; not draw-call savings."}
 

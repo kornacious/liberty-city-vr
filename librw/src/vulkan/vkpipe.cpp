@@ -33,7 +33,9 @@ static bool32 vehicleAlphaPass;
 static bool32 dynamicObjectPass;
 static AtomicSubmissionStats gAtomicSubmissionStats;
 static bool32 gOpaqueOrderEnabled;
+static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
+void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback){gOpaqueOrderDefaultWrapper=callback;}
 void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
@@ -869,35 +871,47 @@ bool32
 getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth)
 {
 	++gOpaqueOrderStats.candidates;
-	if(!gOpaqueOrderEnabled || !gvk.inFrame || !atomic ||
-	   atomic->renderCB != Atomic::defaultRenderCB || dynamicObjectPass || vehicleAlphaPass ||
+	using namespace OpaqueOrder;
+	if(!gOpaqueOrderEnabled || !gvk.inFrame || !atomic)
+		return Reject(gOpaqueOrderStats,Inactive);
+	if(!IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper))
+		return Reject(gOpaqueOrderStats,Callback);
+	if(dynamicObjectPass || vehicleAlphaPass ||
 	   !gstate.zTestEnabled || !gstate.zWriteEnabled || gstate.alphaTestRef>=254)
-		return 0;
+		return Reject(gOpaqueOrderStats,PassState);
 	rw::ObjPipeline *base=atomic->getPipeline();
-	if(!base || base->platform!=PLATFORM_VULKAN) return 0;
+	if(!base || base->platform!=PLATFORM_VULKAN) return Reject(gOpaqueOrderStats,OpaqueOrder::Pipeline);
 	ObjPipeline *pipe=(ObjPipeline*)base;
-	if(pipe->instanceCB!=defaultInstanceCB || pipe->renderCB!=defaultRenderCB) return 0;
-	Geometry *geo=atomic->geometry;
+	if(pipe->instanceCB!=defaultInstanceCB || pipe->renderCB!=defaultRenderCB)
+		return Reject(gOpaqueOrderStats,OpaqueOrder::Pipeline);
+	rw::Geometry *geo=atomic->geometry;
 	if(!geo || geo->numMorphTargets!=1 || geo->lockedSinceInst ||
-	   (geo->flags&(Geometry::NATIVE|Geometry::LIGHT)) || !geo->meshHeader ||
-	   !geo->instData || geo->instData->platform!=PLATFORM_VULKAN) return 0;
+	   (geo->flags&rw::Geometry::NATIVE) || !geo->meshHeader)
+		return Reject(gOpaqueOrderStats,OpaqueOrder::Geometry);
+	if(geo->flags&rw::Geometry::LIGHT) return Reject(gOpaqueOrderStats,Lighting);
+	if(!geo->instData || geo->instData->platform!=PLATFORM_VULKAN)
+		return Reject(gOpaqueOrderStats,Instance);
 	InstanceDataHeader *header=(InstanceDataHeader*)geo->instData;
 	if(!header->orderBoundsValid || !header->inst || header->numMeshes==0 ||
-	   header->numMeshes>64 || header->serialNumber!=geo->meshHeader->serialNum) return 0;
+	   header->numMeshes>64 || header->serialNumber!=geo->meshHeader->serialNum)
+		return Reject(gOpaqueOrderStats,Instance);
 	for(uint32 i=0;i<header->numMeshes;++i){
 		const InstanceData &inst=header->inst[i];
 		Material *m=inst.material;
-		if(inst.vertexAlpha || !m || m->color.alpha!=255 ||
-		   MatFX::getEffects(m)!=MatFX::NOTHING) return 0;
+		if(inst.vertexAlpha || !m || m->color.alpha!=255)
+			return Reject(gOpaqueOrderStats,MeshAlpha);
+		if(MatFX::getEffects(m)!=MatFX::NOTHING) return Reject(gOpaqueOrderStats,MatFx);
 		Raster *r=m->texture ? m->texture->raster : nil;
 		if(r && (r->platform!=PLATFORM_VULKAN || (r->type&0xF)!=Raster::TEXTURE ||
-		   (r->parent && r->parent!=r) || rasterHasAlpha(r))) return 0;
+		   (r->parent && r->parent!=r) || rasterHasAlpha(r))) return Reject(gOpaqueOrderStats,OpaqueOrder::Texture);
 		if(m->texture){
 			const uint32 u=m->texture->getAddressU(),v=m->texture->getAddressV();
-			if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
-			   (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP)) return 0;
+			if((u!=rw::Texture::WRAP&&u!=rw::Texture::MIRROR&&u!=rw::Texture::CLAMP)||
+			   (v!=rw::Texture::WRAP&&v!=rw::Texture::MIRROR&&v!=rw::Texture::CLAMP))
+				return Reject(gOpaqueOrderStats,Address);
 		}
 	}
+	if(!atomic->getFrame()) return Reject(gOpaqueOrderStats,Projection);
 	Matrix *ltm=atomic->getFrame()->getLTM();
 	float object[16]={ltm->right.x,ltm->right.y,ltm->right.z,0,
 		ltm->up.x,ltm->up.y,ltm->up.z,0,ltm->at.x,ltm->at.y,ltm->at.z,0,
@@ -913,9 +927,9 @@ getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth)
 				p[axis]=(corner&(1<<axis)) ? header->orderMax[axis] : header->orderMin[axis];
 			const float w=clipMatrix[3]*p[0]+clipMatrix[7]*p[1]+clipMatrix[11]*p[2]+clipMatrix[15];
 			const float z=clipMatrix[2]*p[0]+clipMatrix[6]*p[1]+clipMatrix[10]*p[2]+clipMatrix[14];
-			if(!isfinite(w)||!isfinite(z)||w<=0.001f) return 0;
+			if(!isfinite(w)||!isfinite(z)||w<=0.001f) return Reject(gOpaqueOrderStats,Projection);
 			const float d=z/w;
-			if(!isfinite(d)||d<0||d>1) return 0;
+			if(!isfinite(d)||d<0||d>1) return Reject(gOpaqueOrderStats,Projection);
 			depth.nearDepth[eye]=fminf(depth.nearDepth[eye],d);
 			depth.farDepth[eye]=fmaxf(depth.farDepth[eye],d);
 		}

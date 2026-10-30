@@ -464,6 +464,9 @@ void setOpaqueWorldAlphaFastPathEnabled(bool32 enabled);
 bool32 getOpaqueWorldAlphaFastPathEnabled(void);
 void setOpaqueOrderEnabled(bool32 enabled);
 bool32 getOpaqueOrderEnabled(void);
+// Register only a game callback audited to delegate unchanged to the default
+// renderer. Unknown/custom callbacks remain barriers; nil clears registration.
+void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback);
 bool32 getOpaqueOrderInterval(Atomic *atomic, OpaqueOrder::Interval &depth);
 void recordOpaqueOrderSwaps(uint32 swaps);
 OpaqueOrder::Stats getOpaqueOrderStats(void);
