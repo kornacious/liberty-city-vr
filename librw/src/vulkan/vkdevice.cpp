@@ -15,6 +15,7 @@
 #include "rwvk.h"
 #include "rwvkimpl.h"
 #include "PhysicalScopeMath.h"
+#include "PostFxPolicy.h"
 
 #define PLUGIN_ID ID_DRIVER
 
@@ -28,6 +29,9 @@ static const uint32_t kPostFxVertSpv[] =
 ;
 static const uint32_t kPostFxFragSpv[] =
 #include "rw_postfx_frag.h"
+;
+static const uint32_t kPostFxNativeFragSpv[] =
+#include "rw_postfx_native_frag.h"
 ;
 static const uint32_t kMotionFragSpv[] =
 #include "rw_motion_frag.h"
@@ -1501,6 +1505,22 @@ createPostFxResources(void)
 	const VkResult pipelineResult =
 		vkCreateGraphicsPipelines(gvk.device, VK_NULL_HANDLE, 1,
 		                          &pipelineInfo, nil, &gvk.postFxPipeline);
+	// Optional native-size path. Keep the general pipeline as a fallback if
+	// the driver cannot create this variant. Both use the same layout and
+	// draw constants; the small module cannot reference temporal resources.
+	if(pipelineResult == VK_SUCCESS && colourBlend.attachmentCount == 1){
+		VkShaderModule nativeModule = createPostFxModule(
+			kPostFxNativeFragSpv, sizeof(kPostFxNativeFragSpv));
+		if(nativeModule != VK_NULL_HANDLE){
+			stages[1].module = nativeModule;
+			if(vkCreateGraphicsPipelines(gvk.device, VK_NULL_HANDLE, 1,
+				&pipelineInfo, nil, &gvk.postFxNativePipeline) != VK_SUCCESS){
+				gvk.postFxNativePipeline = VK_NULL_HANDLE;
+				VKERR("native post-FX pipeline unavailable; using general shader");
+			}
+			vkDestroyShaderModule(gvk.device, nativeModule, nil);
+		}
+	}
 	vkDestroyShaderModule(gvk.device, vertexModule, nil);
 	vkDestroyShaderModule(gvk.device, fragmentModule, nil);
 	if(pipelineResult != VK_SUCCESS){
@@ -2821,7 +2841,7 @@ endFrame(void)
 	// Resolve the sampled scene into the OpenXR swapchain. This always runs:
 	// mode 0 is a byte-for-byte colour pass-through, while mode 1 applies the
 	// Vice City colour filter. FXAA is selected with a push-constant flag, so
-	// toggling it never rebuilds or switches a graphics pipeline.
+	// toggling it never rebuilds a graphics pipeline.
 	VkViewport viewport = {};
 	viewport.width = (float32)gvk.width;
 	viewport.height = (float32)gvk.height;
@@ -2831,8 +2851,12 @@ endFrame(void)
 	scissor.extent.height = gvk.height;
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
+	const bool nativePostFx = useNativePostFx(gvk.width, gvk.height,
+		gvk.sceneWidth, gvk.sceneHeight, gvk.postFxConstants.mode,
+		gvk.postFxConstants.upscale, gvk.sgsrMode,
+		gvk.postFxNativePipeline != VK_NULL_HANDLE);
 	vkCmdBindPipeline(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
-	                  gvk.postFxPipeline);
+		nativePostFx ? gvk.postFxNativePipeline : gvk.postFxPipeline);
 	vkCmdBindDescriptorSets(gvk.frameCommands,
 	                        VK_PIPELINE_BIND_POINT_GRAPHICS,
 	                        gvk.postFxPipelineLayout, 0, 1,
@@ -4359,6 +4383,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			if(gvk.motionDescriptorLayout) vkDestroyDescriptorSetLayout(gvk.device, gvk.motionDescriptorLayout, nil);
 			if(gvk.motionDepthSampler) vkDestroySampler(gvk.device, gvk.motionDepthSampler, nil);
 			if(gvk.postFxPipeline) vkDestroyPipeline(gvk.device, gvk.postFxPipeline, nil);
+			if(gvk.postFxNativePipeline) vkDestroyPipeline(gvk.device, gvk.postFxNativePipeline, nil);
 			if(gvk.postFxPipelineLayout) vkDestroyPipelineLayout(gvk.device, gvk.postFxPipelineLayout, nil);
 			if(gvk.postFxDescriptorPool) vkDestroyDescriptorPool(gvk.device, gvk.postFxDescriptorPool, nil);
 			if(gvk.postFxDescriptorLayout) vkDestroyDescriptorSetLayout(gvk.device, gvk.postFxDescriptorLayout, nil);

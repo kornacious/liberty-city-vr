@@ -211,6 +211,7 @@ struct Globals
 	VkSampler motionDepthSampler;
 	VkPipelineLayout postFxPipelineLayout;
 	VkPipeline postFxPipeline;
+	VkPipeline postFxNativePipeline;
 	PostFxPushConstants postFxConstants;
 	VkRenderPass motionRenderPass;
 	VkFormat motionFormat;

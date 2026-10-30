@@ -1,6 +1,10 @@
 #version 450
 #extension GL_EXT_multiview : require
 
+#ifndef RW_POSTFX_NATIVE
+#define RW_POSTFX_NATIVE 0
+#endif
+
 // Snapdragon Game Super Resolution 1 integration.
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc.
 // SPDX-License-Identifier: BSD-3-Clause
@@ -447,6 +451,7 @@ void main()
 		return;
 	}
 	vec2 uv = gl_FragCoord.xy / OutputSize();
+#if !RW_POSTFX_NATIVE
 	if(postFx.upscale.z == 1u){
 		vec2 motion = SampleCombinedMotion(uv);
 		vec3 source = SampleColour(uv);
@@ -495,11 +500,14 @@ void main()
 	const bool temporalEnabled =
 		postFx.upscale.z == 2u || postFx.upscale.z == 3u ||
 		postFx.upscale.z == 4u;
+#endif
 	vec4 source = vec4(SampleColour(uv), 1.0);
 	if(postFx.mode.y != 0u)
 		source.rgb = ApplyFxaa(uv, source.rgb);
+#if !RW_POSTFX_NATIVE
 	if(temporalEnabled)
 		source.rgb = ApplyTemporalStabilizer(uv, source.rgb);
+#endif
 	if(postFx.mode.x != 1u){
 		StoreBoth(vec4(source.rgb, 1.0));
 		return;
