@@ -158,3 +158,40 @@ Focused reproduction:
 ./tools/tests/test-perf-capture.ps1 -OutDir <new-output-directory>
 python tools/tests/test-perf-analysis.py
 ```
+
+## Effects-OFF fragment interface and RenderDoc warnings
+
+The shared world fragment shader declares three environment/water samplers at
+set 3. In the reported capture, EID 186 shows specialization ID 1 (world effects)
+as zero in both shader stages, while RenderDoc reports the three set 3 bindings
+as unbound for many draws. Successful counter collection alone does not verify
+API correctness.
+
+Offline compilation of the production shader, followed by specialization of
+IDs 0 (alpha test) and 1 (world effects), confirms that effects OFF removes all
+set 3 references and leaves only the material sample. This supports a
+reflection/inspection warning rather than an actual effects texture access;
+it is not a disassembly of the device driver's final machine code.
+
+The backend now builds an additional fragment module with
+`RW_WORLD_EFFECTS_RESOURCES=0`. Its SPIR-V has no set 3 declarations or effects
+inputs even before specialization. World, skin and Im3D pipelines select this
+module from the requested pipeline key when effects are OFF, including deferred
+compilation and cold-effects fallback. Effects ON retains the original shared
+module. Im2D coverage selection is unchanged. Alpha testing, fog, colour and
+dynamic-motion output remain in the baseline shader.
+
+`tools/tests/test-effects-shaders.ps1` validates both modules, all four original
+specializations, both baseline alpha-test modes, and the development baseline
+variant. The resource-free baseline must have one material sample, no set 3,
+no effects-only inputs, loops or atomics, and no discard in its opaque variant.
+
+A new capture from the new APK is required to verify that the repeated set 3
+warnings disappear on the headset. Existing RDC files retain the old shader.
+This change makes the baseline interface explicit for diagnostics; no FPS gain
+or on-device warning elimination is claimed from offline tests alone.
+
+Validation for this change: the shader suite, production pipeline host tests
+and uniform/opaque-alpha differential tests pass. A fresh arm64 debug APK build
+passes. Deployment was skipped because no authorized, responsive Quest 3 was
+available; on-device warning and visual verification remain pending.

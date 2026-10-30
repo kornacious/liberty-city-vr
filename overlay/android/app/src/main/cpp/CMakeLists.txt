@@ -106,6 +106,14 @@ foreach(SHADER rw_world:vert:vertex rw_world:frag:fragment
 	list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
 endforeach()
 
+# Build the baseline world fragment interface without effects resources. A
+# specialization-only variant still advertises set 3 to capture reflection.
+set(SHADER_OUTPUTS "")
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment
+               "rw_world_noeffects_frag" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_WORLD_EFFECTS_RESOURCES=0)
+list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
+
 set(SHADER_OUTPUTS "")
 compile_shader("${LIBRW_SHADER_DIR}/rw_im2d.frag" fragment
                "rw_im2d_nocoverage_frag" "${LIBRW_SPIRV_DIR}"

@@ -8,6 +8,13 @@
 layout(constant_id = 0) const int RW_ALPHA_TEST = 0;
 
 layout(set = 1, binding = 0) uniform sampler2D diffuseTexture;
+#ifndef RW_WORLD_EFFECTS_RESOURCES
+#define RW_WORLD_EFFECTS_RESOURCES 1
+#endif
+// The baseline module has no set 3 interface, even before specialization.
+// Capture tools otherwise report these declarations as unbound when effects
+// are OFF, despite specialization removing every access to them.
+#if RW_WORLD_EFFECTS_RESOURCES
 // The shared vehicle env-map art -- the streak texture the DFF materials
 // reference -- bound once per frame; white when no vehicle has drawn yet.
 layout(set = 3, binding = 0) uniform sampler2D envTexture;
@@ -18,17 +25,21 @@ layout(set = 3, binding = 0) uniform sampler2D envTexture;
 layout(set = 3, binding = 1) uniform sampler2DArray envScene;
 // The generated water wave normal map; see createWaterNormalTexture.
 layout(set = 3, binding = 2) uniform sampler2D waterNormals;
+#endif
 
 layout(location = 0) in vec4 fragColour;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec2 fragFog;
 layout(location = 3) flat in vec2 fragDynamicMotion;
+#if RW_WORLD_EFFECTS_RESOURCES
 layout(location = 4) in vec3 fragWorldPos;
 layout(location = 5) in vec3 fragNormal;
+#endif
 
 layout(location = 0) out vec4 outColour;
 layout(location = 1) out vec2 outDynamicMotion;
 
+#if RW_WORLD_EFFECTS_RESOURCES
 // How much of the previous-frame lookup at this clip position survives:
 // nothing behind or hugging the camera, and a soft ramp toward the frame
 // edge so a turning head sweeps a fade instead of a hard border.
@@ -52,6 +63,7 @@ bool CoveredByInterface(vec2 uv, int eye)
 	return (scene.im2dCoverage[word >> 2][word & 3] &
 	        (1u << (bit & 31))) != 0u;
 }
+#endif
 
 void main()
 {
@@ -83,6 +95,7 @@ void main()
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	const bool vizActive = scene.vizParams.x > 0.5;
 #endif
+#if RW_WORLD_EFFECTS_RESOURCES
 	if(RW_WORLD_EFFECTS != 0){
 	const int lightBits = int(push.surfaceProps.z);
 	const int surfaceMask = lightBits & 0xFF;
@@ -405,6 +418,7 @@ void main()
 	}
 
 	}
+#endif
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	// Culling visualizer: paint the draw its debug colour. The index is the
 	// whole of surfaceProps.z here (the pack was suppressed on the CPU), so

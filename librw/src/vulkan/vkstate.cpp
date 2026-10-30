@@ -29,6 +29,9 @@ static const uint32_t kWorldVertSpv[] =
 static const uint32_t kWorldFragSpv[] =
 #include "rw_world_frag.h"
 ;
+static const uint32_t kWorldNoEffectsFragSpv[] =
+#include "rw_world_noeffects_frag.h"
+;
 static const uint32_t kIm2DVertSpv[] =
 #include "rw_im2d_vert.h"
 ;
@@ -131,6 +134,7 @@ struct State
 
 	VkShaderModule modules[SHADER_COUNT][2];	// [variant][0=vert,1=frag]
 	VkShaderModule im2dCoverageModule;
+	VkShaderModule worldNoEffectsModule;
 
 	std::vector<PipelineEntry> pipelines;
 	std::vector<PendingPipeline> pending;
@@ -866,6 +870,10 @@ stateInit(void)
 
 	gs.modules[SHADER_WORLD][0] = createModule(kWorldVertSpv, sizeof(kWorldVertSpv));
 	gs.modules[SHADER_WORLD][1] = createModule(kWorldFragSpv, sizeof(kWorldFragSpv));
+	gs.worldNoEffectsModule = createModule(kWorldNoEffectsFragSpv,
+		sizeof(kWorldNoEffectsFragSpv));
+	if(gs.worldNoEffectsModule == VK_NULL_HANDLE)
+		return 0;
 	gs.modules[SHADER_IM2D][0] = createModule(kIm2DVertSpv, sizeof(kIm2DVertSpv));
 	gs.modules[SHADER_IM2D][1] = createModule(kIm2DNoCoverageFragSpv,
 		sizeof(kIm2DNoCoverageFragSpv));
@@ -1017,6 +1025,9 @@ stateShutdown(void)
 	gs.pipelines.clear();
 	if(gs.pipelineCache) vkDestroyPipelineCache(gvk.device, gs.pipelineCache, nil);
 	gs.pipelineCache = VK_NULL_HANDLE;
+	if(gs.worldNoEffectsModule)
+		vkDestroyShaderModule(gvk.device, gs.worldNoEffectsModule, nil);
+	gs.worldNoEffectsModule = VK_NULL_HANDLE;
 
 	// SHADER_IM3D's fragment module aliases SHADER_WORLD's, so it must not be
 	// destroyed twice.
@@ -1244,6 +1255,11 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
 	stages[1].module = gs.modules[shader][1];
+	// Use the captured pipeline key, including cold-effects fallback keys,
+	// rather than the current frame's settings. World, skin and Im3D share
+	// this fragment interface; Im2D keeps its own coverage variants.
+	if(shader != SHADER_IM2D && (key & (uint64(1) << 22)) == 0)
+		stages[1].module = gs.worldNoEffectsModule;
 	if((key & (uint64(1) << 23)) != 0)
 		stages[1].module = gs.im2dCoverageModule;
 	stages[1].pName = "main";
