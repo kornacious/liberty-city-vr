@@ -137,7 +137,7 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ### World model LOD and optimization menu
 
-Open **Graphics → Optimizations → World Model LOD**. This persisted three-state
+Open **Graphics → Optimizations → World Model LOD**. This persisted four-state
 control (`VR/WorldLodMode`) affects simple/time world models; vehicle and ped
 callback LOD and traffic generation keep their existing behavior.
 
@@ -146,6 +146,22 @@ callback LOD and traffic generation keep their existing behavior.
 | OFF | 0 | Highest-detail atomic in the correct intact/damaged family; LOD entities suppressed. |
 | ON (default) | 1 | Existing authored selection with the current VR minimum 2.2× distance multiplier. |
 | PERFORMANCE | 2 | Approximately 1× authored switching distances, with related high-detail/LOD handoffs capped at the normal 300 m sector range. |
+| AGGRESSIVE | 3 | Earlier switching, smooth mesh handoffs, and earlier fading/hiding of unpaired detail. |
+
+AGGRESSIVE (value 3) uses the PERFORMANCE handoff distances but also limits
+unpaired high-detail world models to their authored final distance (at most
+300 m). Those models fade out over the following 20 m, and fade back in when
+approaching. Existing low-detail world entities retain their far coverage.
+Internal mesh changes and related high/LOD handoffs crossfade over 20 m;
+closely spaced internal thresholds shorten that band to avoid overlaps.
+Distance weights work in either travel direction. Missing streamed variants
+cannot be crossfaded; during an internal transition the resident variant is
+kept solid, and related LOD coverage is retained while detail is loading.
+This mode deliberately removes distant unpaired scenery and may expose gaps
+behind it; it is an experimental quality/performance tradeoff. Transparent
+crossfades temporarily submit both meshes and can increase blending cost.
+Compare PERFORMANCE -> AGGRESSIVE -> PERFORMANCE -> AGGRESSIVE under otherwise
+identical benchmark settings. Device visual/performance validation is required.
 
 PERFORMANCE retains the far visibility range for LOD entities and for models
 without replacement partners. It changes world geometry transitions rather than

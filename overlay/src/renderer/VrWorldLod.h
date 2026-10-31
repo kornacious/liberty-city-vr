@@ -13,5 +13,9 @@ bool Suppress(CSimpleModelInfo *model);
 float LargestDistance(CSimpleModelInfo *model);
 float NearDistance(CSimpleModelInfo *model);
 float ScanRadius(float normalRadius);
+// Distance weights, shared by visibility and both rendering paths.
+struct Layer { RpAtomic *atomic=nullptr; float weight=0; };
+struct Transition { Layer layers[2]; int count=0; bool fading=false; };
+Transition GetTransition(CSimpleModelInfo *model,float distance);
 RpAtomic *SelectAtomic(CSimpleModelInfo *model,float distance);
 }

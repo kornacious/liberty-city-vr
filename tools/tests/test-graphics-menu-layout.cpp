@@ -75,7 +75,7 @@ static void Verify(){
 static void VerifyOptimizations(){
  Check(drawnRows.size()==VR_OPT_ITEM_COUNT,"all optimization rows drawn once");
  Check(drawnRows.back().text=="BACK TO GRAPHICS","submenu returns to Graphics");
- Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all three LOD states visible");
+ Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - FADE / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all four LOD states visible");
  Check(drawnRows[VR_OPT_STATIC_INSTANCES].text==std::string("STATIC INSTANCING  < ")+(gStaticInstances?"ON":"OFF")+" >","instancing state preserved in submenu");
  Check(highlights.size()==1,"one submenu selection");
  for(size_t i=0;i<drawnRows.size();++i){

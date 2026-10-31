@@ -3979,7 +3979,7 @@ DrawQuestOptimizationsPage(void)
 	BeginFullVrMenuPage("OPTIMIZATIONS", "WORLD DETAIL AND RENDERER EXPERIMENTS");
 	char rows[VR_OPT_ITEM_COUNT][112];
 	const char *mode=gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":
-		gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN";
+		gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - FADE / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN";
 	snprintf(rows[VR_OPT_WORLD_LOD],sizeof(rows[0]),"WORLD MODEL LOD  < %s >",mode);
 	snprintf(rows[VR_OPT_OPAQUE_WORLD],sizeof(rows[0]),"OPAQUE WORLD FAST PATH  < %s >",gOpaqueWorldAlphaFastPath?"ON":"OFF");
 	snprintf(rows[VR_OPT_MASKED_ALPHA_SKIP],sizeof(rows[0]),"MASKED ALPHA PASS SKIP  < %s >",gMaskedAlphaPassSkip?"ON":"OFF");
@@ -3990,6 +3990,7 @@ DrawQuestOptimizationsPage(void)
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
 		DrawFullVrMenuRow(rows[item],180+item*40,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
 	DrawVrMenuText(gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
+		gWorldLodMode==WorldLodPolicy::Aggressive?"EARLIER SWITCHING; UNPAIRED DETAIL FADES OUT":
 		gWorldLodMode==WorldLodPolicy::Performance?"EARLIER WORLD LOD SWITCHING; DISTANT COVERAGE KEPT":
 		"ON PRESERVES THE CURRENT WORLD LOD DISTANCES",VR_MENU_WIDTH/2,580,2,240,178,48);
 }

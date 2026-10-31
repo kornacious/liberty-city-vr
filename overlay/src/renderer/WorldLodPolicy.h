@@ -3,7 +3,7 @@
 #include <cstdint>
 
 namespace WorldLodPolicy {
-enum Mode { Off=0,On=1,Performance=2,Count=3 };
+enum Mode { Off=0,On=1,Performance=2,Aggressive=3,Count=4 };
 struct Stats {
     uint32_t highSelections=0,lowerSelections=0,lodSelections=0;
     uint32_t suppressedLod=0,missingSelections=0,pairedModels=0,unpairedLodModels=0;

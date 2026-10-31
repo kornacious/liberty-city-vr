@@ -21,6 +21,8 @@ struct CBaseModelInfo {
 };
 struct CSimpleModelInfo:CBaseModelInfo {
     bool m_isDamaged=false,m_isBigBuilding=false;
+    int m_alpha=255;
+    void *GetRwObject(){return m_atomics[0];}
     int m_firstDamaged=0,m_numAtomics=2,originalCalls=0;
     float m_lodDistances[3]={50,100,0};
     RpAtomic *m_atomics[3]={};CSimpleModelInfo *related=nullptr;CColModel col;
@@ -44,6 +46,9 @@ using Stats=WorldLodPolicy::Stats;
 void Invalidate();void BeginFrame(int);void SetMode(int);int Mode();Stats GetStats();
 bool Suppress(CSimpleModelInfo*);float LargestDistance(CSimpleModelInfo*);
 float NearDistance(CSimpleModelInfo*);float ScanRadius(float);
+struct Layer { RpAtomic *atomic=nullptr; float weight=0; };
+struct Transition { Layer layers[2]; int count=0; bool fading=false; };
+Transition GetTransition(CSimpleModelInfo*,float);
 RpAtomic *SelectAtomic(CSimpleModelInfo*,float);
 }
 #include "world-lod-production.inc"
@@ -70,6 +75,32 @@ int main(){
     assert(VrWorldLod::SelectAtomic(&lod,800)==&low); // distant coverage retained
     assert(VrWorldLod::SelectAtomic(&solo,150)==&high); // no partner: do not create a gap
     assert(VrWorldLod::ScanRadius(300)==300);
+    VrWorldLod::BeginFrame(WorldLodPolicy::Aggressive);
+    assert(VrWorldLod::LargestDistance(&solo)==100);
+    auto plan=VrWorldLod::GetTransition(&solo,110);
+    assert(plan.count==1 && plan.fading && plan.layers[0].weight==0.5f);
+    assert(VrWorldLod::GetTransition(&solo,120).count==0);
+    assert(VrWorldLod::GetTransition(&solo,99).layers[0].weight==1);
+    plan=VrWorldLod::GetTransition(&model,60);
+    assert(plan.count==2&&plan.layers[0].atomic==&high&&plan.layers[1].atomic==&low);
+    assert(plan.layers[0].weight==0.5f&&plan.layers[1].weight==0.5f);
+    plan=VrWorldLod::GetTransition(&lod,110);
+    assert(plan.count==1&&plan.layers[0].weight==0.5f);
+    assert(VrWorldLod::GetTransition(&lod,100).count==0);
+    model.m_alpha=0;
+    assert(VrWorldLod::GetTransition(&lod,90).layers[0].weight==1); // residency fallback
+    model.m_alpha=255;
+    for(float d=0;d<140;d+=0.25f){
+        const auto a=VrWorldLod::GetTransition(&solo,d);
+        const auto b=VrWorldLod::GetTransition(&solo,d+0.25f);
+        const float wa=a.count?a.layers[0].weight:0,wb=b.count?b.layers[0].weight:0;
+        assert(wa>=wb&&wa-wb<=0.013f); // reversible continuous distance fade
+    }
+    model.m_atomics[1]=nullptr;
+    plan=VrWorldLod::GetTransition(&model,60);
+    assert(plan.count==1&&plan.layers[0].weight==1); // no half-transparent missing counterpart
+    model.m_atomics[1]=&low;
+    assert(VrWorldLod::GetTransition(&solo,NAN).count==0);
     VrWorldLod::BeginFrame(WorldLodPolicy::Off);
     assert(VrWorldLod::SelectAtomic(&model,700)==&high);
     assert(VrWorldLod::LargestDistance(&model)==820);
@@ -89,6 +120,16 @@ int main(){
     VrWorldLod::Invalidate();
     assert(VrWorldLod::LargestDistance(&day)==100 && VrWorldLod::LargestDistance(&night)==100);
     const auto stats=VrWorldLod::GetStats();assert(stats.pairedModels==2 && stats.unpairedLodModels==1);
+    VrWorldLod::BeginFrame(WorldLodPolicy::Aggressive);
+    day.m_atomics[0]=nullptr;night.m_alpha=255;
+    assert(VrWorldLod::GetTransition(&lod,110).layers[0].weight==0.5f); // alternate time residency
+    solo.m_lodDistances[0]=1000;
+    assert(VrWorldLod::LargestDistance(&solo)==300);
+    assert(VrWorldLod::GetTransition(&solo,310).layers[0].weight==0.5f);
+    model.m_isDamaged=true;model.m_firstDamaged=1;
+    auto damaged=VrWorldLod::GetTransition(&model,30);
+    assert(damaged.count==1&&damaged.layers[0].atomic==&damage);
+    model.m_isDamaged=false;
     VrWorldLod::BeginFrame(999);assert(VrWorldLod::Mode()==WorldLodPolicy::On);
     bool loaded[3]={true,true,true};float thresholds[3]={50,100,200};
     assert(WorldLodPolicy::Select(WorldLodPolicy::Off,NAN,200,thresholds,loaded,0,2)==-1);
