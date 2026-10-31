@@ -38,7 +38,14 @@ static const unsigned char kSourceCategories[] = {
 	VEHICLE_EFFECTS,  // WHEELS ONLY
 	VEHICLE_EFFECTS,  // FLYING CARS
 	VEHICLE_EFFECTS,  // STRONG GRIP
-	GENERAL           // NASTY LIMBS
+	GENERAL,          // NASTY LIMBS
+	WEATHER,          // MORNING (06:00)
+	WEATHER,          // NOON (12:00)
+	WEATHER,          // EVENING (18:00)
+	WEATHER,          // MIDNIGHT (00:00)
+	WEATHER,          // FAST FORWARD ONE HOUR
+	WEATHER,          // REWIND ONE HOUR
+	WEATHER           // STOP MISSION TIMER
 };
 
 inline const char *CategoryName(int category)

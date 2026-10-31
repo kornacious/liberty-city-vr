@@ -30,15 +30,17 @@ static bool IsQuestDualWieldEnabled(int){return false;}
 static int GetQuestCalibrationValue(int,int,int){return 360;}
 static int GetQuestWeaponLaserOverride(int){return -1;}
 }
-static int nativeCount = 29;
+static int nativeCount = 36;
 static int activatedSource = -1, activationCount, cycledSource = -1, cycleDirection;
 static bool godMode, unlimitedRun, neverWanted, carInvincibility;
+namespace TimeCheatFixture { static bool ActivateVrTimeCheat(int); bool GetVrCheatToggleState(int, bool*); }
 static int GetVrCheatCount() { return nativeCount; }
 static int GetVrMissionCategoryCount() { return 0; }
 static int GetVrMissionCount(int) { return 0; }
 static const char *GetVrCheatName(int source);
 static bool GetVrCheatToggleState(int source, bool *enabled)
 {
+	if(source == 35) return TimeCheatFixture::GetVrCheatToggleState(source, enabled);
 	if(source != 2 && source != 3 && source != 4 && source != 5) return false;
 	*enabled = source == 2 ? godMode : source == 3 ? unlimitedRun : source == 4 ? neverWanted : carInvincibility;
 	return true;
@@ -52,6 +54,7 @@ static bool ActivateVrCheat(int source)
 	if(source == 3) unlimitedRun = !unlimitedRun;
 	if(source == 4) neverWanted = !neverWanted;
 	if(source == 5) carInvincibility = !carInvincibility;
+	if(source >= 29) return TimeCheatFixture::ActivateVrTimeCheat(source-6);
 	return source != 0 && source != 1; // Vehicle spawning can be unavailable without a player.
 }
 static bool CycleVrCheatSelection(int source, int direction)
@@ -97,6 +100,37 @@ static const char *GetVrVehicleModelName(int model) {
 static int strcasecmp(const char *a, const char *b) { return _stricmp(a, b); }
 }
 static const int SimulationReplayMenuRows = 8;
+namespace TimeCheatFixture {
+using uint32 = unsigned int;
+static const int NUMONSCREENTIMERENTRIES = 1, COUNTER_DISPLAY_NUMBER = 0;
+struct CClock {
+ static int hours, minutes, seconds, resets;
+ static int GetHours() { return hours; }
+ static int GetMinutes() { return minutes; }
+ static void SetGameClock(int h, int m) { hours=h; minutes=m; seconds=0; ++resets; }
+};
+int CClock::hours, CClock::minutes, CClock::seconds, CClock::resets;
+struct CReplay { static bool playing; static bool IsPlayingBack() { return playing; } };
+bool CReplay::playing;
+struct TimerEntry {
+ int m_nTimerOffset, m_nCounterOffset, m_nType, ticks;
+ bool m_bTimerProcessed, m_bCounterProcessed;
+ char m_aTimerText[10], m_aCounterText[10];
+ void Process() { ++ticks; }
+};
+struct COnscreenTimer {
+ static bool bVrMissionTimerStopped;
+ bool m_bDisabled;
+ TimerEntry m_sEntries[1] = {};
+ void Init();
+ void Process();
+};
+bool COnscreenTimer::bVrMissionTimerStopped;
+static bool gVrGodModeEnabled, gVrCarInvincibilityEnabled;
+static bool IsVrRunWithoutLimitsEnabled() { return false; }
+struct CWanted { static bool bNoWantedCheat; };
+bool CWanted::bNoWantedCheat;
+}
 #include "cheat-menu-production.inc"
 
 static const char *GetVrCheatName(int source)
@@ -118,15 +152,54 @@ static void CheckDrawSelection(int selected)
 int main()
 {
 	using namespace VrCheatMenu;
+ {
+  using namespace TimeCheatFixture;
+  const int presets[] = {6, 12, 18, 0};
+  for(int i=0; i<4; ++i){
+   CClock::minutes=47; CClock::seconds=33;
+   Check(ActivateVrTimeCheat(23+i), "time preset activates");
+   Check(CClock::hours==presets[i] && CClock::minutes==0 && CClock::seconds==0, "preset sets exact hour and resets clock tick");
+  }
+  for(int hour=0; hour<24; ++hour){
+   CClock::hours=hour; CClock::minutes=37;
+   Check(ActivateVrTimeCheat(27) && CClock::hours==(hour+1)%24 && CClock::minutes==37, "advance wraps all hours and preserves minutes");
+   Check(ActivateVrTimeCheat(28) && CClock::hours==hour && CClock::minutes==37, "rewind reverses advance including midnight");
+  }
+  const int resets=CClock::resets;
+  Check(!ActivateVrTimeCheat(-1) && !ActivateVrTimeCheat(30) && CClock::resets==resets, "unrelated cheats cannot change time");
+  COnscreenTimer timer;
+  timer.Init();
+  Check(!COnscreenTimer::bVrMissionTimerStopped, "new game starts with mission timer running");
+  timer.Process();
+  Check(timer.m_sEntries[0].ticks==1, "normal timer processing continues");
+  Check(ActivateVrTimeCheat(29) && COnscreenTimer::bVrMissionTimerStopped, "mission timer toggle turns on");
+  bool enabled=false;
+  Check(TimeCheatFixture::GetVrCheatToggleState(35, &enabled) && enabled, "backend exposes timer ON state");
+  Check(!TimeCheatFixture::GetVrCheatToggleState(35, nullptr), "toggle state rejects null output");
+  timer.Process();
+  Check(timer.m_sEntries[0].ticks==1, "stopped mission timer does not advance");
+  Check(ActivateVrTimeCheat(29) && !COnscreenTimer::bVrMissionTimerStopped, "mission timer toggle turns off");
+  Check(TimeCheatFixture::GetVrCheatToggleState(35, &enabled) && !enabled, "backend exposes timer OFF state");
+  timer.Process();
+  Check(timer.m_sEntries[0].ticks==2, "mission timer resumes after toggle off");
+  timer.m_bDisabled=true;
+  ActivateVrTimeCheat(29); ActivateVrTimeCheat(29); timer.Process();
+  Check(timer.m_sEntries[0].ticks==2 && timer.m_bDisabled, "cheat preserves script-controlled timer pause");
+  timer.m_bDisabled=false; CReplay::playing=true; timer.Process();
+  Check(timer.m_sEntries[0].ticks==2, "replay still prevents timer processing");
+  CReplay::playing=false; ActivateVrTimeCheat(29); timer.Init();
+  Check(!COnscreenTimer::bVrMissionTimerStopped, "timer initialization clears cheat for a new game");
+ }
+
  Check(VehicleCatalogFixture::GetVrSpawnVehicleCount() == 4, "catalog contains eligible cars and boats only");
  const int sortedModels[] = {1, 4, 2, 0};
  for(int i = 0; i < 4; ++i)
   Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(i) == sortedModels[i], "production catalog sorts case-insensitively and breaks ties by model ID");
  Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(-1) == -1 && VehicleCatalogFixture::GetVrSpawnVehicleModel(4) == -1, "invalid catalog rows have no model");
 
-	const int expectedCounts[] = {6, 3, 1, 7, 3, 5, 3};
-	int seen[29] = {};
-	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 29 retained cheats");
+	const int expectedCounts[] = {6, 3, 1, 14, 3, 5, 3};
+	int seen[36] = {};
+	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 36 retained cheats");
 	Check(VR_SPECIAL_SPAWN_NEXT_CAR == 0 && VR_SPECIAL_SPAWN_NEXT_BOAT == 1 &&
 		VR_SPECIAL_GOD_MODE == 2 && VR_SPECIAL_RUN_WITHOUT_LIMITS == 3 &&
 		VR_SPECIAL_NEVER_WANTED == 4 && VR_SPECIAL_CAR_INVINCIBILITY == 5 &&
@@ -138,7 +211,7 @@ int main()
 	for(int category = 0; category < CATEGORY_COUNT; ++category){
 		if(category == VEHICLE_SELECTOR){ seen[0] = seen[1] = seen[12] = 1; continue; }
 		Check(Count(category, nativeCount) == expectedCounts[category], "expected category size");
-		Check(Count(category, nativeCount)+1 <= VR_CHEAT_ITEMS_PER_PAGE, "every category and Back fit one page");
+		Check(Count(category, nativeCount) <= VR_CHEAT_ITEMS_PER_PAGE, "all cheat actions fit on the first page");
 		OpenCheatMenu();
 		Check(gVrCheatCategory == -1 && gVrCheatCategorySelection == 0, "opening starts at category root");
 		Check(CurrentMenuSelection() == &gVrCheatCategorySelection, "root navigation selects categories");
@@ -176,8 +249,9 @@ int main()
 			Check(title == std::string("CHEATS / ")+CategoryName(category), "heading names active category");
 			Check(rows[item].text == nativeNames[source], "display and action share the source mapping");
 			Check(rows[item].text != "PASS CURRENT MISSION", "removed mission-pass entry cannot be rendered or activated");
-			Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back is present in every category");
-			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5;
+			if(expectedCounts[category] < VR_CHEAT_ITEMS_PER_PAGE)
+				Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back is present on the last page");
+			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source == 35;
 			Check(rows[item].off == isToggle && !rows[item].on, "toggle state uses mapped source before activation");
 			activatedSource = -1;
 			ActivateQuestCheatMenuSelection();
@@ -197,7 +271,8 @@ int main()
 		}
 		gVrCheatSelection = expectedCounts[category];
 		DrawQuestCheatPage();
-		CheckDrawSelection(gVrCheatSelection);
+		CheckDrawSelection(gVrCheatSelection%VR_CHEAT_ITEMS_PER_PAGE);
+		Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back appears on the final page");
 		Check(!CycleQuestCheatMenuSelection(1), "Back row cannot cycle a model");
 		const int beforeBack = activationCount;
 		ActivateQuestCheatMenuSelection();

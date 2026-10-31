@@ -31,7 +31,7 @@ $legacyMatch = [regex]::Match($pad, '(?s)static const char \*gVrCheatNames\[\]\s
 $legacy = @([regex]::Matches($legacyMatch.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $mappingMatch = [regex]::Match($header, '(?s)kSourceCategories\[\]\s*=\s*\{(.*?)\};')
 $labels = @([regex]::Matches($mappingMatch.Groups[1].Value, '// ([^\r\n]+)') | ForEach-Object { $_.Groups[1].Value.Trim() })
-if ($special.Count -ne 6 -or $legacy.Count -ne 23 -or $labels.Count -ne $special.Count + $legacy.Count) {
+if ($special.Count -ne 6 -or $legacy.Count -ne 30 -or $labels.Count -ne $special.Count + $legacy.Count) {
     throw 'The native cheat catalog changed; review the category mapping and its coverage.'
 }
 if ($pad -match 'VR_SPECIAL_PASS_CURRENT_MISSION|PassCurrentVrMission|VrMissionPassEntry|gVrMissionPassEntries|PASS CURRENT MISSION' -or
@@ -86,6 +86,20 @@ $pieces.Add('namespace VehicleCatalogFixture {')
 foreach ($name in @('GetVrSpawnVehicleCount', 'GetVrSpawnVehicleModel')) {
     $match = [regex]::Match($pad, '(?ms)^int ' + $name + '\(.*?^\}')
     if (-not $match.Success) { throw "Cannot extract vehicle catalog: $name" }
+    $pieces.Add($match.Value)
+}
+$pieces.Add('}')
+$pieces.Add('namespace TimeCheatFixture {')
+$timeAction = [regex]::Match($pad, '(?ms)^static bool\r?\nActivateVrTimeCheat\(.*?^\}')
+if (-not $timeAction.Success) { throw 'Cannot extract time cheat actions.' }
+$pieces.Add($timeAction.Value)
+$toggle = [regex]::Match($pad, '(?ms)^bool GetVrCheatToggleState\(.*?^\}')
+if (-not $toggle.Success) { throw 'Cannot extract backend toggle state.' }
+$pieces.Add($toggle.Value)
+$timer = [IO.File]::ReadAllText((Join-Path $sourceRoot 'control/OnscreenTimer.cpp'))
+foreach ($name in @('Init', 'Process')) {
+    $match = [regex]::Match($timer, '(?ms)^void\r?\nCOnscreenTimer::' + $name + '\(\).*?^\}')
+    if (-not $match.Success) { throw "Cannot extract timer function: $name" }
     $pieces.Add($match.Value)
 }
 $pieces.Add('}')

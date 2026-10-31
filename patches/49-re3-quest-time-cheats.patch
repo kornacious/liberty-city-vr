@@ -1,0 +1,104 @@
+--- a/src/core/Pad.cpp
++++ b/src/core/Pad.cpp
+@@ -40,6 +40,8 @@
+ #include "Population.h"
+ #include "Replay.h"
+ #include "Weather.h"
++#include "Clock.h"
++#include "OnscreenTimer.h"
+ #include "Streaming.h"
+ #include "PathFind.h"
+ #include "Wanted.h"
+@@ -381,7 +383,14 @@
+ 	"SUNNY WEATHER", "CLOUDY WEATHER", "RAINY WEATHER",
+ 	"FOGGY WEATHER", "FAST WEATHER", "FASTER GAME",
+ 	"SLOWER GAME", "WHEELS ONLY", "FLYING CARS",
+-	"STRONG GRIP", "NASTY LIMBS"
++	"STRONG GRIP", "NASTY LIMBS",
++	"MORNING (06:00)",
++	"NOON (12:00)",
++	"EVENING (18:00)",
++	"MIDNIGHT (00:00)",
++	"FAST FORWARD ONE HOUR",
++	"REWIND ONE HOUR",
++	"STOP MISSION TIMER"
+ };
+ 
+ enum eVrSpecialCheatIndex {
+@@ -706,6 +715,10 @@
+ 
+ bool GetVrCheatToggleState(int index, bool *enabled)
+ {
++	if(enabled && index == VR_SPECIAL_CHEAT_COUNT+29){
++		*enabled = COnscreenTimer::bVrMissionTimerStopped;
++		return true;
++	}
+ 	if(!enabled)
+ 		return false;
+ 	if(index == VR_SPECIAL_NEVER_WANTED){
+@@ -850,6 +863,22 @@
+ const char *GetVrHolsterSlotName(int slot) { return ::GetVrHolsterSlotName(slot); }
+ }
+ 
++static bool
++ActivateVrTimeCheat(int legacyIndex)
++{
++	switch(legacyIndex){
++	case 23: CClock::SetGameClock(6, 0); break;
++	case 24: CClock::SetGameClock(12, 0); break;
++	case 25: CClock::SetGameClock(18, 0); break;
++	case 26: CClock::SetGameClock(0, 0); break;
++	case 27: CClock::SetGameClock((CClock::GetHours()+1)%24, CClock::GetMinutes()); break;
++	case 28: CClock::SetGameClock((CClock::GetHours()+23)%24, CClock::GetMinutes()); break;
++	case 29: COnscreenTimer::bVrMissionTimerStopped = !COnscreenTimer::bVrMissionTimerStopped; break;
++	default: return false;
++	}
++	return true;
++}
++
+ bool ActivateVrCheat(int index)
+ {
+ 	if(index == VR_SPECIAL_SPAWN_NEXT_CAR){
+@@ -901,6 +930,7 @@
+ 		return true;
+ 	}
+ 	const int legacyIndex = index-VR_SPECIAL_CHEAT_COUNT;
++	if(ActivateVrTimeCheat(legacyIndex)) return true;
+ 	if(!FindPlayerPed() && !(legacyIndex >= 12 && legacyIndex <= 16))
+ 		return false;
+ 	switch(legacyIndex){
+--- a/src/control/OnscreenTimer.h
++++ b/src/control/OnscreenTimer.h
+@@ -32,6 +32,7 @@
+ class COnscreenTimer
+ {
+ public:
++	static bool bVrMissionTimerStopped;
+ 	COnscreenTimerEntry m_sEntries[NUMONSCREENTIMERENTRIES];
+ 	bool m_bProcessed;
+ 	bool m_bDisabled;
+--- a/src/control/OnscreenTimer.cpp
++++ b/src/control/OnscreenTimer.cpp
+@@ -8,10 +8,13 @@
+ #include "Script.h"
+ #include "OnscreenTimer.h"
+ 
++bool COnscreenTimer::bVrMissionTimerStopped;
++
+ void
+ COnscreenTimer::Init()
+ {
+ 	m_bDisabled = false;
++	bVrMissionTimerStopped = false;
+ 	for(uint32 i = 0; i < NUMONSCREENTIMERENTRIES; i++) {
+ 		m_sEntries[i].m_nTimerOffset = 0;
+ 		m_sEntries[i].m_nCounterOffset = 0;
+@@ -30,7 +33,7 @@
+ void
+ COnscreenTimer::Process()
+ {
+-	if(!CReplay::IsPlayingBack() && !m_bDisabled)
++	if(!CReplay::IsPlayingBack() && !m_bDisabled && !bVrMissionTimerStopped)
+ 		for(uint32 i = 0; i < NUMONSCREENTIMERENTRIES; i++)
+ 			m_sEntries[i].Process();
+ }
