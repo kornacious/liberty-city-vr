@@ -11,6 +11,7 @@ namespace GameRender
 // Scoped attribution also wraps direct distance-fade callbacks.
 class ProfileEntity {
     bool active=false;
+    bool instanceActive=false;
 public:
     explicit ProfileEntity(CEntity *entity);
     ~ProfileEntity();

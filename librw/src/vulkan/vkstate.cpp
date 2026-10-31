@@ -23,6 +23,9 @@
 #include <vector>
 #include <unordered_map>
 
+static const uint32_t kWorldInstancedVertSpv[] =
+#include "rw_world_instanced_vert.h"
+;
 static const uint32_t kWorldVertSpv[] =
 #include "rw_world_vert.h"
 ;
@@ -115,6 +118,10 @@ struct StateFrame
 	VkDeviceSize dynamicCapacity;
 	VkDeviceSize dynamicOffset;
 	bool32 dynamicOverflowReported;
+	VkBuffer instanceBuffer;
+	VkDeviceMemory instanceMemory;
+	uint8 *instanceMapped;
+	VkDeviceSize instanceOffset;
 };
 
 struct State
@@ -178,6 +185,7 @@ struct State
 State gs;
 
 const VkDeviceSize DYNAMIC_CAPACITY = 8 * 1024 * 1024;
+const VkDeviceSize INSTANCE_CAPACITY = 256 * 1024;
 // Sized for full-map residency: both islands' texture dictionaries stay
 // loaded at once on the headset build.
 const uint32 MAX_TEXTURE_DESCRIPTORS = 8192;
@@ -670,8 +678,10 @@ warmStandardPipelines(void)
 		gstate.zWriteEnabled = depthWrite;
 		gstate.cullMode = cull ? CULLBACK : CULLNONE;
 		gstate.alphaTestFunction = alphaTest ? ALPHAGREATEREQUAL : ALPHAALWAYS;
-		for(uint32 shader = 0; shader < SHADER_COUNT; shader++)
+		for(uint32 shader = 0; shader < SHADER_COUNT; shader++){
+			if(shader==SHADER_WORLD_INSTANCED && (blend||!depthTest||!depthWrite||alphaTest))continue;
 			getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		}
 	}
 	gstate = saved;
 }
@@ -870,6 +880,8 @@ stateInit(void)
 
 	gs.modules[SHADER_WORLD][0] = createModule(kWorldVertSpv, sizeof(kWorldVertSpv));
 	gs.modules[SHADER_WORLD][1] = createModule(kWorldFragSpv, sizeof(kWorldFragSpv));
+	gs.modules[SHADER_WORLD_INSTANCED][0] = createModule(kWorldInstancedVertSpv,sizeof(kWorldInstancedVertSpv));
+	gs.modules[SHADER_WORLD_INSTANCED][1] = gs.modules[SHADER_WORLD][1];
 	gs.worldNoEffectsModule = createModule(kWorldNoEffectsFragSpv,
 		sizeof(kWorldNoEffectsFragSpv));
 	if(gs.worldNoEffectsModule == VK_NULL_HANDLE)
@@ -907,6 +919,16 @@ stateInit(void)
 		               (void**)&sf.dynamicMapped) != VK_SUCCESS)
 			return 0;
 		sf.dynamicCapacity = DYNAMIC_CAPACITY;
+		// Optional, private per-frame storage. Instancing must never consume
+		// the shared immediate/bone stream or overwrite another submit's data.
+		if(createBuffer(INSTANCE_CAPACITY,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&sf.instanceBuffer,&sf.instanceMemory)){
+			if(vkMapMemory(gvk.device,sf.instanceMemory,0,INSTANCE_CAPACITY,0,(void**)&sf.instanceMapped)!=VK_SUCCESS){
+				vkDestroyBuffer(gvk.device,sf.instanceBuffer,nil);vkFreeMemory(gvk.device,sf.instanceMemory,nil);
+				sf.instanceBuffer=VK_NULL_HANDLE;sf.instanceMemory=VK_NULL_HANDLE;sf.instanceMapped=nil;
+			}
+		}else{sf.instanceBuffer=VK_NULL_HANDLE;sf.instanceMemory=VK_NULL_HANDLE;sf.instanceMapped=nil;}
 
 		VkDescriptorSetAllocateInfo boneSetInfo = {};
 		boneSetInfo.sType =
@@ -1070,6 +1092,9 @@ stateShutdown(void)
 
 	for(uint32 frame = 0; frame < NUM_FRAME_CONTEXTS; frame++){
 		StateFrame &sf = gs.frames[frame];
+		if(sf.instanceMapped)vkUnmapMemory(gvk.device,sf.instanceMemory);
+		if(sf.instanceBuffer)vkDestroyBuffer(gvk.device,sf.instanceBuffer,nil);
+		if(sf.instanceMemory)vkFreeMemory(gvk.device,sf.instanceMemory,nil);
 		if(sf.dynamicMapped)
 			vkUnmapMemory(gvk.device, sf.dynamicMemory);
 		if(sf.dynamicBuffer)
@@ -1150,6 +1175,7 @@ setStateFrame(uint32 frame)
 void
 uploadSceneData(void)
 {
+	flushStaticInstances();
 	StateFrame &sf = gs.frames[gs.activeFrame];
 	if(sf.sceneMapped != nil)
 		memcpy(sf.sceneMapped, &gs.scene, sizeof(SceneData));
@@ -1192,6 +1218,7 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 {
 	if(!gs.initialised || shader >= SHADER_COUNT)
 		return VK_NULL_HANDLE;
+	if(shader==SHADER_WORLD_INSTANCED && !gs.modules[shader][0])return VK_NULL_HANDLE;
 
 	if(gs.lastPipelineValid && gs.lastPipelineKey == key)
 		return gs.lastPipeline;
@@ -1270,10 +1297,10 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	binding.binding = 0;
 	binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	VkVertexInputAttributeDescription attributes[6] = {};
+	VkVertexInputAttributeDescription attributes[8] = {};
 	uint32 attributeCount = 0;
 
-	if(shader == SHADER_WORLD){
+	if(shader == SHADER_WORLD || shader == SHADER_WORLD_INSTANCED){
 		binding.stride = sizeof(WorldVertex);
 		attributes[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,
 		                  (uint32)offsetof(WorldVertex, position) };
@@ -1284,6 +1311,11 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 		attributes[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,
 		                  (uint32)offsetof(WorldVertex, texCoord) };
 		attributeCount = 4;
+		if(shader==SHADER_WORLD_INSTANCED){
+			for(uint32 column=0;column<4;++column)
+				attributes[4+column]={4+column,1,VK_FORMAT_R32G32B32A32_SFLOAT,column*16};
+			attributeCount=8;
+		}
 	}else if(shader == SHADER_SKIN){
 		binding.stride = sizeof(SkinVertex);
 		attributes[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,
@@ -1322,8 +1354,9 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 
 	VkPipelineVertexInputStateCreateInfo vertexInput = {};
 	vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInput.vertexBindingDescriptionCount = 1;
-	vertexInput.pVertexBindingDescriptions = &binding;
+	const VkVertexInputBindingDescription vertexBindings[2]={binding,{1,64,VK_VERTEX_INPUT_RATE_INSTANCE}};
+	vertexInput.vertexBindingDescriptionCount = shader==SHADER_WORLD_INSTANCED?2:1;
+	vertexInput.pVertexBindingDescriptions = vertexBindings;
 	vertexInput.vertexAttributeDescriptionCount = attributeCount;
 	vertexInput.pVertexAttributeDescriptions = attributes;
 
@@ -1590,6 +1623,7 @@ void
 bindEnvironmentDescriptor(VkCommandBuffer commandBuffer,
                           VkImageView previousScene)
 {
+	flushStaticInstances();
 	if(!worldEffectsActive())
 		return;
 	const VkDescriptorSet set = gs.envDescriptors[gs.activeFrame];
@@ -1685,11 +1719,23 @@ allocateDynamic(VkDeviceSize size, VkDeviceSize alignment, VkBuffer *bufferOut,
 	return 1;
 }
 
+bool32
+allocateStaticInstanceTransforms(unsigned count,VkBuffer *buffer,VkDeviceSize *offset,void **mapped)
+{
+	StateFrame &sf=gs.frames[gs.activeFrame];
+	const VkDeviceSize size=VkDeviceSize(count)*64;
+	if(!count || count>StaticInstances::MaxInstances || !sf.instanceMapped ||
+		sf.instanceOffset>INSTANCE_CAPACITY-size)return 0;
+	*buffer=sf.instanceBuffer;*offset=sf.instanceOffset;*mapped=sf.instanceMapped+sf.instanceOffset;
+	sf.instanceOffset+=size;return 1;
+}
+
 void
 resetDynamic(void)
 {
 	StateFrame &sf = gs.frames[gs.activeFrame];
 	sf.dynamicOffset = 0;
+	sf.instanceOffset = 0;
 	sf.dynamicOverflowReported = 0;
 }
 

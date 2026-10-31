@@ -135,14 +135,63 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
-### Cross-object static reuse audit
+### Static instancing experiment
 
-Minimal and full profiling automatically collect `static_reuse_*` on the native
+Graphics → **Static Instancing** is a persisted, default-OFF benchmark switch
+(`VR/StaticInstances`); changes apply immediately. Compare four normal demo
+playbacks in **OFF → ON → OFF → ON** order. Keep Opaque Mesh Batch, Opaque Order
+Experiment and Masked Alpha Pass Skip OFF, Opaque World Fast Path and Forward
+View ON, and the usual fixed resolution, refresh rate and minimal profiling.
+Keep RenderDoc detached and auto-capture OFF.
+
+The native, effects-free world path collects a window of at most 64 static
+building draws. Up to 16 matching opaque ranges can use one indexed instanced
+draw, with each object's own transform and original visibility decision. Matches
+require identical buffers/ranges, pipeline, texture descriptor, non-transform
+material/lighting push data, model and profiling flags. Members must lie within
+32 metres of the first member. No persistent merged geometry is created.
+
+Before moving a matching draw earlier, both eyes must prove independence from
+every crossed draw. Opaque depth-writing barriers allow separated depth
+intervals or screen rectangles; alpha/blending barriers require screen
+separation. Bounds cover the entire geometry, include a raster-pixel expansion
+and numerical margins, and reject near-plane/invalid projections. Instance order
+inside a group is preserved. Masked/blended meshes retain ordinary draws and
+act as order barriers; they are not instanced.
+
+Phase, scene/viewport, immediate-mode and resource-retirement boundaries flush
+the collector. Skinned/dynamic/custom callbacks, material effects, temporal SGSR,
+physical scope and active world effects use the normal path. A cold/missing
+instanced pipeline or failed transform allocation retains ordinary submissions.
+Transform uploads use a private 256 KiB buffer per frame slot, reset after that
+slot's fence, and do not consume the immediate-mode/bone stream.
+
+The session records `static_instances_at_start` and the policy version. Frame
+columns `static_instances_*` record enabled state, queued draws, successful
+groups/instances, **actual saved submissions**, state/bounds/order/spatial
+rejections, pipeline misses, allocation failures and source/emitted index totals.
+The two index totals must agree; GPU/model triangle counts include every
+instance, while draw counts reflect actual Vulkan draw calls. `flush_ms` covers
+planning/upload/emission, excluding front-end collection and bounds preparation.
+Existing per-atomic binding-cache counters are disabled while the collector is
+active; use the new counters and normal CPU/GPU timings for acceptance.
+
+The previous reuse feasibility audit is disabled on both OFF and ON runs of
+this build. Its session policy says `disabled_for_static_instance_benchmark`,
+and its rows have `static_reuse_sampled=0`. Successful compilation and host
+ordering/fallback tests do not establish a device performance gain or absence
+of all visual artifacts; the controlled replay recordings provide that check.
+
+### Cross-object static reuse audit (earlier diagnostic build)
+
+The earlier diagnostic build collected `static_reuse_*` on the native
 GPU profiler's rotating one-in-eight source frames. Two matching normal demo
 playbacks are sufficient for this opportunity audit; keep Opaque Mesh Batch,
 Opaque Order Experiment and Masked Alpha Pass Skip OFF, Forward View ON, and
-RenderDoc/auto-capture OFF. This build adds measurements for selecting an
-instancing prototype; it does not implement instanced rendering or draw savings.
+RenderDoc/auto-capture OFF. That build measured opportunities rather than
+implementing instanced rendering or draw savings. The following field reference
+applies to its historical recordings; the audit is disabled in the subsequent
+instancing benchmark build described above.
 
 The audit accepts default-pipeline opaque static buildings in roads/world/fading
 phases, with depth testing/writes and no alpha test. Dynamic/skinned/custom

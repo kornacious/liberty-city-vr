@@ -112,6 +112,10 @@ int main()
         frame.opaqueOrder={40,30,i%7};
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
+        frame.staticInstancesEnabled=i%2;
+        frame.staticInstances={};frame.staticInstances.queued=12;frame.staticInstances.groups=2;
+        frame.staticInstances.instances=8;frame.staticInstances.savedDraws=6;
+        frame.staticInstances.sourceIndices=frame.staticInstances.emittedIndices=6000000000ULL+i;
         frame.staticReuse={};
         frame.staticReuse.sourceFrame=i;frame.staticReuse.sampled=1;
         frame.staticReuse.candidates=10;frame.staticReuse.compatibleInstances=3;
@@ -167,6 +171,9 @@ int main()
         assert(std::stoull(row[column("static_reuse_source_frame_id")]) == id);
         assert(std::stoi(row[column("static_reuse_compatible_instances")]) == 3);
         assert(std::stoi(row[column("static_reuse_top_model")]) == 1416);
+        assert(std::stoi(row[column("static_instances_enabled")]) == int(id%2));
+        assert(std::stoi(row[column("static_instances_saved_draws")]) == 6);
+        assert(std::stoull(row[column("static_instances_emitted_indices")]) == 6000000000ULL+id);
         assert(std::abs(std::stod(row[column("static_reuse_cpu_ms")])-.012345)<1e-7);
         assert(std::stoi(row[column("opaque_mesh_batch_reject_range")]) == 9);
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason){

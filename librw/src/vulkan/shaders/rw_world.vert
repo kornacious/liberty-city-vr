@@ -7,6 +7,12 @@ layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec4 inColour;
 layout(location = 3) in vec2 inTexCoord;
+#ifdef RW_STATIC_INSTANCING
+layout(location = 4) in vec4 instance0;
+layout(location = 5) in vec4 instance1;
+layout(location = 6) in vec4 instance2;
+layout(location = 7) in vec4 instance3;
+#endif
 
 layout(location = 0) out vec4 fragColour;
 layout(location = 1) out vec2 fragTexCoord;
@@ -20,7 +26,11 @@ layout(location = 5) out vec3 fragNormal;
 // better and cost noticeably more on a tiler at 1680x1760 per eye.
 void main()
 {
+#ifdef RW_STATIC_INSTANCING
+	mat4 model = mat4(instance0,instance1,instance2,instance3);
+#else
 	mat4 model = RwModelMatrix();
+#endif
 	vec4 world = model * vec4(inPosition, 1.0);
 	gl_Position = scene.viewProj[gl_ViewIndex] * world;
 	vec4 rootMotion = RwRootScreenMotion();

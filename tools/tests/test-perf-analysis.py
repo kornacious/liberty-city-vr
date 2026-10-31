@@ -10,6 +10,22 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_static_instances_actual_savings_and_conservation(self):
+        keys=["queued_draws", "groups", "instances", "saved_draws", "reject_state", "reject_bounds",
+              "reject_order", "reject_spatial", "pipeline_misses", "allocation_failures", "source_indices", "emitted_indices"]
+        row={"static_instances_"+k:"0" for k in keys}
+        row.update(static_instances_enabled="1",static_instances_flush_ms=".1",
+                   static_instances_queued_draws="12",static_instances_groups="2",static_instances_instances="8",
+                   static_instances_saved_draws="6",static_instances_source_indices="6000000000",static_instances_emitted_indices="6000000000")
+        out=analysis.summarize_static_instances([row]);self.assertEqual(out["valid_frames"],1)
+        self.assertEqual(out["totals"]["saved_draws"],6)
+        self.assertEqual(out["totals"]["emitted_indices"],6000000000)
+        broken=dict(row,static_instances_emitted_indices="5999999999")
+        self.assertEqual(analysis.summarize_static_instances([broken])["invalid_frames"],1)
+        broken=dict(row,static_instances_saved_draws="7")
+        self.assertEqual(analysis.summarize_static_instances([broken])["invalid_frames"],1)
+        self.assertIsNone(analysis.summarize_static_instances([{}]))
+
     def test_static_reuse_sample_identity_and_limits(self):
         keys = ["candidates", "groups", "geometry_repeats", "compatible_instances",
                 "nearby_instances", "adjacent_instances", "reject_state", "reject_owner",

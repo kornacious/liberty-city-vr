@@ -55,9 +55,100 @@ void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
-void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};resetStaticReuseSample(0,0);}
+static void resetStaticInstanceStats(void);
+void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};resetStaticReuseSample(0,0);}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
+
+static bool32 gStaticInstancesEnabled;
+static StaticInstances::Stats gStaticInstanceStats;
+static DrawProfile::Context gInstanceOwner,gInstanceParents[DrawProfile::ContextDepth];
+static unsigned gInstanceDepth;
+struct StaticInstanceDraw {
+	VkPipeline pipeline=VK_NULL_HANDLE,instanced=VK_NULL_HANDLE;
+	VkDescriptorSet texture=VK_NULL_HANDLE;
+	VkBuffer vertices=VK_NULL_HANDLE,indices=VK_NULL_HANDLE;
+	uint32 first=0,count=0,flags=0;
+	PushConstants push{};
+	DrawProfile::Context owner;
+	uint64 object=0;
+	float position[3]{};
+	StaticInstances::Bounds bounds;
+	bool opaque=false;
+};
+static StaticInstanceDraw gInstanceDraws[StaticInstances::Window];
+static unsigned gInstanceCount;
+static void resetStaticInstanceStats(void){assert(gInstanceCount==0);gStaticInstanceStats={};}
+
+bool32 getStaticInstancesEnabled(void){return gStaticInstancesEnabled;}
+void setStaticInstancesEnabled(bool32 enabled){
+	if(gStaticInstancesEnabled!=(enabled!=0)){flushStaticInstances();gStaticInstancesEnabled=enabled!=0;}
+}
+StaticInstances::Stats getStaticInstancesStats(void){return gStaticInstanceStats;}
+bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
+	if(!gStaticInstancesEnabled)return 0;
+	if(gInstanceDepth<DrawProfile::ContextDepth)gInstanceParents[gInstanceDepth]=gInstanceOwner;
+	gInstanceOwner=gInstanceDepth<DrawProfile::ContextDepth?DrawProfile::Entity(model,entityClass,name,flags):DrawProfile::Context{};
+	++gInstanceDepth;return 1;
+}
+void endStaticInstanceEntity(void){
+	if(gInstanceDepth && --gInstanceDepth<DrawProfile::ContextDepth)gInstanceOwner=gInstanceParents[gInstanceDepth];
+}
+static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeline,
+                                   VkBuffer transforms,VkDeviceSize transformOffset,unsigned instances){
+	const VkCommandBuffer cb=gvk.frameCommands;
+	const VkDeviceSize zero=0;
+	vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+	vkCmdBindVertexBuffers(cb,0,1,&d.vertices,&zero);
+	if(instances>1)vkCmdBindVertexBuffers(cb,1,1,&transforms,&transformOffset);
+	vkCmdBindIndexBuffer(cb,d.indices,0,VK_INDEX_TYPE_UINT16);
+	vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,getPipelineLayout(),1,1,&d.texture,0,nil);
+	vkCmdPushConstants(cb,getPipelineLayout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(d.push),&d.push);
+	const bool sampled=gpuProfileSampling();
+	DrawProfile::Context previousOwner;
+	if(sampled){previousOwner=gvk.frames[gvk.activeFrame].gpuProfile.geometry.entity;
+		gvk.frames[gvk.activeFrame].gpuProfile.geometry.entity=d.owner;}
+	countGpuProfileDraw(d.count*instances,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,d.flags);
+	if(sampled)gvk.frames[gvk.activeFrame].gpuProfile.geometry.entity=previousOwner;
+	vkCmdDrawIndexed(cb,d.count,instances,d.first,0,0);
+	gStaticInstanceStats.emittedIndices+=uint64(d.count)*instances;
+}
+void flushStaticInstances(void){
+	if(!gInstanceCount)return;
+	assert(gvk.inFrame);
+	const auto start=std::chrono::steady_clock::now();
+	bool used[StaticInstances::Window]={};
+	for(unsigned i=0;i<gInstanceCount;++i){
+		if(used[i])continue;
+		unsigned selected[StaticInstances::MaxInstances];
+		const auto match=[](const StaticInstanceDraw &a,const StaticInstanceDraw &b){
+			return a.object!=b.object && a.pipeline==b.pipeline && a.instanced && a.instanced==b.instanced &&
+				a.vertices==b.vertices && a.indices==b.indices && a.first==b.first && a.count==b.count &&
+				a.texture==b.texture && a.flags==b.flags && a.owner.model==b.owner.model &&
+				a.owner.flags==b.owner.flags &&
+				memcmp(a.push.materialColour,b.push.materialColour,64)==0;
+		};
+		unsigned n=StaticInstances::Plan(gInstanceDraws,gInstanceCount,i,used,selected,match,gStaticInstanceStats);
+		VkBuffer buffer=VK_NULL_HANDLE;VkDeviceSize offset=0;void *mapped=nil;
+		if(n>1 && (gInstanceDraws[i].count>~0u/n || !allocateStaticInstanceTransforms(n,&buffer,&offset,&mapped))){
+			++gStaticInstanceStats.allocationFailure;n=1;
+		}
+		if(n>1){
+			for(unsigned j=0;j<n;++j){
+				float *model=(float*)mapped+j*16;
+				memcpy(model,gInstanceDraws[selected[j]].push.model,64);
+				// RwModelMatrix restores the root-motion transport row likewise.
+				model[3]=model[7]=model[11]=0;model[15]=1;
+			}
+			++gStaticInstanceStats.groups;gStaticInstanceStats.instances+=n;
+			gStaticInstanceStats.savedDraws+=n-1;
+		}
+		emitStaticInstanceDraw(gInstanceDraws[i],n>1?gInstanceDraws[i].instanced:gInstanceDraws[i].pipeline,buffer,offset,n);
+		for(unsigned j=0;j<n;++j)used[selected[j]]=true;
+	}
+	gInstanceCount=0;
+	gStaticInstanceStats.flushMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+}
 
 struct AtomicMotionRecord
 {
@@ -543,6 +634,36 @@ sameOpaqueBatchMaterial(const Material *a,const Material *b)
 		a->surfaceProps.specular==b->surfaceProps.specular;
 }
 
+static StaticInstances::Bounds staticInstanceBounds(const InstanceDataHeader *header,const PushConstants &push){
+	StaticInstances::Bounds out;
+	if(!header->orderBoundsValid)return out;
+	float model[16];memcpy(model,push.model,64);model[3]=model[7]=model[11]=0;model[15]=1;
+	for(unsigned eye=0;eye<2;++eye){
+		float clip[16];multiplyMatrix(clip,getSceneData()->viewProj[eye],model);
+		out.left[eye]=out.bottom[eye]=out.depth.nearDepth[eye]=1e30f;
+		out.right[eye]=out.top[eye]=out.depth.farDepth[eye]=-1e30f;
+		for(unsigned corner=0;corner<8;++corner){
+			float p[3];for(unsigned a=0;a<3;++a)p[a]=(corner&(1u<<a))?header->orderMax[a]:header->orderMin[a];
+			float c[4];for(unsigned r=0;r<4;++r)c[r]=clip[r]*p[0]+clip[4+r]*p[1]+clip[8+r]*p[2]+clip[12+r];
+			if(!isfinite(c[3])||c[3]<=0.001f)return out;
+			const float x=c[0]/c[3],y=c[1]/c[3],z=c[2]/c[3];
+			if(!isfinite(x)||!isfinite(y)||!isfinite(z)||z<0||z>1)return out;
+			out.left[eye]=fminf(out.left[eye],x);out.right[eye]=fmaxf(out.right[eye],x);
+			out.bottom[eye]=fminf(out.bottom[eye],y);out.top[eye]=fmaxf(out.top[eye],y);
+			out.depth.nearDepth[eye]=fminf(out.depth.nearDepth[eye],z);
+			out.depth.farDepth[eye]=fmaxf(out.depth.farDepth[eye],z);
+		}
+		// Expand by one raster pixel as well as the plan's fixed margin.
+		// This remains conservative at reduced or externally overridden sizes.
+		const uint32 dimension=gvk.sceneWidth<gvk.sceneHeight?gvk.sceneWidth:gvk.sceneHeight;
+		if(!dimension)return out;
+		const float padding=2.0f/dimension;
+		out.left[eye]-=padding;out.right[eye]+=padding;
+		out.bottom[eye]-=padding;out.top[eye]+=padding;
+	}
+	out.valid=true;return out;
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -680,9 +801,15 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	// its meshes. Dynamic/skinned/vehicle paths retain their original binds.
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
-	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled;
-	const bool auditSampling = gpuProfileSampling();
-	const bool staticAtomic = (gOpaqueMeshBatchEnabled || auditSampling) && cacheBindings &&
+	bool instanceSubmission=gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
+		!gvk.wristPanelOffscreen && !physicalScopeCaptureActive() && !worldEffectsActive() && !gvk.im3dWaterDraw;
+#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+	if(gvk.debugVizActive)instanceSubmission=false;
+#endif
+	if(!instanceSubmission)flushStaticInstances();
+	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled && !instanceSubmission;
+	const bool auditSampling = gStaticReuse.stats.sampled!=0;
+	const bool staticAtomic = (gOpaqueMeshBatchEnabled || auditSampling || instanceSubmission) && cacheBindings &&
 		OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper) &&
 		geometry->numMorphTargets==1 && !geometry->lockedSinceInst &&
 		atomic->getPipeline() && atomic->getPipeline()->platform==PLATFORM_VULKAN &&
@@ -692,6 +819,12 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 	const bool batchAtomic = gOpaqueMeshBatchEnabled && staticAtomic;
 	const bool measureBatch = gOpaqueMeshBatchEnabled && gvk.frameTimestampEnabled;
+	bool bufferStatic=instanceSubmission && staticAtomic && gInstanceOwner.entityClass==0 && gInstanceOwner.model>=0;
+	StaticInstances::Bounds instanceBounds;
+	if(bufferStatic){
+		instanceBounds=staticInstanceBounds(header,push);
+		if(!StaticInstances::FiniteBounds(instanceBounds)){++gStaticInstanceStats.rejectBounds;bufferStatic=false;}
+	}
 	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout>
 		bindings(cacheBindings,measureBindings);
 	const VkPipelineLayout layout = getPipelineLayout();
@@ -809,18 +942,23 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		const bool profileAlphaTest = gstate.alphaTestFunction != ALPHAALWAYS;
 		VkPipeline pipeline = getPipeline(shader,
 		                                  (VkPrimitiveTopology)header->primType);
+		VkPipeline instancePipeline=VK_NULL_HANDLE;
+		if(bufferStatic && !wantsBlend && !gsSplit && gstate.zTestEnabled && !gstate.vertexAlphaEnabled && profileDepthWrite && !profileAlphaTest){
+			instancePipeline=getPipeline(SHADER_WORLD_INSTANCED,(VkPrimitiveTopology)header->primType);
+			if(!instancePipeline)++gStaticInstanceStats.pipelineMiss;
+		}
 		gstate.zWriteEnabled = savedZWrite;
 		gstate.alphaTestFunction = savedAlphaFunction;
 		if(pipeline == VK_NULL_HANDLE)
 			continue;
-		if(bindings.PipelineBind(pipeline))
+		if(!instanceSubmission && bindings.PipelineBind(pipeline))
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		if(!cacheBindings || !textureResolved){
 			textureSet = getTextureDescriptor(raster);
 			textureResolved = true;
 			bindings.TextureLookup();
 		}
-		if(bindings.TextureBind(layout,textureSet))
+		if(!instanceSubmission && bindings.TextureBind(layout,textureSet))
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                        layout, 1, 1, &textureSet, 0, nil);
 
@@ -956,14 +1094,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			gStaticReuse.stats.cpuMs+=std::chrono::duration<double,std::milli>(
 				std::chrono::steady_clock::now()-auditStart).count();
 		}
-		vkCmdPushConstants(commandBuffer, getPipelineLayout(),
-		                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-		                   0, sizeof(push), &push);
-
-		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
-			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic);
-		countGpuProfileDraw(drawIndices, header->primType,
-            (gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra) |
+		const uint32 profileFlags=(gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra) |
             (wantsBlend?DrawProfile::HasAlpha:0) |
             (textureAlpha?DrawProfile::HasTextureAlpha:0) |
             (inst->vertexAlpha?DrawProfile::HasVertexAlpha:0) |
@@ -972,7 +1103,41 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
             (profileDepthWrite?DrawProfile::WritesDepth:0) |
             (gsSplit&&!vehicleSplit?DrawProfile::Ps2:0) |
             (vehicleSplit?DrawProfile::Vehicle:0) |
-            (boneOffset?DrawProfile::Skin:0));
+            (boneOffset?DrawProfile::Skin:0);
+		const bool bufferDraw=bufferStatic && material && !MatFX::get(material) &&
+			drawIndices && drawIndices%3==0 && isfinite(material->surfaceProps.ambient) &&
+			isfinite(material->surfaceProps.diffuse);
+		if(gStaticInstancesEnabled && !instanceSubmission)++gStaticInstanceStats.rejectState;
+		if(instanceSubmission){
+			if(bufferDraw){
+				if(gInstanceCount==StaticInstances::Window)flushStaticInstances();
+				StaticInstanceDraw &d=gInstanceDraws[gInstanceCount++];
+				d.pipeline=pipeline;d.instanced=instancePipeline;d.texture=textureSet;
+				d.vertices=header->vbo;d.indices=header->ibo;d.first=inst->offset/2;d.count=drawIndices;
+				d.flags=profileFlags;d.push=push;d.owner=gInstanceOwner;d.object=(uint64)(uintptr_t)atomic;
+				d.position[0]=ltm->pos.x;d.position[1]=ltm->pos.y;d.position[2]=ltm->pos.z;d.bounds=instanceBounds;
+				d.opaque=!wantsBlend && !gsSplit && gstate.zTestEnabled && !gstate.vertexAlphaEnabled && profileDepthWrite && !profileAlphaTest;
+				++gStaticInstanceStats.queued;gStaticInstanceStats.sourceIndices+=drawIndices;
+			}else{
+				++gStaticInstanceStats.rejectState;flushStaticInstances();
+				// A flush may have changed every graphics binding. Restore this
+				// draw fully; bone set 2 is untouched by the instanced emitter.
+				vkCmdBindPipeline(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+				vkCmdBindVertexBuffers(commandBuffer,0,1,&header->vbo,&vertexOffset);
+				vkCmdBindIndexBuffer(commandBuffer,header->ibo,0,VK_INDEX_TYPE_UINT16);
+				vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,1,1,&textureSet,0,nil);
+			}
+		}
+		if(instanceSubmission && bufferDraw){
+			i+=batchMeshes-1;inst+=batchMeshes-1;continue;
+		}
+		vkCmdPushConstants(commandBuffer, getPipelineLayout(),
+		                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+		                   0, sizeof(push), &push);
+
+		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
+			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic);
+		countGpuProfileDraw(drawIndices, header->primType,profileFlags);
 		vkCmdDrawIndexed(commandBuffer, drawIndices, 1,
 		                 inst->offset / 2, 0, 0);
 		i+=batchMeshes-1;

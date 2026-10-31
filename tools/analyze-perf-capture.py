@@ -29,6 +29,30 @@ ATOMIC_SUBMISSION_COLUMNS = ["vk_static_atomic_calls", "vk_static_atomic_pipelin
     "vk_static_atomic_texture_binds", "vk_static_atomic_texture_lookups"]
 
 
+def summarize_static_instances(rows):
+    if not rows or "static_instances_enabled" not in rows[0]:
+        return None
+    keys=["queued_draws", "groups", "instances", "saved_draws", "reject_state", "reject_bounds",
+          "reject_order", "reject_spatial", "pipeline_misses", "allocation_failures", "source_indices", "emitted_indices"]
+    valid,invalid=[],0
+    for row in rows:
+        try:
+            v={k:int(row["static_instances_"+k]) for k in keys}
+            cpu=float(row["static_instances_flush_ms"])
+            if (min(v.values())<0 or not math.isfinite(cpu) or cpu<0 or
+                    v["source_indices"]!=v["emitted_indices"] or
+                    v["instances"]-v["groups"]!=v["saved_draws"] or
+                    v["instances"]>v["queued_draws"] or v["instances"]<2*v["groups"]):
+                raise ValueError("Inconsistent instancing sample")
+            v["flush_ms"]=cpu;valid.append(v)
+        except (ValueError,KeyError):
+            invalid+=1
+    return {"valid_frames":len(valid),"invalid_frames":invalid,
+            "per_frame":{k:distribution([v[k] for v in valid]) for k in keys+["flush_ms"]},
+            "totals":{k:sum(v[k] for v in valid) for k in keys},
+            "note":"Actual instanced submissions; indices include all instances. Flush timer excludes collection/bounds setup."}
+
+
 def summarize_static_reuse(rows):
     if not rows or "static_reuse_sampled" not in rows[0]:
         return None
@@ -509,10 +533,11 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
-             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled"] if key in rows[0]},
+             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "static_instances_enabled"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),
+        "static_instances": summarize_static_instances(selected),
         "opaque_mesh_batch": {key: {"mean": sum(int(r[key]) for r in selected)/len(selected), "max": max(int(r[key]) for r in selected)}
             for key in ("opaque_mesh_batch_eligible", "opaque_mesh_batch_checks", "opaque_mesh_batch_merged_meshes",
                 "opaque_mesh_batch_saved_draws", "opaque_mesh_batch_reject_state", "opaque_mesh_batch_reject_material",

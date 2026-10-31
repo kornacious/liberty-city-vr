@@ -24,6 +24,11 @@ namespace GameRender
 {
 ProfileEntity::ProfileEntity(CEntity *entity){
 #ifdef RW_VULKAN
+	if(entity && rw::vulkan::getStaticInstancesEnabled())
+		instanceActive=rw::vulkan::beginStaticInstanceEntity(entity->GetModelIndex(),
+			entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
+			CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),
+			entity->bDistanceFade?DrawProfile::Distance:0)!=0;
 	if(entity&&rw::vulkan::gpuProfileSampling())active=rw::vulkan::beginGpuProfileEntity(entity->GetModelIndex(),
 		entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
 		CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),
@@ -35,6 +40,7 @@ ProfileEntity::ProfileEntity(CEntity *entity){
 ProfileEntity::~ProfileEntity(){
 #ifdef RW_VULKAN
 	if(active)rw::vulkan::endGpuProfileEntity();
+	if(instanceActive)rw::vulkan::endStaticInstanceEntity();
 #endif
 }
 namespace

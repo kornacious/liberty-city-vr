@@ -191,6 +191,7 @@ static int gPs2AlphaTest = 0;
 static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
+static int gStaticInstances = 0;
 static int gMaskedAlphaPassSkip = 0;
 // The game's point lights -- headlights, explosions, street lamps --
 // evaluated per pixel against the world instead of being folded into the
@@ -707,6 +708,7 @@ enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_OPAQUE_WORLD,
 	VR_GRAPHICS_MASKED_ALPHA_SKIP,
 	VR_GRAPHICS_OPAQUE_MESH_BATCH,
+	VR_GRAPHICS_STATIC_INSTANCES,
 	VR_GRAPHICS_OPAQUE_ORDER,
 	VR_GRAPHICS_FOLIAGE,
 	VR_GRAPHICS_DIAGNOSTICS,
@@ -1286,6 +1288,7 @@ LoadVrSettings(void)
 	gPs2AlphaTest = GetPrivateProfileIntA("VR", "Ps2AlphaTest", 0,
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
+	gStaticInstances = GetPrivateProfileIntA("VR", "StaticInstances", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
 	gMaskedAlphaPassSkip = GetPrivateProfileIntA("VR", "MaskedAlphaPassSkip", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueWorldAlphaFastPath = GetPrivateProfileIntA("VR",
@@ -2939,6 +2942,10 @@ VrDebugUpdate(const PadInput &in)
 				gPs2AlphaTest = !gPs2AlphaTest;
 				SaveVrInteger("Ps2AlphaTest", gPs2AlphaTest);
 				rw::vulkan::setPs2AlphaTestEnabled(gPs2AlphaTest);
+			}else if(gVrGraphicsSelection == VR_GRAPHICS_STATIC_INSTANCES){
+				gStaticInstances = !gStaticInstances;
+				SaveVrInteger("StaticInstances", gStaticInstances);
+				rw::vulkan::setStaticInstancesEnabled(gStaticInstances);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_OPAQUE_MESH_BATCH){
 				gOpaqueMeshBatch = !gOpaqueMeshBatch;
 				SaveVrInteger("OpaqueMeshBatch", gOpaqueMeshBatch);
@@ -3961,6 +3968,8 @@ DrawQuestGraphicsPage(void)
 		gPs2AlphaTest ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_OPAQUE_ORDER], sizeof(rows[0]),
 		"OPAQUE ORDER EXPERIMENT  < %s >", gOpaqueOrderExperiment ? "ON" : "OFF");
+	snprintf(rows[VR_GRAPHICS_STATIC_INSTANCES], sizeof(rows[0]),
+		"STATIC INSTANCING  < %s >", gStaticInstances ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_OPAQUE_MESH_BATCH], sizeof(rows[0]),
 		"OPAQUE MESH BATCH  < %s >", gOpaqueMeshBatch ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_MASKED_ALPHA_SKIP], sizeof(rows[0]),
@@ -4028,7 +4037,7 @@ DrawQuestGraphicsPage(void)
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++)
 		// Compact rows leave room for the status footer.
-		DrawFullVrMenuRow(rows[item], 170+item*(VR_GRAPHICS_ITEM_COUNT>23 ? 21 : 22), 2,
+		DrawFullVrMenuRow(rows[item], 170+item*(VR_GRAPHICS_ITEM_COUNT>24 ? 20 : VR_GRAPHICS_ITEM_COUNT>23 ? 21 : 22), 2,
 			item == gVrGraphicsSelection, true, false,
 			item == VR_GRAPHICS_PROFILER ||
 				item == VR_GRAPHICS_MIPMAPS ||
@@ -4037,6 +4046,7 @@ DrawQuestGraphicsPage(void)
 				item == VR_GRAPHICS_OPAQUE_ORDER ||
 				item == VR_GRAPHICS_MASKED_ALPHA_SKIP ||
 				item == VR_GRAPHICS_OPAQUE_MESH_BATCH ||
+				item == VR_GRAPHICS_STATIC_INSTANCES ||
 				item == VR_GRAPHICS_MSAA ||
 				item == VR_GRAPHICS_DIAGNOSTICS ||
 				item == VR_GRAPHICS_FOLIAGE,
@@ -5613,6 +5623,13 @@ VrOpaqueOrderExperiment(void)
 {
 	LoadVrSettings();
 	return gOpaqueOrderExperiment != 0;
+}
+
+bool
+VrStaticInstances(void)
+{
+	LoadVrSettings();
+	return gStaticInstances != 0;
 }
 
 bool

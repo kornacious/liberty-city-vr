@@ -170,6 +170,7 @@ bool VrGenerateMipmaps(void);
 // Saved benchmark control for proven-opaque world pipeline selection.
 bool VrOpaqueWorldAlphaFastPath(void);
 bool VrOpaqueOrderExperiment(void);
+bool VrStaticInstances(void);
 bool VrOpaqueMeshBatch(void);
 bool VrMaskedAlphaPassSkip(void);
 // The PS2 two-pass alpha rule for masked geometry.

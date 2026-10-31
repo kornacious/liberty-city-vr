@@ -431,6 +431,7 @@ enum ShaderVariant
 	SHADER_IM2D,
 	SHADER_IM3D,
 	SHADER_SKIN,
+	SHADER_WORLD_INSTANCED,
 	SHADER_COUNT
 };
 
@@ -513,6 +514,7 @@ bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
     const PushConstants &push, VkBuffer vertices, VkDeviceSize vertexOffset,
     VkBuffer indices, VkDeviceSize indexOffset, uint32 count, uint32 first,
     const uint32 *boneOffset = nil, Atomic *atomic = nil);
+bool32 physicalScopeCaptureActive(void);
 VkDescriptorSet uploadPhysicalScopeScene(const SceneData &scene);
 
 // Stall checkpoints, provided by the application layer. Same binary, so this
@@ -601,6 +603,7 @@ bool32 allocateDynamic(VkDeviceSize size, VkDeviceSize alignment,
                        VkBuffer *bufferOut, VkDeviceSize *offsetOut,
                        void **mappedOut);
 void resetDynamic(void);
+bool32 allocateStaticInstanceTransforms(unsigned count,VkBuffer *buffer,VkDeviceSize *offset,void **mapped);
 
 // Streaming frees GPU objects on the game thread.  With more than one frame
 // submitted those destroys are retired behind the frame fence that last used

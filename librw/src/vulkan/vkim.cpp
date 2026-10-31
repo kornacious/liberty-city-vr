@@ -106,6 +106,7 @@ bool32
 setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
                  VkPrimitiveTopology topology, const float32 *model)
 {
+	flushStaticInstances();
 	VkPipeline pipeline = getPipeline(shader, topology);
 	if(pipeline == VK_NULL_HANDLE)
 		return 0;

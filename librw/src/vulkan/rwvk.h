@@ -3,6 +3,7 @@
 #include "AtomicSubmission.h"
 #include "OpaqueMeshBatch.h"
 #include "StaticReuseAudit.h"
+#include "StaticInstances.h"
 #include "OpaqueOrder.h"
 #include "UniformAlphaPolicy.h"
 
@@ -275,6 +276,12 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void setStaticInstancesEnabled(bool32 enabled);
+bool32 getStaticInstancesEnabled(void);
+StaticInstances::Stats getStaticInstancesStats(void);
+void flushStaticInstances(void);
+bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags);
+void endStaticInstanceEntity(void);
 void resetStaticReuseSample(bool32 sampled,uint64 sourceFrame);
 void staticReuseBoundary(void);
 void finishStaticReuseDraw(void);

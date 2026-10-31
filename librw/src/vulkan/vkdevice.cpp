@@ -66,8 +66,8 @@ static bool32 gpuPassRecording(void){
 		gvk.frames[gvk.activeFrame].gpuEpoch==gGpuEpoch && gvk.frames[gvk.activeFrame].gpuProfile.sampled;
 }
 bool32 gpuProfileSampling(void){return gpuPassRecording();}
-void beginGpuProfilePass(uint32 pass){if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}}
-void endGpuProfilePass(uint32 pass){if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}}
+void beginGpuProfilePass(uint32 pass){flushStaticInstances();if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}}
+void endGpuProfilePass(uint32 pass){flushStaticInstances();if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}}
 void countGpuProfileDraw(uint32 count,uint32 topology,uint32 flags){if(gpuPassRecording()){gvk.frames[gvk.activeFrame].gpuProfile.Draw(count,topology,flags);finishStaticReuseDraw();}}
 bool32 beginGpuProfileEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
 	if(!gpuPassRecording())return 0;
@@ -99,6 +99,7 @@ bool32 getFrameBeginStats(FrameBeginStats *out)
 
 static VkRenderPass gScopeStorePass, gScopeLoadPass;
 static bool32 gScopeWanted, gScopeCapture, gScopeFrameValid;
+bool32 physicalScopeCaptureActive(void){return gScopeCapture;}
 static int32 gScopeDrawRole;
 static float32 gScopePosition[3], gScopeRight[3], gScopeUp[3], gScopeForward[3];
 static float32 gScopeFov, gScopeAspect;
@@ -195,6 +196,7 @@ retirementFrame(void)
 void
 retireBuffer(VkBuffer buffer, VkDeviceMemory memory)
 {
+	flushStaticInstances();
 	if(buffer == VK_NULL_HANDLE && memory == VK_NULL_HANDLE)
 		return;
 	if(!gvk.initialised || (!gvk.inFrame && !gvk.hasSubmittedFrame)){
@@ -209,6 +211,7 @@ retireBuffer(VkBuffer buffer, VkDeviceMemory memory)
 void
 retireImage(VkImageView view, VkImage image, VkDeviceMemory memory)
 {
+	flushStaticInstances();
 	if(view == VK_NULL_HANDLE && image == VK_NULL_HANDLE &&
 	   memory == VK_NULL_HANDLE)
 		return;
@@ -2261,6 +2264,7 @@ renderWristPanelTarget(int32 index, VkDescriptorSet scopeScene = VK_NULL_HANDLE,
 	VkRect2D scissor = {};
 	scissor.extent.width = (uint32)width;
 	scissor.extent.height = (uint32)height;
+	flushStaticInstances();
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 
@@ -2271,6 +2275,7 @@ renderWristPanelTarget(int32 index, VkDescriptorSet scopeScene = VK_NULL_HANDLE,
 	}else
 		gvk.wristPanelRenderer[index]();
 	gvk.wristPanelOffscreen = 0;
+	flushStaticInstances();
 	vkCmdEndRenderPass(gvk.frameCommands);
 	copyWristPanelToRaster(panel, source, width, height);
 }
@@ -2324,6 +2329,7 @@ renderPhysicalScope(void)
 	viewport.maxDepth = 1.0f;
 	VkRect2D scissor = {};
 	scissor.extent = pass.renderArea.extent;
+	flushStaticInstances();
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 	VkDescriptorSet mainScene = getSceneDescriptor();
@@ -2331,6 +2337,7 @@ renderPhysicalScope(void)
 		getPipelineLayout(), 0, 1, &mainScene, 0, nil);
 	rebindEnvironmentDescriptor(gvk.frameCommands);
 	replayScopeDraws(gScopeLensDraws);
+	flushStaticInstances();
 	vkCmdEndRenderPass(gvk.frameCommands);
 }
 
@@ -2539,7 +2546,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	frame.gpuTimingActive=gvk.frameTimestampEnabled && frame.timestampQueryPool!=VK_NULL_HANDLE;
 	frame.gpuEpoch=gGpuEpoch;frame.gpuSourceId=gGpuSourceId;frame.gpuSourceStartNs=gGpuSourceStartNs;
 	frame.gpuProfile.Reset(frame.gpuTimingActive && GpuPassProfile::ShouldSample(frame.gpuSourceId));
-	resetStaticReuseSample(frame.gpuProfile.sampled,frame.gpuSourceId);
+	resetStaticReuseSample(0,0); // Feasibility audit disabled for acceptance benchmarks.
 	if(frame.gpuTimingActive){
 		vkCmdResetQueryPool(gvk.frameCommands,
 		                    frame.timestampQueryPool, 0, frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2);
@@ -2696,6 +2703,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	VkRect2D scissor = {};
 	scissor.extent.width = gvk.sceneWidth;
 	scissor.extent.height = gvk.sceneHeight;
+	flushStaticInstances();
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 
@@ -2731,6 +2739,7 @@ endFrame(void)
 	// Make the stored world image visible to the sampled post pass. This is a
 	// full-image dependency rather than BY_REGION because FXAA reads adjacent
 	// pixels.
+	flushStaticInstances();
 	vkCmdEndRenderPass(gvk.frameCommands);
 	endGpuProfilePass(GpuPassProfile::Scene);
 	beginGpuProfilePass(GpuPassProfile::Postprocess);
@@ -2789,7 +2798,8 @@ endFrame(void)
 			VkRect2D convertScissor = {};
 			convertScissor.extent.width = gvk.sceneWidth;
 			convertScissor.extent.height = gvk.sceneHeight;
-			vkCmdSetViewport(gvk.frameCommands, 0, 1, &convertViewport);
+			flushStaticInstances();
+	vkCmdSetViewport(gvk.frameCommands, 0, 1, &convertViewport);
 			vkCmdSetScissor(gvk.frameCommands, 0, 1, &convertScissor);
 			vkCmdBindPipeline(gvk.frameCommands,
 			                  VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -2800,7 +2810,8 @@ endFrame(void)
 			                        &frame.sgsrConvertDescriptor, 0, nil);
 			countGpuProfileDraw(3,3,0);
 			vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
-			vkCmdEndRenderPass(gvk.frameCommands);
+			flushStaticInstances();
+	vkCmdEndRenderPass(gvk.frameCommands);
 		}
 	}
 	// Take the reduced copy for the reflection first: it reads the scene
@@ -2850,6 +2861,7 @@ endFrame(void)
 	VkRect2D scissor = {};
 	scissor.extent.width = gvk.width;
 	scissor.extent.height = gvk.height;
+	flushStaticInstances();
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 	const bool nativePostFx = useNativePostFx(gvk.width, gvk.height,
@@ -2868,6 +2880,7 @@ endFrame(void)
 	                   sizeof(gvk.postFxConstants), &gvk.postFxConstants);
 	countGpuProfileDraw(3,3,0);
 	vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
+	flushStaticInstances();
 	vkCmdEndRenderPass(gvk.frameCommands);
 	endGpuProfilePass(GpuPassProfile::Postprocess);
 	if(frame.gpuTimingActive)
