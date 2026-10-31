@@ -1,6 +1,7 @@
 #pragma once
 #include "GpuPassProfile.h"
 #include "AtomicSubmission.h"
+#include "OpaqueMeshBatch.h"
 #include "OpaqueOrder.h"
 #include "UniformAlphaPolicy.h"
 
@@ -273,6 +274,9 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void setOpaqueMeshBatchEnabled(bool32 enabled);
+bool32 getOpaqueMeshBatchEnabled(void);
+OpaqueMeshBatch::Stats getOpaqueMeshBatchStats(void);
 void setMaskedAlphaPassSkipEnabled(bool32 enabled);
 bool32 getMaskedAlphaPassSkipEnabled(void);
 

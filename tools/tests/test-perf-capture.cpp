@@ -112,6 +112,8 @@ int main()
         frame.opaqueOrder={40,30,i%7};
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
+        frame.opaqueMeshBatchEnabled=i%2;
+        frame.opaqueMeshBatch={100,99,64,62,7,8,9};
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason)
             frame.opaqueOrder.rejected[reason]=(i+reason)%11;
         if(writer.Submit(frame)) ++accepted;
@@ -156,6 +158,9 @@ int main()
         assert(std::stoul(row[column("masked_alpha_bound_solid_passes_skipped")]) == id%21);
         assert(std::stoull(row[column("masked_alpha_bound_indices_skipped")]) == 6000000000ULL+id);
         assert(std::stoi(row[column("masked_alpha_pass_skip_enabled")]) == int(id%2));
+        assert(std::stoi(row[column("opaque_mesh_batch_enabled")]) == int(id%2));
+        assert(std::stoi(row[column("opaque_mesh_batch_saved_draws")]) == 62);
+        assert(std::stoi(row[column("opaque_mesh_batch_reject_range")]) == 9);
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason){
             std::string key="opaque_order_reject_";key+=OpaqueOrder::RejectionName(reason);
             assert(std::stoi(row[column(key.c_str())]) == int((id+reason)%11));

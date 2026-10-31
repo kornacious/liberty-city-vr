@@ -4,6 +4,7 @@
 // numeric samples into a bounded queue; formatting and disk I/O run elsewhere.
 #include "vulkan/DrawProfile.h"
 #include "vulkan/AtomicSubmission.h"
+#include "vulkan/OpaqueMeshBatch.h"
 #include "vulkan/OpaqueOrder.h"
 #include "vulkan/UniformAlphaPolicy.h"
 #include <memory>
@@ -137,6 +138,8 @@ struct Frame {
     int opaqueOrderExperimentEnabled = 0;
     OpaqueOrder::Stats opaqueOrder{};
     rw::vulkan::UniformAlphaPolicy::BoundStats alphaBound{};
+    int opaqueMeshBatchEnabled=0;
+    OpaqueMeshBatch::Stats opaqueMeshBatch{};
     int maskedAlphaPassSkipEnabled=0;
     int activeModels[5]{}, requestedModel = 0;
     float renderScale = -1;
@@ -208,8 +211,11 @@ class Writer {
             f.opaqueOrderExperimentEnabled,f.opaqueOrder.candidates,f.opaqueOrder.eligible,f.opaqueOrder.swaps);
         for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
             std::fprintf(frames,",%u",f.opaqueOrder.rejected[i]);
-        std::fprintf(frames,",%u,%u,%llu,%d\n",f.alphaBound.candidates,f.alphaBound.solidPassesSkipped,
+        std::fprintf(frames,",%u,%u,%llu,%d",f.alphaBound.candidates,f.alphaBound.solidPassesSkipped,
             (unsigned long long)f.alphaBound.indicesSkipped,f.maskedAlphaPassSkipEnabled);
+        const auto &mb=f.opaqueMeshBatch;
+        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u\n",f.opaqueMeshBatchEnabled,
+            mb.eligible,mb.checks,mb.merged,mb.savedDraws,mb.rejectedState,mb.rejectedMaterial,mb.rejectedRange);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -301,7 +307,7 @@ public:
         std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups,renderdoc_capture_active,opaque_order_experiment_enabled,opaque_order_candidates,opaque_order_eligible,opaque_order_swaps",frames);
         for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
             std::fprintf(frames,",opaque_order_reject_%s",OpaqueOrder::RejectionName(i));
-        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled\n",frames);
+        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled,opaque_mesh_batch_enabled,opaque_mesh_batch_eligible,opaque_mesh_batch_checks,opaque_mesh_batch_merged_meshes,opaque_mesh_batch_saved_draws,opaque_mesh_batch_reject_state,opaque_mesh_batch_reject_material,opaque_mesh_batch_reject_range\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

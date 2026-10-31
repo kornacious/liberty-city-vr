@@ -36,6 +36,11 @@ static bool32 gOpaqueOrderEnabled;
 static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
 static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
+static bool32 gOpaqueMeshBatchEnabled;
+static OpaqueMeshBatch::Stats gOpaqueMeshBatchStats;
+void setOpaqueMeshBatchEnabled(bool32 enabled){gOpaqueMeshBatchEnabled=enabled!=0;}
+bool32 getOpaqueMeshBatchEnabled(void){return gOpaqueMeshBatchEnabled;}
+OpaqueMeshBatch::Stats getOpaqueMeshBatchStats(void){return gOpaqueMeshBatchStats;}
 static bool32 gMaskedAlphaPassSkipEnabled;
 void setMaskedAlphaPassSkipEnabled(bool32 enabled){gMaskedAlphaPassSkipEnabled=enabled!=0;}
 bool32 getMaskedAlphaPassSkipEnabled(void){return gMaskedAlphaPassSkipEnabled;}
@@ -44,7 +49,7 @@ void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
-void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};}
+void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
@@ -520,6 +525,18 @@ useOpaqueWorldPipeline(const InstanceData *inst,const Material *material,
 		true,false,textureAlpha,gstate.alphaTestRef/255.0f)==UniformAlphaPolicy::Solid;
 }
 
+static bool
+sameOpaqueBatchMaterial(const Material *a,const Material *b)
+{
+	if(!a || !b || MatFX::get(a) || MatFX::get(b)) return false;
+	return a->texture==b->texture &&
+		a->color.red==b->color.red && a->color.green==b->color.green &&
+		a->color.blue==b->color.blue && a->color.alpha==255 && b->color.alpha==255 &&
+		a->surfaceProps.ambient==b->surfaceProps.ambient &&
+		a->surfaceProps.diffuse==b->surfaceProps.diffuse &&
+		a->surfaceProps.specular==b->surfaceProps.specular;
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -658,6 +675,15 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
 	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled;
+	const bool batchAtomic = gOpaqueMeshBatchEnabled && cacheBindings &&
+		OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper) &&
+		geometry->numMorphTargets==1 && !geometry->lockedSinceInst &&
+		atomic->getPipeline() && atomic->getPipeline()->platform==PLATFORM_VULKAN &&
+		((ObjPipeline*)atomic->getPipeline())->instanceCB==defaultInstanceCB &&
+		((ObjPipeline*)atomic->getPipeline())->renderCB==defaultRenderCB &&
+		!(geometry->flags & Geometry::NATIVE) &&
+		header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	const bool measureBatch = gOpaqueMeshBatchEnabled && gvk.frameTimestampEnabled;
 	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout>
 		bindings(cacheBindings,measureBindings);
 	const VkPipelineLayout layout = getPipelineLayout();
@@ -855,13 +881,45 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			(gsPass == 0 ? splitReference : -splitReference) :
 			gstate.alphaTestRef/255.0f;
 
+		// Never defer commands across objects or reorder geometry. Compatible
+		// adjacent index ranges share every per-atomic value and the exact
+		// texture/sampler and material state used to build this push block.
+		uint32 batchMeshes=1,drawIndices=inst->numIndex;
+		const bool batchState = batchAtomic && !wantsBlend && !gsSplit &&
+			!inst->vertexAlpha && !textureAlpha && profileDepthWrite &&
+			gstate.zTestEnabled && !profileAlphaTest && !gvk.im3dWaterDraw &&
+			sameOpaqueBatchMaterial(material,material);
+		if(measureBatch){
+			if(batchState) ++gOpaqueMeshBatchStats.eligible;
+			else ++gOpaqueMeshBatchStats.rejectedState;
+		}
+		if(batchState){
+			while(i+batchMeshes<header->numMeshes && batchMeshes<OpaqueMeshBatch::MaxMeshes){
+				const InstanceData &next=inst[batchMeshes];
+				if(measureBatch) ++gOpaqueMeshBatchStats.checks;
+				if(next.vertexAlpha || !sameOpaqueBatchMaterial(material,next.material)){
+					if(measureBatch) ++gOpaqueMeshBatchStats.rejectedMaterial;
+					break;
+				}
+				if(!OpaqueMeshBatch::CanAppend(inst->offset,drawIndices,next.offset,next.numIndex,batchMeshes)){
+					if(measureBatch) ++gOpaqueMeshBatchStats.rejectedRange;
+					break;
+				}
+				drawIndices+=next.numIndex;
+				++batchMeshes;
+			}
+		}
+		if(measureBatch && batchMeshes>1){
+			gOpaqueMeshBatchStats.merged+=batchMeshes;
+			gOpaqueMeshBatchStats.savedDraws+=batchMeshes-1;
+		}
 		vkCmdPushConstants(commandBuffer, getPipelineLayout(),
 		                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 		                   0, sizeof(push), &push);
 
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
-			header->ibo, 0, inst->numIndex, inst->offset / 2, boneOffset, atomic);
-		countGpuProfileDraw(inst->numIndex, header->primType,
+			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic);
+		countGpuProfileDraw(drawIndices, header->primType,
             (gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra) |
             (wantsBlend?DrawProfile::HasAlpha:0) |
             (textureAlpha?DrawProfile::HasTextureAlpha:0) |
@@ -872,8 +930,10 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
             (gsSplit&&!vehicleSplit?DrawProfile::Ps2:0) |
             (vehicleSplit?DrawProfile::Vehicle:0) |
             (boneOffset?DrawProfile::Skin:0));
-		vkCmdDrawIndexed(commandBuffer, inst->numIndex, 1,
+		vkCmdDrawIndexed(commandBuffer, drawIndices, 1,
 		                 inst->offset / 2, 0, 0);
+		i+=batchMeshes-1;
+		inst+=batchMeshes-1;
 		}
 	}
 	}

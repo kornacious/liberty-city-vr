@@ -135,6 +135,36 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### Opaque mesh batching experiment
+
+Graphics → **Opaque Mesh Batch** is a persisted, default-OFF benchmark switch
+(`VR/OpaqueMeshBatch`). It combines at most 32 adjacent opaque triangle-list
+mesh ranges within the same default-pipeline object. Ranges must be contiguous
+in the same index buffer, with identical texture/sampler identity, material
+colour and surface properties. Transform, lighting and stereo state remain
+per-object. It preserves index order and falls back at incompatible boundaries;
+it does not batch across objects, change culling, or merge transparent/PS2 split
+passes, material effects, skinned objects or dynamic-object passes.
+
+Use four normal demo playbacks in **OFF → ON → OFF → ON** order with Forward
+View ON, fixed resolution/refresh rate and all other settings held constant.
+Leave Opaque Order Experiment and Masked Alpha Pass Skip OFF. No restart is
+needed between toggle changes. Keep RenderDoc detached and auto-capture OFF.
+
+The session records `opaque_mesh_batch_at_start`; frames record the current
+`opaque_mesh_batch_enabled` and `opaque_mesh_batch_*` counters. `eligible`
+counts eligible group starts, `checks` counts attempted adjacent joins,
+`merged_meshes` counts source meshes in successful groups, and `saved_draws`
+counts eliminated Vulkan draw submissions. Rejections distinguish unsupported
+state, incompatible material/vertex alpha, and invalid/noncontiguous ranges.
+Counters reset each frame and are collected with performance profiling enabled.
+OFF performs no compatibility scans. GPU draw/model histograms count the actual
+combined submissions and all their triangles, not the original source meshes.
+
+Compare normal CPU/GPU times and tails, saved submissions, unchanged triangle
+counts and visual behavior. A zero or small saved-draw count means this narrow
+path has little opportunity in that scene; it is not evidence for a GPU gain.
+
 Use the same save, route, assets, settings, refresh rate and warm-up. Record at
 least three repeats per build and retain matching OVR Metrics reports. Use a
 controlled route without deaths for the main comparison; test combat and
