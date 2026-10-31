@@ -551,7 +551,10 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "world_occlusion_cache_builds", "world_occlusion_cache_hits", "world_occlusion_cache_scanned",
              "world_occlusion_cache_deferred", "world_occlusion_source_objects", "world_occlusion_source_projected",
              "world_occlusion_source_projection_rejected", "world_occlusion_source_small",
-             "world_occlusion_source_budget_skipped", "world_occlusion_source_top_samples") if key in rows[0]},
+             "world_occlusion_source_budget_skipped", "world_occlusion_source_top_samples",
+             "world_occlusion_footprint_candidates", "world_occlusion_footprint_rejected",
+             "world_occlusion_footprint_uncertain", "world_occlusion_footprint_selected",
+             "world_occlusion_footprint_capacity_skipped") if key in rows[0]},
         "world_backface": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_backface_candidates", "world_backface_draws", "world_backface_reject_state",
              "world_backface_reject_geometry", "world_backface_reject_view", "world_backface_reject_transform",

@@ -20,7 +20,7 @@ bool enabled=false,building=false,ready=false;
 WorldOcclusion::Stereo grid;
 WorldOcclusion::Stats stats;
 WorldOcclusion::Selection selection;
-struct Source {InstanceDataHeader *header;double matrix[2][16];unsigned samples;int32 model;};
+struct Source {Atomic *atomic;InstanceDataHeader *header;double matrix[2][16];unsigned samples,order;int32 model;double priority;};
 Source sources[WorldOcclusion::MaxSourceObjects];
 unsigned sourceCount=0;
 float views[2][16],world[16];
@@ -102,30 +102,49 @@ void addWorldOccluder(Atomic *a,int32 model){
     if(!building)return;
     ++stats.occluderCandidates;
     if(stats.occluderCandidates>WorldOcclusion::MaxSourceObjects){++stats.budget;return;}
-    auto *h=source(a,true);
+    auto *h=source(a,false);
     if(!h||h->totalNumIndex%3||!h->totalNumIndex){++stats.invalid;return;}
-    const auto *v=(const WorldVertex*)h->vertexBuffer;
-    const unsigned faces=h->totalNumIndex/3;
-    auto &cache=h->occlusionSource;
-    if(!cache.ready){
-        const unsigned scan=std::min(faces,WorldOcclusion::MaxCacheScan);
-        if(stats.cacheScanned+scan>WorldOcclusion::MaxCacheScanPerFrame){++stats.cacheDeferred;return;}
-        stats.cacheScanned+=scan;++stats.cacheBuilds;
-        cache.Build(faces,[&](unsigned face,WorldOcclusion::Point (&p)[3]){
-            const uint16 *ix=h->indexBuffer+face*3;
-            for(unsigned k=0;k<3;++k){
-                if(ix[k]>=h->totalNumVertex){++stats.invalid;return false;}
-                const auto &position=v[ix[k]].position;p[k]={position[0],position[1],position[2]};
-            }
-            return true;
-        });
-    }else ++stats.cacheHits;
-    if(!cache.count)return;
-    auto &src=sources[sourceCount++];src.header=h;src.samples=0;src.model=model;matrices(a,src.matrix);
-    ++stats.sourceObjects;
+    ++stats.footprintCandidates;
+    Source candidate;candidate.atomic=a;candidate.header=h;candidate.samples=0;candidate.order=sourceCount;candidate.model=model;matrices(a,candidate.matrix);
+    const auto left=WorldOcclusion::ProjectedFootprint(candidate.matrix[0],h->orderMin,h->orderMax);
+    const auto right=WorldOcclusion::ProjectedFootprint(candidate.matrix[1],h->orderMin,h->orderMax);
+    if(!left.valid||!right.valid)++stats.footprintUncertain;
+    candidate.priority=std::min(left.area,right.area)+.25*std::max(left.area,right.area);
+    if(candidate.priority<=0){++stats.footprintRejected;return;}
+    sources[sourceCount++]=candidate;
 }
 void finishWorldOcclusion(void){
     if(!building)return;
+    // Prefer current projected coverage before expensive material checks,
+    // cold cache scans or triangle projection. Rejected sources still render.
+    std::sort(sources,sources+sourceCount,[](const Source &a,const Source &b){
+        return a.priority!=b.priority?a.priority>b.priority:a.order<b.order;
+    });
+    const unsigned candidates=sourceCount;sourceCount=0;
+    for(unsigned i=0;i<candidates;++i){
+        if(sourceCount==WorldOcclusion::MaxFootprintSources){stats.footprintCapacitySkipped=candidates-i;break;}
+        auto &candidate=sources[i];auto *h=source(candidate.atomic,true);
+        if(!h){++stats.invalid;continue;}
+        const auto *v=(const WorldVertex*)h->vertexBuffer;
+        const unsigned faces=h->totalNumIndex/3;
+        auto &cache=h->occlusionSource;
+        if(!cache.ready){
+            const unsigned scan=std::min(faces,WorldOcclusion::MaxCacheScan);
+            if(stats.cacheScanned+scan>WorldOcclusion::MaxCacheScanPerFrame){++stats.cacheDeferred;continue;}
+            stats.cacheScanned+=scan;++stats.cacheBuilds;
+            cache.Build(faces,[&](unsigned face,WorldOcclusion::Point (&p)[3]){
+                const uint16 *ix=h->indexBuffer+face*3;
+                for(unsigned k=0;k<3;++k){
+                    if(ix[k]>=h->totalNumVertex){++stats.invalid;return false;}
+                    const auto &position=v[ix[k]].position;p[k]={position[0],position[1],position[2]};
+                }
+                return true;
+            });
+        }else ++stats.cacheHits;
+        if(!cache.count)continue;
+        if(sourceCount!=i)sources[sourceCount]=candidate;
+        ++sourceCount;++stats.sourceObjects;++stats.footprintSelected;
+    }
     unsigned available=0;for(unsigned i=0;i<sourceCount;++i)available+=sources[i].header->occlusionSource.count;
     stats.triangles=WorldOcclusion::Distribute(sourceCount,
       [&](unsigned object){return sources[object].header->occlusionSource.count;},

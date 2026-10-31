@@ -222,6 +222,8 @@ class AnalysisTests(unittest.TestCase):
             source_keys=["cache_builds", "cache_hits", "cache_scanned", "cache_deferred", "source_objects",
                          "source_projected", "source_projection_rejected", "source_small", "source_budget_skipped", "source_top_samples"]
             fields += ["world_occlusion_"+key for key in source_keys]+["world_occlusion_source_top_model"]
+            footprint_keys=["footprint_candidates", "footprint_rejected", "footprint_uncertain", "footprint_selected", "footprint_capacity_skipped"]
+            fields += ["world_occlusion_"+key for key in footprint_keys]
             with path.open("w", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=fields+timings)
                 writer.writeheader()
@@ -234,6 +236,7 @@ class AnalysisTests(unittest.TestCase):
                                opaque_order_experiment_enabled=i%2, opaque_order_candidates=40, opaque_order_eligible=20, opaque_order_swaps=i%2, masked_alpha_pass_skip_enabled=i%2, opaque_mesh_batch_enabled=i%2, opaque_mesh_batch_saved_draws=i*2, world_lod_mode=i%4, world_lod_high_selections=i*10, world_backface_enabled=i%2, world_backface_draws=i*3, world_backface_certify_ms=.1*i, world_occlusion_enabled=i%2, world_occlusion_rejected=i*4, world_occlusion_build_ms=.02*i, lod_fade_transition_enabled=i%2)
                     row.update(world_occlusion_raster_rows=i*30,world_occlusion_selected_triangles=i*10)
                     row.update({"world_occlusion_"+key:i*2 for key in source_keys})
+                    row.update({"world_occlusion_"+key:i*3 for key in footprint_keys})
                     row["world_occlusion_source_top_model"]=1417 if i%2 else -1
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
@@ -256,6 +259,7 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["world_occlusion"]["world_occlusion_raster_rows"]["mean"], 60)
             self.assertEqual(result["world_occlusion"]["world_occlusion_selected_triangles"]["mean"], 20)
             for key in source_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],4)
+            for key in footprint_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],6)
             self.assertEqual(result["world_occlusion_source_model_frames"],{"1417":2})
             self.assertAlmostEqual(result["world_occlusion"]["world_occlusion_build_ms"]["mean"], .04)
             self.assertEqual(result["recorded_configuration"]["world_backface_enabled"], ["0", "1"])

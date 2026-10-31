@@ -167,7 +167,17 @@ Work is bounded to 128 prioritized entity candidates, up to 24 contributing
 occluders, 1024 sampled source triangles (at most 48 per entity), 8192 raster
 cell visits, 8192 raster rows and 16384 query cell visits per app frame. Incomplete coverage and
 exhausted budgets reduce rejection rather than hiding uncertain geometry.
-The cached-sources round-robin v3 policy caches up to 16 broad triangles for
+The projected-sources v4 policy projects each candidate's complete render
+vertex bounds into the current eye views before checking opaque materials,
+building source caches or assigning triangle samples. Only a viewport-clipped
+extent of at least 2 cells in each dimension and 16 cells in area qualifies in
+an eye. Scores favor area shared by both eyes, with a smaller weight for one-eye
+contributors. Unprojectable near/far crossings contribute no source score in
+that eye. The best 32 qualifying opaque sources receive the existing sample
+budget, with deterministic ordering for equal scores. Bounds are scheduling
+estimates only: rejected candidates render normally, and bounds never write
+depth or prove object occlusion. No source/raster/query budgets were increased.
+The policy caches up to 16 broad triangles for
 each dominant normal axis in the geometry's instance header. A bounded scan
 examines at most 2048 evenly distributed real faces per geometry, retaining
 large, non-degenerate, reasonably compact faces and interleaving the axes.
@@ -207,6 +217,12 @@ cached faces omitted by the frame budget, and the highest per-object sample
 count with its model ID. The top model is a single most-sampled object per
 frame (ties retain the first), not aggregate model work or GPU attribution.
 The analyzer reports that model's frame-frequency histogram separately.
+`world_occlusion_footprint_*` reports candidates tested, zero-score rejections,
+candidates with at least one uncertain eye, selected sources and candidates
+left unprepared after reaching the 32-source cap. Uncertain is an overlapping
+diagnostic, not an exclusive rejection category; capacity-skipped candidates
+have not necessarily passed material/cache eligibility. These counters and
+total build/query times expose whether the added bounds work is worthwhile.
 
 Replay **OFF -> ON -> OFF -> ON**, keeping World Model LOD AGGRESSIVE, World
 Backface Cull OFF, Static Instancing and all remaining settings fixed. Use a

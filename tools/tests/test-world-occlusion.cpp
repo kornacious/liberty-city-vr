@@ -155,5 +155,28 @@ int main(){
     assert(Distribute(3,[](unsigned object){return object==1?0u:2u;},
         [&](unsigned object,unsigned rank){assert(object!=1&&rank<2);++sparse[object];})==4);
     assert(sparse[0]==2&&sparse[1]==0&&sparse[2]==2);
+    // Current-view source footprints: clip to each viewport and avoid spending
+    // source samples on tiny, thin, offscreen or unprojectable bounds.
+    double view[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+    double low[3]={-.5,-.5,.2},high[3]={.5,.5,.8};
+    auto footprint=ProjectedFootprint(view,low,high);
+    assert(footprint.valid&&footprint.area==576);
+    view[12]=4;auto otherEye=ProjectedFootprint(view,low,high);
+    assert(otherEye.valid&&otherEye.area==0); // per-eye disocclusion
+    view[12]=0;
+    low[0]=low[1]=0;high[0]=high[1]=.01;
+    footprint=ProjectedFootprint(view,low,high);assert(footprint.valid&&footprint.area==0);
+    high[0]=.04;high[1]=1; // tall but thinner than two grid cells
+    assert(ProjectedFootprint(view,low,high).area==0);
+    high[0]=high[1]=.125; // 3x3 footprint is below 16-cell area threshold
+    assert(ProjectedFootprint(view,low,high).area==0);
+    high[0]=high[1]=.25;assert(ProjectedFootprint(view,low,high).area==36);
+    low[0]=low[1]=-100;high[0]=high[1]=100;
+    assert(ProjectedFootprint(view,low,high).area==Size*Size);
+    low[2]=0;assert(!ProjectedFootprint(view,low,high).valid);
+    low[2]=.2;high[2]=1;assert(!ProjectedFootprint(view,low,high).valid);
+    high[2]=.8;view[15]=-1;assert(!ProjectedFootprint(view,low,high).valid);view[15]=1;
+    low[0]=std::numeric_limits<double>::quiet_NaN();assert(!ProjectedFootprint(view,low,high).valid);
+    low[0]=101;assert(!ProjectedFootprint(view,low,high).valid);
     std::puts("PASS: stereo/opening/depth guards, 3.6 million cell-depth checks, bounded caches, orientation retention, source fairness, invalidation and work budgets.");
 }

@@ -9,6 +9,8 @@ constexpr unsigned Size=48,MaxOccluders=24,MaxTriangles=1024;
 constexpr unsigned MaxRasterTests=8192,MaxQueryTests=16384;
 constexpr unsigned MaxRasterRows=8192,MaxSelectedTriangles=256;
 constexpr unsigned MaxSourceObjects=128,SourceFacesPerAxis=16,MaxCacheScan=2048,MaxCacheScanPerFrame=4096;
+constexpr unsigned MaxFootprintSources=32;
+constexpr double MinSourceExtent=2,MinSourceArea=16;
 constexpr double DepthGuard=0.00002,ScreenGuard=0.002;
 struct Stats {
     uint32_t builds=0,occluderCandidates=0,occluders=0,triangles=0,cells=0;
@@ -21,6 +23,7 @@ struct Stats {
     uint32_t sourceObjects=0,sourceProjected=0,sourceProjectionRejected=0,sourceSmall=0,sourceBudgetSkipped=0;
     uint32_t sourceTopSamples=0;
     int32_t sourceTopModel=-1;
+    uint32_t footprintCandidates=0,footprintRejected=0,footprintUncertain=0,footprintSelected=0,footprintCapacitySkipped=0;
 };
 struct Point {double x=0,y=0,z=0;}; // screen x/y in cells, Vulkan depth [0,1]
 // Object-space scheduling cache only. Never merges faces or caches visibility.
@@ -82,6 +85,24 @@ inline bool Project(const double *matrix,const double *p,Point &out){
     if(c[3]<=0.001||c[2]<=0||c[2]>=c[3])return false;
     out={(c[0]/c[3]+1)*Size*0.5,(c[1]/c[3]+1)*Size*0.5,c[2]/c[3]};
     return Finite(out);
+}
+struct Footprint {double area=0;bool valid=false;};
+// Scheduling only: these bounds never write depth or hide a rendered object.
+// Uncertain near/far crossings omit the occluder, keeping ordinary rendering.
+template<class T> inline Footprint ProjectedFootprint(const double *matrix,const T *low,const T *high){
+    for(unsigned axis=0;axis<3;++axis)
+        if(!std::isfinite(low[axis])||!std::isfinite(high[axis])||low[axis]>high[axis])return {};
+    double left=1e100,right=-1e100,bottom=1e100,top=-1e100;
+    for(unsigned corner=0;corner<8;++corner){
+        double p[3];for(unsigned axis=0;axis<3;++axis)p[axis]=(corner&(1<<axis))?high[axis]:low[axis];
+        Point projected;if(!Project(matrix,p,projected))return {};
+        left=std::min(left,projected.x);right=std::max(right,projected.x);
+        bottom=std::min(bottom,projected.y);top=std::max(top,projected.y);
+    }
+    const double width=std::min(double(Size),right)-std::max(0.0,left);
+    const double height=std::min(double(Size),top)-std::max(0.0,bottom);
+    const double area=width*height;
+    return {width>=MinSourceExtent&&height>=MinSourceExtent&&area>=MinSourceArea?area:0,true};
 }
 inline Box Bounds(const Point *corners){
     Box b;
