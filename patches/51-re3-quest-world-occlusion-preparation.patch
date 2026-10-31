@@ -44,8 +44,8 @@
 +            if(!std::isfinite(priority))continue;
 +            candidates.push_back({priority,e});
 +        }
-+        std::sort(candidates.begin(),candidates.end(),[](const Candidate &a,const Candidate &b){return a.priority>b.priority;});
 +        const unsigned limit=std::min(unsigned(candidates.size()),128u);
++        std::partial_sort(candidates.begin(),candidates.begin()+limit,candidates.end(),[](const Candidate &a,const Candidate &b){return a.priority>b.priority;});
 +        for(unsigned i=0;i<limit;++i)addWorldOccluder((rw::Atomic*)candidates[i].entity->m_rwObject);
 +    }catch(const std::bad_alloc&){ /* A partial conservative map is still valid. */ }
 +    finishWorldOcclusion();

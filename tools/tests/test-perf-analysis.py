@@ -218,6 +218,7 @@ class AnalysisTests(unittest.TestCase):
                        "runtime_cpu_ms", "runtime_gpu_ms", "vulkan_gpu_ms", "game_ms", "streaming_ms",
                        "script_ms", "population_ms", "car_ms", "world_process_ms", "world_list_ms",
                        "world_render_ms", "render_fading_ms"]
+            fields += ["world_occlusion_raster_rows", "world_occlusion_selected_triangles"]
             with path.open("w", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=fields+timings)
                 writer.writeheader()
@@ -228,6 +229,7 @@ class AnalysisTests(unittest.TestCase):
                                dropped_rows=0, activity="walking", phase_valid_mask=1,
                                runtime_gpu_ms=-1, opaque_world_alpha_fast_path_enabled=i%2, replay_forward_view_active=i%2, renderdoc_capture_active=int(i==2),
                                opaque_order_experiment_enabled=i%2, opaque_order_candidates=40, opaque_order_eligible=20, opaque_order_swaps=i%2, masked_alpha_pass_skip_enabled=i%2, opaque_mesh_batch_enabled=i%2, opaque_mesh_batch_saved_draws=i*2, world_lod_mode=i%4, world_lod_high_selections=i*10, world_backface_enabled=i%2, world_backface_draws=i*3, world_backface_certify_ms=.1*i, world_occlusion_enabled=i%2, world_occlusion_rejected=i*4, world_occlusion_build_ms=.02*i, lod_fade_transition_enabled=i%2)
+                    row.update(world_occlusion_raster_rows=i*30,world_occlusion_selected_triangles=i*10)
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
@@ -246,6 +248,8 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["recorded_configuration"]["lod_fade_transition_enabled"], ["0", "1"])
             self.assertEqual(result["recorded_configuration"]["world_occlusion_enabled"], ["0", "1"])
             self.assertEqual(result["world_occlusion"]["world_occlusion_rejected"]["mean"], 8)
+            self.assertEqual(result["world_occlusion"]["world_occlusion_raster_rows"]["mean"], 60)
+            self.assertEqual(result["world_occlusion"]["world_occlusion_selected_triangles"]["mean"], 20)
             self.assertAlmostEqual(result["world_occlusion"]["world_occlusion_build_ms"]["mean"], .04)
             self.assertEqual(result["recorded_configuration"]["world_backface_enabled"], ["0", "1"])
             self.assertEqual(result["world_backface"]["world_backface_draws"]["mean"], 6)

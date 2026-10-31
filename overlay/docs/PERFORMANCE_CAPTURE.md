@@ -165,9 +165,16 @@ benchmark settings; it does not claim support for every render configuration.
 
 Work is bounded to 128 prioritized entity candidates, up to 24 contributing
 occluders, 1024 sampled source triangles (at most 64 per entity), 8192 raster
-cell visits and 16384 query cell visits per app frame. Incomplete coverage and
+cell visits, 8192 raster rows and 16384 query cell visits per app frame. Incomplete coverage and
 exhausted budgets reduce rejection rather than hiding uncertain geometry.
-This first version deliberately samples a subset of real opaque triangles;
+The ranked-spans v2 policy keeps the best 256 projected triangles from those
+samples in a fixed-capacity heap, prioritizing viewport-intersecting projected
+area in both eyes. The heuristic changes scheduling only, never the coverage
+proof. Per-row edge bounds skip empty portions of triangle bounding rectangles;
+every visited cell still passes the original three full-cell edge tests and
+conservative far-depth calculation. No partial triangles are merged. Entity
+selection partially sorts only the leading 128 candidates. This version still
+deliberately samples a subset of real opaque triangles;
 selected triangles remain exact and are not replaced by filled bounding boxes.
 
 Frame CSVs append `world_occlusion_enabled`, builds, occluder candidates,
@@ -179,6 +186,9 @@ object counts or compositor statistics. Indexed geometry shared by multiple
 passes can appear repeatedly; skipped alpha split passes are not multiplied
 into the input estimates. Metadata records the starting state and policy.
 The analyzer summarizes the new counters and includes the toggle in settings.
+`world_occlusion_raster_rows` and `world_occlusion_selected_triangles` expose
+the additional row budget and bounded shortlist. Source triangles count sampled
+input faces; selected triangles count shortlisted faces before raster budgets.
 
 Replay **OFF -> ON -> OFF -> ON**, keeping World Model LOD AGGRESSIVE, World
 Backface Cull OFF, Static Instancing and all remaining settings fixed. Use a

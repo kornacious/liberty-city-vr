@@ -113,6 +113,7 @@ int main()
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
         frame.worldOcclusionEnabled=i%2;frame.worldOcclusion.rejected=19;frame.worldOcclusion.vertices=6000000000ULL+i;frame.worldOcclusion.buildMs=.234567;
+        frame.worldOcclusion.rasterRows=125;frame.worldOcclusion.selectedTriangles=219;
           frame.worldBackfaceEnabled=i%2;frame.worldBackface.draws=7;frame.worldBackface.indices=6000000000ULL+i;frame.worldBackface.certifyMs=.123456;
           frame.lodFadeTransitionEnabled=i%2;frame.worldLodMode=i%3;frame.worldLod={11,12,13,14,15,16,17};
         frame.staticInstancesEnabled=i%2;
@@ -183,6 +184,8 @@ int main()
           assert(std::stoull(row[column("world_backface_indices")])==6000000000ULL+id);
           assert(std::abs(std::stod(row[column("world_backface_certify_ms")])-.123456)<1e-7);
           assert(std::stoi(row[column("lod_fade_transition_enabled")])==int(id%2));
+          assert(std::stoi(row[column("world_occlusion_raster_rows")])==125);
+          assert(std::stoi(row[column("world_occlusion_selected_triangles")])==219);
           assert(std::stoi(row[column("world_lod_mode")]) == int(id%3));
         assert(std::stoi(row[column("world_lod_lower_selections")]) == 12);
         assert(std::stoi(row[column("world_lod_unpaired_models")]) == 17);

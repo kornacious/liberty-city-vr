@@ -544,7 +544,8 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "world_occlusion_rejected", "world_occlusion_visible", "world_occlusion_invalid", "world_occlusion_budget",
              "world_occlusion_left_cells", "world_occlusion_right_cells", "world_occlusion_raster_tests",
              "world_occlusion_query_tests", "world_occlusion_indices_avoided", "world_occlusion_vertices_avoided",
-             "world_occlusion_build_ms", "world_occlusion_query_ms") if key in rows[0]},
+             "world_occlusion_build_ms", "world_occlusion_query_ms",
+             "world_occlusion_raster_rows", "world_occlusion_selected_triangles") if key in rows[0]},
         "world_backface": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_backface_candidates", "world_backface_draws", "world_backface_reject_state",
              "world_backface_reject_geometry", "world_backface_reject_view", "world_backface_reject_transform",
