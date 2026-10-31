@@ -20,11 +20,15 @@ $pieces.Add('#define MIAMIVR_DEV_TOOLS '+[int][bool]$DevTools)
 $enum=[regex]::Match($source,'(?ms)^enum eVrGraphicsMenuItem \{.*?^\};')
 if(-not $enum.Success){throw 'Graphics item enum missing'}
 $pieces.Add($enum.Value)
+$optimizationEnum=[regex]::Match($source,'(?ms)^enum eVrOptimizationMenuItem \{.*?^\};')
+if(-not $optimizationEnum.Success){throw 'Optimization item enum missing'}
+$pieces.Add($optimizationEnum.Value)
 $pieces.Add((Definition $source 'QuestCpuPerformanceModeName'))
 $pieces.Add((Definition $source 'BeginFullVrMenuPage'))
 $pieces.Add((Definition $source 'DrawFullVrMenuRow').Replace('DrawFullVrMenuRow(','DrawFullVrMenuRowNative('))
 $page=Definition $source 'DrawQuestGraphicsPage'
 $pieces.Add($page)
+$pieces.Add((Definition $source 'DrawQuestOptimizationsPage'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'graphics-menu-layout-production.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
 Write-Host ('Menu SHA256: '+(Get-FileHash -LiteralPath $MenuSourcePath).Hash)
 & (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-graphics-menu-layout.cpp')

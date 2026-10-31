@@ -1,0 +1,199 @@
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -1,5 +1,6 @@
+ #define WITHD3D
+ #include "common.h"
++#include "VrWorldLod.h"
+ 
+ #include "main.h"
+ #include "Lights.h"
+@@ -717,8 +718,14 @@
+ 		float fadefactor;
+ 		uint32 alpha;
+ 
+-		lodatm = mi->GetAtomicFromDistance(camdist - FADE_DISTANCE);
+-		fadefactor = (mi->GetLargestLodDistance() - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
++		lodatm = VrWorldLod::SelectAtomic(mi, camdist - FADE_DISTANCE);
++		if(!lodatm){
++#ifdef EXTRA_MODEL_FLAGS
++			if(resetCull)BACKFACE_CULLING_ON;
++#endif
++			ent->bImBeingRendered=false;return;
++		}
++		fadefactor = (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
+ 		if(fadefactor > 1.0f)
+ 			fadefactor = 1.0f;
+ 		alpha = mi->m_alpha * fadefactor;
+@@ -1076,6 +1083,7 @@
+ CRenderer::SetupEntityVisibility(CEntity *ent)
+ {
+ 	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(ent->m_modelIndex);
++	if(mi->IsSimple() && VrWorldLod::Suppress(mi))return VIS_INVISIBLE;
+ 	CTimeModelInfo *ti;
+ 	int32 other;
+ 	float dist;
+@@ -1139,13 +1147,13 @@
+ 
+ 	// This can only happen with multi-atomic models (e.g. railtracks)
+ 	// but why do we bump up the distance? can only be fading...
+-	if(LOD_DISTANCE + STREAM_DISTANCE < dist && dist < mi->GetLargestLodDistance())
+-		dist = mi->GetLargestLodDistance();
++	if(VrWorldLod::Mode()!=WorldLodPolicy::Off && LOD_DISTANCE + STREAM_DISTANCE < dist && dist < VrWorldLod::LargestDistance(mi))
++		dist = VrWorldLod::LargestDistance(mi);
+ 
+ 	if(ent->IsObject() && ent->bRenderDamaged)
+ 		mi->m_isDamaged = true;
+ 
+-	RpAtomic *a = mi->GetAtomicFromDistance(dist);
++	RpAtomic *a = VrWorldLod::SelectAtomic(mi, dist);
+ 	if(a){
+ 		mi->m_isDamaged = false;
+ 		if(ent->m_rwObject == nil)
+@@ -1196,18 +1204,18 @@
+ 	if(mi->m_noFade){
+ 		mi->m_isDamaged = false;
+ 		// request model
+-		if(dist - STREAM_DISTANCE < mi->GetLargestLodDistance() && request)
++		if(dist - STREAM_DISTANCE < VrWorldLod::LargestDistance(mi) && request)
+ 			return VIS_STREAMME;
+ 		return VIS_INVISIBLE;
+ 	}
+ 
+ 	// We might be fading
+ 
+-	a = mi->GetAtomicFromDistance(dist - FADE_DISTANCE);
++	a = VrWorldLod::SelectAtomic(mi, dist - FADE_DISTANCE);
+ 	mi->m_isDamaged = false;
+ 	if(a == nil){
+ 		// request model
+-		if(dist - FADE_DISTANCE - STREAM_DISTANCE < mi->GetLargestLodDistance() && request)
++		if(dist - FADE_DISTANCE - STREAM_DISTANCE < VrWorldLod::LargestDistance(mi) && request)
+ 			return VIS_STREAMME;
+ 		return VIS_INVISIBLE;
+ 	}
+@@ -1236,6 +1244,7 @@
+ CRenderer::SetupBigBuildingVisibility(CEntity *ent)
+ {
+ 	CSimpleModelInfo *mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(ent->GetModelIndex());
++	if(mi->IsSimple() && VrWorldLod::Suppress(mi))return VIS_INVISIBLE;
+ 	CTimeModelInfo *ti;
+ 	int32 other;
+ 
+@@ -1259,7 +1268,7 @@
+ 	// Find out whether to draw below near distance.
+ 	// This is only the case if there is a non-LOD which is either not
+ 	// loaded or not completely faded in yet.
+-	if(dist < mi->GetNearDistance() && dist < LOD_DISTANCE + STREAM_DISTANCE){
++	if(dist < VrWorldLod::NearDistance(mi) && dist < LOD_DISTANCE + STREAM_DISTANCE){
+ 		// No non-LOD or non-LOD is completely visible.
+ 		if(nonLOD == nil ||
+ 		   nonLOD->GetRwObject() && nonLOD->m_alpha == 255)
+@@ -1275,7 +1284,7 @@
+ 		}
+ 	}
+ 
+-	RpAtomic *a = mi->GetAtomicFromDistance(dist);
++	RpAtomic *a = VrWorldLod::SelectAtomic(mi, dist);
+ 	if(a){
+ 		if(ent->m_rwObject == nil)
+ 			ent->CreateRwObject();
+@@ -1303,7 +1312,7 @@
+ 
+ 
+ 	// get faded atomic
+-	a = mi->GetAtomicFromDistance(dist - FADE_DISTANCE);
++	a = VrWorldLod::SelectAtomic(mi, dist - FADE_DISTANCE);
+ 	if(a == nil){
+ 		ent->DeleteRwObject();
+ 		return VIS_INVISIBLE;
+@@ -1426,7 +1435,7 @@
+ 	// a complete area around the player and lets each eye clip it at draw time.
+ 	ms_bVrOmnidirectionalScan = true;
+ 	m_loadingPriority = false;
+-	const float radius = LOD_DISTANCE;
++	const float radius = VrWorldLod::ScanRadius(LOD_DISTANCE);
+ 	int x1 = CWorld::GetSectorIndexX(ms_vecCameraPosition.x - radius);
+ 	int x2 = CWorld::GetSectorIndexX(ms_vecCameraPosition.x + radius);
+ 	int y1 = CWorld::GetSectorIndexY(ms_vecCameraPosition.y - radius);
+@@ -2144,11 +2153,12 @@
+ CRenderer::ShouldModelBeStreamed(CEntity *ent)
+ {
+ 	CSimpleModelInfo *mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(ent->GetModelIndex());
++	if(mi->IsSimple() && VrWorldLod::Suppress(mi))return false;
+ 	float dist = (ent->GetPosition() - ms_vecCameraPosition).Magnitude();
+ 	if(mi->m_noFade)
+-		return dist - STREAM_DISTANCE < mi->GetLargestLodDistance();
++		return dist - STREAM_DISTANCE < VrWorldLod::LargestDistance(mi);
+ 	else
+-		return dist - FADE_DISTANCE - STREAM_DISTANCE < mi->GetLargestLodDistance();
++		return dist - FADE_DISTANCE - STREAM_DISTANCE < VrWorldLod::LargestDistance(mi);
+ }
+ 
+ bool
+--- a/src/modelinfo/ModelInfo.cpp
++++ b/src/modelinfo/ModelInfo.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "VrWorldLod.h"
+ 
+ #include "General.h"
+ #include "TempColModels.h"
+@@ -21,6 +22,7 @@
+ void
+ CModelInfo::Initialise(void)
+ {
++	VrWorldLod::Invalidate();
+ 	int i;
+ 	CSimpleModelInfo *m;
+ 
+--- a/src/modelinfo/SimpleModelInfo.cpp
++++ b/src/modelinfo/SimpleModelInfo.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "VrWorldLod.h"
+ 
+ #include "General.h"
+ #include "Camera.h"
+@@ -153,6 +154,7 @@
+ void
+ CSimpleModelInfo::SetupBigBuilding(void)
+ {
++	VrWorldLod::Invalidate();
+ 	CSimpleModelInfo *related;
+ 	if(m_lodDistances[0] > LOD_DISTANCE && GetRelatedModel() == nil){
+ 		m_isBigBuilding = 1;
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "VrWorldLod.h"
+ 
+ #include "RwHelper.h"
+ #include "templates.h"
+@@ -371,6 +372,7 @@
+ 			continue;
+ #endif
+ 		mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(e->GetModelIndex());
++		if(mi->IsSimple() && VrWorldLod::Suppress(mi))continue;
+ 
+ #ifdef FIX_BUGS
+ 		if(mi->GetModelType() == MITYPE_SIMPLE && mi->m_noZwrite)
+@@ -490,13 +492,16 @@
+ 	CSimpleModelInfo *mi;
+ 
+ 	mi = GetAtomicModelInfo(atomic);
+-	lodatm = mi->GetAtomicFromDistance(camdist - FADE_DISTANCE);
++	lodatm = VrWorldLod::SelectAtomic(mi, camdist - FADE_DISTANCE);
++	if(!lodatm)return atomic;
++	if(RpAtomicGetGeometry(lodatm)!=RpAtomicGetGeometry(atomic))
++		RpAtomicSetGeometry(atomic,RpAtomicGetGeometry(lodatm),rpATOMICSAMEBOUNDINGSPHERE);
+ 	if(mi->m_additive){
+ 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
+ 		RENDERCALLBACK(atomic);
+ 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+ 	}else{
+-		fadefactor = (mi->GetLargestLodDistance() - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
++		fadefactor = (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
+ 		if(fadefactor > 1.0f)
+ 			fadefactor = 1.0f;
+ 		alpha = mi->m_alpha * fadefactor;

@@ -112,6 +112,7 @@ int main()
         frame.opaqueOrder={40,30,i%7};
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
+        frame.worldLodMode=i%3;frame.worldLod={11,12,13,14,15,16,17};
         frame.staticInstancesEnabled=i%2;
         frame.staticInstances={};frame.staticInstances.queued=12;frame.staticInstances.groups=2;
         frame.staticInstances.instances=8;frame.staticInstances.savedDraws=6;
@@ -171,6 +172,9 @@ int main()
         assert(std::stoull(row[column("static_reuse_source_frame_id")]) == id);
         assert(std::stoi(row[column("static_reuse_compatible_instances")]) == 3);
         assert(std::stoi(row[column("static_reuse_top_model")]) == 1416);
+        assert(std::stoi(row[column("world_lod_mode")]) == int(id%3));
+        assert(std::stoi(row[column("world_lod_lower_selections")]) == 12);
+        assert(std::stoi(row[column("world_lod_unpaired_models")]) == 17);
         assert(std::stoi(row[column("static_instances_enabled")]) == int(id%2));
         assert(std::stoi(row[column("static_instances_saved_draws")]) == 6);
         assert(std::stoull(row[column("static_instances_emitted_indices")]) == 6000000000ULL+id);

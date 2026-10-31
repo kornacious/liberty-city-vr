@@ -135,9 +135,54 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### World model LOD and optimization menu
+
+Open **Graphics → Optimizations → World Model LOD**. This persisted three-state
+control (`VR/WorldLodMode`) affects simple/time world models; vehicle and ped
+callback LOD and traffic generation keep their existing behavior.
+
+| Mode | Value | Selection policy |
+|---|---:|---|
+| OFF | 0 | Highest-detail atomic in the correct intact/damaged family; LOD entities suppressed. |
+| ON (default) | 1 | Existing authored selection with the current VR minimum 2.2× distance multiplier. |
+| PERFORMANCE | 2 | Approximately 1× authored switching distances, with related high-detail/LOD handoffs capped at the normal 300 m sector range. |
+
+PERFORMANCE retains the far visibility range for LOD entities and for models
+without replacement partners. It changes world geometry transitions rather than
+reducing traffic generation distance. It is PS2-like in using earlier authored
+distances; it does not claim exact PS2 camera or asset parity. Time-of-day checks
+remain in the renderer, and paired time variants share a handoff distance.
+Damaged atomics are not treated as low-detail alternatives.
+
+OFF extends paired high-detail visibility/scanning to the camera's far range
+and requests detailed assets through normal streaming. LOD-only scenery with no
+high-detail counterpart is hidden: OFF does not fabricate replacement geometry.
+Its larger scan/streaming workload is intentionally a quality/control mode.
+Missing high-detail residency can leave temporary gaps. The submenu displays
+the LOD-only limitation. ON remains the initial/default behavior.
+
+The five renderer controls (Opaque World Fast Path, Masked Alpha Pass Skip,
+Opaque Mesh Batch, Static Instancing and Opaque Order Experiment) now live in
+the same Optimizations submenu. Their saved values and backend behavior remain
+independent. Back/B from this submenu returns to Graphics.
+
+Sessions record `world_lod_mode_at_start` and a policy string. Frames record
+`world_lod_mode`, high/lower atomic selections, LOD-entity selections, suppressed
+LOD calls, missing selections and linked/unpaired model counts. Selection counts
+include visibility/fading queries and offscreen/streaming candidates; they are
+NOT actual draw counts or GPU costs. Use companion draw/model histograms and
+triangle counts to verify submitted workload. Model links are invalidated when
+definitions/big-building relationships are rebuilt.
+
+For a controlled performance comparison, replay **ON → PERFORMANCE → ON →
+PERFORMANCE**, with the usual fixed resolution, refresh rate and Forward View,
+and Static Instancing, Opaque Mesh Batch, Masked Alpha Pass Skip and Opaque Order
+Experiment OFF. Keep Opaque World Fast Path ON. No restart is required between
+mode changes; set the mode before starting playback and keep it fixed per run.
+
 ### Static instancing experiment
 
-Graphics → **Static Instancing** is a persisted, default-OFF benchmark switch
+Graphics → Optimizations → **Static Instancing** is a persisted, default-OFF benchmark switch
 (`VR/StaticInstances`); changes apply immediately. Compare four normal demo
 playbacks in **OFF → ON → OFF → ON** order. Keep Opaque Mesh Batch, Opaque Order
 Experiment and Masked Alpha Pass Skip OFF, Opaque World Fast Path and Forward
@@ -233,7 +278,7 @@ identity and summarizes valid sampled rows separately from unsampled rows.
 
 ### Opaque mesh batching experiment
 
-Graphics → **Opaque Mesh Batch** is a persisted, default-OFF benchmark switch
+Graphics → Optimizations → **Opaque Mesh Batch** is a persisted, default-OFF benchmark switch
 (`VR/OpaqueMeshBatch`). It combines at most 32 adjacent opaque triangle-list
 mesh ranges within the same default-pipeline object. Ranges must be contiguous
 in the same index buffer, with identical texture/sampler identity, material

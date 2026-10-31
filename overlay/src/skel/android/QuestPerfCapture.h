@@ -7,6 +7,7 @@
 #include "vulkan/OpaqueMeshBatch.h"
 #include "vulkan/StaticReuseAudit.h"
 #include "vulkan/StaticInstances.h"
+#include "../../renderer/WorldLodPolicy.h"
 #include "vulkan/OpaqueOrder.h"
 #include "vulkan/UniformAlphaPolicy.h"
 #include <memory>
@@ -143,6 +144,8 @@ struct Frame {
     int opaqueMeshBatchEnabled=0;
     OpaqueMeshBatch::Stats opaqueMeshBatch{};
     StaticReuseAudit::Stats staticReuse{};
+    int worldLodMode=WorldLodPolicy::On;
+    WorldLodPolicy::Stats worldLod{};
     int staticInstancesEnabled=0;
     StaticInstances::Stats staticInstances{};
     int maskedAlphaPassSkipEnabled=0;
@@ -228,10 +231,13 @@ class Writer {
             reuse.rejectedState,reuse.rejectedOwner,reuse.rejectedTransform,reuse.tableOverflow,
             reuse.ownerOverflow,reuse.maxInstances,reuse.topModel,reuse.cpuMs);
         const auto &si=f.staticInstances;
-        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%llu,%.6f\n",
+        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%llu,%llu,%.6f",
             f.staticInstancesEnabled,si.queued,si.groups,si.instances,si.savedDraws,
             si.rejectState,si.rejectBounds,si.rejectOrder,si.rejectSpatial,si.pipelineMiss,si.allocationFailure,
             (unsigned long long)si.sourceIndices,(unsigned long long)si.emittedIndices,si.flushMs);
+        const auto &lod=f.worldLod;
+        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u\n",f.worldLodMode,lod.highSelections,lod.lowerSelections,
+            lod.lodSelections,lod.suppressedLod,lod.missingSelections,lod.pairedModels,lod.unpairedLodModels);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -323,7 +329,7 @@ public:
         std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups,renderdoc_capture_active,opaque_order_experiment_enabled,opaque_order_candidates,opaque_order_eligible,opaque_order_swaps",frames);
         for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
             std::fprintf(frames,",opaque_order_reject_%s",OpaqueOrder::RejectionName(i));
-        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled,opaque_mesh_batch_enabled,opaque_mesh_batch_eligible,opaque_mesh_batch_checks,opaque_mesh_batch_merged_meshes,opaque_mesh_batch_saved_draws,opaque_mesh_batch_reject_state,opaque_mesh_batch_reject_material,opaque_mesh_batch_reject_range,static_reuse_source_frame_id,static_reuse_sampled,static_reuse_candidates,static_reuse_groups,static_reuse_geometry_repeats,static_reuse_compatible_instances,static_reuse_nearby_instances,static_reuse_adjacent_instances,static_reuse_reject_state,static_reuse_reject_owner,static_reuse_reject_transform,static_reuse_table_overflow,static_reuse_owner_overflow,static_reuse_max_instances,static_reuse_top_model,static_reuse_cpu_ms,static_instances_enabled,static_instances_queued_draws,static_instances_groups,static_instances_instances,static_instances_saved_draws,static_instances_reject_state,static_instances_reject_bounds,static_instances_reject_order,static_instances_reject_spatial,static_instances_pipeline_misses,static_instances_allocation_failures,static_instances_source_indices,static_instances_emitted_indices,static_instances_flush_ms\n",frames);
+        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled,opaque_mesh_batch_enabled,opaque_mesh_batch_eligible,opaque_mesh_batch_checks,opaque_mesh_batch_merged_meshes,opaque_mesh_batch_saved_draws,opaque_mesh_batch_reject_state,opaque_mesh_batch_reject_material,opaque_mesh_batch_reject_range,static_reuse_source_frame_id,static_reuse_sampled,static_reuse_candidates,static_reuse_groups,static_reuse_geometry_repeats,static_reuse_compatible_instances,static_reuse_nearby_instances,static_reuse_adjacent_instances,static_reuse_reject_state,static_reuse_reject_owner,static_reuse_reject_transform,static_reuse_table_overflow,static_reuse_owner_overflow,static_reuse_max_instances,static_reuse_top_model,static_reuse_cpu_ms,static_instances_enabled,static_instances_queued_draws,static_instances_groups,static_instances_instances,static_instances_saved_draws,static_instances_reject_state,static_instances_reject_bounds,static_instances_reject_order,static_instances_reject_spatial,static_instances_pipeline_misses,static_instances_allocation_failures,static_instances_source_indices,static_instances_emitted_indices,static_instances_flush_ms,world_lod_mode,world_lod_high_selections,world_lod_lower_selections,world_lod_entity_selections,world_lod_suppressed,world_lod_missing_selections,world_lod_paired_models,world_lod_unpaired_models\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

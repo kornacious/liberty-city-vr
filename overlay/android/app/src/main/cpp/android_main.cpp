@@ -23,6 +23,7 @@
 #include "SimulationReplay.h"
 #include "crossplatform.h"
 #include "VehiclePlacement.h"
+#include "VrWorldLod.h"
 #endif
 
 namespace {
@@ -304,6 +305,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
                 const float eyePos[2][3], const float eyeQuat[2][4])
 {
 	const int64_t frameStartNs = monotonicNowNs();
+	VrWorldLod::BeginFrame(androidgame::VrWorldLodMode());
 	androidgame::QuestProfilerBeginAppFrame();
 	xrvk::ControllerInput controllers;
 	xrvk::getInput(&controllers);

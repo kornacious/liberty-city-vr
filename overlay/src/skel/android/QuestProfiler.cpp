@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include "QuestProfiler.h"
+#include "VrWorldLod.h"
 #include "QuestPerfCapture.h"
 #include "QuestRenderDoc.h"
 #include "xr_vulkan_session.h"
@@ -272,6 +273,8 @@ StartFrameCapture(void)
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
+	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
+	details += "world_lod_policy,current_or_high_only_or_authored_switching_v1\n";
 	details += "static_instances_policy,bounded64_instances16_radius32_stereo_separation_v1\n";
 	details += "static_instances_at_start," + std::to_string(rw::vulkan::getStaticInstancesEnabled()?1:0) + "\n";
 	details += "static_reuse_policy,disabled_for_static_instance_benchmark\n";
@@ -1473,6 +1476,8 @@ QuestProfilerEndAppFrame(void)
 		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
 		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
 	}
+	gCaptureFrame.worldLodMode = VrWorldLod::Mode();
+	gCaptureFrame.worldLod = VrWorldLod::GetStats();
 	gCaptureFrame.staticInstancesEnabled = rw::vulkan::getStaticInstancesEnabled()?1:0;
 	gCaptureFrame.staticInstances = rw::vulkan::getStaticInstancesStats();
 	gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();

@@ -40,6 +40,7 @@
 #include "VrCheatMenu.h"
 #include "VrWeaponCalibrationMenu.h"
 #include "VrCullViz.h"
+#include "VrWorldLod.h"
 #include "ParticleObject.h"
 #include "CutsceneMgr.h"
 #include "Camera.h"
@@ -188,6 +189,7 @@ static int gGenerateMipmaps = 1;
 // the draws are paid everywhere. On for anyone who would rather have
 // it the other way round.
 static int gPs2AlphaTest = 0;
+static int gWorldLodMode = WorldLodPolicy::On;
 static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
@@ -476,6 +478,7 @@ static int gVrPadBinding[androidgame::VR_PAD_SOURCE_COUNT];
 static int gVrMenuPage;
 static int gVrMenuSelection;
 static int gVrGraphicsSelection;
+static int gVrOptimizationSelection;
 static int gVrLightingSelection;
 static int gVrWaterSelection;
 static int gVrWeaponsSelection;
@@ -540,6 +543,7 @@ static int gQuestGpuPerformanceMode = 1; // SUSTAINED; enum is declared below.
 enum {
 	VR_MENU_PAGE_SETTINGS,
 	VR_MENU_PAGE_GRAPHICS,
+	VR_MENU_PAGE_OPTIMIZATIONS,
 	VR_MENU_PAGE_LIGHTING,
 	VR_MENU_PAGE_WATER,
 	VR_MENU_PAGE_WEAPONS,
@@ -698,6 +702,17 @@ enum eVrMainMenuItem {
 	VR_MAIN_ITEM_COUNT
 };
 
+enum eVrOptimizationMenuItem {
+	VR_OPT_WORLD_LOD=0,
+	VR_OPT_OPAQUE_WORLD,
+	VR_OPT_MASKED_ALPHA_SKIP,
+	VR_OPT_OPAQUE_MESH_BATCH,
+	VR_OPT_STATIC_INSTANCES,
+	VR_OPT_OPAQUE_ORDER,
+	VR_OPT_BACK,
+	VR_OPT_ITEM_COUNT
+};
+
 enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_RENDER_SCALE = 0,
 	VR_GRAPHICS_SGSR,
@@ -705,11 +720,7 @@ enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_FXAA,
 	VR_GRAPHICS_MIPMAPS,
 	VR_GRAPHICS_PS2_ALPHA,
-	VR_GRAPHICS_OPAQUE_WORLD,
-	VR_GRAPHICS_MASKED_ALPHA_SKIP,
-	VR_GRAPHICS_OPAQUE_MESH_BATCH,
-	VR_GRAPHICS_STATIC_INSTANCES,
-	VR_GRAPHICS_OPAQUE_ORDER,
+	VR_GRAPHICS_OPTIMIZATIONS,
 	VR_GRAPHICS_FOLIAGE,
 	VR_GRAPHICS_DIAGNOSTICS,
 	VR_GRAPHICS_COLOR,
@@ -1287,6 +1298,7 @@ LoadVrSettings(void)
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gPs2AlphaTest = GetPrivateProfileIntA("VR", "Ps2AlphaTest", 0,
 		".\\vr_settings.ini") != 0 ? 1 : 0;
+	gWorldLodMode = WorldLodPolicy::ClampMode(GetPrivateProfileIntA("VR", "WorldLodMode", WorldLodPolicy::On, ".\\vr_settings.ini"));
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
 	gStaticInstances = GetPrivateProfileIntA("VR", "StaticInstances", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
@@ -2264,6 +2276,7 @@ CurrentMenuSelection(void)
 	switch(gVrMenuPage){
 	case VR_MENU_PAGE_SIMULATION: return &simulationSelection;
 	case VR_MENU_PAGE_GRAPHICS: return &gVrGraphicsSelection;
+	case VR_MENU_PAGE_OPTIMIZATIONS: return &gVrOptimizationSelection;
 	case VR_MENU_PAGE_LIGHTING: return &gVrLightingSelection;
 	case VR_MENU_PAGE_WATER: return &gVrWaterSelection;
 	case VR_MENU_PAGE_WEAPONS: return &gVrWeaponsSelection;
@@ -2298,6 +2311,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_SIMULATION: return SimulationReplayMenuRows;
 	case VR_MENU_PAGE_SETTINGS: return VR_MAIN_ITEM_COUNT;
 	case VR_MENU_PAGE_GRAPHICS: return VR_GRAPHICS_ITEM_COUNT;
+	case VR_MENU_PAGE_OPTIMIZATIONS: return VR_OPT_ITEM_COUNT;
 	case VR_MENU_PAGE_LIGHTING: return VR_LIGHTING_ITEM_COUNT;
 	case VR_MENU_PAGE_WATER: return VR_WATER_ITEM_COUNT;
 	case VR_MENU_PAGE_WEAPONS: return VR_WEAPONS_ITEM_COUNT;
@@ -2522,7 +2536,7 @@ ReturnFromCurrentMenuPage(void)
 		gVrMenuPage = VR_MENU_PAGE_HUD;
 		return;
 	}
-	if(gVrMenuPage == VR_MENU_PAGE_LIGHTING){
+	if(gVrMenuPage == VR_MENU_PAGE_LIGHTING || gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS){
 		gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
 		return;
 	}
@@ -2907,9 +2921,40 @@ VrDebugUpdate(const PadInput &in)
 			const int row = *CurrentMenuSelection();
 			if(row == SimulationReplayMenuRows-1) gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 			else if(SimulationReplayMenuAction(row, decreasePulse ? -1 : 1)) gVrMenuVisible = false;
+		}else if(gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS && (positivePulse || decreasePulse)){
+			if(gVrOptimizationSelection == VR_OPT_WORLD_LOD){
+				gWorldLodMode = (gWorldLodMode+(positivePulse?1:WorldLodPolicy::Count-1))%WorldLodPolicy::Count;
+				SaveVrInteger("WorldLodMode",gWorldLodMode);
+				VrWorldLod::SetMode(gWorldLodMode);
+			}else if(gVrOptimizationSelection == VR_OPT_STATIC_INSTANCES){
+				gStaticInstances = !gStaticInstances;
+				SaveVrInteger("StaticInstances", gStaticInstances);
+				rw::vulkan::setStaticInstancesEnabled(gStaticInstances);
+			}else if(gVrOptimizationSelection == VR_OPT_OPAQUE_MESH_BATCH){
+				gOpaqueMeshBatch = !gOpaqueMeshBatch;
+				SaveVrInteger("OpaqueMeshBatch", gOpaqueMeshBatch);
+				rw::vulkan::setOpaqueMeshBatchEnabled(gOpaqueMeshBatch);
+			}else if(gVrOptimizationSelection == VR_OPT_MASKED_ALPHA_SKIP){
+				gMaskedAlphaPassSkip = !gMaskedAlphaPassSkip;
+				SaveVrInteger("MaskedAlphaPassSkip", gMaskedAlphaPassSkip);
+				rw::vulkan::setMaskedAlphaPassSkipEnabled(gMaskedAlphaPassSkip);
+			}else if(gVrOptimizationSelection == VR_OPT_OPAQUE_ORDER){
+				gOpaqueOrderExperiment = !gOpaqueOrderExperiment;
+				SaveVrInteger("OpaqueOrderExperiment", gOpaqueOrderExperiment);
+				rw::vulkan::setOpaqueOrderEnabled(gOpaqueOrderExperiment);
+			}else if(gVrOptimizationSelection == VR_OPT_OPAQUE_WORLD){
+				gOpaqueWorldAlphaFastPath = !gOpaqueWorldAlphaFastPath;
+				SaveVrInteger("OpaqueWorldAlphaFastPath", gOpaqueWorldAlphaFastPath);
+				rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(gOpaqueWorldAlphaFastPath);
+			}else if(gVrOptimizationSelection == VR_OPT_BACK){
+				gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
+			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_GRAPHICS &&
 		         (positivePulse || decreasePulse)){
-			if(gVrGraphicsSelection == VR_GRAPHICS_RENDER_SCALE){
+			if(gVrGraphicsSelection == VR_GRAPHICS_OPTIMIZATIONS){
+				gVrMenuPage = VR_MENU_PAGE_OPTIMIZATIONS;
+				gVrOptimizationSelection = 0;
+			}else if(gVrGraphicsSelection == VR_GRAPHICS_RENDER_SCALE){
 				static const int scales[] = { 100, 125, 150, 175 };
 				int index = 0;
 				for(int i = 0; i < (int)ARRAY_SIZE(scales); i++)
@@ -2942,26 +2987,6 @@ VrDebugUpdate(const PadInput &in)
 				gPs2AlphaTest = !gPs2AlphaTest;
 				SaveVrInteger("Ps2AlphaTest", gPs2AlphaTest);
 				rw::vulkan::setPs2AlphaTestEnabled(gPs2AlphaTest);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_STATIC_INSTANCES){
-				gStaticInstances = !gStaticInstances;
-				SaveVrInteger("StaticInstances", gStaticInstances);
-				rw::vulkan::setStaticInstancesEnabled(gStaticInstances);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_OPAQUE_MESH_BATCH){
-				gOpaqueMeshBatch = !gOpaqueMeshBatch;
-				SaveVrInteger("OpaqueMeshBatch", gOpaqueMeshBatch);
-				rw::vulkan::setOpaqueMeshBatchEnabled(gOpaqueMeshBatch);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_MASKED_ALPHA_SKIP){
-				gMaskedAlphaPassSkip = !gMaskedAlphaPassSkip;
-				SaveVrInteger("MaskedAlphaPassSkip", gMaskedAlphaPassSkip);
-				rw::vulkan::setMaskedAlphaPassSkipEnabled(gMaskedAlphaPassSkip);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_OPAQUE_ORDER){
-				gOpaqueOrderExperiment = !gOpaqueOrderExperiment;
-				SaveVrInteger("OpaqueOrderExperiment", gOpaqueOrderExperiment);
-				rw::vulkan::setOpaqueOrderEnabled(gOpaqueOrderExperiment);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_OPAQUE_WORLD){
-				gOpaqueWorldAlphaFastPath = !gOpaqueWorldAlphaFastPath;
-				SaveVrInteger("OpaqueWorldAlphaFastPath", gOpaqueWorldAlphaFastPath);
-				rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(gOpaqueWorldAlphaFastPath);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_MIPMAPS){
 				gGenerateMipmaps = !gGenerateMipmaps;
 				SaveVrInteger("GenerateMipmaps", gGenerateMipmaps);
@@ -3941,6 +3966,27 @@ DrawQuestSimulationPage(void)
 }
 
 static void
+DrawQuestOptimizationsPage(void)
+{
+	BeginFullVrMenuPage("OPTIMIZATIONS", "WORLD DETAIL AND RENDERER EXPERIMENTS");
+	char rows[VR_OPT_ITEM_COUNT][112];
+	const char *mode=gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":
+		gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN";
+	snprintf(rows[VR_OPT_WORLD_LOD],sizeof(rows[0]),"WORLD MODEL LOD  < %s >",mode);
+	snprintf(rows[VR_OPT_OPAQUE_WORLD],sizeof(rows[0]),"OPAQUE WORLD FAST PATH  < %s >",gOpaqueWorldAlphaFastPath?"ON":"OFF");
+	snprintf(rows[VR_OPT_MASKED_ALPHA_SKIP],sizeof(rows[0]),"MASKED ALPHA PASS SKIP  < %s >",gMaskedAlphaPassSkip?"ON":"OFF");
+	snprintf(rows[VR_OPT_OPAQUE_MESH_BATCH],sizeof(rows[0]),"OPAQUE MESH BATCH  < %s >",gOpaqueMeshBatch?"ON":"OFF");
+	snprintf(rows[VR_OPT_STATIC_INSTANCES],sizeof(rows[0]),"STATIC INSTANCING  < %s >",gStaticInstances?"ON":"OFF");
+	snprintf(rows[VR_OPT_OPAQUE_ORDER],sizeof(rows[0]),"OPAQUE ORDER EXPERIMENT  < %s >",gOpaqueOrderExperiment?"ON":"OFF");
+	strcpy(rows[VR_OPT_BACK],"BACK TO GRAPHICS");
+	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
+		DrawFullVrMenuRow(rows[item],180+item*40,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
+	DrawVrMenuText(gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
+		gWorldLodMode==WorldLodPolicy::Performance?"EARLIER WORLD LOD SWITCHING; DISTANT COVERAGE KEPT":
+		"ON PRESERVES THE CURRENT WORLD LOD DISTANCES",VR_MENU_WIDTH/2,580,2,240,178,48);
+}
+
+static void
 DrawQuestGraphicsPage(void)
 {
 	BeginFullVrMenuPage("GRAPHICS", "QUEST RENDERING AND PERFORMANCE");
@@ -3966,17 +4012,6 @@ DrawQuestGraphicsPage(void)
 	snprintf(rows[VR_GRAPHICS_PS2_ALPHA], sizeof(rows[0]),
 		"* PS2 ALPHA (FENCE FIX)  < %s >",
 		gPs2AlphaTest ? "ON" : "OFF");
-	snprintf(rows[VR_GRAPHICS_OPAQUE_ORDER], sizeof(rows[0]),
-		"OPAQUE ORDER EXPERIMENT  < %s >", gOpaqueOrderExperiment ? "ON" : "OFF");
-	snprintf(rows[VR_GRAPHICS_STATIC_INSTANCES], sizeof(rows[0]),
-		"STATIC INSTANCING  < %s >", gStaticInstances ? "ON" : "OFF");
-	snprintf(rows[VR_GRAPHICS_OPAQUE_MESH_BATCH], sizeof(rows[0]),
-		"OPAQUE MESH BATCH  < %s >", gOpaqueMeshBatch ? "ON" : "OFF");
-	snprintf(rows[VR_GRAPHICS_MASKED_ALPHA_SKIP], sizeof(rows[0]),
-		"MASKED ALPHA PASS SKIP  < %s >", gMaskedAlphaPassSkip ? "ON" : "OFF");
-	snprintf(rows[VR_GRAPHICS_OPAQUE_WORLD], sizeof(rows[0]),
-		"OPAQUE WORLD FAST PATH  < %s >",
-		gOpaqueWorldAlphaFastPath ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_MIPMAPS], sizeof(rows[0]),
 		"* GENERATE MIPMAPS  < %s >",
 		gGenerateMipmaps ? "ON (RESTART)" : "OFF");
@@ -4034,6 +4069,7 @@ DrawQuestGraphicsPage(void)
 		"QUICK TEST START  < %s - NEXT LAUNCH >",
 		gQuestQuickTestStart ? "ON" : "OFF");
 #endif
+	snprintf(rows[VR_GRAPHICS_OPTIMIZATIONS],sizeof(rows[0]),"OPTIMIZATIONS  < OPEN >");
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++)
 		// Compact rows leave room for the status footer.
@@ -4042,16 +4078,11 @@ DrawQuestGraphicsPage(void)
 			item == VR_GRAPHICS_PROFILER ||
 				item == VR_GRAPHICS_MIPMAPS ||
 				item == VR_GRAPHICS_PS2_ALPHA ||
-				item == VR_GRAPHICS_OPAQUE_WORLD ||
-				item == VR_GRAPHICS_OPAQUE_ORDER ||
-				item == VR_GRAPHICS_MASKED_ALPHA_SKIP ||
-				item == VR_GRAPHICS_OPAQUE_MESH_BATCH ||
-				item == VR_GRAPHICS_STATIC_INSTANCES ||
 				item == VR_GRAPHICS_MSAA ||
 				item == VR_GRAPHICS_DIAGNOSTICS ||
 				item == VR_GRAPHICS_FOLIAGE,
 			// Highlight the lighting submenu.
-			item == VR_GRAPHICS_DYNAMIC_LIGHTS);
+			item == VR_GRAPHICS_DYNAMIC_LIGHTS || item == VR_GRAPHICS_OPTIMIZATIONS);
 	if(scaleStatusValid){
 		char activeScale[192];
 		snprintf(activeScale, sizeof(activeScale),
@@ -5205,6 +5236,9 @@ VrDebugPixels(int *width, int *height)
 
 	if(gVrMenuVisible){
 		switch(gVrMenuPage){
+		case VR_MENU_PAGE_OPTIMIZATIONS:
+			DrawQuestOptimizationsPage();
+			break;
 		case VR_MENU_PAGE_GRAPHICS:
 			DrawQuestGraphicsPage();
 			break;
@@ -5644,6 +5678,13 @@ VrMaskedAlphaPassSkip(void)
 {
 	LoadVrSettings();
 	return gMaskedAlphaPassSkip != 0;
+}
+
+int
+VrWorldLodMode(void)
+{
+	LoadVrSettings();
+	return gWorldLodMode;
 }
 
 bool

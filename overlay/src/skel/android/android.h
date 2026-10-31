@@ -168,6 +168,7 @@ bool VrFxaaEnabled(void);
 // Build a mip chain for textures whose TXD carries a single level.
 bool VrGenerateMipmaps(void);
 // Saved benchmark control for proven-opaque world pipeline selection.
+int VrWorldLodMode(void);
 bool VrOpaqueWorldAlphaFastPath(void);
 bool VrOpaqueOrderExperiment(void);
 bool VrStaticInstances(void);
