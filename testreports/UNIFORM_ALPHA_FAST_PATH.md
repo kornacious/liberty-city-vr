@@ -7,7 +7,8 @@ mesh: alpha at or above the reference writes depth, and alpha below it blends
 without depth writes. Some distance-faded opaque materials have constant
 fragment alpha, making one half discard every fragment.
 
-The atomic world path now omits that empty half only when all of these hold:
+For uniform-alpha materials the atomic world path omits that empty half only
+when all of these hold (the masked-texture extension is described below):
 
 - The PS2 split is active and fragment alpha testing is enabled.
 - This is the unskinned world shader, outside dynamic-object and vehicle paths.
@@ -30,7 +31,7 @@ which cannot encode the shader's second comparison correctly.
 Rejection occurs before depth/alpha state changes, pipeline lookup, descriptor
 binding, scope capture and draw submission. The surviving half keeps its
 original pass index, signed shader reference and depth/blend behavior. Shader
-code and draw ordering are unchanged. Cutout foliage, glass, skinning and
+code and draw ordering are unchanged. Full-opacity cutouts, glass, skinning and
 unsupported cases keep the existing path; the PS2 alpha fix stays enabled.
 
 ## Profiling

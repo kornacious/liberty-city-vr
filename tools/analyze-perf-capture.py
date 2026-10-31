@@ -55,6 +55,25 @@ def summarize_atomic_submission(rows):
         "texture_skip_percent": 100*(t-tb)/t if t else None}
 
 
+def summarize_alpha_bound(rows):
+    keys = ["masked_alpha_bound_candidates", "masked_alpha_bound_solid_passes_skipped",
+            "masked_alpha_bound_indices_skipped"]
+    if not rows or any(key not in rows[0] for key in keys):
+        return None
+    valid, invalid = [], 0
+    for row in rows:
+        values = [int(row[key]) for key in keys]
+        if min(values) < 0 or values[1] > values[0]:
+            invalid += 1
+        else:
+            valid.append(values)
+    return {"valid_frames": len(valid), "invalid_frames": invalid,
+            "frames_with_skips": sum(v[1] > 0 for v in valid),
+            "totals": {key: sum(v[i] for v in valid) for i, key in enumerate(keys)},
+            "per_frame": {key: distribution([v[i] for v in valid]) for i, key in enumerate(keys)},
+            "note": "Conservative empty solid-pass decisions; indices are not multiplied by eye count. Not measured GPU savings."}
+
+
 def summarize_opaque_order(rows):
     keys = ["opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps"]
     if not rows or any(key not in rows[0] for key in keys):
@@ -460,6 +479,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
         "opaque_order": summarize_opaque_order(selected),
+        "masked_alpha_bound": summarize_alpha_bound(selected),
         "renderdoc_capture": {
             "diagnostic_run": metadata.get("renderdoc_attached_at_start") == "1" or
                 ";renderdoc=1;" in metadata.get("simulation_replay", "") or

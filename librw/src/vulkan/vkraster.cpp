@@ -1899,6 +1899,19 @@ rasterHasAlpha(Raster *raster)
 }
 
 bool32
+rasterHasNormalizedAlpha(const Raster *raster)
+{
+	if(raster == nil || raster->platform != PLATFORM_VULKAN ||
+	   (raster->type & 0xF) != Raster::TEXTURE ||
+	   (raster->parent != nil && raster->parent != raster))
+		return 0;
+	const VulkanRaster *native = GETVULKANRASTER(raster);
+	// Prove sampled alpha is bounded, rather than infer it from the hasAlpha
+	// hint. Unknown/compressed/float images retain both passes conservatively.
+	return native->view != VK_NULL_HANDLE && native->format == VK_FORMAT_R8G8B8A8_UNORM;
+}
+
+bool32
 allocateCompressed(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 {
 	// Adreno exposes ETC2 and ASTC but not BC/DXT, and every Vice City TXD is

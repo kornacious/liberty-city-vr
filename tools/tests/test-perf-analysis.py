@@ -201,6 +201,14 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["opaque_order"]["frames_with_swaps"], 2)
             self.assertEqual(result["opaque_order"]["per_frame"]["opaque_order_eligible"]["mean"], 20)
             self.assertIsNone(analysis.summarize_opaque_order([{"frame_id": "1"}]))
+            self.assertIsNone(result["masked_alpha_bound"])
+            bound = [{"masked_alpha_bound_candidates": "8", "masked_alpha_bound_solid_passes_skipped": "3",
+                      "masked_alpha_bound_indices_skipped": "6000000000"}]
+            self.assertEqual(analysis.summarize_alpha_bound(bound)["frames_with_skips"], 1)
+            self.assertEqual(analysis.summarize_alpha_bound(bound)["totals"]["masked_alpha_bound_indices_skipped"], 6000000000)
+            bound[0]["masked_alpha_bound_solid_passes_skipped"] = "9"
+            self.assertEqual(analysis.summarize_alpha_bound(bound)["invalid_frames"], 1)
+            self.assertIsNone(analysis.summarize_alpha_bound([{"frame_id": "1"}]))
             self.assertIsNone(result["opaque_order"]["candidate_accounting_valid"])
             self.assertEqual(result["opaque_order"]["rejection_totals"], {})
             reasons = [{"opaque_order_candidates": "8", "opaque_order_eligible": "2", "opaque_order_swaps": "1",

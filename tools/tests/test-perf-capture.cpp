@@ -110,6 +110,7 @@ int main()
         frame.renderdocCaptureActive = i==10?1:0;
         frame.opaqueOrderExperimentEnabled=i%2;
         frame.opaqueOrder={40,30,i%7};
+        frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason)
             frame.opaqueOrder.rejected[reason]=(i+reason)%11;
         if(writer.Submit(frame)) ++accepted;
@@ -150,6 +151,9 @@ int main()
         assert(std::stoi(row[column("opaque_order_candidates")]) == 40);
         assert(std::stoi(row[column("opaque_order_eligible")]) == 30);
         assert(std::stoi(row[column("opaque_order_swaps")]) == int(id%7));
+        assert(std::stoul(row[column("masked_alpha_bound_candidates")]) == 30+id%21);
+        assert(std::stoul(row[column("masked_alpha_bound_solid_passes_skipped")]) == id%21);
+        assert(std::stoull(row[column("masked_alpha_bound_indices_skipped")]) == 6000000000ULL+id);
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason){
             std::string key="opaque_order_reject_";key+=OpaqueOrder::RejectionName(reason);
             assert(std::stoi(row[column(key.c_str())]) == int((id+reason)%11));

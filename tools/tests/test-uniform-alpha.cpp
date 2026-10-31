@@ -4,13 +4,18 @@
 #include <cstdio>
 #include <limits>
 #include <initializer_list>
+#include <algorithm>
 namespace rw { namespace vulkan {
 using uint32=unsigned;
+using bool32=int;
 #define nil nullptr
 enum {SHADER_WORLD,SHADER_SKIN,SHADER_IM3D,ALPHAALWAYS=10,ALPHAGREATEREQUAL=11,PLATFORM_VULKAN=12};
-struct InstanceData {bool vertexAlpha=false;};
+struct InstanceData {bool vertexAlpha=false;unsigned numIndex=120;};
 struct Material {struct {unsigned char alpha=255;}color;};
-struct Raster {enum {TEXTURE=4,CAMERATEXTURE=5};int platform=PLATFORM_VULKAN,type=TEXTURE;Raster *parent=nullptr;};
+enum {VK_NULL_HANDLE=0,VK_FORMAT_R8G8B8A8_UNORM=37};
+struct VulkanRaster {int view=1,format=VK_FORMAT_R8G8B8A8_UNORM;};
+struct Raster {enum {TEXTURE=4,CAMERATEXTURE=5};int platform=PLATFORM_VULKAN,type=TEXTURE;Raster *parent=nullptr;VulkanRaster native;};
+#define GETVULKANRASTER(raster) (&(raster)->native)
 struct Geometry {enum {MODULATE=1};unsigned flags=MODULATE;};
 struct Texture {enum {WRAP=1,MIRROR,CLAMP,BORDER};};
 static bool vehicleAlphaPass=false,dynamicObjectPass=false;
@@ -18,6 +23,7 @@ static struct {unsigned alphaTestFunction=ALPHAGREATEREQUAL,alphaTestRef=2;
     bool vertexAlphaEnabled=false;unsigned zWriteEnabled=1;
     unsigned textureAddressU=Texture::WRAP,textureAddressV=Texture::WRAP;}gstate;
 static bool opaqueFastPathEnabled=true;
+static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
 static bool getOpaqueWorldAlphaFastPathEnabled(){return opaqueFastPathEnabled;}
 #include "uniform-alpha-production.inc"
 using VkPipeline=unsigned;
@@ -89,6 +95,9 @@ int main(){
     gstate.textureAddressV=Texture::CLAMP;assert(select()==Solid);gstate.textureAddressV=Texture::WRAP;
     gstate.textureAddressU=Texture::WRAP;
     assert(select(true,false,false,SHADER_WORLD,nullptr,&raster)==Solid);
+    assert(rasterHasNormalizedAlpha(&raster));
+    raster.native.view=0;assert(!rasterHasNormalizedAlpha(&raster));raster.native.view=1;
+    raster.native.format=99;assert(!rasterHasNormalizedAlpha(&raster));raster.native.format=VK_FORMAT_R8G8B8A8_UNORM;
     raster.type=Raster::CAMERATEXTURE;assert(select(true,false,false,SHADER_WORLD,nullptr,&raster)==Both);raster.type=Raster::TEXTURE;
     raster.platform=0;assert(select(true,false,false,SHADER_WORLD,nullptr,&raster)==Both);
     raster.platform=PLATFORM_VULKAN;raster.parent=&raster;
@@ -103,6 +112,53 @@ int main(){
         assert(Select(.25f,ref)==Both);
     for(float alpha:{-1.0f,2.0f,std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()})
         assert(Select(alpha,.5f)==Both);
+    // Execute the production selector against every normalized byte texture
+    // alpha, material alpha and split reference, with interpolation perturbations.
+    gAlphaBoundStats={};unsigned boundedChecks=0,skipped=0;
+    for(unsigned a=0;a<256;++a)for(unsigned r=0;r<256;++r){
+        material.color.alpha=static_cast<unsigned char>(a);
+        const float reference=r/255.f,maximum=a/255.f;
+        const unsigned mask=selectAtomicAlphaPasses(&inst,&material,&raster,&geometry,
+            SHADER_WORLD,nullptr,true,false,true,reference);
+        assert(mask==Both||mask==Faint);
+        skipped+=mask==Faint;
+        for(unsigned texel=0;texel<256;++texel){
+            float alpha=maximum*(texel/255.f);
+            for(float error:{-Margin*.5f,0.f,Margin*.5f}){
+                float sampled=std::clamp(alpha+error,0.f,1.f);
+                for(unsigned pass=0;pass<2;++pass){
+                    bool before=Keeps(pass,sampled,reference);
+                    bool after=(mask&(1u<<pass))&&Keeps(pass,sampled,reference);
+                    assert(before==after);++boundedChecks;
+                }
+            }
+        }
+    }
+    assert(skipped>30000 && gAlphaBoundStats.candidates==65536);
+    assert(gAlphaBoundStats.solidPassesSkipped==skipped);
+    assert(gAlphaBoundStats.indicesSkipped==uint64_t(skipped)*inst.numIndex);
+    material.color.alpha=64;
+    assert(select(true,false,true,SHADER_WORLD,nullptr,&raster)==Faint);
+    auto guarded=[&](){return select(true,false,true,SHADER_WORLD,nullptr,&raster);};
+    inst.vertexAlpha=true;assert(guarded()==Both);inst.vertexAlpha=false;
+    dynamicObjectPass=true;assert(guarded()==Both);dynamicObjectPass=false;
+    vehicleAlphaPass=true;assert(guarded()==Both);vehicleAlphaPass=false;
+    assert(select(true,true,true,SHADER_WORLD,nullptr,&raster)==Both);
+    assert(select(true,false,true,SHADER_SKIN,nullptr,&raster)==Both);
+    assert(select(true,false,true,SHADER_WORLD,&bones,&raster)==Both);
+    raster.native.format=99;assert(guarded()==Both);raster.native.format=VK_FORMAT_R8G8B8A8_UNORM;
+    raster.native.view=0;assert(guarded()==Both);raster.native.view=1;
+    raster.parent=&parent;assert(guarded()==Both);raster.parent=nullptr;
+    raster.parent=&raster;assert(guarded()==Faint);raster.parent=nullptr;
+    raster.platform=0;assert(guarded()==Both);raster.platform=PLATFORM_VULKAN;
+    raster.type=Raster::CAMERATEXTURE;assert(guarded()==Both);raster.type=Raster::TEXTURE;
+    gstate.textureAddressU=Texture::BORDER;assert(guarded()==Both);gstate.textureAddressU=Texture::WRAP;
+    gstate.alphaTestFunction=ALPHAALWAYS;assert(guarded()==Both);gstate.alphaTestFunction=ALPHAGREATEREQUAL;
+    geometry.flags=0;assert(guarded()==Both);geometry.flags=Geometry::MODULATE;
+    for(float ref:{0.f,1.f,.5f,Margin,1-Margin,std::numeric_limits<float>::quiet_NaN()})
+        assert(FromUpperBound(.5f,ref)==Both);
+    std::printf("PASS: %u masked-texture differential coverage checks, %u empty solid passes and exact decision counters.\n",boundedChecks,skipped);
+    material.color.alpha=64;
     for(float alpha:{.5f,.5f-Margin,.5f+Margin})assert(Select(alpha,.5f)==Both);
     assert(Select(std::nextafter(.5f+Margin,1.0f),.5f)==Solid);
     assert(Select(std::nextafter(.5f-Margin,0.0f),.5f)==Faint);

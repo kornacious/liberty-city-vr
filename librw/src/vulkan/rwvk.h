@@ -2,6 +2,7 @@
 #include "GpuPassProfile.h"
 #include "AtomicSubmission.h"
 #include "OpaqueOrder.h"
+#include "UniformAlphaPolicy.h"
 
 #ifdef RW_VULKAN
 #include <vulkan/vulkan.h>
@@ -75,6 +76,7 @@ bool32 rasterFromImage(Raster *raster, Image *image);
 Image *rasterToImage(Raster *raster);
 void setRasterHasAlpha(Raster *raster, bool32 hasAlpha);
 bool32 rasterHasAlpha(Raster *raster);
+bool32 rasterHasNormalizedAlpha(const Raster *raster);
 
 // Vehicle alpha atomics can contain both opaque bodywork and transparent
 // side-window meshes.  The game scopes this flag to its vehicle alpha list so
@@ -270,6 +272,7 @@ void resetFrameBeginStats(void);
 using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
+UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
 
 // True only when the most recent DEVICEOPEN failed while creating one of the
 // full-resolution colour/depth targets or its framebuffer. This lets the

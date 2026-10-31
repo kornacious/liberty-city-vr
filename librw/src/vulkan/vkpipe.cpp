@@ -35,13 +35,15 @@ static AtomicSubmissionStats gAtomicSubmissionStats;
 static bool32 gOpaqueOrderEnabled;
 static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
+static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
 void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback){gOpaqueOrderDefaultWrapper=callback;}
 void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
-void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};}
+void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
+UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
 struct AtomicMotionRecord
 {
@@ -470,17 +472,31 @@ selectAtomicAlphaPasses(const InstanceData *inst,const Material *material,
 	if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
 	   (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP))
 		return UniformAlphaPolicy::Both;
-	// A false alpha hint from an unsupported/subraster is not proof of
-	// uniform sampled alpha. Untextured draws bind the opaque white texture.
-	if(textureAlpha||(raster!=nil&&
-	   (raster->platform!=PLATFORM_VULKAN||
-	    (raster->type&0xF)!=Raster::TEXTURE||
-	    (raster->parent!=nil&&raster->parent!=raster))))
-		return UniformAlphaPolicy::Both;
 	// Match the actual shader multiplier, including ignored material colour
-	// on geometry without MODULATE. Vertex and texture alpha are both 1 here.
+	// without MODULATE. Constant vertex alpha is one after the guard above.
 	const float alpha=material&&(geometry->flags&Geometry::MODULATE)?
 		material->color.alpha/255.0f:1.0f;
+	if(textureAlpha){
+		++gAlphaBoundStats.candidates;
+		if(!rasterHasNormalizedAlpha(raster)) return UniformAlphaPolicy::Both;
+		// UNORM texture alpha (including filtered/mipped samples) is in [0,1].
+		// Hence fragColour.a * texColour.a <= material alpha. Preserve the
+		// original faint pass and its discard/blend/depth/motion behaviour.
+		const uint32 passes=UniformAlphaPolicy::FromUpperBound(alpha,reference);
+		if(passes==UniformAlphaPolicy::Faint){
+			++gAlphaBoundStats.solidPassesSkipped;
+			gAlphaBoundStats.indicesSkipped+=inst->numIndex;
+		}
+		return passes;
+	}
+	// A false alpha hint from an unsupported/subraster is not proof of
+	// uniform sampled alpha. Untextured draws bind the opaque white texture.
+	if(raster!=nil&&
+	   (raster->platform!=PLATFORM_VULKAN||
+	    (raster->type&0xF)!=Raster::TEXTURE||
+	    (raster->parent!=nil&&raster->parent!=raster)))
+		return UniformAlphaPolicy::Both;
+	// Existing uniform-alpha path: vertex and texture alpha are both one.
 	return UniformAlphaPolicy::Select(alpha,reference);
 }
 
