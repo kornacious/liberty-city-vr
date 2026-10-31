@@ -5,6 +5,7 @@
 #include "StaticReuseAudit.h"
 #include "StaticInstances.h"
 #include "WorldBackface.h"
+#include "WorldOcclusion.h"
 #include "OpaqueOrder.h"
 #include "UniformAlphaPolicy.h"
 
@@ -278,6 +279,15 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void setWorldOcclusionEnabled(bool32 enabled);
+bool32 getWorldOcclusionEnabled(void);
+bool32 isDefaultWorldRenderCallback(Atomic *atomic);
+void resetWorldOcclusion(void);
+bool32 beginWorldOcclusion(void);
+void addWorldOccluder(Atomic *atomic);
+void finishWorldOcclusion(void);
+bool32 isWorldOccluded(Atomic *atomic);
+WorldOcclusion::Stats getWorldOcclusionStats(void);
 void setWorldBackfaceEnabled(bool32 enabled);
 bool32 getWorldBackfaceEnabled(void);
 WorldBackface::Stats getWorldBackfaceStats(void);

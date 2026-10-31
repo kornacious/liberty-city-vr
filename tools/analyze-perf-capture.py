@@ -533,11 +533,18 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
-             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "static_instances_enabled", "world_lod_mode", "world_backface_enabled"] if key in rows[0]},
+             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "static_instances_enabled", "world_lod_mode", "world_backface_enabled", "world_occlusion_enabled"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),
         "static_instances": summarize_static_instances(selected),
+        "world_occlusion": {key: distribution([float(row[key]) for row in selected]) for key in
+            ("world_occlusion_builds", "world_occlusion_occluder_candidates", "world_occlusion_occluders",
+             "world_occlusion_triangles", "world_occlusion_cell_updates", "world_occlusion_candidates",
+             "world_occlusion_rejected", "world_occlusion_visible", "world_occlusion_invalid", "world_occlusion_budget",
+             "world_occlusion_left_cells", "world_occlusion_right_cells", "world_occlusion_raster_tests",
+             "world_occlusion_query_tests", "world_occlusion_indices_avoided", "world_occlusion_vertices_avoided",
+             "world_occlusion_build_ms", "world_occlusion_query_ms") if key in rows[0]},
         "world_backface": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_backface_candidates", "world_backface_draws", "world_backface_reject_state",
              "world_backface_reject_geometry", "world_backface_reject_view", "world_backface_reject_transform",

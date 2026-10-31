@@ -51,13 +51,14 @@ OpaqueMeshBatch::Stats getOpaqueMeshBatchStats(void){return gOpaqueMeshBatchStat
 static bool32 gMaskedAlphaPassSkipEnabled;
 void setMaskedAlphaPassSkipEnabled(bool32 enabled){gMaskedAlphaPassSkipEnabled=enabled!=0;}
 bool32 getMaskedAlphaPassSkipEnabled(void){return gMaskedAlphaPassSkipEnabled;}
+bool32 isDefaultWorldRenderCallback(Atomic *atomic){return atomic&&OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper);}
 void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback){gOpaqueOrderDefaultWrapper=callback;}
 void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
 static void resetStaticInstanceStats(void);
-void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};gWorldBackfaceStats={};resetStaticReuseSample(0,0);}
+void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};gWorldBackfaceStats={};resetWorldOcclusion();resetStaticReuseSample(0,0);}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
@@ -94,7 +95,7 @@ void setStaticInstancesEnabled(bool32 enabled){
 }
 StaticInstances::Stats getStaticInstancesStats(void){return gStaticInstanceStats;}
 bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
-	if(!gStaticInstancesEnabled&&!gWorldBackfaceEnabled)return 0;
+	if(!gStaticInstancesEnabled&&!gWorldBackfaceEnabled&&!getWorldOcclusionEnabled())return 0;
 	if(gInstanceDepth<DrawProfile::ContextDepth)gInstanceParents[gInstanceDepth]=gInstanceOwner;
 	gInstanceOwner=gInstanceDepth<DrawProfile::ContextDepth?DrawProfile::Entity(model,entityClass,name,flags):DrawProfile::Context{};
 	++gInstanceDepth;return 1;
@@ -1262,6 +1263,11 @@ defaultRenderCB(Atomic *atomic, InstanceDataHeader *header)
 	if(!gvk.inFrame || header->vbo == VK_NULL_HANDLE ||
 	   header->ibo == VK_NULL_HANDLE)
 		return;
+    // Reject before pipeline/descriptor binds, mesh iteration or draw emission.
+    // Entity attribution is maintained even when per-draw GPU sampling is off.
+    if(getWorldOcclusionEnabled()&&!dynamicObjectPass&&!vehicleAlphaPass&&
+       gInstanceOwner.entityClass==0&&gInstanceOwner.model>=0&&
+       !(gInstanceOwner.flags&DrawProfile::Distance)&&isWorldOccluded(atomic))return;
 	drawAtomicMeshes(atomic, header, SHADER_WORLD, nil);
 }
 

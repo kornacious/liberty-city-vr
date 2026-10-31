@@ -24,7 +24,7 @@ namespace GameRender
 {
 ProfileEntity::ProfileEntity(CEntity *entity){
 #ifdef RW_VULKAN
-	if(entity && (rw::vulkan::getStaticInstancesEnabled()||rw::vulkan::getWorldBackfaceEnabled()))
+	if(entity && (rw::vulkan::getStaticInstancesEnabled()||rw::vulkan::getWorldBackfaceEnabled()||rw::vulkan::getWorldOcclusionEnabled()))
 		instanceActive=rw::vulkan::beginStaticInstanceEntity(entity->GetModelIndex(),
 			entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
 			CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),

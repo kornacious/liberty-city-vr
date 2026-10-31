@@ -143,7 +143,7 @@ add_custom_target(librw_shaders DEPENDS ${LIBRW_SPIRV_HEADERS})
 # or the link fails.
 # ---------------------------------------------------------------------------
 file(GLOB LIBRW_CORE_SOURCES "${LIBRW_DIR}/src/*.cpp")
-file(GLOB LIBRW_VULKAN_SOURCES "${LIBRW_DIR}/src/vulkan/*.cpp")
+file(GLOB LIBRW_VULKAN_SOURCES CONFIGURE_DEPENDS "${LIBRW_DIR}/src/vulkan/*.cpp")
 file(GLOB LIBRW_D3D_SOURCES "${LIBRW_DIR}/src/d3d/*.cpp")
 file(GLOB LIBRW_D3D12_SOURCES "${LIBRW_DIR}/src/d3d12/*.cpp")
 file(GLOB LIBRW_GL_SOURCES "${LIBRW_DIR}/src/gl/*.cpp")

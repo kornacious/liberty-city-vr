@@ -26,7 +26,7 @@ namespace VrCullViz {static bool active;static int calls;inline bool IsActive(){
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
 namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}
-static int gProfilerDisplayMode=1,gOpaqueWorldAlphaFastPath=1,gOpaqueOrderExperiment=0,gMaskedAlphaPassSkip=0,gOpaqueMeshBatch=0,gStaticInstances=0,gWorldBackface=0;
+static int gProfilerDisplayMode=1,gOpaqueWorldAlphaFastPath=1,gOpaqueOrderExperiment=0,gMaskedAlphaPassSkip=0,gOpaqueMeshBatch=0,gStaticInstances=0,gWorldBackface=0,gWorldOcclusion=0;
 struct Rect {int left,top,right,bottom;};
 struct Text {std::string text;Rect bounds;};
 struct Row {std::string text;int y,scale;bool selected;};
@@ -78,6 +78,7 @@ static void VerifyOptimizations(){
  Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - FADE / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all four LOD states visible");
  Check(drawnRows[VR_OPT_STATIC_INSTANCES].text==std::string("STATIC INSTANCING  < ")+(gStaticInstances?"ON":"OFF")+" >","instancing state preserved in submenu");
  Check(drawnRows[VR_OPT_WORLD_BACKFACE].text==std::string("WORLD BACKFACE CULL  < ")+(gWorldBackface?"ON":"OFF")+" >","backface state visible");
+ Check(drawnRows[VR_OPT_WORLD_OCCLUSION].text==std::string("WORLD OCCLUSION  < ")+(gWorldOcclusion?"ON":"OFF")+" >","occlusion state visible");
  Check(highlights.size()==1,"one submenu selection");
  for(size_t i=0;i<drawnRows.size();++i){
   Check(drawnRows[i].selected==(int(i)==gVrOptimizationSelection),"submenu selection matches row");
@@ -97,7 +98,7 @@ int main(){
  }
  for(int mode=0;mode<WorldLodPolicy::Count;++mode)for(int state=0;state<2;++state)
   for(int selection=0;selection<VR_OPT_ITEM_COUNT;++selection){
-   Clear();gWorldLodMode=mode;gStaticInstances=state;gWorldBackface=state;gVrOptimizationSelection=selection;
+   Clear();gWorldLodMode=mode;gStaticInstances=state;gWorldBackface=state;gWorldOcclusion=state;gVrOptimizationSelection=selection;
    DrawQuestOptimizationsPage();VerifyOptimizations();
   }
  std::printf("Graphics layout: %u checks PASS; %d rows, %d rendered states, dev-tools %d; every selectable row and footer separate.\n",checks,VR_GRAPHICS_ITEM_COUNT,4*VR_GRAPHICS_ITEM_COUNT,MIAMIVR_DEV_TOOLS);

@@ -135,6 +135,60 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### Stereo world occlusion experiment
+
+Open **Graphics -> Optimizations -> World Occlusion**. `VR/WorldOcclusion`
+defaults OFF and applies immediately. The menu makes this experiment mutually
+exclusive with World Backface Cull: enabling either turns the other OFF.
+
+This CPU software occlusion pass rebuilds two 48 x 48 depth grids from the
+current frame's loaded, visible, solid static-building triangles. Collision
+boxes are used only for prioritization, never as opaque occluders. Each cell
+must be entirely covered by an actual triangle with a silhouette margin;
+partial triangle coverage cannot fill a window or fence gap. An affine depth
+plane stores a conservative far depth for that whole cell. An occludee uses
+its selected render geometry's complete vertex AABB, expanded on screen and
+compared at its nearest depth. It is skipped before default world mesh draw
+submission only if all relevant cells are nearer in **both** eye grids.
+
+There is no GPU depth readback and no prior-frame visibility reuse. Projection
+or camera-fold changes invalidate queries; near/far-plane crossings, missing
+instance data, fades, dynamic/unknown owners, unsupported callbacks/topologies
+and uncertain cases keep their original rendering. Occluders exclude alpha
+textures, vertex/material alpha, additive/no-Z-write/draw-last/scorched/damaged
+entities and non-default pipelines. The first loaded frame may lack eligible
+instance data and simply draws normally. Main world view only: alternate
+renderers, scope/wrist passes, temporal rendering, reflections/modern water,
+active dynamic-light effects, debug replacement views and backface-cull mode
+fall back to original rendering. The implementation targets the normal fixed
+benchmark settings; it does not claim support for every render configuration.
+
+Work is bounded to 128 prioritized entity candidates, up to 24 contributing
+occluders, 1024 sampled source triangles (at most 64 per entity), 8192 raster
+cell visits and 16384 query cell visits per app frame. Incomplete coverage and
+exhausted budgets reduce rejection rather than hiding uncertain geometry.
+This first version deliberately samples a subset of real opaque triangles;
+selected triangles remain exact and are not replaced by filled bounding boxes.
+
+Frame CSVs append `world_occlusion_enabled`, builds, occluder candidates,
+contributing occluders, source triangles, cell updates, queried atomic calls,
+rejected/visible calls, invalid/budget counts, coverage per eye, raster/query
+cell visits, avoided input indices/vertices, and build/query CPU milliseconds.
+These are input-work estimates, not measured GPU vertex invocations, unique
+object counts or compositor statistics. Indexed geometry shared by multiple
+passes can appear repeatedly; skipped alpha split passes are not multiplied
+into the input estimates. Metadata records the starting state and policy.
+The analyzer summarizes the new counters and includes the toggle in settings.
+
+Replay **OFF -> ON -> OFF -> ON**, keeping World Model LOD AGGRESSIVE, World
+Backface Cull OFF, Static Instancing and all remaining settings fixed. Use a
+normal launch without RenderDoc/auto-capture. No special cache warm-up is
+needed: the depth grids are rebuilt every frame. Watch both eyes for missing
+walls, holes, side views and fast-turn disocclusion. The experiment must save
+more submission/GPU work than its measured CPU cost to be worth enabling.
+Host tests and compilation do not establish device visual correctness or a
+performance gain; those remain to be checked with the controlled recordings.
+
 ### Guarded world backface culling experiment
 
 Open **Graphics -> Optimizations -> World Backface Cull**. The persisted

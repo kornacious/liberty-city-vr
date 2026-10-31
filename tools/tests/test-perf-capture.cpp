@@ -112,7 +112,8 @@ int main()
         frame.opaqueOrder={40,30,i%7};
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
-        frame.worldBackfaceEnabled=i%2;frame.worldBackface.draws=7;frame.worldBackface.indices=6000000000ULL+i;frame.worldBackface.certifyMs=.123456;
+        frame.worldOcclusionEnabled=i%2;frame.worldOcclusion.rejected=19;frame.worldOcclusion.vertices=6000000000ULL+i;frame.worldOcclusion.buildMs=.234567;
+          frame.worldBackfaceEnabled=i%2;frame.worldBackface.draws=7;frame.worldBackface.indices=6000000000ULL+i;frame.worldBackface.certifyMs=.123456;
           frame.worldLodMode=i%3;frame.worldLod={11,12,13,14,15,16,17};
         frame.staticInstancesEnabled=i%2;
         frame.staticInstances={};frame.staticInstances.queued=12;frame.staticInstances.groups=2;
@@ -173,7 +174,11 @@ int main()
         assert(std::stoull(row[column("static_reuse_source_frame_id")]) == id);
         assert(std::stoi(row[column("static_reuse_compatible_instances")]) == 3);
         assert(std::stoi(row[column("static_reuse_top_model")]) == 1416);
-        assert(std::stoi(row[column("world_backface_enabled")])==int(id%2));
+        assert(std::stoi(row[column("world_occlusion_enabled")])==int(id%2));
+          assert(std::stoi(row[column("world_occlusion_rejected")])==19);
+          assert(std::stoull(row[column("world_occlusion_vertices_avoided")])==6000000000ULL+id);
+          assert(std::abs(std::stod(row[column("world_occlusion_build_ms")])-.234567)<1e-7);
+          assert(std::stoi(row[column("world_backface_enabled")])==int(id%2));
           assert(std::stoi(row[column("world_backface_draws")])==7);
           assert(std::stoull(row[column("world_backface_indices")])==6000000000ULL+id);
           assert(std::abs(std::stod(row[column("world_backface_certify_ms")])-.123456)<1e-7);

@@ -195,6 +195,7 @@ static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
 static int gStaticInstances = 0;
 static int gWorldBackface = 0;
+static int gWorldOcclusion = 0;
 static int gMaskedAlphaPassSkip = 0;
 // The game's point lights -- headlights, explosions, street lamps --
 // evaluated per pixel against the world instead of being folded into the
@@ -710,6 +711,7 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_OPAQUE_MESH_BATCH,
 	VR_OPT_STATIC_INSTANCES,
 	VR_OPT_WORLD_BACKFACE,
+	VR_OPT_WORLD_OCCLUSION,
 	VR_OPT_OPAQUE_ORDER,
 	VR_OPT_BACK,
 	VR_OPT_ITEM_COUNT
@@ -1302,6 +1304,7 @@ LoadVrSettings(void)
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gWorldLodMode = WorldLodPolicy::ClampMode(GetPrivateProfileIntA("VR", "WorldLodMode", WorldLodPolicy::On, ".\\vr_settings.ini"));
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
+	gWorldOcclusion = GetPrivateProfileIntA("VR", "WorldOcclusion", 0, ".\\vr_settings.ini") != 0;
 	gWorldBackface = GetPrivateProfileIntA("VR", "WorldBackface", 0, ".\\vr_settings.ini") != 0;
 	gStaticInstances = GetPrivateProfileIntA("VR", "StaticInstances", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
@@ -2937,8 +2940,20 @@ VrDebugUpdate(const PadInput &in)
 				gWorldLodMode = (gWorldLodMode+(positivePulse?1:WorldLodPolicy::Count-1))%WorldLodPolicy::Count;
 				SaveVrInteger("WorldLodMode",gWorldLodMode);
 				VrWorldLod::SetMode(gWorldLodMode);
+			}else if(gVrOptimizationSelection == VR_OPT_WORLD_OCCLUSION){
+                gWorldOcclusion=!gWorldOcclusion;
+                if(gWorldOcclusion&&gWorldBackface){
+                    gWorldBackface=0;SaveVrInteger("WorldBackface",0);
+                    rw::vulkan::setWorldBackfaceEnabled(0);
+                }
+                SaveVrInteger("WorldOcclusion",gWorldOcclusion);
+                rw::vulkan::setWorldOcclusionEnabled(gWorldOcclusion);
 			}else if(gVrOptimizationSelection == VR_OPT_WORLD_BACKFACE){
                 gWorldBackface=!gWorldBackface;
+                if(gWorldBackface&&gWorldOcclusion){
+                    gWorldOcclusion=0;SaveVrInteger("WorldOcclusion",0);
+                    rw::vulkan::setWorldOcclusionEnabled(0);
+                }
                 SaveVrInteger("WorldBackface",gWorldBackface);
                 rw::vulkan::setWorldBackfaceEnabled(gWorldBackface);
 			}else if(gVrOptimizationSelection == VR_OPT_STATIC_INSTANCES){
@@ -3994,10 +4009,13 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_STATIC_INSTANCES],sizeof(rows[0]),"STATIC INSTANCING  < %s >",gStaticInstances?"ON":"OFF");
 	snprintf(rows[VR_OPT_OPAQUE_ORDER],sizeof(rows[0]),"OPAQUE ORDER EXPERIMENT  < %s >",gOpaqueOrderExperiment?"ON":"OFF");
 	snprintf(rows[VR_OPT_WORLD_BACKFACE],sizeof(rows[0]),"WORLD BACKFACE CULL  < %s >",gWorldBackface?"ON":"OFF");
+	snprintf(rows[VR_OPT_WORLD_OCCLUSION],sizeof(rows[0]),"WORLD OCCLUSION  < %s >",gWorldOcclusion?"ON":"OFF");
 	strcpy(rows[VR_OPT_BACK],"BACK TO GRAPHICS");
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
 		DrawFullVrMenuRow(rows[item],180+item*40,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
-	DrawVrMenuText(gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
+	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_WORLD_OCCLUSION?"BOTH EYES MUST BE HIDDEN; SWITCHES BACKFACE CULL OFF":
+        gVrOptimizationSelection==VR_OPT_WORLD_BACKFACE?"CLOSED OPAQUE MESHES; SWITCHES WORLD OCCLUSION OFF":
+        gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
 		gWorldLodMode==WorldLodPolicy::Aggressive?"EARLIER SWITCHING; UNPAIRED DETAIL FADES OUT":
 		gWorldLodMode==WorldLodPolicy::Performance?"EARLIER WORLD LOD SWITCHING; DISTANT COVERAGE KEPT":
 		"ON PRESERVES THE CURRENT WORLD LOD DISTANCES",VR_MENU_WIDTH/2,580,2,240,178,48);
@@ -5677,6 +5695,13 @@ VrOpaqueOrderExperiment(void)
 {
 	LoadVrSettings();
 	return gOpaqueOrderExperiment != 0;
+}
+
+bool
+VrWorldOcclusion(void)
+{
+	LoadVrSettings();
+	return gWorldOcclusion != 0;
 }
 
 bool
