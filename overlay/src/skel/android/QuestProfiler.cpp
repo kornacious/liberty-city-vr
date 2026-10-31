@@ -272,6 +272,7 @@ StartFrameCapture(void)
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
+	details += "static_reuse_policy,sampled_static_building_exact_range_state_v1_32m_32owners_2048slots\n";
 	details += "opaque_mesh_batch_at_start," + std::to_string(rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0) + "\n";
 	details += "masked_alpha_pass_skip_at_start," + std::to_string(rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0) + "\n";
 	details += "opaque_order_policy,bounded_32_adjacent_disjoint_stereo_depth_static_opaque_v3_lit_buildings\n";
@@ -1468,6 +1469,7 @@ QuestProfilerEndAppFrame(void)
 		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
 		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
 	}
+	gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();
 	gCaptureFrame.opaqueMeshBatchEnabled = rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0;
 	gCaptureFrame.opaqueMeshBatch = rw::vulkan::getOpaqueMeshBatchStats();
 	gCaptureFrame.alphaBound = rw::vulkan::getAlphaBoundStats();

@@ -112,6 +112,10 @@ int main()
         frame.opaqueOrder={40,30,i%7};
         frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
         frame.maskedAlphaPassSkipEnabled=i%2;
+        frame.staticReuse={};
+        frame.staticReuse.sourceFrame=i;frame.staticReuse.sampled=1;
+        frame.staticReuse.candidates=10;frame.staticReuse.compatibleInstances=3;
+        frame.staticReuse.topModel=1416;frame.staticReuse.cpuMs=.012345;
         frame.opaqueMeshBatchEnabled=i%2;
         frame.opaqueMeshBatch={100,99,64,62,7,8,9};
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason)
@@ -160,6 +164,10 @@ int main()
         assert(std::stoi(row[column("masked_alpha_pass_skip_enabled")]) == int(id%2));
         assert(std::stoi(row[column("opaque_mesh_batch_enabled")]) == int(id%2));
         assert(std::stoi(row[column("opaque_mesh_batch_saved_draws")]) == 62);
+        assert(std::stoull(row[column("static_reuse_source_frame_id")]) == id);
+        assert(std::stoi(row[column("static_reuse_compatible_instances")]) == 3);
+        assert(std::stoi(row[column("static_reuse_top_model")]) == 1416);
+        assert(std::abs(std::stod(row[column("static_reuse_cpu_ms")])-.012345)<1e-7);
         assert(std::stoi(row[column("opaque_mesh_batch_reject_range")]) == 9);
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason){
             std::string key="opaque_order_reject_";key+=OpaqueOrder::RejectionName(reason);

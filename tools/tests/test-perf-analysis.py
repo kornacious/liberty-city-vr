@@ -10,6 +10,30 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_static_reuse_sample_identity_and_limits(self):
+        keys = ["candidates", "groups", "geometry_repeats", "compatible_instances",
+                "nearby_instances", "adjacent_instances", "reject_state", "reject_owner",
+                "reject_transform", "table_overflow", "owner_overflow", "max_instances"]
+        row={"static_reuse_"+k:"0" for k in keys}
+        row.update(frame_id="9",static_reuse_source_frame_id="9",static_reuse_sampled="1",
+                   static_reuse_cpu_ms="0.12",static_reuse_top_model="1416")
+        row.update(static_reuse_candidates="12",static_reuse_groups="2",
+                   static_reuse_compatible_instances="3",static_reuse_nearby_instances="2",
+                   static_reuse_table_overflow="1")
+        out=analysis.summarize_static_reuse([row])
+        self.assertEqual(out["sampled_frames"],1)
+        self.assertEqual(out["totals"]["compatible_instances"],3)
+        self.assertEqual(out["per_sample"]["cpu_ms"]["mean"],.12)
+        self.assertEqual(out["totals"]["table_overflow"],1)
+        self.assertEqual(analysis.summarize_static_reuse([row,row])["invalid_frames"],1)
+        stale=dict(row,static_reuse_source_frame_id="8")
+        self.assertEqual(analysis.summarize_static_reuse([stale])["invalid_frames"],1)
+        invalid=dict(row,static_reuse_nearby_instances="4")
+        self.assertEqual(analysis.summarize_static_reuse([invalid])["invalid_frames"],1)
+        off=dict(row,static_reuse_sampled="0")
+        self.assertEqual(analysis.summarize_static_reuse([off])["sampled_frames"],0)
+        self.assertIsNone(analysis.summarize_static_reuse([{"frame_id":"1"}]))
+
     def test_draw_companion_alignment_reconciliation_and_missing(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/"test.frames.csv"

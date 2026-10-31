@@ -66,9 +66,9 @@ static bool32 gpuPassRecording(void){
 		gvk.frames[gvk.activeFrame].gpuEpoch==gGpuEpoch && gvk.frames[gvk.activeFrame].gpuProfile.sampled;
 }
 bool32 gpuProfileSampling(void){return gpuPassRecording();}
-void beginGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}
-void endGpuProfilePass(uint32 pass){if(gpuPassRecording())writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}
-void countGpuProfileDraw(uint32 count,uint32 topology,uint32 flags){if(gpuPassRecording())gvk.frames[gvk.activeFrame].gpuProfile.Draw(count,topology,flags);}
+void beginGpuProfilePass(uint32 pass){if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.Begin(pass));}}
+void endGpuProfilePass(uint32 pass){if(gpuPassRecording()){staticReuseBoundary();writeGpuPassMarker(gvk.frames[gvk.activeFrame].gpuProfile.End(pass));}}
+void countGpuProfileDraw(uint32 count,uint32 topology,uint32 flags){if(gpuPassRecording()){gvk.frames[gvk.activeFrame].gpuProfile.Draw(count,topology,flags);finishStaticReuseDraw();}}
 bool32 beginGpuProfileEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
 	if(!gpuPassRecording())return 0;
 	gvk.frames[gvk.activeFrame].gpuProfile.geometry.Begin(DrawProfile::Entity(model,entityClass,name,flags));
@@ -2539,6 +2539,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	frame.gpuTimingActive=gvk.frameTimestampEnabled && frame.timestampQueryPool!=VK_NULL_HANDLE;
 	frame.gpuEpoch=gGpuEpoch;frame.gpuSourceId=gGpuSourceId;frame.gpuSourceStartNs=gGpuSourceStartNs;
 	frame.gpuProfile.Reset(frame.gpuTimingActive && GpuPassProfile::ShouldSample(frame.gpuSourceId));
+	resetStaticReuseSample(frame.gpuProfile.sampled,frame.gpuSourceId);
 	if(frame.gpuTimingActive){
 		vkCmdResetQueryPool(gvk.frameCommands,
 		                    frame.timestampQueryPool, 0, frame.gpuProfile.sampled?GpuPassProfile::QueryCount:2);

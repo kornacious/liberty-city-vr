@@ -135,6 +135,53 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### Cross-object static reuse audit
+
+Minimal and full profiling automatically collect `static_reuse_*` on the native
+GPU profiler's rotating one-in-eight source frames. Two matching normal demo
+playbacks are sufficient for this opportunity audit; keep Opaque Mesh Batch,
+Opaque Order Experiment and Masked Alpha Pass Skip OFF, Forward View ON, and
+RenderDoc/auto-capture OFF. This build adds measurements for selecting an
+instancing prototype; it does not implement instanced rendering or draw savings.
+
+The audit accepts default-pipeline opaque static buildings in roads/world/fading
+phases, with depth testing/writes and no alpha test. Dynamic/skinned/custom
+callbacks, material effects, translucent/split-alpha meshes, unknown owners,
+offscreen wrist targets and invalid transforms are excluded. It groups exact
+shared geometry ranges, pipeline and texture descriptor handles, model ID and
+all non-transform push data, including material state and per-object lighting.
+Render-phase boundaries separate groups. Equal geometry content in separate
+allocations is not detected. Untracked global state still needs checking before
+any grouping is used to change rendering.
+
+- `source_frame_id` refers to the current CPU-side `frame_id`, unlike delayed
+  GPU result IDs. `sampled=0` rows carry no audit; do not average them as zeros.
+- `candidates` counts eligible draw observations; `groups` counts exact-state
+  groups. `geometry_repeats` counts draw observations sharing a geometry range
+  with an earlier different owner, even if state differs; it is not unique
+  instance count.
+- `compatible_instances` deduplicates object identities within each exact-state
+  group and counts owners after the first. `nearby_instances` is its subset
+  within 32 metres of the first owner. Neither implies safe reordering or
+  predicted draw savings. An object with multiple meshes can count per range.
+- `adjacent_instances` counts consecutive compatible different-owner draw
+  transitions. Intervening unsupported draws and phase boundaries break it;
+  transitions can revisit owners and are not a unique-instance count.
+- `max_instances` and `top_model` identify the largest observed group, with
+  first-seen tie breaking. They are not GPU cost rankings.
+- `cpu_ms` measures the in-draw audit, including matching and clock overhead.
+  Per-atomic eligibility setup and phase/reset hooks are outside this timer.
+  Sampled frames can be slower; treat this build as diagnostic and do not
+  subtract this partial timer to manufacture an uninstrumented benchmark.
+- Storage is bounded to 2048 geometry and state slots, 64 probes per lookup and
+  32 owners per state group, with no per-draw allocation. `table_overflow` and
+  `owner_overflow` disclose truncated observations; resulting counts are lower
+  bounds. `reject_state`, `reject_owner` and `reject_transform` explain exclusions.
+
+Geometry, object and Vulkan handles remain in process-local tables; only numeric
+counts and model IDs enter the CSV. The analysis tool verifies source-frame
+identity and summarizes valid sampled rows separately from unsampled rows.
+
 ### Opaque mesh batching experiment
 
 Graphics → **Opaque Mesh Batch** is a persisted, default-OFF benchmark switch

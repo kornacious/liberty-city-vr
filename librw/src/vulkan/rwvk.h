@@ -2,6 +2,7 @@
 #include "GpuPassProfile.h"
 #include "AtomicSubmission.h"
 #include "OpaqueMeshBatch.h"
+#include "StaticReuseAudit.h"
 #include "OpaqueOrder.h"
 #include "UniformAlphaPolicy.h"
 
@@ -274,6 +275,10 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void resetStaticReuseSample(bool32 sampled,uint64 sourceFrame);
+void staticReuseBoundary(void);
+void finishStaticReuseDraw(void);
+StaticReuseAudit::Stats getStaticReuseStats(void);
 void setOpaqueMeshBatchEnabled(bool32 enabled);
 bool32 getOpaqueMeshBatchEnabled(void);
 OpaqueMeshBatch::Stats getOpaqueMeshBatchStats(void);

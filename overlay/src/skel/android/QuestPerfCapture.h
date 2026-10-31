@@ -5,6 +5,7 @@
 #include "vulkan/DrawProfile.h"
 #include "vulkan/AtomicSubmission.h"
 #include "vulkan/OpaqueMeshBatch.h"
+#include "vulkan/StaticReuseAudit.h"
 #include "vulkan/OpaqueOrder.h"
 #include "vulkan/UniformAlphaPolicy.h"
 #include <memory>
@@ -140,6 +141,7 @@ struct Frame {
     rw::vulkan::UniformAlphaPolicy::BoundStats alphaBound{};
     int opaqueMeshBatchEnabled=0;
     OpaqueMeshBatch::Stats opaqueMeshBatch{};
+    StaticReuseAudit::Stats staticReuse{};
     int maskedAlphaPassSkipEnabled=0;
     int activeModels[5]{}, requestedModel = 0;
     float renderScale = -1;
@@ -214,8 +216,14 @@ class Writer {
         std::fprintf(frames,",%u,%u,%llu,%d",f.alphaBound.candidates,f.alphaBound.solidPassesSkipped,
             (unsigned long long)f.alphaBound.indicesSkipped,f.maskedAlphaPassSkipEnabled);
         const auto &mb=f.opaqueMeshBatch;
-        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u\n",f.opaqueMeshBatchEnabled,
+        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u",f.opaqueMeshBatchEnabled,
             mb.eligible,mb.checks,mb.merged,mb.savedDraws,mb.rejectedState,mb.rejectedMaterial,mb.rejectedRange);
+        const auto &reuse=f.staticReuse;
+        std::fprintf(frames,",%llu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,%.6f\n",
+            (unsigned long long)reuse.sourceFrame,reuse.sampled,reuse.candidates,reuse.groups,
+            reuse.geometryRepeats,reuse.compatibleInstances,reuse.nearbyInstances,reuse.adjacentInstances,
+            reuse.rejectedState,reuse.rejectedOwner,reuse.rejectedTransform,reuse.tableOverflow,
+            reuse.ownerOverflow,reuse.maxInstances,reuse.topModel,reuse.cpuMs);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -307,7 +315,7 @@ public:
         std::fputs(",opaque_world_alpha_fast_path_enabled,replay_forward_view_active,vk_static_atomic_calls,vk_static_atomic_pipeline_requests,vk_static_atomic_pipeline_binds,vk_static_atomic_texture_requests,vk_static_atomic_texture_binds,vk_static_atomic_texture_lookups,renderdoc_capture_active,opaque_order_experiment_enabled,opaque_order_candidates,opaque_order_eligible,opaque_order_swaps",frames);
         for(unsigned i=0;i<OpaqueOrder::RejectionCount;++i)
             std::fprintf(frames,",opaque_order_reject_%s",OpaqueOrder::RejectionName(i));
-        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled,opaque_mesh_batch_enabled,opaque_mesh_batch_eligible,opaque_mesh_batch_checks,opaque_mesh_batch_merged_meshes,opaque_mesh_batch_saved_draws,opaque_mesh_batch_reject_state,opaque_mesh_batch_reject_material,opaque_mesh_batch_reject_range\n",frames);
+        std::fputs(",masked_alpha_bound_candidates,masked_alpha_bound_solid_passes_skipped,masked_alpha_bound_indices_skipped,masked_alpha_pass_skip_enabled,opaque_mesh_batch_enabled,opaque_mesh_batch_eligible,opaque_mesh_batch_checks,opaque_mesh_batch_merged_meshes,opaque_mesh_batch_saved_draws,opaque_mesh_batch_reject_state,opaque_mesh_batch_reject_material,opaque_mesh_batch_reject_range,static_reuse_source_frame_id,static_reuse_sampled,static_reuse_candidates,static_reuse_groups,static_reuse_geometry_repeats,static_reuse_compatible_instances,static_reuse_nearby_instances,static_reuse_adjacent_instances,static_reuse_reject_state,static_reuse_reject_owner,static_reuse_reject_transform,static_reuse_table_overflow,static_reuse_owner_overflow,static_reuse_max_instances,static_reuse_top_model,static_reuse_cpu_ms\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

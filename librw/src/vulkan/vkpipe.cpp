@@ -5,6 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include <chrono>
 #include <unordered_map>
 
 #include "../rwbase.h"
@@ -36,6 +37,11 @@ static bool32 gOpaqueOrderEnabled;
 static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
 static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
+static StaticReuseAudit::Recording<> gStaticReuse;
+void resetStaticReuseSample(bool32 sampled,uint64 sourceFrame){gStaticReuse.Reset(sampled!=0,sourceFrame);}
+void staticReuseBoundary(void){gStaticReuse.Boundary();}
+void finishStaticReuseDraw(void){gStaticReuse.FinishDraw();}
+StaticReuseAudit::Stats getStaticReuseStats(void){return gStaticReuse.stats;}
 static bool32 gOpaqueMeshBatchEnabled;
 static OpaqueMeshBatch::Stats gOpaqueMeshBatchStats;
 void setOpaqueMeshBatchEnabled(bool32 enabled){gOpaqueMeshBatchEnabled=enabled!=0;}
@@ -49,7 +55,7 @@ void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
-void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};}
+void resetAtomicSubmissionStats(void){gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};resetStaticReuseSample(0,0);}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
@@ -675,7 +681,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
 	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled;
-	const bool batchAtomic = gOpaqueMeshBatchEnabled && cacheBindings &&
+	const bool auditSampling = gpuProfileSampling();
+	const bool staticAtomic = (gOpaqueMeshBatchEnabled || auditSampling) && cacheBindings &&
 		OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper) &&
 		geometry->numMorphTargets==1 && !geometry->lockedSinceInst &&
 		atomic->getPipeline() && atomic->getPipeline()->platform==PLATFORM_VULKAN &&
@@ -683,6 +690,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		((ObjPipeline*)atomic->getPipeline())->renderCB==defaultRenderCB &&
 		!(geometry->flags & Geometry::NATIVE) &&
 		header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	const bool batchAtomic = gOpaqueMeshBatchEnabled && staticAtomic;
 	const bool measureBatch = gOpaqueMeshBatchEnabled && gvk.frameTimestampEnabled;
 	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout>
 		bindings(cacheBindings,measureBindings);
@@ -912,6 +920,41 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		if(measureBatch && batchMeshes>1){
 			gOpaqueMeshBatchStats.merged+=batchMeshes;
 			gOpaqueMeshBatchStats.savedDraws+=batchMeshes-1;
+		}
+		// Sampled feasibility audit only: ignore transform in the grouping key,
+		// but require exact geometry range, pipeline, descriptor and lighting.
+		// No GPU command/state is changed by this measurement.
+		if(auditSampling){
+			const auto auditStart=std::chrono::steady_clock::now();
+			const auto &recording=gvk.frames[gvk.activeFrame].gpuProfile;
+			const auto &owner=recording.geometry.entity;
+			const bool worldPhase=recording.active==GpuPassProfile::Roads ||
+				recording.active==GpuPassProfile::World || recording.active==GpuPassProfile::Fading;
+			if(owner.entityClass!=0 || owner.model<0)
+				++gStaticReuse.stats.rejectedOwner;
+			else if(!staticAtomic || !worldPhase || gvk.wristPanelOffscreen ||
+				wantsBlend || gsSplit || inst->vertexAlpha || textureAlpha ||
+				!profileDepthWrite || !gstate.zTestEnabled || profileAlphaTest ||
+				gvk.im3dWaterDraw || !sameOpaqueBatchMaterial(material,material))
+				++gStaticReuse.stats.rejectedState;
+			else{
+				bool finite=true;
+				for(float value:push.model)if(!isfinite(value))finite=false;
+				if(!finite)++gStaticReuse.stats.rejectedTransform;
+				else{
+					StaticReuseAudit::Key key;
+					key.geometry=(uint64)(uintptr_t)header;
+					key.pipeline=(uint64)(uintptr_t)pipeline;
+					key.texture=(uint64)(uintptr_t)textureSet;
+					key.first=inst->offset/2;key.count=drawIndices;key.model=owner.model;
+					static_assert(sizeof(PushConstants)==128,"Audit non-transform push layout");
+					memcpy(key.state,push.materialColour,sizeof(key.state));
+					const float position[3]={ltm->pos.x,ltm->pos.y,ltm->pos.z};
+					gStaticReuse.Observe(key,(uint64)(uintptr_t)atomic,position);
+				}
+			}
+			gStaticReuse.stats.cpuMs+=std::chrono::duration<double,std::milli>(
+				std::chrono::steady_clock::now()-auditStart).count();
 		}
 		vkCmdPushConstants(commandBuffer, getPipelineLayout(),
 		                   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,

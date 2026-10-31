@@ -29,6 +29,40 @@ ATOMIC_SUBMISSION_COLUMNS = ["vk_static_atomic_calls", "vk_static_atomic_pipelin
     "vk_static_atomic_texture_binds", "vk_static_atomic_texture_lookups"]
 
 
+def summarize_static_reuse(rows):
+    if not rows or "static_reuse_sampled" not in rows[0]:
+        return None
+    counters = ["candidates", "groups", "geometry_repeats", "compatible_instances",
+                "nearby_instances", "adjacent_instances", "reject_state", "reject_owner",
+                "reject_transform", "table_overflow", "owner_overflow", "max_instances"]
+    valid, invalid, models, seen = [], 0, Counter(), set()
+    for row in rows:
+        if row["static_reuse_sampled"] == "0":
+            continue
+        try:
+            source = int(row["static_reuse_source_frame_id"])
+            values = {key: int(row["static_reuse_"+key]) for key in counters}
+            cpu = float(row["static_reuse_cpu_ms"])
+            model = int(row["static_reuse_top_model"])
+            if (row["static_reuse_sampled"] != "1" or source != int(row["frame_id"]) or source in seen
+                    or min(values.values()) < 0 or not math.isfinite(cpu) or cpu < 0
+                    or values["groups"] > values["candidates"]
+                    or values["nearby_instances"] > values["compatible_instances"]
+                    or values["compatible_instances"] > values["candidates"]):
+                raise ValueError("Invalid static reuse sample")
+            seen.add(source);values["cpu_ms"] = cpu;valid.append(values)
+            if model >= 0: models[model] += 1
+        except (KeyError, ValueError):
+            invalid += 1
+    return {"sampled_frames": len(valid), "invalid_frames": invalid,
+            "per_sample": {key: distribution([v[key] for v in valid]) for key in counters+["cpu_ms"]},
+            "totals": {key: sum(v[key] for v in valid) for key in counters},
+            "top_model_frame_counts": dict(models),
+            "note": "Opportunity counts, not merged draws or predicted savings. CPU-side source frame; sampled only. "
+                    "Geometry repeats are draw-level; compatible instances deduplicate owners per exact-state group. "
+                    "Near counts are within 32 m of the first owner. Overflow makes counts lower bounds."}
+
+
 def summarize_atomic_submission(rows):
     if not rows or any(key not in rows[0] for key in ATOMIC_SUBMISSION_COLUMNS):
         return None
@@ -478,6 +512,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
+        "static_reuse": summarize_static_reuse(selected),
         "opaque_mesh_batch": {key: {"mean": sum(int(r[key]) for r in selected)/len(selected), "max": max(int(r[key]) for r in selected)}
             for key in ("opaque_mesh_batch_eligible", "opaque_mesh_batch_checks", "opaque_mesh_batch_merged_meshes",
                 "opaque_mesh_batch_saved_draws", "opaque_mesh_batch_reject_state", "opaque_mesh_batch_reject_material",
