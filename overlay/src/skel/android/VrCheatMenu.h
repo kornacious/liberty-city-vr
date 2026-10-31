@@ -5,8 +5,8 @@
 // use the original source index.
 namespace VrCheatMenu {
 enum Category {
-	GENERAL, WANTED, WEAPONS, APPEARANCE, WEATHER, VEHICLE_SELECTOR,
-	SPECIAL_VEHICLES, VEHICLE_EFFECTS, PEDESTRIANS, CATEGORY_COUNT
+	GENERAL, WANTED, WEAPONS, WEATHER, VEHICLE_SELECTOR,
+	VEHICLE_EFFECTS, PEDESTRIANS, CATEGORY_COUNT, HIDDEN = 255
 };
 
 static const unsigned char kSourceCategories[] = {
@@ -22,9 +22,9 @@ static const unsigned char kSourceCategories[] = {
 	GENERAL,          // ADD 250000 MONEY
 	WANTED,           // RAISE WANTED
 	WANTED,           // CLEAR WANTED
-	SPECIAL_VEHICLES, // SPAWN RHINO
+	VEHICLE_SELECTOR, // SPAWN RHINO
 	VEHICLE_EFFECTS,  // BLOW UP ALL CARS
-	APPEARANCE,       // CHANGE PLAYER PED
+	HIDDEN,           // CHANGE PLAYER PED
 	PEDESTRIANS,      // PEDESTRIAN MAYHEM
 	PEDESTRIANS,      // EVERYONE ATTACKS PLAYER
 	PEDESTRIANS,      // ARMED PEDESTRIANS
@@ -47,10 +47,8 @@ inline const char *CategoryName(int category)
 	case GENERAL: return "GENERAL / PLAYER";
 	case WANTED: return "WANTED / POLICE";
 	case WEAPONS: return "WEAPONS";
-	case APPEARANCE: return "PLAYER APPEARANCE";
 	case WEATHER: return "WEATHER / TIME";
 	case VEHICLE_SELECTOR: return "VEHICLE SPAWN";
-	case SPECIAL_VEHICLES: return "SPECIAL VEHICLES";
 	case VEHICLE_EFFECTS: return "VEHICLE EFFECTS";
 	case PEDESTRIANS: return "PEDESTRIANS";
 	default: return "CHEATS";

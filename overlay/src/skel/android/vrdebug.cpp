@@ -2219,7 +2219,15 @@ static void
 ActivateQuestCheatMenuSelection(void)
 {
 	if(gVrCheatCategory < 0){
-		if(gVrCheatCategorySelection == VrCheatMenu::CATEGORY_COUNT){
+		if(gVrCheatCategorySelection == VrCheatMenu::WEAPONS){
+			const int source = VrCheatMenu::SourceIndex(VrCheatMenu::WEAPONS, 0, GetVrCheatCount());
+			const bool activated = source >= 0 && ActivateVrCheat(source);
+			snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
+				activated ? "CHEAT ACTIVATED" : "UNAVAILABLE RIGHT NOW");
+			gVrCheatStatusFrames = 120;
+			ResetMenuNavigationRepeat();
+			return;
+		}else if(gVrCheatCategorySelection == VrCheatMenu::CATEGORY_COUNT){
 			gVrMenuPage = VR_MENU_PAGE_MISSIONS;
 			gVrMissionCategory = -1;
 			gVrMissionCategorySelection = 0;
@@ -4967,7 +4975,9 @@ DrawQuestCheatPage(void)
 		BeginFullVrMenuPage("CHEATS", "CHOOSE A CATEGORY");
 		for(int item = 0; item < VrCheatMenu::CATEGORY_COUNT+2; ++item){
 			char row[96];
-			if(item < VrCheatMenu::CATEGORY_COUNT)
+			if(item == VrCheatMenu::WEAPONS)
+				snprintf(row, sizeof(row), "WEAPONS");
+			else if(item < VrCheatMenu::CATEGORY_COUNT)
 				snprintf(row, sizeof(row), "%s  < OPEN >",
 					VrCheatMenu::CategoryName(item));
 			else
@@ -4977,7 +4987,8 @@ DrawQuestCheatPage(void)
 			DrawFullVrMenuRow(row, 166+item*49, 2,
 				item == gVrCheatCategorySelection);
 		}
-		DrawVrMenuText("STICK UP/DOWN SELECT   A OPEN   B BACK TO SETTINGS",
+		DrawVrMenuText(gVrCheatStatusFrames > 0 ? gVrCheatStatus :
+			"STICK UP/DOWN SELECT   A ACTIVATE/OPEN   B BACK TO SETTINGS",
 			VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 		return;
 	}
