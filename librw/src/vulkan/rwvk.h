@@ -142,6 +142,7 @@ struct InstanceDataHeader : rw::InstanceDataHeader
 	float32 orderMin[3], orderMax[3];
 	bool32 orderBoundsValid;
 	int32 backfaceCertificate; // -1 untested; reset whenever geometry is instanced
+	WorldOcclusion::SourceCache occlusionSource;
 };
 
 class ObjPipeline : public rw::ObjPipeline
@@ -284,7 +285,7 @@ bool32 getWorldOcclusionEnabled(void);
 bool32 isDefaultWorldRenderCallback(Atomic *atomic);
 void resetWorldOcclusion(void);
 bool32 beginWorldOcclusion(void);
-void addWorldOccluder(Atomic *atomic);
+void addWorldOccluder(Atomic *atomic, int32 model=-1);
 void finishWorldOcclusion(void);
 bool32 isWorldOccluded(Atomic *atomic);
 WorldOcclusion::Stats getWorldOcclusionStats(void);

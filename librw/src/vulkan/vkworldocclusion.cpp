@@ -20,6 +20,9 @@ bool enabled=false,building=false,ready=false;
 WorldOcclusion::Stereo grid;
 WorldOcclusion::Stats stats;
 WorldOcclusion::Selection selection;
+struct Source {InstanceDataHeader *header;double matrix[2][16];unsigned samples;int32 model;};
+Source sources[WorldOcclusion::MaxSourceObjects];
+unsigned sourceCount=0;
 float views[2][16],world[16];
 double clip[2][16];
 std::chrono::steady_clock::time_point started;
@@ -92,31 +95,55 @@ bool32 beginWorldOcclusion(void){
         clip[e][col*4+row]=0;
         for(unsigned k=0;k<4;++k)clip[e][col*4+row]+=double(views[e][k*4+row])*world[col*4+k];
     }
-    started=std::chrono::steady_clock::now();grid.Clear();selection.Clear();building=true;++stats.builds;
+    started=std::chrono::steady_clock::now();grid.Clear();selection.Clear();sourceCount=0;building=true;++stats.builds;
     return 1;
 }
-void addWorldOccluder(Atomic *a){
+void addWorldOccluder(Atomic *a,int32 model){
     if(!building)return;
     ++stats.occluderCandidates;
-    if(stats.occluderCandidates>128||stats.triangles>=WorldOcclusion::MaxTriangles){++stats.budget;return;}
+    if(stats.occluderCandidates>WorldOcclusion::MaxSourceObjects){++stats.budget;return;}
     auto *h=source(a,true);
     if(!h||h->totalNumIndex%3||!h->totalNumIndex){++stats.invalid;return;}
-    double m[2][16];matrices(a,m);
     const auto *v=(const WorldVertex*)h->vertexBuffer;
     const unsigned faces=h->totalNumIndex/3;
-    const unsigned count=std::min({faces,WorldOcclusion::PerObjectTriangles,WorldOcclusion::MaxTriangles-stats.triangles});
-    for(unsigned i=0;i<count;++i){
-        const unsigned face=unsigned(uint64(i)*faces/count);
+    auto &cache=h->occlusionSource;
+    if(!cache.ready){
+        const unsigned scan=std::min(faces,WorldOcclusion::MaxCacheScan);
+        if(stats.cacheScanned+scan>WorldOcclusion::MaxCacheScanPerFrame){++stats.cacheDeferred;return;}
+        stats.cacheScanned+=scan;++stats.cacheBuilds;
+        cache.Build(faces,[&](unsigned face,WorldOcclusion::Point (&p)[3]){
+            const uint16 *ix=h->indexBuffer+face*3;
+            for(unsigned k=0;k<3;++k){
+                if(ix[k]>=h->totalNumVertex){++stats.invalid;return false;}
+                const auto &position=v[ix[k]].position;p[k]={position[0],position[1],position[2]};
+            }
+            return true;
+        });
+    }else ++stats.cacheHits;
+    if(!cache.count)return;
+    auto &src=sources[sourceCount++];src.header=h;src.samples=0;src.model=model;matrices(a,src.matrix);
+    ++stats.sourceObjects;
+}
+void finishWorldOcclusion(void){
+    if(!building)return;
+    unsigned available=0;for(unsigned i=0;i<sourceCount;++i)available+=sources[i].header->occlusionSource.count;
+    stats.triangles=WorldOcclusion::Distribute(sourceCount,
+      [&](unsigned object){return sources[object].header->occlusionSource.count;},
+      [&](unsigned object,unsigned rank){
+        auto &src=sources[object];auto *h=src.header;
+        ++src.samples;
+        if(src.samples>stats.sourceTopSamples){stats.sourceTopSamples=src.samples;stats.sourceTopModel=src.model;}
+        const unsigned face=h->occlusionSource.faces[rank];
         const uint16 *ix=h->indexBuffer+face*3;
-        if(ix[0]>=h->totalNumVertex||ix[1]>=h->totalNumVertex||ix[2]>=h->totalNumVertex){++stats.invalid;continue;}
-        ++stats.triangles;
-        WorldOcclusion::Triangle triangle;triangle.owner=stats.occluderCandidates-1;
+        if(ix[0]>=h->totalNumVertex||ix[1]>=h->totalNumVertex||ix[2]>=h->totalNumVertex){++stats.invalid;return;}
+        const auto *v=(const WorldVertex*)h->vertexBuffer;
+        WorldOcclusion::Triangle triangle;triangle.owner=object;
         double score[2]={};
         for(unsigned eye=0;eye<2;++eye){
             auto &p=triangle.eye[eye];bool valid=true;
             for(unsigned k=0;k<3;++k){
                 const auto &vtx=v[ix[k]];const double point[3]={vtx.position[0],vtx.position[1],vtx.position[2]};
-                if(!WorldOcclusion::Project(m[eye],point,p[k])){valid=false;break;}
+                if(!WorldOcclusion::Project(src.matrix[eye],point,p[k])){valid=false;break;}
             }
             triangle.valid[eye]=valid;
             if(valid)score[eye]=WorldOcclusion::Priority(p);
@@ -124,13 +151,15 @@ void addWorldOccluder(Atomic *a){
         // Favor usefulness to both eyes, while retaining one-eye contributors
         // that can complement other triangles. This score never proves hiding.
         triangle.priority=std::min(score[0],score[1])+.25*std::max(score[0],score[1]);
+        if(!triangle.valid[0]&&!triangle.valid[1])++stats.sourceProjectionRejected;
+        else if(triangle.priority<=0)++stats.sourceSmall;
+        else ++stats.sourceProjected;
         selection.Add(triangle);
-    }
-}
-void finishWorldOcclusion(void){
-    if(!building)return;
+      });
+    stats.sourceBudgetSkipped=available-stats.triangles;
+    if(stats.sourceBudgetSkipped)++stats.budget;
     stats.selectedTriangles=selection.Count();
-    bool contributing[128]={};
+    bool contributing[WorldOcclusion::MaxSourceObjects]={};
     selection.Visit([&](const WorldOcclusion::Triangle &t){
         if(stats.rasterTests>=WorldOcclusion::MaxRasterTests||stats.rasterRows>=WorldOcclusion::MaxRasterRows){++stats.budget;return;}
         if(!contributing[t.owner]&&stats.occluders>=WorldOcclusion::MaxOccluders){++stats.budget;return;}

@@ -46,7 +46,7 @@
 +        }
 +        const unsigned limit=std::min(unsigned(candidates.size()),128u);
 +        std::partial_sort(candidates.begin(),candidates.begin()+limit,candidates.end(),[](const Candidate &a,const Candidate &b){return a.priority>b.priority;});
-+        for(unsigned i=0;i<limit;++i)addWorldOccluder((rw::Atomic*)candidates[i].entity->m_rwObject);
++        for(unsigned i=0;i<limit;++i)addWorldOccluder((rw::Atomic*)candidates[i].entity->m_rwObject,candidates[i].entity->GetModelIndex());
 +    }catch(const std::bad_alloc&){ /* A partial conservative map is still valid. */ }
 +    finishWorldOcclusion();
 +}

@@ -5,9 +5,10 @@
 #include <cstdint>
 
 namespace WorldOcclusion {
-constexpr unsigned Size=48,MaxOccluders=24,MaxTriangles=1024,PerObjectTriangles=64;
+constexpr unsigned Size=48,MaxOccluders=24,MaxTriangles=1024;
 constexpr unsigned MaxRasterTests=8192,MaxQueryTests=16384;
 constexpr unsigned MaxRasterRows=8192,MaxSelectedTriangles=256;
+constexpr unsigned MaxSourceObjects=128,SourceFacesPerAxis=16,MaxCacheScan=2048,MaxCacheScanPerFrame=4096;
 constexpr double DepthGuard=0.00002,ScreenGuard=0.002;
 struct Stats {
     uint32_t builds=0,occluderCandidates=0,occluders=0,triangles=0,cells=0;
@@ -16,8 +17,61 @@ struct Stats {
     uint64_t indices=0,vertices=0;
     double buildMs=0,queryMs=0;
     uint32_t rasterRows=0,selectedTriangles=0;
+    uint32_t cacheBuilds=0,cacheHits=0,cacheScanned=0,cacheDeferred=0;
+    uint32_t sourceObjects=0,sourceProjected=0,sourceProjectionRejected=0,sourceSmall=0,sourceBudgetSkipped=0;
+    uint32_t sourceTopSamples=0;
+    int32_t sourceTopModel=-1;
 };
 struct Point {double x=0,y=0,z=0;}; // screen x/y in cells, Vulkan depth [0,1]
+// Object-space scheduling cache only. Never merges faces or caches visibility.
+// An axis quota prevents broad roofs/roads from excluding all wall orientations.
+struct SourceCache {
+    uint32_t faces[SourceFacesPerAxis*3];
+    unsigned count;
+    bool ready;
+    void Reset(){count=0;ready=false;}
+    template<class Read> void Build(unsigned total,Read read){
+        struct Ranked {double score=0;unsigned face=0;};
+        Ranked best[3][SourceFacesPerAxis];unsigned counts[3]={};
+        const unsigned scan=std::min(total,MaxCacheScan);
+        for(unsigned i=0;i<scan;++i){
+            const unsigned face=unsigned(uint64_t(i)*total/scan);
+            Point p[3];if(!read(face,p))continue;
+            bool finite=true;for(auto v:p)if(!std::isfinite(v.x)||!std::isfinite(v.y)||!std::isfinite(v.z))finite=false;
+            if(!finite)continue;
+            const double ax=p[1].x-p[0].x,ay=p[1].y-p[0].y,az=p[1].z-p[0].z;
+            const double bx=p[2].x-p[0].x,by=p[2].y-p[0].y,bz=p[2].z-p[0].z;
+            const double n[3]={ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx};
+            const double area=n[0]*n[0]+n[1]*n[1]+n[2]*n[2];
+            const double edge=std::max({ax*ax+ay*ay+az*az,bx*bx+by*by+bz*bz,
+                (ax-bx)*(ax-bx)+(ay-by)*(ay-by)+(az-bz)*(az-bz)});
+            const double score=area*std::min(1.0,area/(edge*edge));
+            if(!std::isfinite(score)||score<=1e-20)continue;
+            unsigned axis=0;for(unsigned j=1;j<3;++j)if(std::abs(n[j])>std::abs(n[axis]))axis=j;
+            unsigned pos=0;while(pos<counts[axis]&&best[axis][pos].score>=score)++pos;
+            if(pos>=SourceFacesPerAxis)continue;
+            const unsigned end=std::min(counts[axis],SourceFacesPerAxis-1);
+            for(unsigned j=end;j>pos;--j)best[axis][j]=best[axis][j-1];
+            best[axis][pos]={score,face};counts[axis]=std::min(counts[axis]+1,SourceFacesPerAxis);
+        }
+        count=0;
+        for(unsigned rank=0;rank<SourceFacesPerAxis;++rank)for(unsigned axis=0;axis<3;++axis)
+            if(rank<counts[axis])faces[count++]=best[axis][rank].face;
+        ready=true;
+    }
+};
+// Fair current-frame distribution: one face per eligible object each round.
+// A partial final round remains deterministic; unused source slots cost no
+// projections. Cache construction and projection have independent work caps.
+template<class Count,class Sample> inline unsigned Distribute(unsigned objects,Count count,Sample sample){
+    unsigned used=0;
+    for(unsigned round=0;round<SourceFacesPerAxis*3;++round)for(unsigned object=0;object<objects;++object){
+        if(round>=count(object))continue;
+        if(used==MaxTriangles)return used;
+        sample(object,round);++used;
+    }
+    return used;
+}
 struct Box {double left=0,right=0,bottom=0,top=0,nearDepth=0;bool valid=false;};
 inline bool Finite(Point p){return std::isfinite(p.x)&&std::isfinite(p.y)&&std::isfinite(p.z)&&p.z>0&&p.z<1;}
 // Projection fails open for near/far-plane crossings and uncertain coordinates.

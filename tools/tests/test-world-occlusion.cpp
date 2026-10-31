@@ -115,5 +115,45 @@ int main(){
     Triangle invalid;invalid.priority=std::numeric_limits<double>::infinity();selected.Add(invalid);assert(selected.Count()==0);
     Point outside[3]={{60,60,.2},{80,60,.2},{60,80,.2}};assert(Priority(outside)==0);
     Point broad[3]={{0,0,.2},{48,0,.2},{0,48,.2}};assert(Priority(broad)>0);
-    std::puts("PASS: stereo/opening/depth guards, 3.6 million differential cell-depth checks, bounded priority selection, thin spans and work budgets.");
+    // Source selection finds a broad final face that index-stride sampling
+    // missed, and keeps vertical orientations despite numerous broad roofs.
+    SourceCache cache;cache.Reset();unsigned reads=0;
+    cache.Build(302,[&](unsigned face,Point (&points)[3]){
+        ++reads;const double size=face==299?1000:double(face+1);
+        points[0]={0,0,0};points[1]={size,0,0};points[2]={0,size,0};
+        if(face==300){points[1]={0,10,0};points[2]={0,0,10};}
+        if(face==301){points[1]={10,0,0};points[2]={0,0,10};}
+        return true;
+    });
+    assert(cache.ready&&reads==302&&cache.count==SourceFacesPerAxis+2);
+    bool found[3]={};
+    for(unsigned i=0;i<cache.count;++i){assert(cache.faces[i]<302);if(cache.faces[i]>=299)found[cache.faces[i]-299]=true;}
+    assert(found[0]&&found[1]&&found[2]);
+    cache.Reset();assert(!cache.ready&&cache.count==0); // reinstance invalidation
+    reads=0;
+    cache.Build(100000,[&](unsigned face,Point (&points)[3]){
+        assert(face<100000);++reads;
+        points[0]={0,0,0};points[1]={1,0,0};points[2]={0,1,0};return true;
+    });
+    assert(reads==MaxCacheScan&&cache.count==SourceFacesPerAxis);
+    cache.Reset();cache.Build(0,[](unsigned,Point (&)[3]){assert(false);return false;});
+    assert(cache.ready&&cache.count==0);
+    cache.Reset();cache.Build(8,[](unsigned face,Point (&points)[3]){
+        points[0]=points[1]=points[2]={0,0,0};
+        if(face%2)points[0].x=std::numeric_limits<double>::quiet_NaN();return true;
+    });
+    assert(cache.ready&&cache.count==0); // no malformed/degenerate source faces
+    cache.Reset();cache.Build(5,[](unsigned,Point (&)[3]){return false;});
+    assert(cache.ready&&cache.count==0); // invalid index/reader failure
+    // Every eligible object receives one sample before any gets a second.
+    unsigned samples[MaxSourceObjects]={};unsigned sequence=0;
+    const unsigned used=Distribute(MaxSourceObjects,[](unsigned){return SourceFacesPerAxis*3;},
+        [&](unsigned object,unsigned rank){assert(rank==sequence/MaxSourceObjects);assert(object==sequence%MaxSourceObjects);++sequence;++samples[object];});
+    assert(used==MaxTriangles&&sequence==MaxTriangles);
+    for(auto n:samples)assert(n==MaxTriangles/MaxSourceObjects);
+    unsigned sparse[3]={};
+    assert(Distribute(3,[](unsigned object){return object==1?0u:2u;},
+        [&](unsigned object,unsigned rank){assert(object!=1&&rank<2);++sparse[object];})==4);
+    assert(sparse[0]==2&&sparse[1]==0&&sparse[2]==2);
+    std::puts("PASS: stereo/opening/depth guards, 3.6 million cell-depth checks, bounded caches, orientation retention, source fairness, invalidation and work budgets.");
 }

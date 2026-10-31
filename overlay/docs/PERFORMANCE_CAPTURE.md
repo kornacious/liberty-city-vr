@@ -164,10 +164,21 @@ fall back to original rendering. The implementation targets the normal fixed
 benchmark settings; it does not claim support for every render configuration.
 
 Work is bounded to 128 prioritized entity candidates, up to 24 contributing
-occluders, 1024 sampled source triangles (at most 64 per entity), 8192 raster
+occluders, 1024 sampled source triangles (at most 48 per entity), 8192 raster
 cell visits, 8192 raster rows and 16384 query cell visits per app frame. Incomplete coverage and
 exhausted budgets reduce rejection rather than hiding uncertain geometry.
-The ranked-spans v2 policy keeps the best 256 projected triangles from those
+The cached-sources round-robin v3 policy caches up to 16 broad triangles for
+each dominant normal axis in the geometry's instance header. A bounded scan
+examines at most 2048 evenly distributed real faces per geometry, retaining
+large, non-degenerate, reasonably compact faces and interleaving the axes.
+No faces are merged, simplified or synthesized. Cache building examines at
+most 4096 faces/frame; deferred objects do not act as occluders yet. The cache
+resets on instancing/reinstancing and is freed with the geometry header.
+Material/alpha/pipeline eligibility is rechecked every frame. Only face indices
+are cached; projections and depth coverage are always from the current frame.
+Source samples are distributed one per eligible object per round before any
+object gets its next sample, sharing the same 1024-face projection cap.
+The policy keeps the best 256 projected triangles from those
 samples in a fixed-capacity heap, prioritizing viewport-intersecting projected
 area in both eyes. The heuristic changes scheduling only, never the coverage
 proof. Per-row edge bounds skip empty portions of triangle bounding rectangles;
@@ -189,11 +200,21 @@ The analyzer summarizes the new counters and includes the toggle in settings.
 `world_occlusion_raster_rows` and `world_occlusion_selected_triangles` expose
 the additional row budget and bounded shortlist. Source triangles count sampled
 input faces; selected triangles count shortlisted faces before raster budgets.
+New `world_occlusion_cache_*` counters track builds, hits, scanned faces and
+deferred objects. `world_occlusion_source_*` tracks prepared objects, useful
+projected samples, samples invalid in both eyes, samples too small/offscreen,
+cached faces omitted by the frame budget, and the highest per-object sample
+count with its model ID. The top model is a single most-sampled object per
+frame (ties retain the first), not aggregate model work or GPU attribution.
+The analyzer reports that model's frame-frequency histogram separately.
 
 Replay **OFF -> ON -> OFF -> ON**, keeping World Model LOD AGGRESSIVE, World
 Backface Cull OFF, Static Instancing and all remaining settings fixed. Use a
-normal launch without RenderDoc/auto-capture. No special cache warm-up is
-needed: the depth grids are rebuilt every frame. Watch both eyes for missing
+normal launch without RenderDoc/auto-capture. First run one unmeasured playback
+with World Occlusion ON to populate source caches, then perform the four
+measured playbacks. Keep LOD Fade Transition OFF. Streaming/reinstancing can
+still rebuild caches; the new counters expose that work. Depth grids are
+rebuilt every frame. Watch both eyes for missing
 walls, holes, side views and fast-turn disocclusion. The experiment must save
 more submission/GPU work than its measured CPU cost to be worth enabling.
 Host tests and compilation do not establish device visual correctness or a

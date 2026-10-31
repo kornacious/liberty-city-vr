@@ -538,6 +538,8 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),
         "static_instances": summarize_static_instances(selected),
+        "world_occlusion_source_model_frames": dict(Counter(row["world_occlusion_source_top_model"]
+            for row in selected if int(row.get("world_occlusion_source_top_model", "-1"))>=0)),
         "world_occlusion": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_occlusion_builds", "world_occlusion_occluder_candidates", "world_occlusion_occluders",
              "world_occlusion_triangles", "world_occlusion_cell_updates", "world_occlusion_candidates",
@@ -545,7 +547,11 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "world_occlusion_left_cells", "world_occlusion_right_cells", "world_occlusion_raster_tests",
              "world_occlusion_query_tests", "world_occlusion_indices_avoided", "world_occlusion_vertices_avoided",
              "world_occlusion_build_ms", "world_occlusion_query_ms",
-             "world_occlusion_raster_rows", "world_occlusion_selected_triangles") if key in rows[0]},
+             "world_occlusion_raster_rows", "world_occlusion_selected_triangles",
+             "world_occlusion_cache_builds", "world_occlusion_cache_hits", "world_occlusion_cache_scanned",
+             "world_occlusion_cache_deferred", "world_occlusion_source_objects", "world_occlusion_source_projected",
+             "world_occlusion_source_projection_rejected", "world_occlusion_source_small",
+             "world_occlusion_source_budget_skipped", "world_occlusion_source_top_samples") if key in rows[0]},
         "world_backface": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_backface_candidates", "world_backface_draws", "world_backface_reject_state",
              "world_backface_reject_geometry", "world_backface_reject_view", "world_backface_reject_transform",

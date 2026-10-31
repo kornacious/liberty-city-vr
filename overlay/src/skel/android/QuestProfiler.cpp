@@ -276,7 +276,7 @@ StartFrameCapture(void)
 	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
 	details += "lod_fade_transition_at_start," + std::to_string(VrWorldLod::FadeTransitions()?1:0) + "\n";
 	details += "world_lod_policy,current_high_only_authored_or_aggressive_optional_fade_v3\n";
-	details += "world_occlusion_policy,current_frame_inner_tiles48_ranked_spans_v2\n";
+	details += "world_occlusion_policy,current_frame_inner_tiles48_cached_sources_round_robin_v3\n";
 	details += "world_occlusion_at_start," + std::to_string(rw::vulkan::getWorldOcclusionEnabled()?1:0) + "\n";
 	details += "world_backface_policy,closed_outward_opaque_static_exterior_v1\n";
 	details += "world_backface_at_start," + std::to_string(rw::vulkan::getWorldBackfaceEnabled()?1:0) + "\n";

@@ -330,6 +330,7 @@ instanceMesh(rw::ObjPipeline *, Geometry *geo)
 	// Custom instancers share this header but do not establish ordering bounds.
 	header->orderBoundsValid = 0;
 	header->backfaceCertificate = -1;
+	header->occlusionSource.Reset();
 
 	header->serialNumber = meshh->serialNum;
 	header->numMeshes = meshh->numMeshes;
@@ -446,6 +447,7 @@ void
 defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 {
     header->backfaceCertificate=-1;
+    header->occlusionSource.Reset();
 	const bool isPrelit = !!(geo->flags & Geometry::PRELIT);
 	const bool hasNormals = !!(geo->flags & Geometry::NORMALS);
 	const bool hasTexCoords = geo->numTexCoordSets > 0;
