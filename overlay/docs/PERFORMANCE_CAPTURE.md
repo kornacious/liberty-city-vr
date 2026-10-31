@@ -227,6 +227,34 @@ missing walls or interiors; certification is a conservative filter, not device
 visual validation. Retain the warm-up capture separately and exclude it from
 the four comparison runs. No performance gain is assumed before measurement.
 
+### LOD fade transition toggle
+
+**Graphics -> Optimizations -> LOD Fade Transition** is persisted as
+`VR/LodFadeTransitions` and defaults **OFF**, including existing installs that
+have no saved value. It applies immediately and leaves World Model LOD mode,
+authored switch distances and traffic settings unchanged.
+
+- OFF: switch internal world meshes directly at their selected threshold;
+  AGGRESSIVE switches between paired high/LOD models directly and hides
+  unpaired detail at its cutoff. Legacy world distance fade bands are disabled.
+- ON: restore legacy world distance fades and AGGRESSIVE's reversible 20 m
+  crossfades/fade-to-hidden behavior. Internal mesh crossfades are specific to
+  AGGRESSIVE; this does not add them to the legacy ON/PERFORMANCE selectors.
+
+Loading/residency opacity is separate and remains active. Retain the related
+LOD fallback while detailed geometry is loading; intact/damaged model families
+remain separate. The toggle affects simple/time world geometry, not vehicle or
+pedestrian callback LOD. Distance fading extends rendering beyond the cutoff
+while blending, so OFF/ON is a quality/performance tradeoff even though the
+activation distances themselves are unchanged.
+
+Frame CSVs append `lod_fade_transition_enabled`, and session metadata records
+`lod_fade_transition_at_start`. The analyzer includes the new toggle in the
+recorded configuration. For a controlled comparison, keep World Model LOD
+AGGRESSIVE, World Occlusion OFF and World Backface Cull OFF; compare fade
+**OFF -> ON -> OFF -> ON** under the usual fixed settings. Old captures made
+before this toggle had the distance fades enabled implicitly.
+
 ### World model LOD and optimization menu
 
 Open **Graphics → Optimizations → World Model LOD**. This persisted four-state
@@ -238,13 +266,15 @@ callback LOD and traffic generation keep their existing behavior.
 | OFF | 0 | Highest-detail atomic in the correct intact/damaged family; LOD entities suppressed. |
 | ON (default) | 1 | Existing authored selection with the current VR minimum 2.2× distance multiplier. |
 | PERFORMANCE | 2 | Approximately 1× authored switching distances, with related high-detail/LOD handoffs capped at the normal 300 m sector range. |
-| AGGRESSIVE | 3 | Earlier switching, smooth mesh handoffs, and earlier fading/hiding of unpaired detail. |
+| AGGRESSIVE | 3 | Earlier switching and hiding of unpaired detail; fades/crossfades are optional. |
 
 AGGRESSIVE (value 3) uses the PERFORMANCE handoff distances but also limits
 unpaired high-detail world models to their authored final distance (at most
-300 m). Those models fade out over the following 20 m, and fade back in when
-approaching. Existing low-detail world entities retain their far coverage.
-Internal mesh changes and related high/LOD handoffs crossfade over 20 m;
+300 m). With LOD Fade Transition ON, those models fade out over the following
+20 m, and fade back in when approaching. With it OFF, they hide/show directly
+at that cutoff. Existing low-detail world entities retain their far coverage.
+With LOD Fade Transition ON, internal mesh changes and related high/LOD
+handoffs crossfade over 20 m;
 closely spaced internal thresholds shorten that band to avoid overlaps.
 Distance weights work in either travel direction. Missing streamed variants
 cannot be crossfaded; during an internal transition the resident variant is

@@ -1,0 +1,88 @@
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -774,14 +774,15 @@
+ 		float fadefactor;
+ 		uint32 alpha;
+ 
+-		lodatm = VrWorldLod::SelectAtomic(mi, camdist - FADE_DISTANCE);
++		lodatm = VrWorldLod::SelectAtomic(mi, VrWorldLod::FadingDistance(camdist));
+ 		if(!lodatm){
+ #ifdef EXTRA_MODEL_FLAGS
+ 			if(resetCull)BACKFACE_CULLING_ON;
+ #endif
+ 			ent->bImBeingRendered=false;return;
+ 		}
+-		fadefactor = (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
++		fadefactor = VrWorldLod::FadeTransitions()?
++            (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE:1.0f;
+ 		if(fadefactor > 1.0f)
+ 			fadefactor = 1.0f;
+ 		alpha = mi->m_alpha * fadefactor;
+@@ -1170,6 +1171,7 @@
+ {
+ 	CSimpleModelInfo *mi = (CSimpleModelInfo*)CModelInfo::GetModelInfo(ent->m_modelIndex);
+ 	if(mi->IsSimple() && VrWorldLod::Suppress(mi))return VIS_INVISIBLE;
++    if(mi->IsSimple() && !VrWorldLod::FadeTransitions())ent->bDistanceFade=false;
+ 	CTimeModelInfo *ti;
+ 	int32 other;
+ 	float dist;
+@@ -1238,7 +1240,7 @@
+ 
+ 	// This can only happen with multi-atomic models (e.g. railtracks)
+ 	// but why do we bump up the distance? can only be fading...
+-	if(VrWorldLod::Mode()!=WorldLodPolicy::Off && LOD_DISTANCE + STREAM_DISTANCE < dist && dist < VrWorldLod::LargestDistance(mi))
++	if(VrWorldLod::FadeTransitions() && VrWorldLod::Mode()!=WorldLodPolicy::Off && LOD_DISTANCE + STREAM_DISTANCE < dist && dist < VrWorldLod::LargestDistance(mi))
+ 		dist = VrWorldLod::LargestDistance(mi);
+ 
+ 	if(ent->IsObject() && ent->bRenderDamaged)
+@@ -1292,10 +1294,10 @@
+ 
+ 	// Object is not loaded, figure out what to do
+ 
+-	if(mi->m_noFade){
++	if(mi->m_noFade || !VrWorldLod::FadeTransitions()){
+ 		mi->m_isDamaged = false;
+ 		// request model
+-		if(dist - STREAM_DISTANCE < VrWorldLod::LargestDistance(mi) && request)
++		if(dist - STREAM_DISTANCE - (mi->m_noFade?0.0f:FADE_DISTANCE) < VrWorldLod::LargestDistance(mi) && request)
+ 			return VIS_STREAMME;
+ 		return VIS_INVISIBLE;
+ 	}
+@@ -1336,6 +1338,7 @@
+ {
+ 	CSimpleModelInfo *mi = (CSimpleModelInfo *)CModelInfo::GetModelInfo(ent->GetModelIndex());
+ 	if(mi->IsSimple() && VrWorldLod::Suppress(mi))return VIS_INVISIBLE;
++    if(mi->IsSimple() && !VrWorldLod::FadeTransitions())ent->bDistanceFade=false;
+ 	CTimeModelInfo *ti;
+ 	int32 other;
+ 
+@@ -1398,7 +1401,7 @@
+ 		return VIS_VISIBLE;
+ 	}
+ 
+-	if(mi->m_noFade){
++	if(mi->m_noFade || !VrWorldLod::FadeTransitions()){
+ 		ent->DeleteRwObject();
+ 		return VIS_INVISIBLE;
+ 	}
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -539,7 +539,7 @@
+ #endif
+         return atomic;
+     }
+-	lodatm = VrWorldLod::SelectAtomic(mi, camdist - FADE_DISTANCE);
++	lodatm = VrWorldLod::SelectAtomic(mi, VrWorldLod::FadingDistance(camdist));
+ 	if(!lodatm)return atomic;
+ 	if(RpAtomicGetGeometry(lodatm)!=RpAtomicGetGeometry(atomic))
+ 		RpAtomicSetGeometry(atomic,RpAtomicGetGeometry(lodatm),rpATOMICSAMEBOUNDINGSPHERE);
+@@ -548,7 +548,8 @@
+ 		RENDERCALLBACK(atomic);
+ 		RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
+ 	}else{
+-		fadefactor = (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE;
++		fadefactor = VrWorldLod::FadeTransitions()?
++            (VrWorldLod::LargestDistance(mi) - (camdist - FADE_DISTANCE))/FADE_DISTANCE:1.0f;
+ 		if(fadefactor > 1.0f)
+ 			fadefactor = 1.0f;
+ 		alpha = mi->m_alpha * fadefactor;

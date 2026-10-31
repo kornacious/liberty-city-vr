@@ -10,6 +10,7 @@
 
 namespace VrWorldLod {
 static int mode=WorldLodPolicy::On;
+static bool fadeTransitions=false;
 static Stats stats;
 static bool linked=false;
 static std::unordered_map<CSimpleModelInfo*,float> transitions;
@@ -19,6 +20,9 @@ static bool IsLod(CSimpleModelInfo *mi){
     return (name[0]=='L'||name[0]=='l')&&(name[1]=='O'||name[1]=='o')&&(name[2]=='D'||name[2]=='d');
 }
 void Invalidate(){linked=false;transitions.clear();unpaired=0;}
+void SetFadeTransitions(bool enabled){fadeTransitions=enabled;}
+bool FadeTransitions(){return fadeTransitions;}
+float FadingDistance(float distance){return fadeTransitions?distance-FADE_DISTANCE:distance;}
 void SetMode(int value){mode=WorldLodPolicy::ClampMode(value);}
 void BeginFrame(int value){SetMode(value);stats={};}
 int Mode(){return mode;}
@@ -94,7 +98,7 @@ Transition GetTransition(CSimpleModelInfo *mi,float distance){
     // Fade over a 20 m transition band. Distance-only
     // weights reverse immediately and smoothly when travelling back inwards.
     const float band=20.0f;
-    const float farWeight=Max(0.0f,Min(1.0f,(limit+band-distance)/band));
+    const float farWeight=fadeTransitions?Max(0.0f,Min(1.0f,(limit+band-distance)/band)):(distance<limit?1.0f:0.0f);
     float nearWeight=1.0f;
     if(IsLod(mi)){
         CSimpleModelInfo *high=mi->m_isBigBuilding?mi->GetRelatedModel():nil;
@@ -111,7 +115,8 @@ Transition GetTransition(CSimpleModelInfo *mi,float distance){
             }
         }
         const float t=Max(0.0f,Min(1.0f,(distance-NearDistance(mi))/band));
-        nearWeight=high?1.0f-(1.0f-t)*ready:t;
+        nearWeight=fadeTransitions?(high?1.0f-(1.0f-t)*ready:t):
+            (high&&ready<1.0f?1.0f:(distance>=NearDistance(mi)?1.0f:0.0f));
     }
     const float envelope=farWeight*nearWeight;
     if(envelope<=0)return out;
@@ -123,7 +128,7 @@ Transition GetTransition(CSimpleModelInfo *mi,float distance){
     for(int i=first;i<end-1;++i){
         const float cutoff=mi->m_lodDistances[i];
         if(!std::isfinite(cutoff)||cutoff<=0)continue;
-        float width=Min(band,Max(0.0f,limit-cutoff));
+        float width=fadeTransitions?Min(band,Max(0.0f,limit-cutoff)):0.0f;
         if(i+1<end-1)width=Min(width,Max(0.0f,mi->m_lodDistances[i+1]-cutoff));
         if(distance<cutoff){add(i,1);break;}
         if(width>0&&distance<cutoff+width){

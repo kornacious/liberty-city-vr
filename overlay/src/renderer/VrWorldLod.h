@@ -6,6 +6,9 @@ namespace VrWorldLod {
 using Stats=WorldLodPolicy::Stats;
 void Invalidate();
 void SetMode(int mode);
+void SetFadeTransitions(bool enabled);
+bool FadeTransitions();
+float FadingDistance(float distance);
 void BeginFrame(int mode);
 int Mode();
 Stats GetStats();

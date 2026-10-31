@@ -305,6 +305,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
                 const float eyePos[2][3], const float eyeQuat[2][4])
 {
 	const int64_t frameStartNs = monotonicNowNs();
+	VrWorldLod::SetFadeTransitions(androidgame::VrLodFadeTransitions());
 	VrWorldLod::BeginFrame(androidgame::VrWorldLodMode());
 	androidgame::QuestProfilerBeginAppFrame();
 	xrvk::ControllerInput controllers;

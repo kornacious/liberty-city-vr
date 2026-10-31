@@ -7,7 +7,7 @@
 #include <algorithm>
 using uint32=uint32_t;
 constexpr int MODELINFOSIZE=16,MITYPE_SIMPLE=1,MITYPE_TIME=3;
-constexpr float LOD_DISTANCE=300,STREAM_DISTANCE=20;
+constexpr float LOD_DISTANCE=300,STREAM_DISTANCE=20,FADE_DISTANCE=40;
 #define nil nullptr
 template<class T> T Min(T a,T b){return std::min(a,b);}
 template<class T> T Max(T a,T b){return std::max(a,b);}
@@ -43,6 +43,7 @@ CBaseModelInfo *CModelInfo::models[MODELINFOSIZE]={};
 struct CDraw {static float GetFarClipZ(){return 800;}};
 namespace VrWorldLod {
 using Stats=WorldLodPolicy::Stats;
+void SetFadeTransitions(bool);bool FadeTransitions();float FadingDistance(float);
 void Invalidate();void BeginFrame(int);void SetMode(int);int Mode();Stats GetStats();
 bool Suppress(CSimpleModelInfo*);float LargestDistance(CSimpleModelInfo*);
 float NearDistance(CSimpleModelInfo*);float ScanRadius(float);
@@ -53,6 +54,8 @@ RpAtomic *SelectAtomic(CSimpleModelInfo*,float);
 }
 #include "world-lod-production.inc"
 int main(){
+    assert(!VrWorldLod::FadeTransitions());
+    assert(VrWorldLod::FadingDistance(120)==120);
     RpAtomic high{0},low{1},damage{2};
     CSimpleModelInfo model,lod,root,solo;
     model.m_atomics[0]=&high;model.m_atomics[1]=&low;
@@ -76,6 +79,25 @@ int main(){
     assert(VrWorldLod::SelectAtomic(&solo,150)==&high); // no partner: do not create a gap
     assert(VrWorldLod::ScanRadius(300)==300);
     VrWorldLod::BeginFrame(WorldLodPolicy::Aggressive);
+    assert(!VrWorldLod::FadeTransitions());
+    auto hard=VrWorldLod::GetTransition(&model,49.9f);
+    assert(hard.count==1&&!hard.fading&&hard.layers[0].atomic==&high&&hard.layers[0].weight==1);
+    hard=VrWorldLod::GetTransition(&model,50);
+    assert(hard.count==1&&!hard.fading&&hard.layers[0].atomic==&low&&hard.layers[0].weight==1);
+    hard=VrWorldLod::GetTransition(&solo,99.9f);
+    assert(hard.count==1&&!hard.fading&&hard.layers[0].weight==1);
+    assert(VrWorldLod::GetTransition(&solo,100).count==0);
+    assert(VrWorldLod::GetTransition(&model,100).count==0);
+    assert(VrWorldLod::GetTransition(&lod,99.9f).count==0);
+    hard=VrWorldLod::GetTransition(&lod,100);
+    assert(hard.count==1&&!hard.fading&&hard.layers[0].weight==1);
+    model.m_alpha=128;
+    assert(VrWorldLod::GetTransition(&lod,90).layers[0].weight==1); // preserve loading fallback
+    model.m_alpha=255;
+    const float limit=VrWorldLod::LargestDistance(&model),near=VrWorldLod::NearDistance(&lod);
+    VrWorldLod::SetFadeTransitions(true);
+    assert(VrWorldLod::FadeTransitions()&&VrWorldLod::FadingDistance(120)==80);
+    assert(VrWorldLod::LargestDistance(&model)==limit&&VrWorldLod::NearDistance(&lod)==near);
     assert(VrWorldLod::LargestDistance(&solo)==100);
     auto plan=VrWorldLod::GetTransition(&solo,110);
     assert(plan.count==1 && plan.fading && plan.layers[0].weight==0.5f);

@@ -274,7 +274,8 @@ StartFrameCapture(void)
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
 	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
-	details += "world_lod_policy,current_high_only_authored_or_aggressive_crossfade_v2\n";
+	details += "lod_fade_transition_at_start," + std::to_string(VrWorldLod::FadeTransitions()?1:0) + "\n";
+	details += "world_lod_policy,current_high_only_authored_or_aggressive_optional_fade_v3\n";
 	details += "world_occlusion_policy,current_frame_inner_tiles48_budgeted_v1\n";
 	details += "world_occlusion_at_start," + std::to_string(rw::vulkan::getWorldOcclusionEnabled()?1:0) + "\n";
 	details += "world_backface_policy,closed_outward_opaque_static_exterior_v1\n";
@@ -1480,6 +1481,7 @@ QuestProfilerEndAppFrame(void)
 		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
 		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
 	}
+	gCaptureFrame.lodFadeTransitionEnabled=VrWorldLod::FadeTransitions()?1:0;
 	gCaptureFrame.worldLodMode = VrWorldLod::Mode();
 	gCaptureFrame.worldLod = VrWorldLod::GetStats();
 	gCaptureFrame.worldOcclusionEnabled=rw::vulkan::getWorldOcclusionEnabled()?1:0;

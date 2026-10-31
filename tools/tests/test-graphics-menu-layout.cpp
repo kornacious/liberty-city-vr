@@ -9,7 +9,7 @@
 using uint8=unsigned char;
 #define nil nullptr
 enum {VR_MENU_WIDTH=1024,VR_MENU_HEIGHT=768,QUEST_CPU_PERFORMANCE_COUNT=3,VR_OCCLUSION_CULLING_AUTHORED=2};
-static int gVrOptimizationSelection,gWorldLodMode=WorldLodPolicy::On;
+static int gVrOptimizationSelection,gWorldLodMode=WorldLodPolicy::On,gLodFadeTransitions=0;
 static int gVrGraphicsSelection,gQuestRenderScalePercent=175,gQuestMsaaSamples=4,gSpatialAaMode=1,gPs2AlphaTest=1,gGenerateMipmaps=1;
 static int gFoliageSoftness=3,gRenderDiagnostics=1,gViceCityColorEnabled=1,gQuestCpuPerformanceMode=2,gQuestGpuPerformanceMode=2;
 static int gDynamicLights=2,gOcclusionCullingMode=2,gDistanceFog=1,gQuestQuickTestStart=1;
@@ -75,10 +75,11 @@ static void Verify(){
 static void VerifyOptimizations(){
  Check(drawnRows.size()==VR_OPT_ITEM_COUNT,"all optimization rows drawn once");
  Check(drawnRows.back().text=="BACK TO GRAPHICS","submenu returns to Graphics");
- Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - FADE / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all four LOD states visible");
+ Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - EARLY / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all four LOD states visible");
  Check(drawnRows[VR_OPT_STATIC_INSTANCES].text==std::string("STATIC INSTANCING  < ")+(gStaticInstances?"ON":"OFF")+" >","instancing state preserved in submenu");
  Check(drawnRows[VR_OPT_WORLD_BACKFACE].text==std::string("WORLD BACKFACE CULL  < ")+(gWorldBackface?"ON":"OFF")+" >","backface state visible");
  Check(drawnRows[VR_OPT_WORLD_OCCLUSION].text==std::string("WORLD OCCLUSION  < ")+(gWorldOcclusion?"ON":"OFF")+" >","occlusion state visible");
+ Check(drawnRows[VR_OPT_LOD_FADE].text==std::string("LOD FADE TRANSITION  < ")+(gLodFadeTransitions?"ON":"OFF")+" >","LOD fade state visible");
  Check(highlights.size()==1,"one submenu selection");
  for(size_t i=0;i<drawnRows.size();++i){
   Check(drawnRows[i].selected==(int(i)==gVrOptimizationSelection),"submenu selection matches row");
@@ -98,7 +99,7 @@ int main(){
  }
  for(int mode=0;mode<WorldLodPolicy::Count;++mode)for(int state=0;state<2;++state)
   for(int selection=0;selection<VR_OPT_ITEM_COUNT;++selection){
-   Clear();gWorldLodMode=mode;gStaticInstances=state;gWorldBackface=state;gWorldOcclusion=state;gVrOptimizationSelection=selection;
+   Clear();gWorldLodMode=mode;gLodFadeTransitions=state;gStaticInstances=state;gWorldBackface=state;gWorldOcclusion=state;gVrOptimizationSelection=selection;
    DrawQuestOptimizationsPage();VerifyOptimizations();
   }
  std::printf("Graphics layout: %u checks PASS; %d rows, %d rendered states, dev-tools %d; every selectable row and footer separate.\n",checks,VR_GRAPHICS_ITEM_COUNT,4*VR_GRAPHICS_ITEM_COUNT,MIAMIVR_DEV_TOOLS);

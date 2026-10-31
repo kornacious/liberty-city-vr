@@ -213,7 +213,7 @@ class AnalysisTests(unittest.TestCase):
             fields = ["frame_id", "start_monotonic_ns", "player_valid", "paused", "cutscene", "dead",
                       "event_mask", "dropped_rows", "activity", "phase_valid_mask",
                       "opaque_world_alpha_fast_path_enabled", "replay_forward_view_active", "renderdoc_capture_active",
-                      "opaque_order_experiment_enabled", "opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "opaque_mesh_batch_saved_draws", "world_lod_mode", "world_lod_high_selections", "world_backface_enabled", "world_backface_draws", "world_backface_certify_ms", "world_occlusion_enabled", "world_occlusion_rejected", "world_occlusion_build_ms"]
+                      "opaque_order_experiment_enabled", "opaque_order_candidates", "opaque_order_eligible", "opaque_order_swaps", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "opaque_mesh_batch_saved_draws", "world_lod_mode", "world_lod_high_selections", "world_backface_enabled", "world_backface_draws", "world_backface_certify_ms", "world_occlusion_enabled", "world_occlusion_rejected", "world_occlusion_build_ms", "lod_fade_transition_enabled"]
             timings = ["frame_interval_ms", "cpu_local_ms", "vk_begin_ms", "step_ms", "recorder_prepare_ms",
                        "runtime_cpu_ms", "runtime_gpu_ms", "vulkan_gpu_ms", "game_ms", "streaming_ms",
                        "script_ms", "population_ms", "car_ms", "world_process_ms", "world_list_ms",
@@ -227,7 +227,7 @@ class AnalysisTests(unittest.TestCase):
                                paused=int(i == 4), cutscene=0, dead=0, event_mask=1 if i == 2 else 0,
                                dropped_rows=0, activity="walking", phase_valid_mask=1,
                                runtime_gpu_ms=-1, opaque_world_alpha_fast_path_enabled=i%2, replay_forward_view_active=i%2, renderdoc_capture_active=int(i==2),
-                               opaque_order_experiment_enabled=i%2, opaque_order_candidates=40, opaque_order_eligible=20, opaque_order_swaps=i%2, masked_alpha_pass_skip_enabled=i%2, opaque_mesh_batch_enabled=i%2, opaque_mesh_batch_saved_draws=i*2, world_lod_mode=i%4, world_lod_high_selections=i*10, world_backface_enabled=i%2, world_backface_draws=i*3, world_backface_certify_ms=.1*i, world_occlusion_enabled=i%2, world_occlusion_rejected=i*4, world_occlusion_build_ms=.02*i)
+                               opaque_order_experiment_enabled=i%2, opaque_order_candidates=40, opaque_order_eligible=20, opaque_order_swaps=i%2, masked_alpha_pass_skip_enabled=i%2, opaque_mesh_batch_enabled=i%2, opaque_mesh_batch_saved_draws=i*2, world_lod_mode=i%4, world_lod_high_selections=i*10, world_backface_enabled=i%2, world_backface_draws=i*3, world_backface_certify_ms=.1*i, world_occlusion_enabled=i%2, world_occlusion_rejected=i*4, world_occlusion_build_ms=.02*i, lod_fade_transition_enabled=i%2)
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
@@ -243,6 +243,7 @@ class AnalysisTests(unittest.TestCase):
             self.assertEqual(result["opaque_mesh_batch"]["opaque_mesh_batch_saved_draws"]["mean"], 4)
             self.assertEqual(result["recorded_configuration"]["world_lod_mode"], ["1", "2", "3"])
             self.assertEqual(result["world_lod"]["world_lod_high_selections"]["mean"], 20)
+            self.assertEqual(result["recorded_configuration"]["lod_fade_transition_enabled"], ["0", "1"])
             self.assertEqual(result["recorded_configuration"]["world_occlusion_enabled"], ["0", "1"])
             self.assertEqual(result["world_occlusion"]["world_occlusion_rejected"]["mean"], 8)
             self.assertAlmostEqual(result["world_occlusion"]["world_occlusion_build_ms"]["mean"], .04)
