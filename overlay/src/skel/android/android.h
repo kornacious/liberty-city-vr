@@ -171,6 +171,7 @@ bool VrGenerateMipmaps(void);
 int VrWorldLodMode(void);
 bool VrOpaqueWorldAlphaFastPath(void);
 bool VrOpaqueOrderExperiment(void);
+bool VrWorldBackface(void);
 bool VrStaticInstances(void);
 bool VrOpaqueMeshBatch(void);
 bool VrMaskedAlphaPassSkip(void);

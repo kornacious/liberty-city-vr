@@ -33,6 +33,7 @@ namespace vulkan {
 static bool32 vehicleAlphaPass;
 static bool32 dynamicObjectPass;
 static AtomicSubmissionStats gAtomicSubmissionStats;
+static WorldBackface::Stats gWorldBackfaceStats;
 static bool32 gOpaqueOrderEnabled;
 static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
@@ -56,10 +57,17 @@ bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
 static void resetStaticInstanceStats(void);
-void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};resetStaticReuseSample(0,0);}
+void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};gWorldBackfaceStats={};resetStaticReuseSample(0,0);}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
+static bool32 gWorldBackfaceEnabled;
+
+void setWorldBackfaceEnabled(bool32 enabled){
+    if(gWorldBackfaceEnabled!=(enabled!=0)){flushStaticInstances();gWorldBackfaceEnabled=enabled!=0;}
+}
+bool32 getWorldBackfaceEnabled(void){return gWorldBackfaceEnabled;}
+WorldBackface::Stats getWorldBackfaceStats(void){return gWorldBackfaceStats;}
 static bool32 gStaticInstancesEnabled;
 static StaticInstances::Stats gStaticInstanceStats;
 static DrawProfile::Context gInstanceOwner,gInstanceParents[DrawProfile::ContextDepth];
@@ -86,7 +94,7 @@ void setStaticInstancesEnabled(bool32 enabled){
 }
 StaticInstances::Stats getStaticInstancesStats(void){return gStaticInstanceStats;}
 bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
-	if(!gStaticInstancesEnabled)return 0;
+	if(!gStaticInstancesEnabled&&!gWorldBackfaceEnabled)return 0;
 	if(gInstanceDepth<DrawProfile::ContextDepth)gInstanceParents[gInstanceDepth]=gInstanceOwner;
 	gInstanceOwner=gInstanceDepth<DrawProfile::ContextDepth?DrawProfile::Entity(model,entityClass,name,flags):DrawProfile::Context{};
 	++gInstanceDepth;return 1;
@@ -320,6 +328,7 @@ instanceMesh(rw::ObjPipeline *, Geometry *geo)
 	header->platform = PLATFORM_VULKAN;
 	// Custom instancers share this header but do not establish ordering bounds.
 	header->orderBoundsValid = 0;
+	header->backfaceCertificate = -1;
 
 	header->serialNumber = meshh->serialNum;
 	header->numMeshes = meshh->numMeshes;
@@ -435,6 +444,7 @@ destroyNativeGeometryData(void *object, int32, int32)
 void
 defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 {
+    header->backfaceCertificate=-1;
 	const bool isPrelit = !!(geo->flags & Geometry::PRELIT);
 	const bool hasNormals = !!(geo->flags & Geometry::NORMALS);
 	const bool hasTexCoords = geo->numTexCoordSets > 0;
@@ -664,6 +674,89 @@ static StaticInstances::Bounds staticInstanceBounds(const InstanceDataHeader *he
 	out.valid=true;return out;
 }
 
+static bool
+worldBackfaceAtomic(Atomic *atomic,Geometry *geometry,InstanceDataHeader *header,
+                    uint32 shader,const uint32 *bones,const float *model,const float *object)
+{
+    if(shader!=SHADER_WORLD||bones||dynamicObjectPass||vehicleAlphaPass||
+       gInstanceOwner.entityClass!=0||gInstanceOwner.model<0||
+       (gInstanceOwner.flags&DrawProfile::Distance)||
+       !gvk.firstPersonActive||!gvk.stereoCullPlanesValid||gvk.wristPanelOffscreen||
+       physicalScopeCaptureActive()||worldEffectsActive()||gvk.im3dWaterDraw||gvk.sgsrMode!=SGSR_OFF||
+       !OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper)||
+       geometry->numMorphTargets!=1||geometry->lockedSinceInst||
+       (geometry->flags&Geometry::NATIVE)||header->primType!=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
+        ++gWorldBackfaceStats.rejectState;return false;
+    }
+#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+    if(gvk.debugVizActive){++gWorldBackfaceStats.rejectState;return false;}
+#endif
+    auto *base=atomic->getPipeline();
+    if(!base||base->platform!=PLATFORM_VULKAN||
+       ((ObjPipeline*)base)->instanceCB!=defaultInstanceCB||
+       ((ObjPipeline*)base)->renderCB!=defaultRenderCB){
+        ++gWorldBackfaceStats.rejectState;return false;
+    }
+    // Reject the complete geometry if any submesh is intentionally two-sided
+    // or uses uncertain alpha/effect state; do not infer sidedness by its name.
+    for(uint32 i=0;i<header->numMeshes;++i){
+        const auto &mesh=header->inst[i];Material *m=mesh.material;
+        if(!m||mesh.vertexAlpha||m->color.alpha!=255||MatFX::getEffects(m)!=MatFX::NOTHING){
+            ++gWorldBackfaceStats.rejectState;return false;
+        }
+        Raster *r=m->texture?m->texture->raster:nil;
+        if(r&&(r->platform!=PLATFORM_VULKAN||(r->type&0xF)!=Raster::TEXTURE||
+            (r->parent&&r->parent!=r)||rasterHasAlpha(r))){
+            ++gWorldBackfaceStats.rejectState;return false;
+        }
+        if(m->texture){
+            const uint32 u=m->texture->getAddressU(),v=m->texture->getAddressV();
+            if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
+               (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP)){
+                ++gWorldBackfaceStats.rejectState;return false;
+            }
+        }
+    }
+    if(!WorldBackface::PositiveTransform(model)){
+        ++gWorldBackfaceStats.rejectTransform;return false;
+    }
+    // Atomic::getWorldBoundingSphere does not account for scaling. Transform
+    // the certified vertex AABB instead, conservatively enclosing every corner.
+    float centre[3]={},extent[3]={};
+    if(!header->orderBoundsValid){++gWorldBackfaceStats.rejectView;return false;}
+    for(unsigned row=0;row<3;++row){
+        centre[row]=object[12+row];
+        for(unsigned axis=0;axis<3;++axis){
+            const float mid=(header->orderMin[axis]+header->orderMax[axis])*0.5f;
+            const float half=(header->orderMax[axis]-header->orderMin[axis])*0.5f;
+            centre[row]+=object[axis*4+row]*mid;
+            extent[row]+=fabsf(object[axis*4+row])*half;
+        }
+    }
+    const float radius=sqrtf(extent[0]*extent[0]+extent[1]*extent[1]+extent[2]*extent[2]);
+    if(!WorldBackface::ViewerOutside(gvk.fpHeadWorld,centre,radius)){
+        ++gWorldBackfaceStats.rejectView;return false;
+    }
+    if(header->backfaceCertificate<0){
+        const auto start=std::chrono::steady_clock::now();
+        ++gWorldBackfaceStats.certifications;
+        header->backfaceCertificate=0;
+        try {
+            if(header->vertexBuffer&&header->indexBuffer){
+                const auto *v=(const WorldVertex*)header->vertexBuffer;
+                header->backfaceCertificate=WorldBackface::ClosedOutward(header->totalNumVertex,
+                    header->totalNumIndex,header->indexBuffer,[&](unsigned i){
+                        return WorldBackface::Point{v[i].position[0],v[i].position[1],v[i].position[2]};
+                    })?1:0;
+            }
+        }catch(const std::bad_alloc&){ /* original two-sided rendering */ }
+        gWorldBackfaceStats.certifyMs+=std::chrono::duration<double,std::milli>(
+            std::chrono::steady_clock::now()-start).count();
+    }
+    if(!header->backfaceCertificate){++gWorldBackfaceStats.rejectGeometry;return false;}
+    return true;
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -799,6 +892,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 
 	// The cache is local to this atomic: no other command writer runs between
 	// its meshes. Dynamic/skinned/vehicle paths retain their original binds.
+    const bool backfaceAtomic=gWorldBackfaceEnabled && worldBackfaceAtomic(
+        atomic,geometry,header,shader,boneOffset,push.model,objectToWorld);
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
 	bool instanceSubmission=gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
@@ -940,6 +1035,17 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		else if(opaqueWorldPipeline) gstate.alphaTestFunction = ALPHAALWAYS;
 		const bool profileDepthWrite = gstate.zWriteEnabled != 0;
 		const bool profileAlphaTest = gstate.alphaTestFunction != ALPHAALWAYS;
+        const uint32 savedCull=gstate.cullMode;
+        bool backfaceMesh=false;
+        if(gWorldBackfaceEnabled){
+            ++gWorldBackfaceStats.candidates;
+            backfaceMesh=backfaceAtomic && savedCull==CULLNONE && !wantsBlend && !gsSplit &&
+                !inst->vertexAlpha && !textureAlpha && material && material->color.alpha==255 &&
+                gstate.zTestEnabled && profileDepthWrite && !gstate.vertexAlphaEnabled &&
+                MatFX::getEffects(material)==MatFX::NOTHING;
+            if(backfaceMesh)gstate.cullMode=CULLBACK;
+            else ++gWorldBackfaceStats.rejectState;
+        }
 		VkPipeline pipeline = getPipeline(shader,
 		                                  (VkPrimitiveTopology)header->primType);
 		VkPipeline instancePipeline=VK_NULL_HANDLE;
@@ -947,6 +1053,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			instancePipeline=getPipeline(SHADER_WORLD_INSTANCED,(VkPrimitiveTopology)header->primType);
 			if(!instancePipeline)++gStaticInstanceStats.pipelineMiss;
 		}
+        gstate.cullMode=savedCull;
 		gstate.zWriteEnabled = savedZWrite;
 		gstate.alphaTestFunction = savedAlphaFunction;
 		if(pipeline == VK_NULL_HANDLE)
@@ -1094,6 +1201,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			gStaticReuse.stats.cpuMs+=std::chrono::duration<double,std::milli>(
 				std::chrono::steady_clock::now()-auditStart).count();
 		}
+        if(backfaceMesh){++gWorldBackfaceStats.draws;gWorldBackfaceStats.indices+=drawIndices;}
 		const uint32 profileFlags=(gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra) |
             (wantsBlend?DrawProfile::HasAlpha:0) |
             (textureAlpha?DrawProfile::HasTextureAlpha:0) |

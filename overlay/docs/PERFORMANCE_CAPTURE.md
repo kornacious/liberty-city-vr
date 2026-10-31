@@ -135,6 +135,44 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### Guarded world backface culling experiment
+
+Open **Graphics -> Optimizations -> World Backface Cull**. The persisted
+`VR/WorldBackface` toggle defaults OFF and applies immediately. It selectively
+uses backface culling on opaque static-building geometry with closed,
+consistently outward-wound components. This is rasterization culling, not
+whole-object occlusion: input draw calls and vertex shading are not removed.
+
+The guard rejects open/inverted/non-manifold/degenerate meshes, alpha textures,
+vertex/material transparency, fading objects, MatFX, non-default pipelines,
+vehicles/peds/unknown owners, reflected or near-singular transforms, custom
+scope/wrist/effect rendering and uncertain state. Exact-position seam welding
+does not bridge real gaps. Certification is bounded to 8192 vertices and
+24576 triangle-list indices; oversized and allocation-failed cases keep the
+original rendering. Geometry reinstancing invalidates the cached result.
+The head must be outside a conservatively transformed vertex bound plus a
+0.25-unit eye margin. Cull state is restored immediately after choosing each
+pipeline, including instanced pipelines.
+
+Capture metadata records `world_backface_at_start` and the policy version.
+Frame CSVs append `world_backface_enabled`, `world_backface_candidates`,
+`world_backface_draws`, rejection reasons (`state`, `geometry`, `view`,
+`transform`), `world_backface_certifications`, `world_backface_indices` and
+`world_backface_certify_ms`. Candidates/draws count considered mesh-pass draws;
+indices count input indices of accepted draws, not culled triangles. Rejection
+reasons include atomic-level guards, so they do not partition the mesh-pass
+candidate count. Certification time measures first-use CPU work independently.
+The analyzer includes the toggle in configuration and summarizes these fields.
+
+Use one ON warm-up playback to populate geometry certificates, then compare
+**OFF -> ON -> OFF -> ON**, holding World Model LOD AGGRESSIVE, resolution,
+refresh rate, Forward View and every other experiment fixed. Keep Static
+Instancing at the same setting as the preceding LOD comparison (ON there).
+Use ordinary launches without RenderDoc or auto-capture. Inspect both eyes for
+missing walls or interiors; certification is a conservative filter, not device
+visual validation. Retain the warm-up capture separately and exclude it from
+the four comparison runs. No performance gain is assumed before measurement.
+
 ### World model LOD and optimization menu
 
 Open **Graphics → Optimizations → World Model LOD**. This persisted four-state

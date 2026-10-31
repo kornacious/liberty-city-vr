@@ -4,6 +4,7 @@
 #include "OpaqueMeshBatch.h"
 #include "StaticReuseAudit.h"
 #include "StaticInstances.h"
+#include "WorldBackface.h"
 #include "OpaqueOrder.h"
 #include "UniformAlphaPolicy.h"
 
@@ -139,6 +140,7 @@ struct InstanceDataHeader : rw::InstanceDataHeader
 	InstanceData *inst;
 	float32 orderMin[3], orderMax[3];
 	bool32 orderBoundsValid;
+	int32 backfaceCertificate; // -1 untested; reset whenever geometry is instanced
 };
 
 class ObjPipeline : public rw::ObjPipeline
@@ -276,6 +278,9 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void setWorldBackfaceEnabled(bool32 enabled);
+bool32 getWorldBackfaceEnabled(void);
+WorldBackface::Stats getWorldBackfaceStats(void);
 void setStaticInstancesEnabled(bool32 enabled);
 bool32 getStaticInstancesEnabled(void);
 StaticInstances::Stats getStaticInstancesStats(void);

@@ -194,6 +194,7 @@ static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
 static int gStaticInstances = 0;
+static int gWorldBackface = 0;
 static int gMaskedAlphaPassSkip = 0;
 // The game's point lights -- headlights, explosions, street lamps --
 // evaluated per pixel against the world instead of being folded into the
@@ -708,6 +709,7 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_MASKED_ALPHA_SKIP,
 	VR_OPT_OPAQUE_MESH_BATCH,
 	VR_OPT_STATIC_INSTANCES,
+	VR_OPT_WORLD_BACKFACE,
 	VR_OPT_OPAQUE_ORDER,
 	VR_OPT_BACK,
 	VR_OPT_ITEM_COUNT
@@ -1300,6 +1302,7 @@ LoadVrSettings(void)
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gWorldLodMode = WorldLodPolicy::ClampMode(GetPrivateProfileIntA("VR", "WorldLodMode", WorldLodPolicy::On, ".\\vr_settings.ini"));
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
+	gWorldBackface = GetPrivateProfileIntA("VR", "WorldBackface", 0, ".\\vr_settings.ini") != 0;
 	gStaticInstances = GetPrivateProfileIntA("VR", "StaticInstances", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
 	gMaskedAlphaPassSkip = GetPrivateProfileIntA("VR", "MaskedAlphaPassSkip", 0, ".\\vr_settings.ini") != 0;
@@ -2934,6 +2937,10 @@ VrDebugUpdate(const PadInput &in)
 				gWorldLodMode = (gWorldLodMode+(positivePulse?1:WorldLodPolicy::Count-1))%WorldLodPolicy::Count;
 				SaveVrInteger("WorldLodMode",gWorldLodMode);
 				VrWorldLod::SetMode(gWorldLodMode);
+			}else if(gVrOptimizationSelection == VR_OPT_WORLD_BACKFACE){
+                gWorldBackface=!gWorldBackface;
+                SaveVrInteger("WorldBackface",gWorldBackface);
+                rw::vulkan::setWorldBackfaceEnabled(gWorldBackface);
 			}else if(gVrOptimizationSelection == VR_OPT_STATIC_INSTANCES){
 				gStaticInstances = !gStaticInstances;
 				SaveVrInteger("StaticInstances", gStaticInstances);
@@ -3986,6 +3993,7 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_OPAQUE_MESH_BATCH],sizeof(rows[0]),"OPAQUE MESH BATCH  < %s >",gOpaqueMeshBatch?"ON":"OFF");
 	snprintf(rows[VR_OPT_STATIC_INSTANCES],sizeof(rows[0]),"STATIC INSTANCING  < %s >",gStaticInstances?"ON":"OFF");
 	snprintf(rows[VR_OPT_OPAQUE_ORDER],sizeof(rows[0]),"OPAQUE ORDER EXPERIMENT  < %s >",gOpaqueOrderExperiment?"ON":"OFF");
+	snprintf(rows[VR_OPT_WORLD_BACKFACE],sizeof(rows[0]),"WORLD BACKFACE CULL  < %s >",gWorldBackface?"ON":"OFF");
 	strcpy(rows[VR_OPT_BACK],"BACK TO GRAPHICS");
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
 		DrawFullVrMenuRow(rows[item],180+item*40,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
@@ -5669,6 +5677,13 @@ VrOpaqueOrderExperiment(void)
 {
 	LoadVrSettings();
 	return gOpaqueOrderExperiment != 0;
+}
+
+bool
+VrWorldBackface(void)
+{
+	LoadVrSettings();
+	return gWorldBackface != 0;
 }
 
 bool

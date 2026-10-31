@@ -275,6 +275,8 @@ StartFrameCapture(void)
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
 	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
 	details += "world_lod_policy,current_high_only_authored_or_aggressive_crossfade_v2\n";
+	details += "world_backface_policy,closed_outward_opaque_static_exterior_v1\n";
+	details += "world_backface_at_start," + std::to_string(rw::vulkan::getWorldBackfaceEnabled()?1:0) + "\n";
 	details += "static_instances_policy,bounded64_instances16_radius32_stereo_separation_v1\n";
 	details += "static_instances_at_start," + std::to_string(rw::vulkan::getStaticInstancesEnabled()?1:0) + "\n";
 	details += "static_reuse_policy,disabled_for_static_instance_benchmark\n";
@@ -1478,6 +1480,8 @@ QuestProfilerEndAppFrame(void)
 	}
 	gCaptureFrame.worldLodMode = VrWorldLod::Mode();
 	gCaptureFrame.worldLod = VrWorldLod::GetStats();
+	gCaptureFrame.worldBackfaceEnabled=rw::vulkan::getWorldBackfaceEnabled()?1:0;
+	gCaptureFrame.worldBackface=rw::vulkan::getWorldBackfaceStats();
 	gCaptureFrame.staticInstancesEnabled = rw::vulkan::getStaticInstancesEnabled()?1:0;
 	gCaptureFrame.staticInstances = rw::vulkan::getStaticInstancesStats();
 	gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();
