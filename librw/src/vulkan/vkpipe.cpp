@@ -36,6 +36,9 @@ static bool32 gOpaqueOrderEnabled;
 static Atomic::RenderCB gOpaqueOrderDefaultWrapper;
 static OpaqueOrder::Stats gOpaqueOrderStats;
 static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
+static bool32 gMaskedAlphaPassSkipEnabled;
+void setMaskedAlphaPassSkipEnabled(bool32 enabled){gMaskedAlphaPassSkipEnabled=enabled!=0;}
+bool32 getMaskedAlphaPassSkipEnabled(void){return gMaskedAlphaPassSkipEnabled;}
 void setOpaqueOrderDefaultRenderWrapper(Atomic::RenderCB callback){gOpaqueOrderDefaultWrapper=callback;}
 void setOpaqueOrderEnabled(bool32 enabled){gOpaqueOrderEnabled=enabled!=0;}
 bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
@@ -472,6 +475,9 @@ selectAtomicAlphaPasses(const InstanceData *inst,const Material *material,
 	if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
 	   (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP))
 		return UniformAlphaPolicy::Both;
+	// OFF restores the pre-extension texture-alpha path before proof/counters.
+	// Existing uniform-alpha and opaque-world optimizations stay independent.
+	if(textureAlpha && !gMaskedAlphaPassSkipEnabled) return UniformAlphaPolicy::Both;
 	// Match the actual shader multiplier, including ignored material colour
 	// without MODULATE. Constant vertex alpha is one after the guard above.
 	const float alpha=material&&(geometry->flags&Geometry::MODULATE)?

@@ -24,7 +24,7 @@ namespace VrCullViz {static bool active;static int calls;inline bool IsActive(){
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
 namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}
-static int gProfilerDisplayMode=1,gOpaqueWorldAlphaFastPath=1;
+static int gProfilerDisplayMode=1,gOpaqueWorldAlphaFastPath=1,gOpaqueOrderExperiment=0,gMaskedAlphaPassSkip=0;
 struct Rect {int left,top,right,bottom;};
 struct Text {std::string text;Rect bounds;};
 struct Row {std::string text;int y,scale;bool selected;};
@@ -41,13 +41,14 @@ static void DrawFullVrMenuRow(const char*text,int y,int scale,bool selected,bool
 static void Clear(){texts.clear();drawnRows.clear();highlights.clear();VrCullViz::calls=0;}
 static void Verify(){
 #if MIAMIVR_DEV_TOOLS
- Check(VR_GRAPHICS_ITEM_COUNT==21,"opt-in developer build includes its visualizer row");
+ Check(VR_GRAPHICS_ITEM_COUNT==23,"opt-in developer build includes its visualizer row");
 #else
- Check(VR_GRAPHICS_ITEM_COUNT==19&&VrCullViz::calls==0,"shipping graphics has no visualizer or quick-test row or backend calls");
+ Check(VR_GRAPHICS_ITEM_COUNT==21&&VrCullViz::calls==0,"shipping graphics has no visualizer or quick-test row or backend calls");
  for(const auto&t:texts)Check(t.text.find("CULLING VISUALIZER")==std::string::npos&&t.text.find("CULL SNAPSHOT")==std::string::npos&&t.text.find("QUICK TEST START")==std::string::npos,"shipping text omits developer visualizer and quick-start controls");
 #endif
  Check(drawnRows.size()==VR_GRAPHICS_ITEM_COUNT,"all graphics settings plus Back drawn exactly once");
  Check(drawnRows[VR_GRAPHICS_OPAQUE_WORLD].text==std::string("OPAQUE WORLD FAST PATH  < ")+(gOpaqueWorldAlphaFastPath?"ON":"OFF")+" >","opaque fast-path state is visible");
+ Check(drawnRows[VR_GRAPHICS_MASKED_ALPHA_SKIP].text==std::string("MASKED ALPHA PASS SKIP  < ")+(gMaskedAlphaPassSkip?"ON":"OFF")+" >","masked-alpha toggle state is visible");
  Check(drawnRows.back().text=="BACK TO SETTINGS","Back remains last independent menu item");
  Check(highlights.size()==1,"exactly selected controller row highlighted");
  for(size_t i=0;i<drawnRows.size();i++){
@@ -55,7 +56,12 @@ static void Verify(){
   Check(drawnRows[i].scale==2,"graphics rows use compact readable font");
   Rect extent={85,drawnRows[i].y-5,VR_MENU_WIDTH-85,drawnRows[i].y+drawnRows[i].scale*7+4};
   Check(extent.top>=160&&extent.bottom<674,"row and selection background fit below subtitle and before status footer");
-  if(i)Check(drawnRows[i-1].y+drawnRows[i-1].scale*7+4<=extent.top,"adjacent row selection areas do not overlap");
+  if(drawnRows[i].selected){
+   // Only one selection background is drawn. Its padding may share the empty
+   // gap with a hypothetical neighboring selection, but must not cover text.
+   if(i)Check(drawnRows[i-1].y+drawnRows[i-1].scale*7<=extent.top,"selection clears preceding text");
+   if(i+1<drawnRows.size())Check(extent.bottom<=drawnRows[i+1].y,"selection clears following text");
+  }
   if(drawnRows[i].selected)Check(highlights[0].top==extent.top&&highlights[0].bottom==extent.bottom,"actual shared row painter matches row selection bounds");
  }
  for(size_t i=0;i<texts.size();i++){
@@ -67,7 +73,7 @@ static void Verify(){
 }
 int main(){
  for(int scenario=0;scenario<4;scenario++)for(int selected=0;selected<VR_GRAPHICS_ITEM_COUNT;selected++){
-  Clear();gOpaqueWorldAlphaFastPath=scenario%2;gProfilerDisplayMode=scenario%3;gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
+  Clear();gOpaqueWorldAlphaFastPath=scenario%2;gMaskedAlphaPassSkip=scenario%2;gProfilerDisplayMode=scenario%3;gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
   xrvk::status.fallbackReason=scenario==3?1:0;xrvk::status.previousFallbackReason=scenario>=2?1:0;VrCullViz::active=scenario==2;
   DrawQuestGraphicsPage();Verify();
  }

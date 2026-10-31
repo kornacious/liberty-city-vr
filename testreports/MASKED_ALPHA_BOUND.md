@@ -101,3 +101,45 @@ The preceding two postprocess-gain runs are the baseline. First verify actual
 nonzero skipped work, then compare scene GPU/CPU time, total/extra split draws
 and the busy final 10 seconds. There is no promised FPS improvement; the
 available gain depends on real material fade values and eligible masks.
+
+## Same-build benchmark toggle
+
+The initial two-run measurement verified roughly 24 removed passes per frame,
+but mixed timing results did not establish a net performance win. A persisted
+**VR overlay → Graphics → Masked Alpha Pass Skip** option now isolates the
+extension for an interleaved comparison. It defaults OFF through
+`VR/MaskedAlphaPassSkip` and takes effect immediately; no restart is needed.
+
+OFF returns the original textured-material `Both` selection before the new
+material-bound calculation, native-raster proof and candidate/skip counters.
+It does not disable the prior uniform-alpha proof, Opaque World Fast Path,
+postprocess refinement or PS2 alpha testing. ON uses the existing guarded
+extension. No image/geometry resources are rebuilt by the toggle.
+
+Session metadata records `masked_alpha_pass_skip_at_start`. Appended frame
+column `masked_alpha_pass_skip_enabled` records the actual backend state, and
+the analyzer lists all observed states in `recorded_configuration`. Older
+captures without the field remain unknown. OFF frames should have zero new
+candidate/skip/index counters; ON frames reveal the real opportunity.
+
+Graphics rows move upward four pixels to leave room for the additional item
+and developer-build rows before the status footer. Layout checks execute the
+actual row painter for normal and developer builds, testing every selectable
+row and both toggle labels; selection backgrounds do not overlap neighboring
+text or the footer. Only the active row draws a selection background.
+
+Validation covers production toggle setters/getters and the OFF/ON/OFF/ON
+sequence: OFF restores both textured halves with no bound-counter additions;
+ON restores the proof; the legacy uniform-alpha proof remains independent.
+Existing exhaustive alpha coverage, CSV writer, six analyzer tests, and both
+graphics layouts pass.
+
+The full arm64 Quest APK build passes and this task's APK was installed with
+`install -r` on the verified **personal Quest 3 device**. Existing data, saves
+and demos are preserved; read-only diagnostics remain accessible.
+
+For the controlled benchmark, play the **same latest 30-second demo four times:
+OFF → ON → OFF → ON**, changing only Masked Alpha Pass Skip between playbacks.
+Keep Opaque Order Experiment OFF, Opaque World Fast Path ON, Forward View ON,
+minimal profiling, 1512 × 1584 at 120 Hz, no RenderDoc/automatic capture, and
+the usual fixed settings. The state is recorded automatically in every run.

@@ -272,6 +272,7 @@ StartFrameCapture(void)
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
+	details += "masked_alpha_pass_skip_at_start," + std::to_string(rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0) + "\n";
 	details += "opaque_order_policy,bounded_32_adjacent_disjoint_stereo_depth_static_opaque_v3_lit_buildings\n";
 	details += "opaque_order_experiment_at_start," + std::to_string(rw::vulkan::getOpaqueOrderEnabled() ? 1 : 0) + "\n";
 	details += "opaque_world_alpha_fast_path_at_start," +
@@ -1467,6 +1468,7 @@ QuestProfilerEndAppFrame(void)
 		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
 	}
 	gCaptureFrame.alphaBound = rw::vulkan::getAlphaBoundStats();
+	gCaptureFrame.maskedAlphaPassSkipEnabled = rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0;
 	rw::vulkan::FrameBeginStats begin = {};
 	if(rw::vulkan::getFrameBeginStats(&begin)){
 		gCaptureFrame.begin.valid = 1;

@@ -24,6 +24,7 @@ static struct {unsigned alphaTestFunction=ALPHAGREATEREQUAL,alphaTestRef=2;
     unsigned textureAddressU=Texture::WRAP,textureAddressV=Texture::WRAP;}gstate;
 static bool opaqueFastPathEnabled=true;
 static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
+static bool32 gMaskedAlphaPassSkipEnabled;
 static bool getOpaqueWorldAlphaFastPathEnabled(){return opaqueFastPathEnabled;}
 #include "uniform-alpha-production.inc"
 using VkPipeline=unsigned;
@@ -115,6 +116,8 @@ int main(){
     // Execute the production selector against every normalized byte texture
     // alpha, material alpha and split reference, with interpolation perturbations.
     gAlphaBoundStats={};unsigned boundedChecks=0,skipped=0;
+    assert(!getMaskedAlphaPassSkipEnabled());
+    setMaskedAlphaPassSkipEnabled(true);
     for(unsigned a=0;a<256;++a)for(unsigned r=0;r<256;++r){
         material.color.alpha=static_cast<unsigned char>(a);
         const float reference=r/255.f,maximum=a/255.f;
@@ -140,6 +143,16 @@ int main(){
     material.color.alpha=64;
     assert(select(true,false,true,SHADER_WORLD,nullptr,&raster)==Faint);
     auto guarded=[&](){return select(true,false,true,SHADER_WORLD,nullptr,&raster);};
+    for(bool enabled:{false,true,false,true}){
+        const auto previous=gAlphaBoundStats;
+        setMaskedAlphaPassSkipEnabled(enabled);
+        assert(bool(getMaskedAlphaPassSkipEnabled())==enabled);
+        assert(guarded()==unsigned(enabled?Faint:Both));
+        assert(gAlphaBoundStats.candidates==previous.candidates+(enabled?1:0));
+        assert(gAlphaBoundStats.solidPassesSkipped==previous.solidPassesSkipped+(enabled?1:0));
+        assert(gAlphaBoundStats.indicesSkipped==previous.indicesSkipped+(enabled?inst.numIndex:0));
+        assert(select()==Faint); // Legacy uniform proof is independent of toggle.
+    }
     inst.vertexAlpha=true;assert(guarded()==Both);inst.vertexAlpha=false;
     dynamicObjectPass=true;assert(guarded()==Both);dynamicObjectPass=false;
     vehicleAlphaPass=true;assert(guarded()==Both);vehicleAlphaPass=false;

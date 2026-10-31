@@ -190,6 +190,7 @@ static int gGenerateMipmaps = 1;
 static int gPs2AlphaTest = 0;
 static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
+static int gMaskedAlphaPassSkip = 0;
 // The game's point lights -- headlights, explosions, street lamps --
 // evaluated per pixel against the world instead of being folded into the
 // per-entity directionals the fixed function used. 0 off, 1 on, 2 adds the
@@ -703,6 +704,7 @@ enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_MIPMAPS,
 	VR_GRAPHICS_PS2_ALPHA,
 	VR_GRAPHICS_OPAQUE_WORLD,
+	VR_GRAPHICS_MASKED_ALPHA_SKIP,
 	VR_GRAPHICS_OPAQUE_ORDER,
 	VR_GRAPHICS_FOLIAGE,
 	VR_GRAPHICS_DIAGNOSTICS,
@@ -1282,6 +1284,7 @@ LoadVrSettings(void)
 	gPs2AlphaTest = GetPrivateProfileIntA("VR", "Ps2AlphaTest", 0,
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
+	gMaskedAlphaPassSkip = GetPrivateProfileIntA("VR", "MaskedAlphaPassSkip", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueWorldAlphaFastPath = GetPrivateProfileIntA("VR",
 		"OpaqueWorldAlphaFastPath", 1, ".\\vr_settings.ini") != 0 ? 1 : 0;
 	gDynamicLights = clamp((int)(int32)GetPrivateProfileIntA("VR",
@@ -2933,6 +2936,10 @@ VrDebugUpdate(const PadInput &in)
 				gPs2AlphaTest = !gPs2AlphaTest;
 				SaveVrInteger("Ps2AlphaTest", gPs2AlphaTest);
 				rw::vulkan::setPs2AlphaTestEnabled(gPs2AlphaTest);
+			}else if(gVrGraphicsSelection == VR_GRAPHICS_MASKED_ALPHA_SKIP){
+				gMaskedAlphaPassSkip = !gMaskedAlphaPassSkip;
+				SaveVrInteger("MaskedAlphaPassSkip", gMaskedAlphaPassSkip);
+				rw::vulkan::setMaskedAlphaPassSkipEnabled(gMaskedAlphaPassSkip);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_OPAQUE_ORDER){
 				gOpaqueOrderExperiment = !gOpaqueOrderExperiment;
 				SaveVrInteger("OpaqueOrderExperiment", gOpaqueOrderExperiment);
@@ -3947,6 +3954,8 @@ DrawQuestGraphicsPage(void)
 		gPs2AlphaTest ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_OPAQUE_ORDER], sizeof(rows[0]),
 		"OPAQUE ORDER EXPERIMENT  < %s >", gOpaqueOrderExperiment ? "ON" : "OFF");
+	snprintf(rows[VR_GRAPHICS_MASKED_ALPHA_SKIP], sizeof(rows[0]),
+		"MASKED ALPHA PASS SKIP  < %s >", gMaskedAlphaPassSkip ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_OPAQUE_WORLD], sizeof(rows[0]),
 		"OPAQUE WORLD FAST PATH  < %s >",
 		gOpaqueWorldAlphaFastPath ? "ON" : "OFF");
@@ -4010,13 +4019,14 @@ DrawQuestGraphicsPage(void)
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++)
 		// Compact rows leave room for the status footer.
-		DrawFullVrMenuRow(rows[item], 174+item*22, 2,
+		DrawFullVrMenuRow(rows[item], 170+item*22, 2,
 			item == gVrGraphicsSelection, true, false,
 			item == VR_GRAPHICS_PROFILER ||
 				item == VR_GRAPHICS_MIPMAPS ||
 				item == VR_GRAPHICS_PS2_ALPHA ||
 				item == VR_GRAPHICS_OPAQUE_WORLD ||
 				item == VR_GRAPHICS_OPAQUE_ORDER ||
+				item == VR_GRAPHICS_MASKED_ALPHA_SKIP ||
 				item == VR_GRAPHICS_MSAA ||
 				item == VR_GRAPHICS_DIAGNOSTICS ||
 				item == VR_GRAPHICS_FOLIAGE,
@@ -5593,6 +5603,13 @@ VrOpaqueOrderExperiment(void)
 {
 	LoadVrSettings();
 	return gOpaqueOrderExperiment != 0;
+}
+
+bool
+VrMaskedAlphaPassSkip(void)
+{
+	LoadVrSettings();
+	return gMaskedAlphaPassSkip != 0;
 }
 
 bool

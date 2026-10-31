@@ -10,8 +10,11 @@ if($depth-ne0){throw 'Unclosed production uniform-alpha selector'}
 $raster=[IO.File]::ReadAllText((Join-Path $kit 'librw/src/vulkan/vkraster.cpp'))
 $bounded=[regex]::Match($raster,'(?ms)^bool32\r?\nrasterHasNormalizedAlpha\(.*?^\}')
 if(-not $bounded.Success){throw 'Missing production normalized alpha texture proof'}
+$setter=[regex]::Match($source,'(?m)^void setMaskedAlphaPassSkipEnabled\([^\r\n]+').Value
+$getter=[regex]::Match($source,'(?m)^bool32 getMaskedAlphaPassSkipEnabled\([^\r\n]+').Value
+if(-not $setter -or -not $getter){throw 'Masked-alpha toggle API missing'}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'uniform-alpha-production.inc'),
-    ($bounded.Value+"`nstatic uint32`n"+$source.Substring($match.Index,$end-$match.Index)),[Text.UTF8Encoding]::new($false))
+    ($setter+"`n"+$getter+"`n"+$bounded.Value+"`nstatic uint32`n"+$source.Substring($match.Index,$end-$match.Index)),[Text.UTF8Encoding]::new($false))
 $match=[regex]::Match($source,'(?m)^useOpaqueWorldPipeline\(')
 if(-not $match.Success){throw 'Missing production opaque-world selector'}
 $brace=$source.IndexOf('{',$match.Index);$depth=1;$end=$brace+1

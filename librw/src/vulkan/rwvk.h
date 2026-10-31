@@ -273,6 +273,8 @@ using AtomicSubmissionStats = AtomicSubmission::Stats;
 void resetAtomicSubmissionStats(void);
 AtomicSubmissionStats getAtomicSubmissionStats(void);
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void);
+void setMaskedAlphaPassSkipEnabled(bool32 enabled);
+bool32 getMaskedAlphaPassSkipEnabled(void);
 
 // True only when the most recent DEVICEOPEN failed while creating one of the
 // full-resolution colour/depth targets or its framebuffer. This lets the
