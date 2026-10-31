@@ -1,0 +1,33 @@
+diff --git a/src/vehicles/Boat.cpp b/src/vehicles/Boat.cpp
+--- a/src/vehicles/Boat.cpp
++++ b/src/vehicles/Boat.cpp
+@@ -24,6 +24,9 @@
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
++#ifdef RW_VULKAN
++#include "vulkan/rwvk.h"
++#endif
+ 
+ #define INVALID_ORIENTATION (-9999.99f)
+ 
+@@ -735,8 +738,18 @@ CBoat::Render()
+ 	}
+ 	m_fMovingRotation += 0.05f;
+ 	((CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex()))->SetVehicleColour(m_currentColour1, m_currentColour2);
+-	if (!CVehicle::bWheelsOnlyCheat)
++	if (!CVehicle::bWheelsOnlyCheat) {
++#ifdef RW_VULKAN
++		// Boats submit glass in the body clump, outside RenderAlphaAtomics.
++		// Use the vehicle split so opaque hull pixels retain depth while
++		// transparent windows cannot occlude the water drawn after boats.
++		rw::vulkan::setVehicleAlphaPass(TRUE);
++#endif
+ 		CEntity::Render();
++#ifdef RW_VULKAN
++		rw::vulkan::setVehicleAlphaPass(FALSE);
++#endif
++	}
+ #ifdef NEW_RENDERER
+ 	if(!gbNewRenderer)
+ #endif

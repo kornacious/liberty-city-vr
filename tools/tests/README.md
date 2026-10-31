@@ -1,5 +1,11 @@
 # Host regression tests
 
+`test-boat-window-depth.ps1 -StageRoot <assembled-tree>` executes the boat
+body submission block with the production Vulkan vehicle-alpha policy. It
+checks water visibility through all transparent material alpha values, opaque
+hull depth, the wheels-only cheat, and state restoration before the hull water
+mask and subsequent world draws. In-game appearance still needs headset QA.
+
 `python3 tools/tests/test-device-diagnostics.py --powershell powershell.exe`
 checks the production Windows installer selection and ADB boundaries using a
 fake native process. `--powershell pwsh` selects PowerShell 7; `--bash bash`

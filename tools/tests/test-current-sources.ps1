@@ -26,7 +26,7 @@ $engineTests = @(
     'ragdoll-presentation','ragdoll-ray-resolver','ragdoll-schedule','ragdoll-weight',
     'vehicle-deformation-hitframe','vehicle-deformation-menu','vehicle-deformation-mesh',
     'vehicle-deformation-runtime','vehicle-deformation-slots','vehicle-seat-recenter',
-    'vr-cop-aim','vr-vehicle-entry','world-billboards'
+    'vr-cop-aim','vr-vehicle-entry','world-billboards','boat-window-depth'
 )
 # Explicit exclusions are evidence, never successful tests. See README.md for
 # reference-only fixtures and diagnostics requiring local assets/toolchains.
