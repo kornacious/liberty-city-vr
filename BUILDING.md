@@ -111,7 +111,15 @@ network/build/device access. Build only produces the APK without installing.
 For release signatures set `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` to your private
 signing properties and select Release. Keep keys and signing values out of Git.
 
-**Tools and tests** exposes the auxiliary authoring, save, model, capture and
+**Transfer save** offers Quest → PC and PC → Quest, manual slot 1–8, and a PC
+save-folder browser. It uses the selected slot's `GTA3sfN.b`, validates the GTA III
+compatible save format/checksum, backs up existing destinations under the
+workplace's `save-transfer/backups`, and verifies Quest read-back. Both directions
+are native C# and use ADB on Windows/Linux; no Python, PowerShell or Bash is
+needed. Close both games before performing a transfer. Legacy save-transfer
+modules are hidden from Tools and tests. See [save transfer](overlay/tools/saves/README.md).
+
+**Tools and tests** exposes the auxiliary authoring, model, capture and
 regression modules. They are embedded into the application and materialized in
 a fresh local source-only workplace snapshot when selected. Python 3, PowerShell
 7, Bash and specialised dependencies remain necessary for those modules. Legacy

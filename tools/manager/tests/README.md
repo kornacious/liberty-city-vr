@@ -16,6 +16,12 @@ tampering; wheel chunk validation; game-directory preconditions; version floors;
 argument tokenization; auxiliary resource completeness; child-process cancellation;
 and staged/history scans of synthetic Git objects.
 
+Save-transfer fixtures cover the GTA III compatible container/checksum, both
+directions, raw destination backups, corrupt/empty slots, read-back failure,
+cancellation recovery, concurrent destination changes, backup failure, exact
+binary ADB sync-file transport, hidden legacy entries and saved action options.
+These tests never connect to a real headset or read personal save files.
+
 Artifacts remain under `.cache/manager-tests-*` for local inspection. They must
 not be committed. The synthetic privacy fixtures deliberately contain values
 assembled at runtime that the scanner must reject.

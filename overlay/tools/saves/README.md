@@ -1,55 +1,87 @@
-> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
-> manager modules. Open **Tools and tests**, or run `dotnet run --project
-> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
-> Legacy filenames below identify resource modules; old direct shell invocations
-> are historical. Use the manager pages for build/install, editor build, music,
-> models, repair and update. See [the manager guide](../../../tools/manager/README.md) for runtime requirements.
 # Liberty City VR save transfer
 
-These tools transfer current Liberty City VR saves between the Win64 PC build and
-the native Meta Quest build. They preserve the game's slot number, convert the
-small ABI-dependent garages section, validate the save checksum, and create a
-backup before overwriting an existing save.
+Open the manager (`MANAGE.bat` on Windows, or `dotnet run --project tools/manager
+-c Release` on Windows/Linux) and choose **Transfer save** in the left navigation.
 
-Original retail, old 32-bit, and `Vanilla` re3 saves are not supported. The
-converter deliberately rejects unknown or corrupt files instead of risking a
-crash or damaged progress. Before an import writes anything to the Quest, it
-also verifies the current Win64 `Cranes`, `Pickups`, `Phone`, and `PlayerInfo`
-block signatures; an old save can have the expected file size and checksum but
-still use an incompatible internal layout.
+1. Select **Quest → PC** or **PC → Quest**.
+2. Select a manual save slot from **1 through 8**.
+3. Choose the **PC save folder** using Browse, or enter its path. The selected
+   slot uses `GTA3sfN.b` in this folder in both directions.
+4. Close both games and any other save-transfer tools, connect/authorize the
+   Quest 3, then choose **Perform**. **Cancel** discards unperformed edits and
+   returns focus to navigation.
 
-## Windows
+The default PC folder is `<workplace>/save-transfer/pc`; choose the PC game's
+actual save directory to transfer directly into or out of that installation.
+The direction, slot and folder are saved when the action is performed. The
+old Windows import/export BAT shortcuts now open this page with the appropriate
+preset direction. Legacy script entries are hidden from **Tools and tests**.
 
-Connect the Quest by USB, enable USB debugging, close the game, then double
-click one of these files:
+## Supported saves
 
-- `import-pc-save-to-quest.bat` - copy a PC save to the Quest.
-- `export-quest-save-to-pc.bat` - copy a Quest save to the PC.
+This native C# action works on Windows and Linux with .NET/ADB, including the
+self-contained published manager. It needs no Python, Bash or PowerShell.
+It uses the Liberty City provider (`com.libertyvr.quest.saves`), which exposes
+exactly the eight manual slots and maps them to the headset's native filenames.
+Autosaves and other application files are outside this action's scope.
 
-The script asks for the slot (1-8) and, when necessary, the PC `userfiles`
-folder. It finds ADB from SideQuest, Android platform-tools, or `PATH`.
-Python is not required on Windows.
+The current GTA III/re3 **COMPATIBLE_SAVES** build uses the same serialized
+layout on Win64, Linux and Quest. Transfers preserve the save bytes; they do not
+apply the old Vice City garages converter. The manager checks the GTA III header,
+20 subsystem blocks, padding limits, the 5484-byte garages block and the additive
+container checksum. Corrupt, truncated, Vice City and unsupported custom layouts
+are rejected before replacing the destination. This validates the container, not
+mission progress or compatibility with arbitrary modified game builds.
 
-Command-line examples:
+## Backups and verification
 
-```powershell
-.\transfer-vr-save.ps1 -Mode Import -Slot 3 -PcSaveDirectory "C:\Games\Liberty City VR\userfiles"
-.\transfer-vr-save.ps1 -Mode Export -Slot 3 -PcSaveDirectory "C:\Games\Liberty City VR\userfiles"
+Existing destinations are backed up locally under:
+
+```text
+<workplace>/save-transfer/backups/<timestamp-and-unique-token>/
 ```
 
-## Linux and Steam Deck
+PC backups use `GTA3sfN.b.pc.bak`; Quest backups use
+`GTA3sfN.b.quest-native.bak`. They retain the exact original bytes, including a
+corrupt destination that is deliberately being replaced. They are not uploaded
+or committed. A failed backup stops the transfer before writing a destination.
 
-Requirements: `adb`, `python3`, USB debugging, and an authorized headset with
-Liberty City VR installed.
+The PC export is staged beside its destination and renamed into place after
+validation. Quest transfers use device-local temporary files and ADB's binary
+sync protocol, avoiding Windows shell-stdin binary corruption. Downloads are
+size/SHA256 checked; imports are read back and compared byte for byte. The game
+is force-stopped before accessing the slot and remains stopped afterward.
 
-```bash
-bash ./import-pc-save-to-quest.sh 3 ~/Games/liberty-city-vr/userfiles/GTA3sf3.b
-bash ./export-quest-save-to-pc.sh 3 ~/Games/liberty-city-vr/userfiles/GTA3sf3.b
+The installed provider truncates on write, so a failed/cancelled import attempts
+to restore the previous slot using a separate recovery timeout. If the device
+has disconnected, automatic recovery may fail: keep the game stopped, retain
+its local raw backup. For a valid compatible backup, copy it into a separate
+PC folder as `GTA3sfN.b` and use **PC → Quest** after reconnecting.
+Do not use the slot until recovery or a verified retry succeeds. Other slots,
+settings and game assets are not transferred. ADB output/identifiers stay private.
+
+## Command interface
+
+Open a page without starting a transfer:
+
+```text
+dotnet run --project tools/manager -c Release -- --page TransferSave
+dotnet run --project tools/manager -c Release -- --page QuestToPc
+dotnet run --project tools/manager -c Release -- --page PcToQuest
 ```
 
-You can also call `save_transfer.sh import ...` or `save_transfer.sh export ...`
-directly. Set `ADB_SERIAL` when more than one Android device is connected.
+For automation use `--run TransferSave REQUEST.json`. The request contains the
+usual shared `Settings` object and these `Options`:
 
-Backups are stored in `LibertyVR-save-backups` on Windows and in
-`save-transfer/backups` on Linux by default. The game is force-stopped during a
-transfer; start it again after the script reports success.
+```json
+{
+  "SaveDirection": 0,
+  "SaveSlot": 3,
+  "PcSaveDirectory": "/home/user/Games/LibertyCityVR/userfiles"
+}
+```
+
+`SaveDirection` is **0** for Quest → PC and **1** for PC → Quest. On Windows use
+an absolute Windows path instead. Headless transfers require exactly one
+eligible authorized Quest 3; the TUI provides numbered selection for multiple
+headsets without displaying identifiers.

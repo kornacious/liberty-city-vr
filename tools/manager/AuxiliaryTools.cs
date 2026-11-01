@@ -29,7 +29,7 @@ public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runn
         "prepare-modern-models", "prepare-xbox-models", "build-modern-modelset", "build-xbox-modelset", "xbox-modelset", "privacy_guard", "device-diagnostics"
     };
     public static IEnumerable<AuxiliaryTool> Catalog => Sources.Keys
-        .Where(p => p != "overlay/android/diagnostics/asan-wrap.sh" &&
+        .Where(p => !p.StartsWith("overlay/tools/saves/", StringComparison.Ordinal) && p != "overlay/android/diagnostics/asan-wrap.sh" &&
             !Primary.Contains(Path.GetFileNameWithoutExtension(p)) && p.Contains('/') && !p.EndsWith("/build.ps1", StringComparison.Ordinal) && !p.EndsWith("/build.sh", StringComparison.Ordinal))
         .GroupBy(p => p[..p.LastIndexOf('.')], StringComparer.Ordinal)
         .Select(g => g.OrderBy(p => Preference(Path.GetExtension(p))).First())

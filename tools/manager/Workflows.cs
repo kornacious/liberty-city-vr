@@ -28,6 +28,13 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 break;
             case ManagerAction.RepairGameFiles: await Repair(options, token); break;
             case ManagerAction.Update: await Update(options, token); break;
+            case ManagerAction.TransferSave:
+                await new SaveTransfer(settings, log, async (temporary, cancellation) =>
+                {
+                    var device = await Connect(cancellation) ?? throw new IOException("Save transfer requires an authorized, responsive Quest 3.");
+                    return new QuestSaveSlots(device, temporary, log);
+                }).Perform(options, token);
+                break;
             default: throw new ArgumentOutOfRangeException(nameof(action));
         }
     }

@@ -35,11 +35,25 @@ internal static class UiChecks
                 Button("_Save").InvokeCommand(Command.Accept);
                 if (store.Load().Workplace != settings.Workplace) throw new Exception("Settings did not persist.");
                 File.WriteAllText(Path.Combine(directory, "settings.txt"), app.ToString());
+                Button("Tools and tests").InvokeCommand(Command.Accept);
+                if (Descendants(ui.Window).OfType<Button>().Any(b => b.Text.Contains("save_transfer", StringComparison.Ordinal) || b.Text.Contains("transfer-vr-save", StringComparison.Ordinal) || b.Text.Contains("convert_vr_save", StringComparison.Ordinal)))
+                    throw new Exception("Legacy save transfer is still visible in auxiliary tools.");
+                Button("Transfer save").InvokeCommand(Command.Accept);
+                var choices = Descendants(ui.Window).OfType<OptionSelector>().ToArray();
+                if (choices.Length != 2 || choices[0].Labels?.Count != 2 || choices[1].Labels?.Count != 8)
+                    throw new Exception("Save direction/slot options are missing.");
+                choices[0].Value = 1; choices[1].Value = 7;
+                Button("_Cancel").InvokeCommand(Command.Accept);
+                choices = Descendants(ui.Window).OfType<OptionSelector>().ToArray();
+                if (choices[0].Value != 0 || choices[1].Value != 0 || ui.Window.MostFocused?.Text != "Transfer save")
+                    throw new Exception("Save transfer Cancel did not reset choices and navigation focus.");
+                Button("Transfer save").InvokeCommand(Command.Accept);
                 app.AddTimeout(TimeSpan.FromMilliseconds(400), () =>
                 {
                     try
                     {
-                        if (app.TopRunnable is not OpenDialog) throw new Exception("Browse did not open an integrated file dialog.");
+                        if (app.TopRunnable is not OpenDialog dialog || dialog.OpenMode != OpenMode.Directory) throw new Exception("Save folder Browse did not open an integrated directory dialog.");
+                        if (!Directory.Exists(dialog.Path)) throw new Exception("Folder browser did not start at an existing parent of the proposed save directory.");
                         File.WriteAllText(Path.Combine(directory, "browser.txt"), app.ToString());
                     }
                     catch (Exception error) { failure = error; }
@@ -51,7 +65,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: navigation, Cancel, settings persistence and integrated file browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: save direction/slot selectors, Cancel, hidden legacy entries, saved settings and integrated folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

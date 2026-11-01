@@ -1,5 +1,22 @@
 # Manager migration verification
 
+## Transfer save extension (2026-11-01)
+
+The dedicated Transfer save page was verified with **47/47 Windows** and
+**48/48 Linux** native manager checks. Terminal UI checks passed on both Windows
+and Linux for direction/slot selection, Cancel/reset/focus, the integrated PC
+folder browser (including a nonexistent proposed folder), saved settings and
+hidden legacy save-transfer entries.
+
+All transfer data was synthetic. Simulated ADB exercised the Liberty City
+provider URI, binary sync files, size/SHA256 verification, destination backups,
+read-back mismatch, cancellation recovery, empty/corrupt slots, concurrent slot
+changes and backup failures. No personal saves were read or replaced, and no
+APK/game-source changes or device deployment were needed for this manager-only
+extension. A real-headset save transfer and in-game load were not performed.
+
+## Original manager migration
+
 Validated locally on Windows and Arch Linux through WSL, 2026-11-01. Original
 game inputs remained local throughout. No Git push or cloud deployment was used.
 

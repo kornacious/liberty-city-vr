@@ -65,7 +65,9 @@ public sealed class SettingsStore(string? directory = null)
     }
 }
 
-public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ImportMusic, InstallModernModels, RepairGameFiles, Update }
+public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ImportMusic, InstallModernModels, RepairGameFiles, Update, TransferSave }
+
+public enum SaveTransferDirection { QuestToPc, PcToQuest }
 
 public sealed record ActionOptions
 {
@@ -84,6 +86,9 @@ public sealed record ActionOptions
     public string ModelOutput { get; set; } = "";
     public string GameFiles { get; set; } = "";
     public string EditorOutput { get; set; } = "";
+    public SaveTransferDirection SaveDirection { get; set; } = SaveTransferDirection.QuestToPc;
+    public int SaveSlot { get; set; } = 1;
+    public string PcSaveDirectory { get; set; } = "";
 }
 
 public static class Paths

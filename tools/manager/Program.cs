@@ -23,7 +23,9 @@ internal static class Program
                 Run with no arguments to open the TUI.
                 --run ACTION REQUEST.json   Run a configured action without the TUI.
                 Actions: BuildAndInstall, BuildVehicleEditor, ImportMusic,
-                         InstallModernModels, RepairGameFiles, Update.
+                         InstallModernModels, RepairGameFiles, Update, TransferSave.
+                TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),
+                                      SaveSlot 1..8, PcSaveDirectory.
                 Request JSON: {"Settings":{...},"Options":{...}}
                 --settings PATH            Use another local settings directory.
                 --page ACTION              Open an action page (or Settings/Tools).
@@ -68,15 +70,23 @@ internal static class Program
                 return 0;
             }
             var page = 0;
-            if (args is ["--ui-check", _, var checkPage] && (!int.TryParse(checkPage, out page) || page is < 0 or > 7)) throw new ArgumentException("Invalid check page.");
+            SaveTransferDirection? saveDirection = null;
+            if (args is ["--ui-check", _, var checkPage] && (!int.TryParse(checkPage, out page) || page is < 0 or > ManagerUi.ToolsPage)) throw new ArgumentException("Invalid check page.");
             if (args is ["--page", var pageName])
             {
-                page = pageName.Equals("Settings", StringComparison.OrdinalIgnoreCase) ? 6 : pageName.Equals("Tools", StringComparison.OrdinalIgnoreCase) ? 7
+                if ((pageName.Equals(nameof(SaveTransferDirection.PcToQuest), StringComparison.OrdinalIgnoreCase) || pageName.Equals(nameof(SaveTransferDirection.QuestToPc), StringComparison.OrdinalIgnoreCase)) && Enum.TryParse<SaveTransferDirection>(pageName, true, out var direction))
+                { page = (int)ManagerAction.TransferSave; saveDirection = direction; }
+                else page = pageName.Equals("Settings", StringComparison.OrdinalIgnoreCase) ? ManagerUi.SettingsPage : pageName.Equals("Tools", StringComparison.OrdinalIgnoreCase) ? ManagerUi.ToolsPage
                     : Enum.TryParse<ManagerAction>(pageName, true, out var parsedPage) && Enum.IsDefined(parsedPage) ? (int)parsedPage : throw new ArgumentException("Unknown page.");
             }
             var store = args is ["--settings", var directory] ? new SettingsStore(directory) : new SettingsStore();
             if (args.Length > 0 && args is not ["--settings", _] and not ["--page", _] and not ["--ui-check", _] and not ["--ui-check", _, _]) throw new ArgumentException("Unknown arguments. Use --help.");
             var settings = store.Load();
+            if (saveDirection is { } preset)
+            {
+                settings.Actions.TryGetValue(ManagerAction.TransferSave, out var savedTransfer);
+                settings.Actions[ManagerAction.TransferSave] = (savedTransfer ?? new ActionOptions()) with { SaveDirection = preset };
+            }
             using var app = Application.Create().Init();
             using var ui = new ManagerUi(app, store, settings);
             ui.Initialize(page);

@@ -204,6 +204,7 @@ await Test("Native privacy staged and history scans", async () =>
     await ThrowsAsync<InvalidDataException>(() => guard.Run("pre-push", pushInput: "refs/heads/master " + new string('a', 40) + " refs/checkpoint/local " + new string('0', 40)));
 });
 
+await SaveTransferChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");
 return failures == 0 ? 0 : 1;
 

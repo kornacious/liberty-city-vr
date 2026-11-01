@@ -9,6 +9,8 @@ namespace LibertyManager;
 
 public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSettings initial) : IDisposable
 {
+    public const int SettingsPage = 7;
+    public const int ToolsPage = 8;
     // GTA III menu cyan, amber HUD, cream lettering and the dark blue of its cover art.
     public static readonly Color Midnight = new(16, 24, 32);
     public static readonly Color Cyan = new(112, 190, 202);
@@ -59,7 +61,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Import music", "Modern models", "Repair game files", "Update", "Settings", "Tools and tests"];
+        string[] pages = ["Build and install", "Vehicle editor", "Import music", "Modern models", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
@@ -109,15 +111,15 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
     {
         if (running is { IsCompleted: false }) return;
         selected = page; draft = settings with { Actions = new(settings.Actions) };
-        options = page < 6 && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
+        options = page < SettingsPage && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
         auxiliary = null; readFields.Clear(); row = 0;
         if (form is not null) { configuration.Remove(form); form.Dispose(); }
         form = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(2), CanFocus = true,
             ViewportSettings = ViewportSettingsFlags.HasVerticalScrollBar };
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
-        perform.Text = page == 6 ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "IMPORT MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "SETTINGS", "TOOLS AND TESTS"];
+        perform.Text = page == SettingsPage ? "_Save" : "_Perform";
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "IMPORT MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "SETTINGS", "TOOLS AND TESTS"];
         configuration.Title = titles[page];
         switch (page)
         {
@@ -157,6 +159,19 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Toggle("Release (requires signing configuration)", options.Release, v => options.Release = v);
                 Licenses(); break;
             case 6:
+                var direction = new OptionSelector { X = 1, Y = row, Labels = ["Quest → PC", "PC → Quest"], Value = (int)options.SaveDirection, Width = Dim.Fill(2), Height = 2 };
+                direction.SetScheme(Theme()); form.Add(direction); row += 3;
+                readFields.Add(() => options.SaveDirection = (SaveTransferDirection)(direction.Value ?? 0));
+                form.Add(new Label { Text = "Save slot", X = 1, Y = row }); row++;
+                var slot = new OptionSelector { X = 1, Y = row, Labels = ["1", "2", "3", "4", "5", "6", "7", "8"], Orientation = Orientation.Horizontal, Value = options.SaveSlot - 1, Width = Dim.Fill(2), Height = 1 };
+                slot.SetScheme(Theme()); form.Add(slot); row += 2;
+                readFields.Add(() => options.SaveSlot = (slot.Value ?? 0) + 1);
+                Field("PC save folder (GTA3sf1.b … GTA3sf8.b)", string.IsNullOrWhiteSpace(options.PcSaveDirectory) ? SaveTransfer.DefaultPcDirectory(draft) : options.PcSaveDirectory,
+                    v => options.PcSaveDirectory = v, OpenMode.Directory, false);
+                Note("Close the PC game first. The Quest game will be stopped. Existing destination saves are backed up before replacement.");
+                Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));
+                break;
+            case SettingsPage:
                 Note("Shared configuration. Cancel discards edits; Save stores them for every action.");
                 Field("Source repository", draft.Repository, v => draft.Repository = v, OpenMode.Directory);
                 Field("Workplace", draft.Workplace, v => draft.Workplace = v, OpenMode.Directory, false);
@@ -171,7 +186,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("Bash executable (auxiliary tools)", draft.Bash, v => draft.Bash = v, OpenMode.File);
                 Toggle("Allow pinned build-tool downloads", draft.AllowToolDownloads, v => draft.AllowToolDownloads = v);
                 Note("Saved to " + store.FilePath); break;
-            case 7:
+            case ToolsPage:
                 Note("Additional project tools and regression checks.");
                 Note("Select a tool. Specialised tools use the configured Python, PowerShell or Bash runtime.");
                 foreach (var tool in AuxiliaryTools.Catalog)
@@ -201,7 +216,19 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             e.Handled = true;
             using var dialog = new OpenDialog { Title = label, OpenMode = mode, MustExist = mustExist };
             dialog.SetScheme(Theme());
-            dialog.Path = string.IsNullOrWhiteSpace(field.Text) ? (Directory.Exists(draft.Workplace) ? draft.Workplace : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)) : field.Text;
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var start = string.IsNullOrWhiteSpace(field.Text) ? (Directory.Exists(draft.Workplace) ? draft.Workplace : home) : field.Text;
+            if (mode == OpenMode.Directory)
+            {
+                try
+                {
+                    var folder = new DirectoryInfo(Path.GetFullPath(start));
+                    while (folder is not null && !folder.Exists) folder = folder.Parent;
+                    start = folder?.FullName ?? home;
+                }
+                catch (Exception error) when (error is ArgumentException or IOException or NotSupportedException) { start = home; }
+            }
+            dialog.Path = start;
             app.Run(dialog);
             if (!dialog.Canceled) field.Text = dialog.Path;
         };
@@ -223,7 +250,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 
     private void RenderTool(AuxiliaryTool tool)
     {
-        Render(7);
+        Render(ToolsPage);
         foreach (var view in form!.SubViews.ToArray()) { form.Remove(view); view.Dispose(); }
         row = 0; readFields.Clear(); auxiliary = tool.Path;
         Note(tool.Category + " / " + tool);
@@ -244,10 +271,10 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         try
         {
             draft.Validate();
-            if (selected == 6)
-            { store.Save(draft); settings = draft with { }; pending.Enqueue("Settings saved to " + store.FilePath); navigationButtons[6].SetFocus(); return; }
-            if (selected == 7 && auxiliary is null) { pending.Enqueue("Select a tool first."); return; }
-            if (selected < 6)
+            if (selected == SettingsPage)
+            { store.Save(draft); settings = draft with { }; pending.Enqueue("Settings saved to " + store.FilePath); navigationButtons[SettingsPage].SetFocus(); return; }
+            if (selected == ToolsPage && auxiliary is null) { pending.Enqueue("Select a tool first."); return; }
+            if (selected < SettingsPage)
             {
                 // License consent is explicit for each run rather than inferred from a saved checkbox.
                 draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false };
