@@ -6,6 +6,13 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`python tools/tests/test-cutscene-cameras.py` compiles the production camera
+lookup and render selection with synthetic original and skinned actors. It
+checks named head-frame detection, actor/director switching, unavailable heads,
+streaming guards, and live-world vehicle occupants. It requires a C++17 compiler
+(Visual Studio on Windows); it reads no game data. Headset appearance and physical
+R3/calibration controls still require in-game validation.
+
 `test-boat-window-depth.ps1 -StageRoot <assembled-tree>` executes the boat
 body submission block with the production Vulkan vehicle-alpha policy. It
 checks water visibility through all transparent material alpha values, opaque

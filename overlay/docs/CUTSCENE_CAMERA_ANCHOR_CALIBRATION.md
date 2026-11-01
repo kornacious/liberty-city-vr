@@ -1,7 +1,7 @@
 # Quest cutscene camera-anchor calibration
 
-The stereo first-person cutscene camera rides the animated head bone when an
-animated actor is available. The camera keeps the existing 4 cm lift and adds a
+The stereo first-person cutscene camera rides the animated head bone or original
+model's `Shead` frame when an animated actor is available. The camera keeps the existing 4 cm lift and adds a
 profile offset stored in the actor's local horizontal frame. Exact model-name
 profiles take priority. If a model name is not recognized, it inherits the
 existing `PLAYER` profile when the actor is the live player ped, or the existing
@@ -26,6 +26,9 @@ made in-headset continue to save to that file.
 ## In-headset controls
 
 1. Enter a first-person stereo cutscene in which the target actor is visible.
+   Press **R3** to cycle the director and available actor cameras. Press **L3**
+   to remember the selected camera for that scene. The selection also applies
+   when Claude participates; his camera does not override another selection.
 2. Press **L3 + R3 together** to open the anchor calibration panel for the model
    currently driving the camera. If the current view is the director camera and
    no animated actor head is active, calibration cannot start; use R3 to select

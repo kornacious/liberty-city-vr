@@ -712,10 +712,8 @@ androidgame::VrCutsceneCameraActor(void)
 	return gCutsceneCameraActor;
 }
 
-// Filming an actor from behind their own eyes needs a posed head bone, and
-// that means a skinned clump: the head does not live in an RwFrame at all,
-// the matrix comes out of the hanim hierarchy the same way CPedIK reads a
-// ped's bones. Cutscene actors and ordinary peds both qualify.
+// Skinned actors expose their posed head through the hanim matrix array.
+// Original non-skinned actors use the named-frame path below.
 static RpHAnimHierarchy*
 GetPosedHeadHierarchy(CEntity *entity)
 {
@@ -732,6 +730,27 @@ GetPosedHeadHierarchy(CEntity *entity)
 	return hierarchy;
 }
 
+// Original actors animate named frames instead of skin bones.
+static RwFrame *
+GetAnimatedHeadFrame(CEntity *entity)
+{
+	if(entity == nil || entity->m_rwObject == nil ||
+	   RwObjectGetType(entity->m_rwObject) != rpCLUMP)
+		return nil;
+	RpClump *clump = (RpClump*)entity->m_rwObject;
+	if(IsClumpSkinned(clump) || !RpAnimBlendClumpIsInitialized(clump))
+		return nil;
+	AnimBlendFrameData *head = RpAnimBlendClumpFindFrame(clump, "Shead");
+	return head != nil ? head->frame : nil;
+}
+
+static bool
+HasAnimatedHead(CEntity *entity)
+{
+	return GetPosedHeadHierarchy(entity) != nil ||
+		GetAnimatedHeadFrame(entity) != nil;
+}
+
 // The heads the player can step through, in a fixed order so a remembered
 // choice means the same thing the next time the scene plays.
 static int
@@ -742,7 +761,7 @@ StageCutsceneCameras(CEntity **actors, int maxActors)
 		(int)NUMCUTSCENEOBJECTS);
 	for(int i = 0; i < count && staged < maxActors; i++){
 		CEntity *actor = CCutsceneMgr::GetCutsceneObject(i);
-		if(GetPosedHeadHierarchy(actor) != nil)
+		if(HasAnimatedHead(actor))
 			actors[staged++] = actor;
 	}
 	// A real cutscene has no one else in it. The player ped is parked
@@ -759,19 +778,19 @@ StageCutsceneCameras(CEntity **actors, int maxActors)
 	CPlayerPed *player = FindPlayerPed();
 	if(player == nil)
 		return staged;
-	if(GetPosedHeadHierarchy(player) != nil && staged < maxActors)
+	if(HasAnimatedHead(player) && staged < maxActors)
 		actors[staged++] = player;
 	CVehicle *vehicle = player->bInVehicle ? player->m_pMyVehicle : nil;
 	if(vehicle == nil)
 		return staged;
 	if(vehicle->pDriver != nil && vehicle->pDriver != player &&
-	   GetPosedHeadHierarchy(vehicle->pDriver) != nil && staged < maxActors)
+	   HasAnimatedHead(vehicle->pDriver) && staged < maxActors)
 		actors[staged++] = vehicle->pDriver;
 	for(int i = 0; i < (int)ARRAY_SIZE(vehicle->pPassengers) &&
 	    staged < maxActors; i++){
 		CPed *passenger = vehicle->pPassengers[i];
 		if(passenger != nil && passenger != player &&
-		   GetPosedHeadHierarchy(passenger) != nil)
+		   HasAnimatedHead(passenger))
 			actors[staged++] = passenger;
 	}
 	return staged;
@@ -790,14 +809,17 @@ GetAnimatedPedHeadPose(CEntity *actor, CVector *head, CVector *forward)
 {
 	if(actor == nil || head == nil || forward == nil)
 		return false;
+	RwMatrix *bonePose = nil;
 	RpHAnimHierarchy *hierarchy = GetPosedHeadHierarchy(actor);
-	if(hierarchy == nil)
-		return false;
-	const int headIndex = RpHAnimIDGetIndex(hierarchy, BONE_head);
-	if(headIndex < 0)
-		return false;
-	RwMatrix *bonePose =
-		&RpHAnimHierarchyGetMatrixArray(hierarchy)[headIndex];
+	if(hierarchy != nil){
+		const int headIndex = RpHAnimIDGetIndex(hierarchy, BONE_head);
+		bonePose = &RpHAnimHierarchyGetMatrixArray(hierarchy)[headIndex];
+	}else{
+		RwFrame *frame = GetAnimatedHeadFrame(actor);
+		if(frame == nil)
+			return false;
+		bonePose = RwFrameGetLTM(frame);
+	}
 
 	*head = CVector(RwMatrixGetPos(bonePose)->x,
 		RwMatrixGetPos(bonePose)->y,
@@ -825,101 +847,6 @@ GetAnimatedActorHead(CEntity *actor, CVector *head, CVector *forward)
 		return false;
 	gCutsceneCameraActor = actor;
 	return true;
-}
-
-static bool
-ContainsNoCase(const char *text, const char *needle)
-{
-	if(text == nil || needle == nil || needle[0] == '\0')
-		return false;
-
-	const size_t needleLen = strlen(needle);
-	for(const char *p = text; *p; p++){
-		size_t i = 0;
-		for(; i < needleLen; i++){
-			if(p[i] == '\0')
-				break;
-			const char ca = p[i] >= 'A' && p[i] <= 'Z' ?
-				(char)(p[i]-'A'+'a') : p[i];
-			const char cb = needle[i] >= 'A' && needle[i] <= 'Z' ?
-				(char)(needle[i]-'A'+'a') : needle[i];
-			if(ca != cb)
-				break;
-		}
-		if(i == needleLen)
-			return true;
-	}
-	return false;
-}
-
-static bool
-IsPlayerCutsceneActor(CEntity *actor)
-{
-	if(actor == nil || GetPosedHeadHierarchy(actor) == nil)
-		return false;
-
-	// Formal cutscenes frequently use a dedicated cutscene-player model rather
-	// than Claude's live-world model index. Match the model's actual name.
-	CBaseModelInfo *model =
-		CModelInfo::GetModelInfo(actor->GetModelIndex());
-	const char *modelName =
-		model != nil ? model->GetModelName() : nil;
-
-	if(ContainsNoCase(modelName, "csplay") ||
-	   ContainsNoCase(modelName, "player") ||
-	   ContainsNoCase(modelName, "claude") ||
-	   ContainsNoCase(modelName, "tommy"))
-		return true;
-
-	// Some special cutscene entries have generic model names, but their active
-	// animation hierarchy still identifies the player role.
-	if(actor->m_rwObject != nil &&
-	   RwObjectGetType(actor->m_rwObject) == rpCLUMP){
-		CAnimBlendAssociation *assoc =
-			RpAnimBlendClumpGetFirstAssociation(
-				(RpClump*)actor->m_rwObject);
-		if(assoc != nil && assoc->hierarchy != nil){
-			const char *animName = assoc->hierarchy->name;
-			if(ContainsNoCase(animName, "claude") ||
-			   ContainsNoCase(animName, "player") ||
-			   ContainsNoCase(animName, "csplay") ||
-			   ContainsNoCase(animName, "tommy"))
-				return true;
-		}
-	}
-
-	return false;
-}
-
-static bool
-GetPlayerCutsceneHead(CVector *head, CVector *forward)
-{
-	CPlayerPed *player = FindPlayerPed();
-	if(player == nil)
-		return false;
-
-	if(CCutsceneMgr::IsRunning() ||
-	   CCutsceneMgr::IsCutsceneProcessing()){
-		const int count =
-			Min(CCutsceneMgr::GetNumCutsceneObjects(),
-			    (int)NUMCUTSCENEOBJECTS);
-
-		for(int i = 0; i < count; i++){
-			CEntity *actor =
-				CCutsceneMgr::GetCutsceneObject(i);
-			if(IsPlayerCutsceneActor(actor) &&
-			   GetAnimatedActorHead(actor, head, forward))
-				return true;
-		}
-		return false;
-	}
-
-	// Scripted widescreen scenes use the real player rather than staged
-	// CCutsceneObjects.
-	if(TheCamera.m_WideScreenOn)
-		return GetAnimatedActorHead(player, head, forward);
-
-	return false;
 }
 
 static bool
@@ -1979,23 +1906,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			forward = CVector(0.0f, 1.0f, 0.0f);
 		forward.Normalise();
 		CVector head = TheCamera.GetPosition();
-		const CVector directorPosition = head;
 		CVector actorHead(0.0f, 0.0f, 0.0f), actorForward;
-		bool usingPlayerHead = false;
-		bool usingSelectedActorHead = false;
-
-		// First-person stereo cutscene policy:
-		// If Claude participates in the scene, ride the NATIVE animated player
-		// head. Body IK is explicitly disabled during the sequence, so the
-		// entire authored animation plays untouched beneath the camera.
-		//
-		// If Claude is not present, preserve the existing remembered actor /
-		// director selection as the fallback.
-		usingPlayerHead = GetPlayerCutsceneHead(&actorHead, &actorForward);
-		if(!usingPlayerHead)
-			usingSelectedActorHead = GetCutsceneActorHead(
-				androidgame::VrCutsceneCamera(), &actorHead, &actorForward);
-		if(usingPlayerHead || usingSelectedActorHead){
+		// Honor the camera R3 selects and L3 remembers, including the director.
+		const bool usingSelectedActorHead = GetCutsceneActorHead(
+			androidgame::VrCutsceneCamera(), &actorHead, &actorForward);
+		if(usingSelectedActorHead){
 			// Exact model profiles win. Unknown model names inherit the existing
 			// PLAYER or CSPLAY configuration according to actor role, so future
 			// replacements keep the calibrated framing instead of using only 4 cm.
