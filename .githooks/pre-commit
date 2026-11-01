@@ -1,7 +1,7 @@
 #!/bin/sh
 repo_root=$(git rev-parse --show-toplevel) || exit 1
-python_path=$(git config --local --get privacy.python) || {
-    echo 'Install privacy hooks with: python tools/privacy_guard.py install-hooks' >&2
+dotnet_path=$(git config --local --get privacy.dotnet) || {
+    echo 'Install privacy hooks with: dotnet run --project tools/manager -- --privacy install-hooks' >&2
     exit 1
 }
-exec "$python_path" "$repo_root/tools/privacy_guard.py" staged
+exec "$dotnet_path" run --project "$repo_root/tools/manager/LibertyManager.csproj" -c Release --no-restore -- --privacy staged

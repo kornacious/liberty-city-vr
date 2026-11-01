@@ -1,328 +1,136 @@
-# Build the Quest APK yourself
+# Build and manage Liberty City VR
 
-This repository does not distribute an APK or a complete re3 tree. The steps
-below produce a personal debug-signed APK on your own machine.
-
-## Easiest Windows method
-
-1. Connect the Quest, enable USB debugging, and accept the authorization prompt
-   inside the headset.
-2. Double-click **`BUILD_AND_INSTALL.bat`** in this repository.
-
-No Android Studio, system Git, system Java or manually prepared Android SDK is
-required for this route. The wizard downloads portable Git, JDK 21, Android
-command-line tools, Platform 35, Build-Tools 34.0.0, Platform-Tools, NDK
-27.2.12479018, CMake 3.22.1 and Gradle 8.13. The user must accept Google's SDK
-licenses when prompted.
-
-## Easiest Linux method
-
-1. Connect the Quest, enable USB debugging, and accept the authorization prompt
-   inside the headset.
-2. Run **`./BUILD_AND_INSTALL.sh`** in this repository.
-
-The wizard needs `git`, `curl`, `unzip` and `tar` on `PATH` (on CachyOS/Arch:
-`sudo pacman -S git curl unzip`). It then discovers or downloads JDK 21
-(pinned official Eclipse Temurin 21.0.11+10, SHA256-verified), the Android
-command-line tools (pinned, SHA256-verified) and Gradle 8.13 (pinned,
-SHA256-verified), and installs Platform 35, Build-Tools 34.0.0, Platform-Tools,
-NDK 27.2.12479018 and CMake 3.22.1 through `sdkmanager`. A system JDK 21
-(`JAVA_HOME`) or Android SDK (`ANDROID_HOME`/`ANDROID_SDK_ROOT`) is used when
-present. The user must accept Google's SDK licenses when prompted.
-
-The Linux entry points mirror the Windows ones:
-
-| Windows | Linux |
-|---|---|
-| `BUILD_AND_INSTALL.bat` | `BUILD_AND_INSTALL.sh` |
-| `INSTALL_MODERN_MODELS.bat` | `INSTALL_MODERN_MODELS.sh` |
-| `REPAIR_GAME_FILES.bat` | `REPAIR_GAME_FILES.sh` |
-
-The model builders need one extra step on Linux: the texture compressor
-is built from source once, next to the other model-set tools:
-
-```sh
-cd tools/modelsets
-g++ -O2 -o txdcompress txdcompress.cpp
-```
-
-(`txdcompress` is gitignored; `txdcompress.exe` is the committed Windows build.)
-
-The asset wizard prepares one Modern overlay using the pinned GTA III Xbox
-Version HD (re3) release. In-game selection is Classic or Modern. Python 3.9+
-is required on both platforms. Supply the ModDB ZIP locally if automated download is blocked.
-See [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md) for commands, storage
-requirements, category effects and validation limits.
-
-Do not launch `tools\build-and-install.ps1` directly. The `.bat` wrapper keeps
-the window open and always prints the location of the persistent diagnostic
-log: `%TEMP%\LibertyCityVR-Build-And-Install.log`. If the build fails, attach that
-file instead of sending a video of a closing console window.
-
-The wizard downloads and SHA256-verifies pinned official portable Git, Eclipse
-Temurin JDK 21, Android command-line tools and Gradle. It then installs the
-required SDK packages, obtains the exact tested public re3 commit, assembles
-the private tree, builds a personal debug APK, installs it with
-`adb install -r`, bootstraps application-owned storage, and asks for the legally
-owned GTA III folder when game data must be copied. It never uninstalls the
-app or clears its data silently. If Android reports that an older installation
-was signed with a different key, the wizard explains that replacement can erase
-saves and game data and asks for explicit confirmation before uninstalling it.
-It validates the supplied GTA III PC folder before deleting the old app and
-then restores the required game data after installing the new build.
-It never uploads anything or bundles an APK/GTA data into this repository.
-
-If somebody downloaded only `BUILD_AND_INSTALL.bat`, the BAT downloads and
-extracts the complete public source kit automatically before starting the
-wizard. Extracting the repository ZIP manually is still supported.
-
-On Linux, run `./BUILD_AND_INSTALL.sh` instead. It mirrors the BAT: it keeps
-the terminal open on error, always prints the location of the persistent
-diagnostic log (`$TMPDIR/LibertyCityVR-Build-And-Install.log`, usually
-`/tmp/LibertyCityVR-Build-And-Install.log`), and downloads the complete public
-source kit if only the script itself was downloaded. Do not launch
-`tools/build-and-install.sh` directly: the wrapper is the supported entry
-point.
-
-Advanced command-line example:
-
-```powershell
-.\BUILD_AND_INSTALL.bat -GameDir "C:\Games\Grand Theft Auto III"
-```
-
-```sh
-./BUILD_AND_INSTALL.sh --game-dir "$HOME/Games/Grand Theft Auto III"
-```
-
-Use `-BuildOnly` / `--build-only` to stop after producing the APK, or
-`-SkipGameData` / `--skip-game-data` when the Quest already contains the
-required data. The manual steps below remain the reference and troubleshooting
-path.
-
-## 1. Install the toolchain
-
-Tested versions:
-
-- Git
-- JDK 21
-- Android SDK Platform 35 and Build Tools 34.0.0
-- Android NDK `27.2.12479018`
-- CMake 3.22.1
-- Gradle 8.13, or Android Studio with an equivalent Gradle installation
-- Android Platform Tools (`adb`)
-
-On Windows, use short working paths such as `C:\LCVRBuild\re3-public-b050e1c` and
-`C:\LCVRBuild\liberty-city-vr-build`; native object paths can otherwise exceed Windows
-path limits.
-
-## 2. Obtain the required re3 source
-
-The source is supplied by the public upstream project, not by this repository:
-
-```powershell
-git clone --no-checkout https://github.com/mrxenginner/re3.git C:\LCVRBuild\re3
-git -C C:\LCVRBuild\re3 checkout --detach b050e1cc63b1869e6b514ab2f1a00ef4969e0c84
-```
-
-Tested build-base repository: <https://github.com/mrxenginner/re3>.
-
-Use a clean checkout at that exact commit. A different revision or local edits
-can make a patch fail; the script stops instead of silently producing a mixed
-tree.
-
-## 3. Assemble the private build tree
-
-From this repository on Windows:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\assemble.ps1 `
-  -Re3 C:\LCVRBuild\re3 `
-  -Out C:\LCVRBuild\liberty-city-vr-build
-```
-
-Linux/macOS:
-
-```sh
-./tools/assemble.sh /path/to/re3 /path/to/liberty-city-vr-build
-```
-
-The output directory must not already exist. The script copies re3, applies
-the Quest and runtime patch layers, overlays only new port files, and installs
-the bundled librw fork under `vendor/librw`. The original checkout is not
-modified. The assembled directory contains re3-derived source and is a local
-build product: do not commit or redistribute it.
-
-## 4. Build a personal debug APK
-
-Windows PowerShell:
-
-```powershell
-$env:JAVA_HOME = "C:\path\to\jdk-21"
-$env:ANDROID_HOME = "C:\path\to\Android\Sdk"
-$env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
-Set-Location C:\LCVRBuild\liberty-city-vr-build\android
-gradle wrapper
-.\gradlew.bat :app:assembleDebug
-```
-
-Linux/macOS:
-
-```sh
-cd /path/to/liberty-city-vr-build/android
-gradle wrapper
-./gradlew :app:assembleDebug
-```
-
-Output:
+The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+dotnet run --project tools/manager -c Release
 ```
 
-The debug build is signed with your machine's local Android debug key and is
-sufficient for personal sideloading. `assembleRelease` requires private signing configuration unless the unsigned build option below is explicitly selected. Never commit signing keys or values.
+On Windows, `MANAGE.bat` opens the same application. The existing BAT shortcuts
+open its action pages. Keep the complete source kit together. Standalone
+PowerShell, Bash and Python entrypoints have been integrated into the manager.
+See [the manager guide](tools/manager/README.md) for publishing standalone Windows
+and Linux binaries, dependencies, auxiliary runtimes and command-line use.
 
-## 5. Install without deleting existing data
+## Configure once
 
-Enable Developer Mode and USB debugging on the headset, then verify it appears:
+Open **Settings** in the left navigation panel. Choose the source repository,
+workplace, optional legally owned GTA III PC installation, Android SDK, JDK,
+ADB, ffprobe and CMake paths. Every path has a terminal file/directory browser.
+Blank toolchain paths use the workplace cache or normal discovery. **Save**
+stores settings atomically; **Cancel** discards edits and returns to navigation.
 
-```powershell
-adb devices
-adb install -r C:\LCVRBuild\liberty-city-vr-build\android\app\build\outputs\apk\debug\app-debug.apk
-```
+Defaults are `C:\LCVRBuild` on Windows and `~/LCVRBuild` on Linux. Keep the
+workplace separate from the repository; short Windows paths avoid native build
+path limits. Settings live in `%APPDATA%\LibertyCityVR` or `~/.liberty-city-vr`.
+Action logs are stored in that directory's `logs` folder. Device identifiers
+are never printed or saved in settings/logs.
 
-`-r` updates the application in place and preserves its settings and saves.
-Do not uninstall or clear application data when you want to retain them.
+## Build and install
 
-On a completely fresh install, bootstrap the external-data layout through the
-APK's narrow save provider before copying any files:
+Choose **Build and install**, configure the options on the right, then
+**Perform**. Build only skips installation. Release requires your private
+signing configuration; debug uses the local Android debug key. Optional retail
+copying requires a complete local GTA III PC installation containing `data`,
+`TEXT`, `anim`, `models`, `movies`, and `Audio`, including `sfx.RAW` and `sfx.SDT`.
+The manager copies only the required folders and optional `mp3`, `skins`, `txd`.
+Game files and saves remain local and must never be committed or uploaded.
 
-```powershell
-adb shell content query --uri content://com.libertyvr.quest.saves/slot/1 `
-  --projection _display_name:_size
-```
+The x64 tool bootstrap retains the original verified versions:
 
-The expected result is a zero-byte `GTA3sf1.b` row. This creates the root and
-the documented retail-data child directories as the application UID. Do
-**not** pre-create `/sdcard/Android/data/com.libertyvr.quest/files` with
-`adb shell mkdir -p`: on current Horizon OS that can leave it owned by the ADB
-shell and the game immediately exits with `cannot enter game data directory`.
+- Git for Windows 2.55.0.3 (Linux requires installed Git)
+- Eclipse Temurin JDK 21.0.11+10
+- Android command-line tools 15859902
+- Android Platform 35, Build Tools 34.0.0 and Platform Tools
+- Android NDK 27.2.12479018 and CMake 3.22.1
+- Gradle 8.13
 
-## 6. Supply your own game data
+Portable archives are SHA256 checked before extraction. Installing missing SDK
+packages requires explicit acceptance of Google's SDK licenses in the action
+configuration. Existing configured tools are reused. No original game data is
+fetched by the manager.
 
-The APK contains no GTA III data. Copy the required directories from
-your legally owned PC installation to:
+The required public source is <https://github.com/mrxenginner/re3>, clean at
+`b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The manager obtains or verifies that
+checkout, copies it into a new private build directory, applies `patches/*.patch`
+in filename order, overlays the Quest files and installs the bundled librw fork.
+Previous builds and the clean upstream checkout are preserved.
+
+The APK is produced at:
 
 ```text
-/sdcard/Android/data/com.libertyvr.quest/files/gamedata/
+<new-build>/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The expected top-level data includes `data`, `TEXT`, `anim`, `txd`, `skins`,
-`mp3`, `movies`, `models` and `Audio`. Saves/settings live separately under:
+A release build uses the corresponding `release/app-release.apk` path. The
+SHA256 and actual build path appear in the action log. Assembled source contains
+re3-derived code and is a private local build product; do not redistribute it.
+
+After a successful build, the manager discovers authorized devices locally,
+queries their model with a deadline and installs only on a responsive Quest 3.
+Multiple eligible devices require a numbered choice. Missing ADB or an eligible
+device skips deployment and leaves the successful build available. Installation
+uses `install -r` with an explicit private target. A signing/version/install
+failure stops; the manager never uninstalls the app or clears saves/game data.
+
+A full installation bootstraps application storage through its save provider,
+optionally copies your game data, installs the port's replacement frontend/text
+assets and bundled hands, verifies transfers and leaves the game stopped.
+Launch it from the headset when ready.
+
+## Other pages
+
+**Vehicle editor** builds and tests the C++ desktop editor, installs it into the
+workplace (or chosen output folder), and optionally creates a ZIP. Windows
+requires Visual Studio/Build Tools with the Desktop C++ workload. Linux needs a C++ compiler,
+Ninja, OpenGL/X11/GLFW development dependencies. Device transfer is routed through
+the packaged manager; its embedded bridge needs configured Python 3 and ADB.
+
+**Import music** accepts one supported file or a flat audio folder. It uses
+ffprobe to validate codec, channels, sample rate, size and duration before any
+transfer. Validation only needs no headset. Imports use provider staging and
+SHA256-verified commits, skip duplicates and preserve existing tracks. Optional
+radio-board export requires a new output filename.
+
+**Modern models** accepts the pinned Xbox HD re3 ZIP or extracted source, or an
+explicit optional ModDB download. It creates a generated folder named `modern`,
+verifies all source/output hashes, merges archives and converts textures. Build
+only skips the headset. Device installation verifies every staged file before
+activating the new folder and restores the old folder if activation fails.
+Model packs and generated products must stay local.
+
+**Repair game files** replaces the port's allowlisted GXT and frontend/shared
+TXD files when menu entries show missing labels. It requires existing game data
+and takes assets from the pinned re3 `gamefiles` folder or the folder you select.
+It does not replace retail IMG archives, optional model overlays or saves.
+
+**Update** requires clean master and a fast-forward from official master. It
+checks the version floor and asset-update marker, rebuilds the fetched manager,
+then builds and updates only the APK. Dry run performs local checks without
+network/build/device access. Build only produces the APK without installing.
+For release signatures set `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` to your private
+signing properties and select Release. Keep keys and signing values out of Git.
+
+**Tools and tests** exposes the auxiliary authoring, save, model, capture and
+regression modules. They are embedded into the application and materialized in
+a fresh local source-only workplace snapshot when selected. Python 3, PowerShell
+7, Bash and specialised dependencies remain necessary for those modules. Legacy
+module names are resource IDs, not standalone files in the checkout. Historical
+installer fixture tests cover their compatibility sources; the active C# manager
+has its own native regression checks.
+
+## Maintainer verification
 
 ```text
-/sdcard/Android/data/com.libertyvr.quest/files/userfiles/
+dotnet build tools/manager -c Release
+dotnet run --project tools/manager/tests -c Release
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-patch-series.py -- C:/LCVRBuild/re3-public-b050e1c
+dotnet run --project tools/manager -c Release -- --privacy install-hooks
+dotnet run --project tools/manager -c Release -- --privacy history
 ```
 
-After the provider bootstrap has created the application-owned root, Android
-scoped storage may still require individual child directories. At that point
-they may be created with `adb shell mkdir -p`. Push each top-level folder into
-`gamedata`, not into another folder of the same name. Detailed examples are in
-[overlay/docs/QUEST_PORT.md](overlay/docs/QUEST_PORT.md).
-
-Retail data alone is not enough. re3 replaces several stock assets and its
-frontend reads strings and button icons that a 2001 installation never shipped;
-without them the OPTIONS menus print `FET_GFX missing`, `FED_AAS missing` and
-the like where the labels belong. The wizard copies them automatically. Doing
-it by hand, from the assembled tree:
-
-```powershell
-$data = "/sdcard/Android/data/com.libertyvr.quest/files/gamedata"
-adb push C:\LCVRBuild\liberty-city-vr-build\gamefiles\TEXT $data
-adb push C:\LCVRBuild\liberty-city-vr-build\gamefiles\models $data
-```
-
-An installation made before the wizard did this can be repaired without
-rebuilding: double-click `REPAIR_GAME_FILES.bat` (Windows) or run
-`./REPAIR_GAME_FILES.sh` (Linux). It replaces selected GXT files and
-frontend/shared TXDs under `models/`. Saves, settings, model archives and
-optional model overlays are left alone.
-
-The VR hand meshes are original MIT-licensed port assets, not GTA data and not
-part of the APK. Copy them once from the assembled tree:
-
-```powershell
-adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
-adb push C:\LCVRBuild\liberty-city-vr-build\gamefiles\models\vrhands `
-  /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
-adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models/vrhands
-```
-
-The final directory must directly contain `BigHandLeft.uxrh`,
-`BigHandRight.uxrh` and `BigHandsAlbedo.png`; avoid a nested
-`vrhands/vrhands` directory.
-
-## Troubleshooting
-
-- `patch does not apply`: reset re3 to the exact tested commit and update its
-  submodules; do not assemble from a modified checkout.
-- `ninja: mkdir ... No such file or directory`: use shorter source/output paths.
-- SDK/NDK not found: set `ANDROID_HOME`/`ANDROID_SDK_ROOT` or create
-  `android/local.properties` with `sdk.dir=...`.
-- release signing error: check your private release configuration. A personal
-  debug build uses a different key and cannot update a release-signed app.
-- app exits or stays in theater mode: verify the game-data path and filename
-  case, then inspect `adb logcat -s LibertyVR:V librw-vk:V`.
-
-## Release and developer build options
-
-A signed release may read its configuration from outside the source tree using
-LIBERTYVR_RELEASE_SIGNING_PROPERTIES. The storeFile path is resolved relative to
-that configuration file. Keep both configuration and keystore private.
-
-For an unsigned release artifact, pass -PlibertyvrUnsignedRelease=true to
-:app:assembleRelease and sign the APK separately. Release builds are not
-debuggable. Neither path changes the source-only distribution policy.
-
-The culling inspector and other developer-only diagnostics require the explicit
--PlibertyvrDevTools=true option. It is off by default for both debug and release
-builds; ordinary player graphics settings are independent of it.
-
-For native memory diagnostics, build `:app:assembleDebug -PlibertyvrAsan=true`
-from the assembled `android` directory. This opt-in build instruments the engine
-and librw with AddressSanitizer and packages its NDK runtime plus an Android
-launch wrapper. Install it with `adb -s <serial> install -r <apk>` to preserve
-saves and game data, reproduce the failure, and capture `adb -s <serial> logcat
--b all -d`. Keep that build's unstripped `liblibertyvr.so` for symbolication;
-addresses must match its Build ID. ASan slows the game and increases memory use.
-It stops on the first detected memory error rather than continuing with corrupt
-state. Release variants are unavailable while this option is enabled.
-
-Rebuild without `libertyvrAsan` to return to a player APK. Normal debug/release
-packages exclude both the sanitizer runtime and wrapper, including when reusing
-the same build directory. Verify the resulting artifact with
-`tools/tests/test-asan-apk.ps1 -Apk <apk>`; add `-ExpectAsan` for a diagnostic APK.
-
-## Updating without downloading another source ZIP
-
-Use the root `UPDATE.bat` / `UPDATE.sh` wrapper after the initial installation.
-It uses the same work directory and tool caches as the build wizard. See the
-[update instructions](README.md#updating-an-existing-installation) for Git/ZIP
-behavior, work-directory selection, dry runs and building without installing.
-Updates never launch the game or perform an uninstall fallback.
-
-The default personal debug build retains the original wizard's signing
-identity. For an installation signed with your release key, provide its
-external configuration and select the release variant:
-
-```powershell
-$env:LIBERTYVR_RELEASE_SIGNING_PROPERTIES = "C:\Private\libertyvr-signing.properties"
-.\UPDATE.bat -Release
-```
-
-```sh
-LIBERTYVR_RELEASE_SIGNING_PROPERTIES="$HOME/private/libertyvr-signing.properties" ./UPDATE.sh --release
-```
-
-The configuration must reference the same signing key as the installed app.
-Keep it and the keystore outside the source kit.
+The optional ASan Android shell wrapper is generated only in the private build
+from the manager resource. Player builds exclude it. Inspect APK packaging using
+the embedded `tools/tests/test-asan-apk.ps1` module (`-Apk`, optional `-ExpectAsan`).
+No manager binary, APK, assembled tree, downloaded dependency or game file belongs
+in the source repository. See [RELEASING.md](RELEASING.md).

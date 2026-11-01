@@ -221,11 +221,11 @@ public:
                     if(edge<=edges[e].threshold){covered=false;break;}
                 }
                 if(!covered)continue;
-                const double far=a.z+dx*((dx>=0?double(x+1):double(x))-a.x)+
+                const double farDepth=a.z+dx*((dx>=0?double(x+1):double(x))-a.x)+
                     dy*((dy>=0?double(y+1):double(y))-a.y)+DepthGuard;
-                if(!std::isfinite(far)||far<=0||far>=1)continue;
+                if(!std::isfinite(farDepth)||farDepth<=0||farDepth>=1)continue;
                 auto &d=depth[y*Size+x];
-                if(far<d){d=far;++s.cells;}
+                if(farDepth<d){d=farDepth;++s.cells;}
             }
         }
     }

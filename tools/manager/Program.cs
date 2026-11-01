@@ -1,0 +1,98 @@
+using System.Text.Json;
+using Terminal.Gui.App;
+
+namespace LibertyManager;
+
+internal static class Program
+{
+    public static async Task<int> Main(string[] args)
+    {
+        if (args.Length >= 2 && args[0] == "--privacy")
+        {
+            try
+            {
+                await new PrivacyGuard(ManagerSettings.FindRepository()).Run(args[1], args.ElementAtOrDefault(2));
+                Console.WriteLine("Privacy check passed."); return 0;
+            }
+            catch { Console.Error.WriteLine("Privacy check failed. Sensitive content and diagnostic values are suppressed."); return 1; }
+        }
+        if (args is ["--help"] or ["-h"])
+        {
+            Console.WriteLine("""
+                Liberty City VR Manager (.NET 10 / Terminal.Gui 2.5.0)
+                Run with no arguments to open the TUI.
+                --run ACTION REQUEST.json   Run a configured action without the TUI.
+                Actions: BuildAndInstall, BuildVehicleEditor, ImportMusic,
+                         InstallModernModels, RepairGameFiles, Update.
+                Request JSON: {"Settings":{...},"Options":{...}}
+                --settings PATH            Use another local settings directory.
+                --page ACTION              Open an action page (or Settings/Tools).
+                --list-tools               List embedded auxiliary tools and test adapters.
+                --tool NAME [-- ARGS...]    Run an integrated auxiliary tool.
+                --privacy MODE [FILE]      staged, message, history, pre-push, install-hooks.
+                Auxiliary modules require their Python 3, PowerShell 7 or Bash runtime.
+                """);
+            return 0;
+        }
+        using var cancellation = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
+        try
+        {
+            if (args is ["--list-tools"])
+            {
+                foreach (var tool in AuxiliaryTools.Catalog) Console.WriteLine(tool.Category + "  " + tool.Path);
+                return 0;
+            }
+            if (args.Length >= 2 && args[0] is "--tool" or "--vehicle-bridge")
+            {
+                var toolSettings = new SettingsStore().Load();
+                using var log = new PrivateLog(); log.Line += Console.WriteLine;
+                var host = new AuxiliaryTools(toolSettings, new CommandRunner(log), log);
+                if (args[0] == "--vehicle-bridge") await host.Bridge(args.Skip(1).ToArray(), cancellation.Token);
+                else await host.Run(args[1], args.Skip(args.ElementAtOrDefault(2) == "--" ? 3 : 2).ToArray(), cancellation.Token);
+                return 0;
+            }
+            if (args is ["--run", var name, var file] && Enum.TryParse<ManagerAction>(name, true, out var action))
+            {
+                var request = JsonSerializer.Deserialize<RunRequest>(File.ReadAllText(file)) ?? throw new InvalidDataException("Invalid action request.");
+                using var log = new PrivateLog(); log.Line += Console.WriteLine;
+                await new Workflows(request.Settings, new CommandRunner(log), log).Perform(action, request.Options, cancellation.Token);
+                return 0;
+            }
+            if (args is ["--update-build", var requestFile])
+            {
+                var request = JsonSerializer.Deserialize<RunRequest>(File.ReadAllText(requestFile)) ?? throw new InvalidDataException("Invalid update request.");
+                request.Settings.Validate();
+                using var log = new PrivateLog(); log.Line += Console.WriteLine;
+                await new Workflows(request.Settings, new CommandRunner(log), log).Build(request.Options, true, cancellation.Token);
+                return 0;
+            }
+            var page = 0;
+            if (args is ["--ui-check", _, var checkPage] && (!int.TryParse(checkPage, out page) || page is < 0 or > 7)) throw new ArgumentException("Invalid check page.");
+            if (args is ["--page", var pageName])
+            {
+                page = pageName.Equals("Settings", StringComparison.OrdinalIgnoreCase) ? 6 : pageName.Equals("Tools", StringComparison.OrdinalIgnoreCase) ? 7
+                    : Enum.TryParse<ManagerAction>(pageName, true, out var parsedPage) && Enum.IsDefined(parsedPage) ? (int)parsedPage : throw new ArgumentException("Unknown page.");
+            }
+            var store = args is ["--settings", var directory] ? new SettingsStore(directory) : new SettingsStore();
+            if (args.Length > 0 && args is not ["--settings", _] and not ["--page", _] and not ["--ui-check", _] and not ["--ui-check", _, _]) throw new ArgumentException("Unknown arguments. Use --help.");
+            var settings = store.Load();
+            using var app = Application.Create().Init();
+            using var ui = new ManagerUi(app, store, settings);
+            ui.Initialize(page);
+            if (args.Length >= 2 && args[0] == "--ui-check")
+            {
+                app.AddTimeout(TimeSpan.FromMilliseconds(800), () => { File.WriteAllText(args[1], app.ToString()); app.RequestStop(); return false; });
+            }
+            app.Run(ui.Window);
+            return 0;
+        }
+        catch (OperationCanceledException) { Console.Error.WriteLine("Action cancelled."); return 130; }
+        catch (Exception error)
+        {
+            using var log = new PrivateLog();
+            Console.Error.WriteLine(log.Sanitize("Manager failed: " + error.Message));
+            return 1;
+        }
+    }
+}

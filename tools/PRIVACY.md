@@ -9,25 +9,23 @@ are replaced before console output, diagnostic logging or error reporting.
 Windows logs use explicit sanitized messages rather than transcript headers,
 which can include a private `-Serial` launch argument.
 
-If several devices have the same model name, connect only the intended headset
-before continuing, or select it with the existing local `-Serial` / `--serial`
-option. Do not paste that argument into support reports.
+If several eligible devices are connected, use the manager's numbered target selection or connect only the intended headset. Never include identifiers in support reports.
 
 Logs created by older versions are not rewritten. Keep those local and generate
 a fresh diagnostic log with the updated tools when requesting support.
 
 ## Repository checks
 
-Before committing or pushing from any new clone, run with Python 3:
+Before committing or pushing from any new clone, run with the .NET 10 SDK:
 
 ```text
-python tools/privacy_guard.py install-hooks
+dotnet run --project tools/manager -c Release -- --privacy install-hooks
 ```
 
 This configures the repository's tracked pre-commit, commit-msg and pre-push
-hooks and remembers the Python executable locally. Existing custom hook paths
+hooks and remembers the .NET host locally. Existing custom hook paths
 require review rather than being silently overwritten. Run installation again
-after moving a clone or changing Python installations.
+after moving a clone or changing .NET installations.
 
 The commit hooks inspect the complete staged tree and the proposed message.
 The push hook checks all reachable file versions and commit/tag metadata for
@@ -45,10 +43,10 @@ backups and replacement lists local, outside the published history.
 Manual checks:
 
 ```text
-python tools/privacy_guard.py staged
-python tools/privacy_guard.py message PATH_TO_LOCAL_MESSAGE_FILE
-python tools/privacy_guard.py history
-python tools/tests/test-privacy-guard.py
+dotnet run --project tools/manager -c Release -- --privacy staged
+dotnet run --project tools/manager -c Release -- --privacy message PATH_TO_LOCAL_MESSAGE_FILE
+dotnet run --project tools/manager -c Release -- --privacy history
+dotnet run --project tools/manager/tests -c Release
 ```
 
 The history command checks all local refs, which can include private checkpoint

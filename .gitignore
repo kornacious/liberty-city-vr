@@ -72,3 +72,7 @@ tools/tests/audit-*
 # Agent scratch work and generated validation artifacts
 /work/
 __pycache__/
+
+# .NET manager output
+**/bin/
+**/obj/

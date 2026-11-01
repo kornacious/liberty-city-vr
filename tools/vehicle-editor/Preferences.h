@@ -15,7 +15,7 @@ struct Preferences {
         bool integral;
     };
     std::map<std::string, std::string> paths = {
-        {"GameFolder", ""}, {"WorkspaceFolder", ""}, {"Python", ""}, {"ADB", ""}};
+        {"GameFolder", ""}, {"WorkspaceFolder", ""}, {"Python", ""}, {"Manager", ""}, {"ADB", ""}};
     std::map<std::string, Number> numbers = {{"EffectivePreview", {1, 0, 1, true}},
                                              {"AutoResetCamera", {0, 0, 1, true}},
                                              {"Orbit", {0, 0, 1, true}},

@@ -1,12 +1,10 @@
 * text=auto
-*.sh text eol=lf
+*.cs text eol=lf
+*.resx text eol=lf
 # Patches must be authored with LF and survive checkout byte-exact everywhere.
-# Validate with tools/tests/test-patch-series.py, including on Windows.
+# Validate with the manager's embedded patch-series test, including on Windows.
 patches/*.patch -text
 patches/*.patch whitespace=-space-before-tab,-blank-at-eol
 *.png -text
 *.uxrh -text
-overlay/android/diagnostics/asan-wrap.sh text eol=lf
 .githooks/* text eol=lf
-BUILD_VEHICLE_EDITOR.sh text eol=lf
-tools/vehicle-editor/build.sh text eol=lf

@@ -1,4 +1,3 @@
 @echo off
-setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\vehicle-editor\build.ps1" %*
+call "%~dp0MANAGE.bat" --page BuildVehicleEditor %*
 exit /b %ERRORLEVEL%

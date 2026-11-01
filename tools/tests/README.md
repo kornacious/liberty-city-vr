@@ -1,3 +1,9 @@
+> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
+> manager modules. Open **Tools and tests**, or run `dotnet run --project
+> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
+> Legacy filenames below identify resource modules; old direct shell invocations
+> are historical. Use the manager pages for build/install, editor build, music,
+> models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
 `test-boat-window-depth.ps1 -StageRoot <assembled-tree>` executes the boat

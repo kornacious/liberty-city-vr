@@ -43,6 +43,9 @@ Before a tag or GitHub release:
    If desired, use GitHub's automatic source archive; do not attach an APK,
    assembled re3 tree, retail data or a generated Modern model set.
 
-The public build scripts intentionally refuse to overwrite an existing output
-directory, and release signing intentionally fails unless the builder supplies
-their own private keystore configuration.
+The manager assembles into a fresh output directory. Release signing fails unless
+the builder supplies their own private keystore configuration. Build and test the
+manager with `dotnet run --project tools/manager/tests -c Release`; verify the
+self-contained Windows/Linux publishes outside version control. Run the native
+privacy history check described in `tools/PRIVACY.md` before publishing. Embedded
+auxiliary resources must contain source only, never game data or private values.

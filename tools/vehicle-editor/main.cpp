@@ -3,6 +3,11 @@
 #include "History.h"
 #include "Preferences.h"
 #include "Process.h"
+#ifdef _WIN32
+// Windows' obsolete memory-model macros collide with RenderWare math locals.
+#undef near
+#undef far
+#endif
 #include "imgui/ImGuizmo.h"
 #include <chrono>
 #include <future>
@@ -41,9 +46,9 @@ static bool extras[6] = {}, dirty = false, showHud = true, showWheel = true, orb
             closeRequested = false;
 static char gamePath[1024] = "", workPath[1024] = "", search[128] = "", adbPath[1024] = "adb";
 #ifdef _WIN32
-static char pythonPath[1024] = "python";
+static char managerPath[1024] = "LibertyManager.exe";
 #else
-static char pythonPath[1024] = "python3";
+static char managerPath[1024] = "LibertyManager";
 #endif
 static char importPath[1024] = "";
 static std::string message, fingerprintNow;
@@ -58,7 +63,6 @@ static History history;
 static Values clipboard;
 static std::future<std::string> deviceTask;
 static int deviceIndex = 0, conflictPreference = 0;
-static std::string helperPath;
 static int smokeFrames = 0, smokeCount = 0;
 static bool smokeOk = true;
 static bool modelTextures = false;
@@ -70,7 +74,7 @@ static Preferences capturePreferences() {
     Preferences p;
     p.paths["GameFolder"] = gamePath;
     p.paths["WorkspaceFolder"] = workPath;
-    p.paths["Python"] = pythonPath;
+    p.paths["Manager"] = managerPath;
     p.paths["ADB"] = adbPath;
     for (auto key : {"GameFolder", "WorkspaceFolder"})
         if (!p.paths[key].empty()) {
@@ -112,8 +116,8 @@ static void applyPreferences(const Preferences &p) {
         std::snprintf(gamePath, sizeof(gamePath), "%s", p.paths.at("GameFolder").c_str());
     if (!p.paths.at("WorkspaceFolder").empty())
         std::snprintf(workPath, sizeof(workPath), "%s", p.paths.at("WorkspaceFolder").c_str());
-    if (!p.paths.at("Python").empty())
-        std::snprintf(pythonPath, sizeof(pythonPath), "%s", p.paths.at("Python").c_str());
+    if (!p.paths.at("Manager").empty())
+        std::snprintf(managerPath, sizeof(managerPath), "%s", p.paths.at("Manager").c_str());
     if (!p.paths.at("ADB").empty())
         std::snprintf(adbPath, sizeof(adbPath), "%s", p.paths.at("ADB").c_str());
     effectivePreview = (bool)p.get("EffectivePreview");
@@ -819,7 +823,7 @@ static void device(const std::string &action, bool automatic = false) {
     if ((action == "deploy" || action == "preview") && !save())
         return;
     std::vector<std::string> args = {
-        pythonPath, helperPath, action, "--workspace", fs::absolute(workPath).string(),
+        managerPath, "--vehicle-bridge", action, "--workspace", fs::absolute(workPath).string(),
         "--adb",    adbPath};
     if (deviceIndex) {
         args.push_back("--device-index");
@@ -1264,7 +1268,7 @@ static void ui() {
     ImGui::SetNextWindowPos(ImVec2(8, 700), ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2(600, 280), ImGuiCond_Once);
     ImGui::Begin("Quest 3 import and deployment");
-    ImGui::InputText("Python executable", pythonPath, sizeof(pythonPath));
+    ImGui::InputText("Manager executable", managerPath, sizeof(managerPath));
     ImGui::InputText("ADB executable", adbPath, sizeof(adbPath));
     ImGui::InputInt("Device index (0=auto)", &deviceIndex);
     if (ImGui::Button("Check headset"))
@@ -1486,14 +1490,15 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
         preferencesPath = executableFolder / "vehicle-editor.ini";
         imguiSettingsPath = (executableFolder / "vehicle-editor-ui.ini").string();
         ImGui::GetIO().IniFilename = imguiSettingsPath.c_str();
-        helperPath = (executableFolder / "device_bridge.py").string();
-        if (!fs::exists(helperPath))
-            helperPath = "tools/vehicle-editor/device_bridge.py";
+#ifdef _WIN32
+        auto portableManager = executableFolder / "manager" / "LibertyManager.exe";
+#else
+        auto portableManager = executableFolder / "manager" / "LibertyManager";
+#endif
+        if (fs::exists(portableManager))
+            std::snprintf(managerPath, sizeof(managerPath), "%s", portableManager.string().c_str());
         std::snprintf(workPath, sizeof(workPath), "%s",
                       (executableFolder / "workspace").string().c_str());
-        auto portablePython = executableFolder / "python" / "python.exe";
-        if (fs::exists(portablePython))
-            std::snprintf(pythonPath, sizeof(pythonPath), "%s", portablePython.string().c_str());
         for (const char *variable : {"ANDROID_HOME", "ANDROID_SDK_ROOT"}) {
             const char *sdk = std::getenv(variable);
             if (!sdk || !*sdk)

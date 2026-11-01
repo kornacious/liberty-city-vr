@@ -2,37 +2,27 @@
 
 > **NO APK IS PROVIDED. THIS IS A SOURCE-BUILD RELEASE.**
 >
-> On Windows, connect the Quest and double-click **`BUILD_AND_INSTALL.bat`**.
-> On Linux, connect the Quest and run **`./BUILD_AND_INSTALL.sh`**.
-> The wizard obtains portable Git, JDK 21, the Android command-line SDK,
-> the exact re3 source, assembles the port, builds your personal APK, installs
-> it without clearing existing data, and can copy only the required folders
-> from your legally owned GTA III installation.
-> Missing build tools and SDK packages are downloaded from their official
-> sources and verified against pinned SHA256 hashes automatically. Google SDK
-> licenses are still shown for the user to accept.
-> If an older installation has an incompatible signing key, the wizard warns
-> that replacing it can erase saves/game data and uninstalls it only after an
-> explicit `Y` confirmation. It validates the supplied GTA III PC folder
-> before removal so the required game data can be restored afterward.
-> You may also download only **`BUILD_AND_INSTALL.bat`** (Windows) or
-> **`BUILD_AND_INSTALL.sh`** (Linux). If the rest of the
-> source kit is not beside it, the wrapper downloads and extracts the complete
-> public repository automatically.
+> Open the cross-platform **Liberty City VR Manager** with `MANAGE.bat` on
+> Windows, or `dotnet run --project tools/manager -c Release` on Windows/Linux.
+> Select **Build and install**, configure the action, then choose **Perform**.
+> The .NET 10 / Terminal.Gui 2.5.0 application also includes the vehicle editor
+> builder, music importer, Modern model installer, game-file repair, updater,
+> shared settings, file browsing, and auxiliary tools/tests.
 >
-> Run the wrapper (`.bat` on Windows, `.sh` on Linux), not the internal
-> wizard file. The window remains open on
-> errors and writes `%TEMP%\LibertyCityVR-Build-And-Install.log` (Windows) or
-> `$TMPDIR/LibertyCityVR-Build-And-Install.log` (Linux); send that log
-> when asking for help.
-
+> Downloads of portable build tools retain pinned SHA256 checks. SDK package
+> installation requires explicit license consent. Game data comes only from
+> your legally owned local GTA III installation. Existing app data and saves
+> are preserved; an incompatible signing key stops installation.
+>
+> See [the manager guide](tools/manager/README.md) for configuration,
+> prerequisites, embedded auxiliary runtimes, logs and standalone publishing.
 
 > [!TIP]
 > **Join the Flat2VR Discord!** Development updates, player feedback, testing,
 > and discussion of the mod take place in the Flat2VR community.
 
 This repository contains the original Quest/OpenXR port layer, Vulkan backend
-changes, build scripts and re3 patch files needed to build Liberty City VR for a
+changes, the project manager and re3 patch files needed to build Liberty City VR for a
 Meta Quest headset.
 
 Android positional sound effects use the full listener-relative 3D position
@@ -63,52 +53,16 @@ own APK and supplies data from a legally owned PC copy of GTA III.
 
 ## Updating an existing installation
 
-After the initial setup, keep this folder and run **`UPDATE.bat`** on Windows
-or **`./UPDATE.sh`** on Linux. There is no need to download the source ZIP again
-for each release. Connect and authorize the Quest before installing the update.
+Choose **Update** in the manager. It fetches official master, requires a clean
+fast-forward, checks the version floor, reuses cached tools, rebuilds the updated
+manager and replaces only the APK. Local changes, divergent history, asset-update
+requirements and incompatible signatures stop the update. Use **Dry run** for
+local checks, **Build only** to skip deployment, and **Release** with your private
+`LIBERTYVR_RELEASE_SIGNING_PROPERTIES` when updating a release-signed application.
+The workplace in **Settings** selects the tool/dependency cache.
 
-The updater fetches newer source and reuses the existing tool and dependency
-cache. From a ZIP installation, its first run creates a managed Git checkout
-under the build work directory; later runs update that checkout. Each APK is
-assembled in a new directory, preserving earlier builds and local files.
-
-Updates replace only the APK. Saves, settings, game data and optional model
-overlays stay in place. An incompatible signing key stops the update instead
-of uninstalling the game. If a future release requires new game assets, the
-updater asks you to use the ordinary installer for that separate step.
-
-Mission autosaves use a separate `autosave.b` file and **Load Game → Load
-Autosave** entry. All eight manual slots remain available. Autosave writes a
-temporary file, flushes and validates it, keeps the previous valid autosave in
-`autosave.b.bak`, then atomically replaces the primary file. Loading autosave
-automatically tries the backup if the primary is missing or corrupt. These
-files use the existing save directory/prefix. Older releases wrote autosaves
-into manual slot 1; that file remains in slot 1 and is not moved or overwritten
-by the new autosave system. A new autosave is created after the next eligible
-mission completion. Storage providers without directory flush support retain
-atomic replacement, but cannot guarantee rename durability after power loss.
-
-The default builds a personal debug APK using the same Android debug key as
-the original wizard. To update an app signed with your release key, use
-`-Release` / `--release` and set `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` to your
-private signing configuration. It must use the installed app's signing key;
-no signing keys are included in this source kit.
-
-Use the same work directory as the original installation to reuse its cache:
-
-```powershell
-.\UPDATE.bat -WorkDir C:\LCVRBuild
-```
-
-```sh
-./UPDATE.sh --work-dir "$HOME/LCVRBuild"
-```
-
-The Git update is fast-forward only. Local changes or a diverged checkout stop
-it; it does not reset, stash or clean your files. `-BuildOnly` / `--build-only`
-builds without installing, and `-DryRun` / `--dry-run` checks the update plan
-without fetching, downloading, building or accessing the headset.
-
+Mission autosaves retain their separate `autosave.b` and `autosave.b.bak` files;
+manual slots, calibration, retail data and optional model overlays stay in place.
 ## What is included
 
 | Path | Contents |
@@ -116,7 +70,7 @@ without fetching, downloading, building or accessing the headset.
 | `overlay/` | New Android, OpenXR, Quest VR and tooling files |
 | `patches/` | Changes applied to a user-supplied re3 checkout |
 | `librw/` | MIT-licensed librw fork with the Quest Vulkan backend |
-| `tools/` | Windows and Unix source-assembly scripts |
+| `tools/` | Cross-platform .NET manager, embedded auxiliary tools and native fixtures |
 
 Modified upstream re3 files are distributed as patches, not as a second copy
 of the re3 repository. The only bundled runtime art is the credited MIT-licensed VR
@@ -124,15 +78,14 @@ hand asset under `overlay/gamefiles/models/vrhands/`.
 
 ## Custom music and radio board
 
-Import your own music with `IMPORT_MUSIC.bat` or `IMPORT_MUSIC.sh`. The adjustable
+Choose **Import music** in the manager to import your own audio. The adjustable
 vehicle-mounted radio board provides station, volume and custom-track controls.
 See [Custom radio](overlay/docs/CUSTOM_RADIO.md) for formats, limits, calibration,
-placement sharing, and the Python/ADB/ffprobe prerequisites.
+placement sharing, and the ADB/ffprobe prerequisites.
 
 ## Desktop vehicle placement editor
 
-Use `BUILD_VEHICLE_EDITOR.bat -Package` on Windows or
-`sh BUILD_VEHICLE_EDITOR.sh` on Linux to build the standalone non-VR editor.
+Choose **Vehicle editor** in the manager to build, test and package the standalone non-VR editor.
 It reads your local GTA III models, edits virtual wheel and dashboard-panel
 placements per vehicle/modelset, and exports or transfers template and personal
 packs to a Quest 3. See the [editor guide](tools/vehicle-editor/README.md) for
@@ -145,7 +98,7 @@ The exact patch base comes from the public upstream re3 project:
 <https://github.com/mrxenginner/re3>
 
 The tested public `master` commit is
-`b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly scripts never modify
+`b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly action never modifies
 that checkout: they copy it to a new directory, apply all patches in
 `patches/` in filename order, and add the port overlay and bundled librw fork.
 No private repository is required or referenced.
@@ -153,16 +106,12 @@ No private repository is required or referenced.
 Complete prerequisites and copy-paste commands are in
 [BUILDING.md](BUILDING.md).
 
-For most Windows users, the recommended route is the guided
-[`BUILD_AND_INSTALL.bat`](BUILD_AND_INSTALL.bat) wizard (Linux:
-[`BUILD_AND_INSTALL.sh`](BUILD_AND_INSTALL.sh)) instead of entering
-those commands manually.
+Use the manager's **Build and install** page for the guided build workflow on Windows and Linux.
 
 If the OPTIONS menus show entries like `FET_GFX missing` or `FED_AAS missing`
 instead of labels, the installation predates the wizard copying the port's
 replacement text and frontend files.
-[`REPAIR_GAME_FILES.bat`](REPAIR_GAME_FILES.bat) (Windows) or
-[`REPAIR_GAME_FILES.sh`](REPAIR_GAME_FILES.sh) (Linux) installs just those onto an
+The manager's **Repair game files** page installs those onto an
 existing headset. It replaces selected GXT and frontend/shared TXD files,
 including files under `models/`; saves, settings, model archives and optional
 model overlays are left alone.

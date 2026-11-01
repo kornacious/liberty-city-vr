@@ -7,32 +7,21 @@ No game data is distributed with the tool or uploaded by it.
 
 ## Build and run
 
-Windows: install Visual Studio's Desktop C++ workload, CMake 3.22+ and Ninja,
-then run `BUILD_VEHICLE_EDITOR.bat -Package` from the kit. The script also
-recognizes CMake/Ninja installed by the Quest build wizard. The executable and
-helper are installed in `out/vehicle-editor`. A ZIP is generated in
-`out/vehicle-editor-build`. The Windows build uses the static C/C++ runtime.
+Open Liberty City VR Manager (`MANAGE.bat` or `dotnet run --project tools/manager
+-c Release`) and choose **Vehicle editor**. Configure the output directory and
+ZIP packaging, then **Perform**. The manager builds all three native test targets,
+runs CTest, installs the editor and packages the chosen output.
 
-Linux: install a C++17 compiler, CMake, Ninja, OpenGL development libraries and
-GLFW development files, then run `sh BUILD_VEHICLE_EDITOR.sh`. For example,
-Debian/Ubuntu packages are `build-essential cmake ninja-build libgl1-mesa-dev
-libglfw3-dev python3`. The output is `out/vehicle-editor-linux`, with a ZIP in
-`out/vehicle-editor-linux-build`. Linux packages include the GLFW shared library
-when linked to a shared system GLFW; they require the system's OpenGL driver,
-standard C/C++ libraries and window-system libraries. Use an installed GLFW where possible; otherwise
-CMake downloads and hash-verifies GLFW 3.3.8 source (X11 development headers are
-then also needed). CMake 4 users building that older GLFW source may need
-`-DCMAKE_POLICY_VERSION_MINIMUM=3.5`.
+Windows requires Visual Studio/Build Tools with the Desktop C++ workload and CMake 3.22+.
+Linux requires C++17, CMake, Ninja, OpenGL/X11 and GLFW development dependencies.
+CMake can obtain pinned GLFW 3.3.8 if it is not installed. Builds are stored under
+the configured workplace; default installation is `<workplace>/vehicle-editor`.
+The manager runtime is included beside the editor in `manager/`.
 
-The Windows package can include Python as described below. Linux device transfers
-use the system's `python3`; local viewing/editing does not require Python.
-
-Python 3 and Android platform-tools/ADB are required only for the device helper.
-Set their executable paths in the editor if they are not on PATH. A Windows
-embeddable Python distribution can be included with
-`build.ps1 -PythonRuntime <folder> -Package`; the editor detects `python/python.exe`
-beside itself. No Python is needed for local viewing, editing or file export.
-
+Device transfer invokes the manager's embedded bridge. Configure Python 3 in
+manager Settings and ADB in the manager/editor as needed. Local viewing/editing
+and file exports require no Python, headset or game process. The editor's device
+panel now asks for a **Manager executable**, rather than a script/interpreter.
 Launch `liberty-vehicle-editor`, choose the **GTA III folder**, and click
 **Read local game assets**. Optional command line:
 
@@ -68,7 +57,7 @@ personal settings. Never put original game files in this workspace or a release.
    A background color picker and Reset steering button are available. X and Y
    inversion toggles affect look/orbit and pan independently. Enable VSync to
    synchronize presentation with the display; the FPS limit accepts 0 (unlimited)
-   or 1–1000. With both enabled, the slower constraint determines the frame rate.
+   or 1ï¿½1000. With both enabled, the slower constraint determines the frame rate.
    The seated head animation is approximated by the adjustable eye-above-seat
    value; final viewpoint, reach and comfort need a headset check.
 6. Newly authored layouts default to a dashboard fixed in vehicle space.
@@ -209,8 +198,8 @@ startup. Direct CLI transfers require `--live` to allow a running game; restorat
 still requires closing the game. No APK uninstall, data erasure or automatic game-asset transfer
 is performed. Offline Save always remains available.
 
-The helper is also usable directly; run `python device_bridge.py --help`.
-To restore a backup reported by deployment, use `python device_bridge.py restore
+The helper is also usable directly; run `LibertyManager --vehicle-bridge --help`.
+To restore a backup reported by deployment, use `LibertyManager --vehicle-bridge restore
 --workspace <folder> --kind personal --backup <reported-backup-filename>` (choose
 `--kind template` for a template backup). Restore validates the backup and saves
 the current configuration as a new backup; import again before subsequent edits.
@@ -220,7 +209,7 @@ helper process and its locally invoked ADB argument array.
 ## Validation
 
 `ctest --test-dir <build> --output-on-failure` runs portable pack/math/data tests.
-`python tools/vehicle-editor/test_device_bridge.py -v` tests merge conflicts,
+`dotnet run --project tools/manager -c Release -- --tool tools/vehicle-editor/test_device_bridge.py -- -v` tests merge conflicts,
 eligibility/privacy, corrupted/interrupted transfers and backups without a device.
 `--smoke 3` renders three frames; `--smoke-all` visits every supported vehicle in
 available modelsets and reports failures. It reads only local game assets.
