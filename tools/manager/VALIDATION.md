@@ -1,5 +1,21 @@
 # Manager migration verification
 
+## Music range selection and deletion (2026-11-01)
+
+Verified **56/56 Windows** and **57/57 Linux** manager checks. Real-terminal UI
+checks passed on both platforms for forward/reverse Shift-click ranges, plain
+click collapse, group dragging and Up/Down movement, queued multi-delete,
+delete-all/empty refresh and Cancel/reset. Synthetic model/client checks cover
+group order, exact kept/deleted payloads, rejected-upload cleanup, unsafe or
+duplicate names and validation-only skipping all headset operations.
+
+Host Java tests passed for actual synthetic file deletion, delete-all, stale
+revision/traversal rejection, deletion staging cleanup and restoring files after
+an atomic playlist-write failure. The complete native/Android APK build and
+Windows/Linux self-contained publishes succeeded. The updated APK was installed
+on the **personal Quest 3 device**. A local read returned its existing 16-track
+library successfully; no personal music was deleted or reordered for testing.
+
 ## Manage music extension (2026-11-01)
 
 Verified **52/52 Windows** and **53/53 Linux** manager checks, plus real-terminal

@@ -18,6 +18,8 @@ public sealed class MusicManagementView : View
     private readonly CheckBox validate;
     private readonly IApplication app;
     private int dragged = -1;
+    private bool dragMoved, shiftClick, updating;
+    private readonly Label selectionInfo = new() { X = 19, Y = 2, Width = Dim.Fill() };
     public Action? RefreshRequested { get; set; }
     public MusicManagementView(IApplication app, ActionOptions options, ManagerSettings settings)
     {
@@ -27,19 +29,29 @@ public sealed class MusicManagementView : View
         board = new TextField { Text = options.BoardExport, Y = Pos.AnchorEnd(1), Width = Dim.Fill(12) };
         source.SetScheme(ManagerUi.Theme()); board.SetScheme(ManagerUi.Theme());
         Add(new Label { Text = "Import:", Y = 0 }, source, Browse(source, OpenMode.Mixed, 0, settings));
-        Add(Button("Refresh", 0, () => RefreshRequested?.Invoke()), Button("↑ Up", 12, () => MoveSelected(-1)), Button("↓ Down", 21, () => MoveSelected(1)));
-        validate = new CheckBox { Text = "Validate only", X = 32, Y = 1, Value = options.ValidateMusicOnly ? CheckState.Checked : CheckState.UnChecked };
-        validate.SetScheme(ManagerUi.Theme()); Add(validate);
-        var list = new FrameView { Title = "PLAYLIST · drag to reorder", Y = 2, Width = Dim.Percent(55), Height = Dim.Fill(2) };
-        var info = new FrameView { Title = "FILE INFO", X = Pos.Right(list), Y = 2, Width = Dim.Fill(), Height = Dim.Fill(2) };
+        Add(Button("Refresh", 0, () => RefreshRequested?.Invoke()), Button("↑ Up", 12, () => MoveSelected(-1)), Button("↓ Down", 21, () => MoveSelected(1)), Button("Delete", 32, DeleteSelected));
+        validate = new CheckBox { Text = "Validate only", X = 0, Y = 2, Value = options.ValidateMusicOnly ? CheckState.Checked : CheckState.UnChecked };
+        validate.SetScheme(ManagerUi.Theme()); Add(validate, selectionInfo);
+        var list = new FrameView { Title = "PLAYLIST · Shift-click range", Y = 3, Width = Dim.Percent(55), Height = Dim.Fill(2) };
+        var info = new FrameView { Title = "FILE INFO", X = Pos.Right(list), Y = 3, Width = Dim.Fill(), Height = Dim.Fill(2) };
         list.Add(Tracks); info.Add(details); Add(list, info);
         Add(new Label { Text = "Board export (optional):", Y = Pos.AnchorEnd(2) }, board, Browse(board, OpenMode.File, Pos.AnchorEnd(1), settings));
-        Tracks.ValueChanged += (_, _) => ShowDetails();
+        Tracks.ValueChanged += (_, _) =>
+        {
+            if (!updating && dragged < 0 && Tracks.SelectedItem is { } index) { Playlist.Select(index, false); RenderRows(index); }
+            ShowDetails();
+        };
+        Tracks.RowRender += (_, e) => { if (e.Row >= 0 && e.Row < Playlist.Tracks.Count && Playlist.Selection.Contains(Playlist.Tracks[e.Row].Name)) e.RowAttribute = ManagerUi.Theme().Focus; };
         Tracks.MouseEvent += (_, e) => HandleDrag(e);
         Tracks.KeyDown += (_, e) =>
         {
             if (e == Key.CursorUp.WithAlt) { MoveSelected(-1); e.Handled = true; }
             if (e == Key.CursorDown.WithAlt) { MoveSelected(1); e.Handled = true; }
+            if (e == Key.CursorUp.WithShift || e == Key.CursorDown.WithShift)
+            {
+                var index = Math.Clamp((Tracks.SelectedItem ?? 0) + (e == Key.CursorUp.WithShift ? -1 : 1), 0, Math.Max(0, Playlist.Tracks.Count - 1));
+                Playlist.Select(index, true); RenderRows(index); ShowDetails(); e.Handled = true;
+            }
             if (e == Key.Esc && dragged >= 0) { dragged = -1; app.Mouse.UngrabMouse(); e.Handled = true; }
         };
     }
@@ -62,10 +74,10 @@ public sealed class MusicManagementView : View
     }
     public void Load(MusicLibrarySnapshot snapshot)
     {
-        var selected = Tracks.SelectedItem is { } index && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Name : "";
-        Playlist.Load(snapshot); RenderRows();
+        var selected = Tracks.SelectedItem is { } index && index >= 0 && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Name : "";
+        Playlist.Load(snapshot);
         var found = Playlist.Tracks.FindIndex(t => t.Name == selected);
-        if (Playlist.Tracks.Count > 0) Tracks.SelectedItem = Math.Max(0, found);
+        Playlist.Select(Math.Max(0, found), false); RenderRows(Math.Max(0, found));
         ShowDetails();
     }
     public void ReadOptions(ActionOptions options)
@@ -73,13 +85,33 @@ public sealed class MusicManagementView : View
         options.MusicSource = source.Text.Trim(); options.BoardExport = board.Text.Trim(); options.ValidateMusicOnly = validate.Value == CheckState.Checked;
         options.MusicRevision = Playlist.Dirty ? Playlist.Revision : "";
         options.MusicOrder = Playlist.Dirty ? Playlist.Tracks.Select(t => t.Name).ToArray() : [];
+        options.MusicDeleted = Playlist.Dirty ? Playlist.Deleted.ToArray() : [];
     }
-    private void RenderRows() => Tracks.SetSource(new ObservableCollection<string>(Playlist.Tracks.Select((t, i) => $"{i + 1,3}. {t.Display}")));
-    private void ShowDetails() => details.Text = Tracks.SelectedItem is { } index && index >= 0 && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Details : "No music files found. Choose audio to import, then Perform.";
+    private void RenderRows(int? focus = null)
+    {
+        updating = true;
+        try
+        {
+            var previous = Tracks.SelectedItem ?? 0;
+            Tracks.SetSource(new ObservableCollection<string>(Playlist.Tracks.Select((t, i) => $"{(Playlist.Selection.Contains(t.Name) ? '●' : ' ')}{i + 1,3}. {t.Display}")));
+            if (Playlist.Tracks.Count > 0) Tracks.SelectedItem = Math.Clamp(focus ?? previous, 0, Playlist.Tracks.Count - 1);
+            selectionInfo.Text = $"{Playlist.Selection.Count} selected · {Playlist.Deleted.Count} to delete";
+        }
+        finally { updating = false; }
+    }
+    private void ShowDetails() => details.Text = (Playlist.Selection.Count > 1 ? $"{Playlist.Selection.Count} tracks selected\n\n" : "") + (Tracks.SelectedItem is { } index && index >= 0 && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Details : "No music files found. Perform applies pending deletions; Cancel discards them.");
+    public void DeleteSelected()
+    {
+        if (Playlist.Selection.Count == 0) return;
+        // A remembered import folder must not immediately re-import deleted tracks.
+        source.Text = "";
+        Playlist.DeleteSelection(); RenderRows(Math.Max(0, Playlist.SelectionStart)); ShowDetails();
+    }
     public void MoveSelected(int delta)
     {
-        if (Tracks.SelectedItem is not { } from || !Playlist.Move(from, from + delta)) return;
-        RenderRows(); Tracks.SelectedItem = from + delta; ShowDetails();
+        var to = Playlist.SelectionStart + delta;
+        if (!Playlist.MoveSelection(to)) return;
+        RenderRows(to); ShowDetails();
     }
     private void HandleDrag(Mouse mouse)
     {
@@ -87,19 +119,31 @@ public sealed class MusicManagementView : View
         var row = Math.Clamp(Tracks.Viewport.Y + position.Y, 0, Playlist.Tracks.Count - 1);
         if (mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) && !mouse.Flags.HasFlag(MouseFlags.PositionReport) && dragged < 0)
         {
-            dragged = row; Tracks.SelectedItem = row; app.Mouse.GrabMouse(Tracks); mouse.Handled = true;
+            if (position.Y < 0 || position.Y >= Tracks.Viewport.Height || Tracks.Viewport.Y + position.Y >= Playlist.Tracks.Count) return;
+            dragged = row; dragMoved = false; shiftClick = mouse.Flags.HasFlag(MouseFlags.Shift);
+            if (shiftClick || !Playlist.Selection.Contains(Playlist.Tracks[row].Name)) Playlist.Select(row, shiftClick);
+            RenderRows(row); Tracks.SetFocus(); app.Mouse.GrabMouse(Tracks); mouse.Handled = true;
         }
         else if (dragged >= 0 && mouse.Flags.HasFlag(MouseFlags.LeftButtonReleased))
         {
             var from = dragged; dragged = -1; app.Mouse.UngrabMouse();
-            if (position.X >= 0 && position.X < Tracks.Viewport.Width && Playlist.Move(from, row)) { RenderRows(); Tracks.SelectedItem = row; }
+            if (dragMoved || row != from)
+            {
+                if (position.X >= 0 && position.X < Tracks.Viewport.Width && !Playlist.Selection.Contains(Playlist.Tracks[row].Name))
+                    Playlist.MoveSelection(Math.Min(row, Playlist.Tracks.Count - Playlist.Selection.Count));
+            }
+            else if (!shiftClick) Playlist.Select(row, false);
+            RenderRows(dragMoved ? Math.Max(0, Playlist.SelectionStart) : row);
             ShowDetails(); mouse.Handled = true;
         }
         else if (dragged >= 0 && mouse.Flags.HasFlag(MouseFlags.PositionReport))
         {
             if (position.Y < 0) row = Math.Max(0, Tracks.Viewport.Y - 1);
             if (position.Y >= Tracks.Viewport.Height) row = Math.Min(Playlist.Tracks.Count - 1, Tracks.Viewport.Bottom);
-            Tracks.SelectedItem = row; mouse.Handled = true;
+            if (row != dragged) dragMoved = true;
+            updating = true; try { Tracks.SelectedItem = row; } finally { updating = false; }
+            mouse.Handled = true;
         }
+        else if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked)) mouse.Handled = true;
     }
 }

@@ -65,12 +65,15 @@ final class MusicCatalog {
     }
     void persist() throws Exception {
         List<File> files = MusicPlaylistStore.ordered(root); StringBuilder titles = new StringBuilder();
+        Set<String> current = new HashSet<>(); for (File f : files) current.add(f.getName());
+        cache.keySet().retainAll(current); originals.keySet().retainAll(current);
         for (File f : files) {
             JSONObject m = describe(f);
             titles.append(MusicPlaylistStore.quoted(f.getName())).append(' ').append(f.length()).append(' ').append(f.lastModified() / 1000).append(' ')
                 .append(MusicPlaylistStore.quoted(m.getString("display"))).append('\n');
         }
         save(new File(root, ".catalog-v2"), cache);
+        save(new File(root, ".original-names-v1"), originals);
         MusicPlaylistStore.atomic(new File(root, ".display-v1"), titles.toString().getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -225,6 +225,12 @@ await Test("Music metadata display and file details retain original filename fal
     Assert((int)ManagerAction.ManageMusic == (int)ManagerAction.ImportMusic);
     return Task.CompletedTask;
 });
+await Test("Music validation-only never applies pending deletion or contacts a headset", async () =>
+{
+    using var log = new PrivateLog();
+    await new Workflows(config, new CommandRunner(log), log).Perform(ManagerAction.ManageMusic,
+        new() { ValidateMusicOnly = true, MusicRevision = new string('a',64), MusicDeleted = ["synthetic.mp3"] }, default);
+});
 await MusicChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");

@@ -54,6 +54,38 @@ public final class MusicPlaylistStore {
             Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally { if (temp.exists()) temp.delete(); }
     }
+    public static void apply(File root, List<String> order, List<String> deleted, String expected) throws Exception {
+        List<File> current = ordered(root);
+        if (!revision(current).equals(expected)) throw new IOException("Library changed; refresh before deleting music");
+        Map<String,File> files = new HashMap<>(); for (File f : current) files.put(f.getName(), f);
+        List<String> all = new ArrayList<>(order); all.addAll(deleted);
+        if (all.size() != files.size() || new HashSet<>(all).size() != all.size() || !files.keySet().equals(new HashSet<>(all)))
+            throw new IOException("Every current file must be kept or deleted exactly once");
+        // Stage removals on the same filesystem. A staging or playlist-write failure
+        // restores every file before returning, leaving the original order intact.
+        File staging = new File(root, ".deleting-" + UUID.randomUUID());
+        if (!staging.mkdir()) throw new IOException("Cannot stage music deletion");
+        List<String> moved = new ArrayList<>();
+        try {
+            for (String name : deleted) {
+                File original = files.get(name);
+                if (!music(original)) throw new IOException("Music file changed; refresh again");
+                Files.move(original.toPath(), new File(staging,name).toPath()); moved.add(name);
+            }
+            atomic(new File(root,".playlist-v1"), (String.join("\n",order) + "\n").getBytes(StandardCharsets.UTF_8));
+        } catch (Exception failure) {
+            for (String name : moved) {
+                try { Files.move(new File(staging,name).toPath(), new File(root,name).toPath()); }
+                catch (Exception rollback) { failure.addSuppressed(rollback); }
+            }
+            staging.delete(); throw failure;
+        }
+        boolean cleaned = true;
+        for (String name : moved) if (!new File(staging,name).delete()) cleaned = false;
+        if (!staging.delete()) cleaned = false;
+        rescan(root);
+        if (!cleaned) throw new IOException("Playlist updated; hidden deletion staging needs local cleanup. Refresh the library.");
+    }
     public static void rescan(File root) throws IOException {
         atomic(new File(root, ".rescan"), Long.toString(System.nanoTime()).getBytes(StandardCharsets.US_ASCII));
     }

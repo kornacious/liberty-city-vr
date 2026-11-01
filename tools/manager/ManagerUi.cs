@@ -279,7 +279,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             if (selected < SettingsPage && !musicRefresh)
             {
                 // License consent is explicit for each run rather than inferred from a saved checkbox.
-                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [] };
+                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [] };
                 store.Save(draft); settings = draft with { Actions = new(draft.Actions) };
             }
         }

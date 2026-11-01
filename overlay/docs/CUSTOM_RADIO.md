@@ -20,8 +20,22 @@ number, genre, year, size, duration, format, sample rate, channels and bitrate.
 Missing metadata fields remain empty. Captions use **Artist - Album - Title**,
 using the original filename when a title tag is missing.
 
-Drag a row to insert it at another position; the intervening rows shift one
-place. **Up/Down** and **Alt+Up/Alt+Down** provide keyboard alternatives. **Perform**
+Click a row to select only that track. **Shift-click** another row selects both
+endpoints and every track between them; **Shift+Up/Down** extends the range by
+keyboard. Selected rows are highlighted and marked with a dot. Drag a selected
+row to move the whole selection together, preserving its internal order while
+the intervening rows shift. **Up/Down** and **Alt+Up/Alt+Down** also move the group.
+
+**Delete** queues the selected files for removal from the headset. The list and
+pending deletion count update immediately; **Perform** actually deletes them,
+while **Cancel** discards pending deletion and order changes. Delete clears the
+optional import field so a remembered folder cannot immediately re-import the
+removed tracks. Validation only never applies deletions. The provider checks the
+library revision and exact kept/deleted file set before writing; staging or
+playlist-write failures restore the staged files. Keep source copies of music
+you may want to import again.
+
+**Perform**
 saves the complete order atomically on the headset, while **Cancel** discards
 pending edits. A library changed since Refresh must be refreshed before saving.
 New imports append after the explicitly ordered tracks, and deleted files are

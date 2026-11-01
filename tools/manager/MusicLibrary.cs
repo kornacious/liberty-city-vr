@@ -32,7 +32,41 @@ public sealed class OrderedMusic
     public string Revision { get; private set; } = "";
     public List<MusicEntry> Tracks { get; } = [];
     public bool Dirty { get; private set; }
-    public void Load(MusicLibrarySnapshot snapshot) { Revision = snapshot.Revision; Tracks.Clear(); Tracks.AddRange(snapshot.Tracks); Dirty = false; }
+    public HashSet<string> Selection { get; } = new(StringComparer.Ordinal);
+    public HashSet<string> Deleted { get; } = new(StringComparer.Ordinal);
+    private string anchor = "";
+    public void Load(MusicLibrarySnapshot snapshot)
+    {
+        Revision = snapshot.Revision; Tracks.Clear(); Tracks.AddRange(snapshot.Tracks);
+        Selection.Clear(); Deleted.Clear(); anchor = ""; Dirty = false;
+        if (Tracks.Count > 0) Select(0, false);
+    }
+    public void Select(int index, bool extend)
+    {
+        if (index < 0 || index >= Tracks.Count) return;
+        var start = extend ? Tracks.FindIndex(t => t.Name == anchor) : index;
+        if (start < 0) start = index;
+        if (!extend || anchor.Length == 0) anchor = Tracks[index].Name;
+        Selection.Clear();
+        for (var i = Math.Min(start, index); i <= Math.Max(start, index); i++) Selection.Add(Tracks[i].Name);
+    }
+    public int SelectionStart => Tracks.FindIndex(t => Selection.Contains(t.Name));
+    public bool MoveSelection(int to)
+    {
+        var selected = Tracks.Where(t => Selection.Contains(t.Name)).ToArray();
+        if (selected.Length == 0 || to < 0 || to > Tracks.Count - selected.Length) return false;
+        var next = Tracks.Where(t => !Selection.Contains(t.Name)).ToList(); next.InsertRange(to, selected);
+        if (Tracks.SequenceEqual(next)) return false;
+        Tracks.Clear(); Tracks.AddRange(next); Dirty = true; return true;
+    }
+    public void DeleteSelection()
+    {
+        if (Selection.Count == 0) return;
+        var next = SelectionStart;
+        Deleted.UnionWith(Selection); Tracks.RemoveAll(t => Selection.Contains(t.Name));
+        Selection.Clear(); anchor = ""; Dirty = true;
+        if (Tracks.Count > 0) Select(Math.Min(next, Tracks.Count - 1), false);
+    }
     public bool Move(int from, int to)
     {
         if (from < 0 || to < 0 || from >= Tracks.Count || to >= Tracks.Count || from == to) return false;
@@ -62,10 +96,14 @@ public sealed class MusicLibraryClient(QuestDevice device, ManagerSettings setti
         log.Write($"Loaded {tracks.Count} headset music files."); return new(revision, tracks);
     }
     public async Task SaveOrder(string revision, string[] names, CancellationToken token)
+        => await Apply(revision, names, [], token);
+    public async Task Apply(string revision, string[] names, string[] deleted, CancellationToken token)
     {
-        if (!Regex.IsMatch(revision, "\\A[a-f0-9]{64}\\z") || names.Length > 1000 || names.Distinct(StringComparer.Ordinal).Count() != names.Length)
+        var all = names.Concat(deleted).ToArray();
+        if (!Regex.IsMatch(revision, "\\A[a-f0-9]{64}\\z") || all.Length > 1000 || all.Distinct(StringComparer.Ordinal).Count() != all.Length ||
+            all.Any(n => string.IsNullOrEmpty(n) || n.Length > 200 || n.StartsWith('.') || n.Contains('/') || n.Contains('\\') || n.Any(char.IsControl)))
             throw new ArgumentException("Refresh the headset library before saving order.");
-        var data = JsonSerializer.SerializeToUtf8Bytes(names);
+        var data = deleted.Length == 0 ? JsonSerializer.SerializeToUtf8Bytes(names) : JsonSerializer.SerializeToUtf8Bytes(new { order = names, delete = deleted });
         if (data.Length > 262144) throw new IOException("Playlist is too large.");
         var root = Path.Combine(settings.Workplace, ".music-" + Guid.NewGuid().ToString("N")); Paths.NoLinks(root); Directory.CreateDirectory(root);
         var local = Path.Combine(root, "playlist.json"); var remote = "/data/local/tmp/lcvr-playlist-" + Guid.NewGuid().ToString("N") + ".json";
@@ -73,9 +111,10 @@ public sealed class MusicLibraryClient(QuestDevice device, ManagerSettings setti
         {
             await File.WriteAllBytesAsync(local, data, token); await device.Push(local, remote, token);
             await device.Shell("content write --uri 'content://com.libertyvr.quest.music/playlist' < " + QuestDevice.Quote(remote), token);
-            await MusicImporter.Provider(device, "set-order", revision, token);
-            log.Write("Playlist order saved. The custom station refreshes automatically.");
+            await MusicImporter.Provider(device, deleted.Length == 0 ? "set-order" : "apply-library", revision, token);
+            log.Write($"Playlist saved; {deleted.Length} music files deleted. The custom station refreshes automatically.");
         }
+        catch (IOException error) { throw new IOException("Could not apply music changes. Refresh the headset library before retrying; an updated APK is required for deletion.", error); }
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(10));

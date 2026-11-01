@@ -91,6 +91,7 @@ public sealed record ActionOptions
     public string PcSaveDirectory { get; set; } = "";
     public string MusicRevision { get; set; } = "";
     public string[] MusicOrder { get; set; } = [];
+    public string[] MusicDeleted { get; set; } = [];
 }
 
 public static class Paths

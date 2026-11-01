@@ -19,7 +19,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             case ManagerAction.BuildVehicleEditor: await Editor(options, token); break;
             case ManagerAction.ManageMusic:
                 if (!options.ValidateMusicOnly && options.MusicRevision.Length > 0)
-                    await new MusicLibraryClient(await Connect(token) ?? throw new IOException("Connect an authorized Quest 3."), settings, log).SaveOrder(options.MusicRevision, options.MusicOrder, token);
+                    await new MusicLibraryClient(await Connect(token) ?? throw new IOException("Connect an authorized Quest 3."), settings, log).Apply(options.MusicRevision, options.MusicOrder, options.MusicDeleted, token);
                 if (!string.IsNullOrWhiteSpace(options.MusicSource) || !string.IsNullOrWhiteSpace(options.BoardExport))
                     await new MusicImporter(settings, runner, log, Connect).Import(options, token);
                 else if (options.MusicRevision.Length == 0) log.Write("No imports or playlist changes selected. Use Refresh to load the headset library.");

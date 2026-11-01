@@ -48,10 +48,34 @@ internal static class UiChecks
 #pragma warning restore CS0618
                 var options = new ActionOptions(); music.ReadOptions(options);
                 if (options.MusicOrder[1] != "1.mp3") throw new Exception("Perform did not capture playlist order.");
+                music.Load(new(new string('a', 64), Enumerable.Range(1, 12).Select(i => new MusicEntry { Name = i + ".mp3", Title = "Track " + i }).ToArray()));
+                void Mouse(int row, MouseFlags flags) => app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = music.Tracks.ViewportToScreen(new System.Drawing.Point(1, row)), Flags = flags });
+                void Click(int row, bool shift = false)
+                {
+                    var modifier = shift ? MouseFlags.Shift : 0;
+                    Mouse(row, MouseFlags.LeftButtonPressed | modifier); Mouse(row, MouseFlags.LeftButtonReleased | modifier);
+                }
+                Click(0); Click(2, true);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3", "3.mp3" })) throw new Exception("Shift-click did not include the endpoints and intervening track.");
+                Click(1);
+                if (!music.Playlist.Selection.SetEquals(new[] { "2.mp3" })) throw new Exception("Plain click did not collapse the range selection.");
+                Click(0, true);
+                Mouse(0, MouseFlags.LeftButtonPressed); Mouse(2, MouseFlags.LeftButtonPressed | MouseFlags.PositionReport); Mouse(2, MouseFlags.LeftButtonReleased);
+                if (music.Playlist.Tracks[2].Name != "1.mp3" || music.Playlist.Tracks[3].Name != "2.mp3" || music.Playlist.Selection.Count != 2) throw new Exception("Group drag did not preserve the selected tracks and order.");
+                Button("↓ Down").InvokeCommand(Command.Accept);
+                if (music.Playlist.Tracks[3].Name != "1.mp3" || music.Playlist.Tracks[4].Name != "2.mp3") throw new Exception("Group keyboard movement failed.");
+                Button("Delete").InvokeCommand(Command.Accept);
+                music.ReadOptions(options);
+                if (!options.MusicDeleted.ToHashSet().SetEquals(new[] { "1.mp3", "2.mp3" }) || options.MusicOrder.Contains("1.mp3") || music.Playlist.Tracks.Count != 10) throw new Exception("Delete did not stage exactly the selected files.");
                 app.LayoutAndDraw(true);
                 File.WriteAllText(Path.Combine(directory, "music.txt"), app.ToString());
+                music.Playlist.Select(0, false); music.Playlist.Select(music.Playlist.Tracks.Count - 1, true); music.DeleteSelected();
+                music.ReadOptions(options);
+                if (options.MusicDeleted.Length != 12 || options.MusicOrder.Length != 0) throw new Exception("Delete-all did not retain an empty pending playlist.");
+                music.Load(new(new string('b',64), []));
                 Button("_Cancel").InvokeCommand(Command.Accept);
-                if (Descendants(ui.Window).OfType<MusicManagementView>().Single().Playlist.Dirty) throw new Exception("Cancel retained pending playlist order.");
+                var cancelled = Descendants(ui.Window).OfType<MusicManagementView>().Single().Playlist;
+                if (cancelled.Dirty || cancelled.Deleted.Count != 0) throw new Exception("Cancel retained pending music changes.");
                 Button("Tools and tests").InvokeCommand(Command.Accept);
                 if (Descendants(ui.Window).OfType<Button>().Any(b => b.Text.Contains("save_transfer", StringComparison.Ordinal) || b.Text.Contains("transfer-vr-save", StringComparison.Ordinal) || b.Text.Contains("convert_vr_save", StringComparison.Ordinal)))
                     throw new Exception("Legacy save transfer is still visible in auxiliary tools.");
@@ -82,7 +106,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: music drag insertion/details/Perform options/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: music range selection, plain click reset, group drag/movement, staged deletion/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

@@ -104,7 +104,7 @@ public final class MusicProvider extends ContentProvider {
         try {
             File root = root();
             if ("info".equals(method)) {
-                result.put("version", 2);
+                result.put("version", 3);
                 result.put("count", count(root)); result.put("free", root.getUsableSpace());
                 result.put("duration", totalDuration(root));
                 JSONArray names = new JSONArray(); File[] files = root.listFiles();
@@ -121,14 +121,21 @@ public final class MusicProvider extends ContentProvider {
                 catalog.persist();
                 if (!revision.equals(MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)))) throw new Exception("Library changed; refresh again");
                 result.put("revision", revision); result.put("total", files.size()); result.put("tracks", tracks);
-            } else if ("set-order".equals(method)) {
+            } else if ("set-order".equals(method) || "apply-library".equals(method)) {
                 File staged = new File(root, ".incoming-playlist");
                 try {
                     if (!staged.isFile() || staged.length() > 262144) throw new Exception("Missing or oversized playlist upload");
-                    JSONArray json = new JSONArray(new String(java.nio.file.Files.readAllBytes(staged.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+                    String payload = new String(java.nio.file.Files.readAllBytes(staged.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                    JSONObject changes = "apply-library".equals(method) ? new JSONObject(payload) : null;
+                    JSONArray json = changes == null ? new JSONArray(payload) : changes.getJSONArray("order");
                     java.util.List<String> names = new java.util.ArrayList<>();
                     for (int i = 0; i < json.length(); ++i) names.add(json.getString(i));
-                    MusicPlaylistStore.save(root, names, arg);
+                    if (changes == null) MusicPlaylistStore.save(root, names, arg);
+                    else {
+                        JSONArray removed = changes.getJSONArray("delete"); java.util.List<String> deleted = new java.util.ArrayList<>();
+                        for (int i = 0; i < removed.length(); ++i) deleted.add(removed.getString(i));
+                        MusicPlaylistStore.apply(root, names, deleted, arg);
+                    }
                     result.put("revision", MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)));
                 } finally { if (staged.exists()) staged.delete(); }
             } else if ("original-name".equals(method)) {
