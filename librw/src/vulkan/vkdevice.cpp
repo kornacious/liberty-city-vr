@@ -33,6 +33,9 @@ static const uint32_t kPostFxFragSpv[] =
 static const uint32_t kPostFxNativeFragSpv[] =
 #include "rw_postfx_native_frag.h"
 ;
+static const uint32_t kPostFxNativeFilteredFragSpv[] =
+#include "rw_postfx_native_filtered_frag.h"
+;
 static const uint32_t kMotionFragSpv[] =
 #include "rw_motion_frag.h"
 ;
@@ -45,6 +48,10 @@ namespace rw {
 namespace vulkan {
 
 static bool32 gLastDeviceOpenRenderTargetFailure;
+static bool32 gFxaaIntegerStencilEnabled=0,gFxaaIntegerStencilActive=0;
+void setFxaaIntegerStencilEnabled(bool32 value){gFxaaIntegerStencilEnabled=value!=0;}
+bool32 getFxaaIntegerStencilEnabled(void){return gFxaaIntegerStencilEnabled;}
+bool32 getFxaaIntegerStencilActive(void){return gFxaaIntegerStencilActive;}
 
 #ifdef RW_VULKAN
 
@@ -1512,16 +1519,21 @@ createPostFxResources(void)
 	// the driver cannot create this variant. Both use the same layout and
 	// draw constants; the small module cannot reference temporal resources.
 	if(pipelineResult == VK_SUCCESS && colourBlend.attachmentCount == 1){
-		VkShaderModule nativeModule = createPostFxModule(
-			kPostFxNativeFragSpv, sizeof(kPostFxNativeFragSpv));
-		if(nativeModule != VK_NULL_HANDLE){
-			stages[1].module = nativeModule;
-			if(vkCreateGraphicsPipelines(gvk.device, VK_NULL_HANDLE, 1,
-				&pipelineInfo, nil, &gvk.postFxNativePipeline) != VK_SUCCESS){
-				gvk.postFxNativePipeline = VK_NULL_HANDLE;
-				VKERR("native post-FX pipeline unavailable; using general shader");
+		for(unsigned variant=0;variant<2;++variant){
+			const bool integer=variant!=0;
+			VkPipeline *target=integer?&gvk.postFxNativePipeline:&gvk.postFxNativeFilteredPipeline;
+			VkShaderModule nativeModule = createPostFxModule(
+				integer?kPostFxNativeFragSpv:kPostFxNativeFilteredFragSpv,
+				integer?sizeof(kPostFxNativeFragSpv):sizeof(kPostFxNativeFilteredFragSpv));
+			if(nativeModule != VK_NULL_HANDLE){
+				stages[1].module = nativeModule;
+				if(vkCreateGraphicsPipelines(gvk.device, VK_NULL_HANDLE, 1,
+					&pipelineInfo, nil, target) != VK_SUCCESS){
+					*target = VK_NULL_HANDLE;
+					VKERR("native post-FX variant %u unavailable",variant);
+				}
+				vkDestroyShaderModule(gvk.device, nativeModule, nil);
 			}
-			vkDestroyShaderModule(gvk.device, nativeModule, nil);
 		}
 	}
 	vkDestroyShaderModule(gvk.device, vertexModule, nil);
@@ -2361,6 +2373,7 @@ renderWristPanels(void)
 	// compile while a pass is open. Both are keyed off inFrame, and from here
 	// on both are true.
 	gvk.inFrame = 1;
+	gFxaaIntegerStencilActive=0;
 	for(int32 index = 0; index < WRIST_PANEL_COUNT; index++){
 		const bool32 wanted = gvk.wristPanelWanted[index];
 		// One-shot: the game arms this every frame the panel is on screen, so
@@ -2396,6 +2409,7 @@ getWristPanelRaster(int32 panel)
 bool32
 beginFrame(VkImage colourImage, VkImageView colourView)
 {
+	gFxaaIntegerStencilActive=0;
 	resetFrameBeginStats();
 	resetAtomicSubmissionStats();
 	if(!gvk.initialised || gvk.inFrame)
@@ -2708,6 +2722,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
 
 	gvk.inFrame = 1;
+	gFxaaIntegerStencilActive=0;
 	if(measure){
 		gFrameBeginStats.totalMs = (float32)(frameBeginNowMs()-beginStarted);
 		gFrameBeginStats.setupMs = gFrameBeginStats.totalMs-gFrameBeginStats.pipelineMs-
@@ -2864,13 +2879,18 @@ endFrame(void)
 	flushStaticInstances();
 	vkCmdSetViewport(gvk.frameCommands, 0, 1, &viewport);
 	vkCmdSetScissor(gvk.frameCommands, 0, 1, &scissor);
+	const auto variant=selectNativePostFxVariant(gFxaaIntegerStencilEnabled!=0,
+		gvk.postFxNativePipeline!=VK_NULL_HANDLE,gvk.postFxNativeFilteredPipeline!=VK_NULL_HANDLE);
+	const VkPipeline nativePipeline=variant==NativePostFxVariant::Integer?gvk.postFxNativePipeline:
+		variant==NativePostFxVariant::Filtered?gvk.postFxNativeFilteredPipeline:VK_NULL_HANDLE;
 	const bool nativePostFx = useNativePostFx(gvk.width, gvk.height,
 		gvk.sceneWidth, gvk.sceneHeight, gvk.postFxConstants.mode,
 		gvk.postFxConstants.upscale, gvk.sgsrMode,
-		gvk.postFxNativePipeline != VK_NULL_HANDLE,
+		nativePipeline != VK_NULL_HANDLE,
 		gvk.postFxConstants.blurColour);
+	gFxaaIntegerStencilActive=nativePostFx && variant==NativePostFxVariant::Integer;
 	vkCmdBindPipeline(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
-		nativePostFx ? gvk.postFxNativePipeline : gvk.postFxPipeline);
+		nativePostFx ? nativePipeline : gvk.postFxPipeline);
 	vkCmdBindDescriptorSets(gvk.frameCommands,
 	                        VK_PIPELINE_BIND_POINT_GRAPHICS,
 	                        gvk.postFxPipelineLayout, 0, 1,
@@ -4399,6 +4419,7 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 			if(gvk.motionDepthSampler) vkDestroySampler(gvk.device, gvk.motionDepthSampler, nil);
 			if(gvk.postFxPipeline) vkDestroyPipeline(gvk.device, gvk.postFxPipeline, nil);
 			if(gvk.postFxNativePipeline) vkDestroyPipeline(gvk.device, gvk.postFxNativePipeline, nil);
+			if(gvk.postFxNativeFilteredPipeline) vkDestroyPipeline(gvk.device, gvk.postFxNativeFilteredPipeline, nil);
 			if(gvk.postFxPipelineLayout) vkDestroyPipelineLayout(gvk.device, gvk.postFxPipelineLayout, nil);
 			if(gvk.postFxDescriptorPool) vkDestroyDescriptorPool(gvk.device, gvk.postFxDescriptorPool, nil);
 			if(gvk.postFxDescriptorLayout) vkDestroyDescriptorSetLayout(gvk.device, gvk.postFxDescriptorLayout, nil);

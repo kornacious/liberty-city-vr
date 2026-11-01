@@ -6,6 +6,13 @@
 
 namespace rw { namespace vulkan {
 
+enum class NativePostFxVariant { General, Filtered, Integer };
+inline NativePostFxVariant selectNativePostFxVariant(bool integerRequested,bool integerAvailable,bool filteredAvailable)
+{
+	if(integerRequested&&integerAvailable)return NativePostFxVariant::Integer;
+	return filteredAvailable?NativePostFxVariant::Filtered:NativePostFxVariant::General;
+}
+
 // With normalized source RGB and coefficients, the five colour-filter steps
 // stay in [0,1]. Their clamps are redundant and a uniform gain can be factored
 // out of the per-pixel work. Unbounded intensity/unknown inputs keep the general

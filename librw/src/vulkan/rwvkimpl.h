@@ -212,6 +212,7 @@ struct Globals
 	VkPipelineLayout postFxPipelineLayout;
 	VkPipeline postFxPipeline;
 	VkPipeline postFxNativePipeline;
+	VkPipeline postFxNativeFilteredPipeline;
 	PostFxPushConstants postFxConstants;
 	VkRenderPass motionRenderPass;
 	VkFormat motionFormat;

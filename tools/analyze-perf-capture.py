@@ -533,7 +533,7 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "recorded_configuration": {key: sorted({row[key] for row in selected}) for key in
             ["active_world", "active_vegetation", "active_vehicles", "active_peds", "active_weapons",
              "render_width", "render_height", "render_scale_effective", "refresh_hz",
-             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "static_instances_enabled", "world_lod_mode", "world_backface_enabled", "world_occlusion_enabled", "lod_fade_transition_enabled"] if key in rows[0]},
+             "profiler_display_mode", "opaque_world_alpha_fast_path_enabled", "opaque_order_experiment_enabled", "replay_forward_view_active", "masked_alpha_pass_skip_enabled", "opaque_mesh_batch_enabled", "static_instances_enabled", "world_lod_mode", "world_backface_enabled", "world_occlusion_enabled", "lod_fade_transition_enabled", "fxaa_integer_sampling_enabled", "fxaa_integer_sampling_active"] if key in rows[0]},
         "events_all_frames": dict(events), "timings_ms": timings,
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),

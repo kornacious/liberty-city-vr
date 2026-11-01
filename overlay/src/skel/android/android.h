@@ -170,6 +170,7 @@ bool VrGenerateMipmaps(void);
 // Saved benchmark control for proven-opaque world pipeline selection.
 int VrWorldLodMode(void);
 bool VrLodFadeTransitions(void);
+bool VrFxaaIntegerStencil(void);
 bool VrOpaqueWorldAlphaFastPath(void);
 bool VrOpaqueOrderExperiment(void);
 bool VrWorldOcclusion(void);

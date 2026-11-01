@@ -191,6 +191,7 @@ static int gGenerateMipmaps = 1;
 static int gPs2AlphaTest = 0;
 static int gWorldLodMode = WorldLodPolicy::On;
 static int gLodFadeTransitions = 0;
+static int gFxaaIntegerStencil = 0;
 static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
@@ -708,6 +709,7 @@ enum eVrMainMenuItem {
 enum eVrOptimizationMenuItem {
 	VR_OPT_WORLD_LOD=0,
 	VR_OPT_LOD_FADE,
+	VR_OPT_FXAA_INTEGER,
 	VR_OPT_OPAQUE_WORLD,
 	VR_OPT_MASKED_ALPHA_SKIP,
 	VR_OPT_OPAQUE_MESH_BATCH,
@@ -1305,6 +1307,7 @@ LoadVrSettings(void)
 	gPs2AlphaTest = GetPrivateProfileIntA("VR", "Ps2AlphaTest", 0,
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gLodFadeTransitions = GetPrivateProfileIntA("VR", "LodFadeTransitions", 0, ".\\vr_settings.ini") != 0;
+	gFxaaIntegerStencil = GetPrivateProfileIntA("VR", "FxaaIntegerStencil", 0, ".\\vr_settings.ini") != 0;
 	gWorldLodMode = WorldLodPolicy::ClampMode(GetPrivateProfileIntA("VR", "WorldLodMode", WorldLodPolicy::On, ".\\vr_settings.ini"));
 	gOpaqueOrderExperiment = GetPrivateProfileIntA("VR", "OpaqueOrderExperiment", 0, ".\\vr_settings.ini") != 0;
 	gWorldOcclusion = GetPrivateProfileIntA("VR", "WorldOcclusion", 0, ".\\vr_settings.ini") != 0;
@@ -2943,6 +2946,10 @@ VrDebugUpdate(const PadInput &in)
 				gWorldLodMode = (gWorldLodMode+(positivePulse?1:WorldLodPolicy::Count-1))%WorldLodPolicy::Count;
 				SaveVrInteger("WorldLodMode",gWorldLodMode);
 				VrWorldLod::SetMode(gWorldLodMode);
+			}else if(gVrOptimizationSelection == VR_OPT_FXAA_INTEGER){
+                gFxaaIntegerStencil=!gFxaaIntegerStencil;
+                SaveVrInteger("FxaaIntegerStencil",gFxaaIntegerStencil);
+                rw::vulkan::setFxaaIntegerStencilEnabled(gFxaaIntegerStencil);
 			}else if(gVrOptimizationSelection == VR_OPT_LOD_FADE){
                 gLodFadeTransitions=!gLodFadeTransitions;
                 SaveVrInteger("LodFadeTransitions",gLodFadeTransitions);
@@ -4018,10 +4025,12 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_WORLD_BACKFACE],sizeof(rows[0]),"WORLD BACKFACE CULL  < %s >",gWorldBackface?"ON":"OFF");
 	snprintf(rows[VR_OPT_WORLD_OCCLUSION],sizeof(rows[0]),"WORLD OCCLUSION  < %s >",gWorldOcclusion?"ON":"OFF");
 	snprintf(rows[VR_OPT_LOD_FADE],sizeof(rows[0]),"LOD FADE TRANSITION  < %s >",gLodFadeTransitions?"ON":"OFF");
+	snprintf(rows[VR_OPT_FXAA_INTEGER],sizeof(rows[0]),"FXAA INTEGER SAMPLING  < %s >",gFxaaIntegerStencil?"ON":"OFF");
 	strcpy(rows[VR_OPT_BACK],"BACK TO GRAPHICS");
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
-		DrawFullVrMenuRow(rows[item],180+item*40,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
-	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_LOD_FADE?"LOD DISTANCE FADES; ASSET-LOADING FADES ARE SEPARATE":
+		DrawFullVrMenuRow(rows[item],160+item*36,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
+	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_FXAA_INTEGER?"NATIVE 1:1 ONLY; OFF FILTERED / ON INTEGER STENCIL":
+        gVrOptimizationSelection==VR_OPT_LOD_FADE?"LOD DISTANCE FADES; ASSET-LOADING FADES ARE SEPARATE":
         gVrOptimizationSelection==VR_OPT_WORLD_OCCLUSION?"BOTH EYES MUST BE HIDDEN; SWITCHES BACKFACE CULL OFF":
         gVrOptimizationSelection==VR_OPT_WORLD_BACKFACE?"CLOSED OPAQUE MESHES; SWITCHES WORLD OCCLUSION OFF":
         gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
@@ -5712,6 +5721,13 @@ VrLodFadeTransitions(void)
 {
 	LoadVrSettings();
 	return gLodFadeTransitions != 0;
+}
+
+bool
+VrFxaaIntegerStencil(void)
+{
+	LoadVrSettings();
+	return gFxaaIntegerStencil != 0;
 }
 
 bool

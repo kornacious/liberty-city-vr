@@ -11,9 +11,10 @@ $shader = Join-Path $root 'librw/src/vulkan/shaders/rw_postfx.frag'
 $gain=[regex]::Match([IO.File]::ReadAllText($shader),'(?ms)^float ColourFilterGain\(.*?^\}')
 if(-not $gain.Success){throw 'Production colour gain helper missing.'}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'postfx-colour-gain.inc'),$gain.Value)
-foreach ($native in @(0, 1)) {
-    $binary = Join-Path $output "postfx-$native.spv"
-    & (Join-Path $ShaderTools 'glslc.exe') --target-env=vulkan1.1 -O "-DRW_POSTFX_NATIVE=$native" -o $binary $shader
+foreach ($variant in @(@(0,1),@(1,0),@(1,1))) {
+    $native=$variant[0];$integer=$variant[1]
+    $binary = Join-Path $output "postfx-$native-$integer.spv"
+    & (Join-Path $ShaderTools 'glslc.exe') --target-env=vulkan1.1 -O "-DRW_POSTFX_NATIVE=$native" "-DRW_POSTFX_INTEGER_STENCIL=$integer" -o $binary $shader
     if ($LASTEXITCODE -ne 0) { throw 'Postprocess shader compilation failed.' }
     & (Join-Path $ShaderTools 'spirv-val.exe') --target-env vulkan1.1 $binary
     if ($LASTEXITCODE -ne 0) { throw 'Postprocess shader validation failed.' }
@@ -25,8 +26,11 @@ foreach ($native in @(0, 1)) {
         }
         $samples = ([regex]::Matches($assembly, 'OpImageSample')).Count
         $fetches = ([regex]::Matches($assembly, 'OpImageFetch')).Count
-        if ($samples -ne 4 -or $fetches -ne 5) {
+        if ($integer -eq 1 -and ($samples -ne 4 -or $fetches -ne 5)) {
             throw "Native FXAA must use five integer stencil fetches and four filtered directional samples; found $fetches/$samples."
+        }
+        if ($integer -eq 0 -and ($samples -ne 9 -or $fetches -ne 0)) {
+            throw 'Filtered native baseline must retain nine filtered reads and no integer fetches.'
         }
     } elseif ($assembly -notmatch 'Binding 4\b' -or $assembly -notmatch 'OpImageFetch') {
         throw 'General postprocess lost temporal/upscale support.'

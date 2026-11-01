@@ -224,6 +224,7 @@ class AnalysisTests(unittest.TestCase):
             fields += ["world_occlusion_"+key for key in source_keys]+["world_occlusion_source_top_model"]
             footprint_keys=["footprint_candidates", "footprint_rejected", "footprint_uncertain", "footprint_selected", "footprint_capacity_skipped"]
             fields += ["world_occlusion_"+key for key in footprint_keys]
+            fields += ["fxaa_integer_sampling_enabled", "fxaa_integer_sampling_active"]
             with path.open("w", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=fields+timings)
                 writer.writeheader()
@@ -238,6 +239,7 @@ class AnalysisTests(unittest.TestCase):
                     row.update({"world_occlusion_"+key:i*2 for key in source_keys})
                     row.update({"world_occlusion_"+key:i*3 for key in footprint_keys})
                     row["world_occlusion_source_top_model"]=1417 if i%2 else -1
+                    row.update(fxaa_integer_sampling_enabled=i%2,fxaa_integer_sampling_active=int(i==1))
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
@@ -261,6 +263,8 @@ class AnalysisTests(unittest.TestCase):
             for key in source_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],4)
             for key in footprint_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],6)
             self.assertEqual(result["world_occlusion_source_model_frames"],{"1417":2})
+            self.assertEqual(result["recorded_configuration"]["fxaa_integer_sampling_enabled"],["0","1"])
+            self.assertEqual(result["recorded_configuration"]["fxaa_integer_sampling_active"],["0","1"])
             self.assertAlmostEqual(result["world_occlusion"]["world_occlusion_build_ms"]["mean"], .04)
             self.assertEqual(result["recorded_configuration"]["world_backface_enabled"], ["0", "1"])
             self.assertEqual(result["world_backface"]["world_backface_draws"]["mean"], 6)

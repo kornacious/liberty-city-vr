@@ -466,6 +466,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
 	rw::vulkan::setOpaqueOrderEnabled(androidgame::VrOpaqueOrderExperiment());
 	rw::vulkan::setWorldOcclusionEnabled(androidgame::VrWorldOcclusion());
+	rw::vulkan::setFxaaIntegerStencilEnabled(androidgame::VrFxaaIntegerStencil());
 	rw::vulkan::setWorldBackfaceEnabled(androidgame::VrWorldBackface());
 	rw::vulkan::setStaticInstancesEnabled(androidgame::VrStaticInstances());
 	rw::vulkan::setOpaqueMeshBatchEnabled(androidgame::VrOpaqueMeshBatch());

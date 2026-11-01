@@ -137,6 +137,17 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ### Native-resolution FXAA stencil sampling
 
+Open **Graphics -> Optimizations -> FXAA Integer Sampling**. The persisted
+`VR/FxaaIntegerStencil` setting defaults OFF and switches immediately without
+restarting. OFF selects the original filtered-stencil native pipeline; ON
+selects the integer-stencil native pipeline. Both share the same native
+eligibility checks, colour-filter factoring, FXAA thresholds and directional
+samples. General temporal/upscale processing is not changed by this toggle.
+If the integer pipeline is unavailable, ON falls back to the filtered native
+pipeline when available, otherwise the general pipeline. OFF never selects
+the integer variant. Both variants are prepared during device initialization,
+so toggling does not compile a pipeline during measured playback.
+
 The native 1:1 postprocess shader uses integer mip-zero fetches for the center
 and four diagonal FXAA contrast samples. Integer coordinates come from the
 current fragment and clamp to the source image bounds, preserving replicated
@@ -147,15 +158,20 @@ scene/output dimensions and draw constants with temporal/upscaling disabled.
 General temporal/upscale processing retains normalized filtered sampling.
 
 Session metadata identifies this as `postfx_native_sampling_policy` =
-`integer_center_diagonals_linear_directional_v1`. This records the compiled
-policy, not proof that a particular frame used the native pipeline. Host tests
+`filtered_or_integer_stencil_toggle_v2` and records `fxaa_integer_sampling_at_start`.
+Frame columns `fxaa_integer_sampling_enabled` and `fxaa_integer_sampling_active`
+separate the requested switch from actual integer-pipeline selection. Active
+means integer center sampling even when spatial AA is OFF; with spatial AA ON
+the four diagonal reads use it too. Active resets at frame start and remains
+false on fallback. Host tests
 check ideal texel-center equivalence; device filtering precision can differ
 slightly from normalized-coordinate sampling, so visual comparison remains
 necessary. The shader retains five contrast-stencil reads and four directional
 reads: this changes sample addressing/filter work, not the number of texels
 needed by FXAA or its intended quality.
 
-Compare two normal-launch playbacks against the preceding unhooked runs using
+Compare four normal-launch playbacks with FXAA Integer Sampling
+**OFF -> ON -> OFF -> ON** using
 the same 1512 x 1584 / 120 Hz settings, Forward View ON, AGGRESSIVE LOD, LOD Fade
 Transition OFF and World Occlusion OFF. RenderDoc and auto capture stay OFF.
 Inspect fine edges and image borders, and compare source-matched

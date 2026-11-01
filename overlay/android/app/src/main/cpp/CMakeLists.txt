@@ -127,6 +127,12 @@ compile_shader("${LIBRW_SHADER_DIR}/rw_postfx.frag" fragment
 list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
 
 set(SHADER_OUTPUTS "")
+compile_shader("${LIBRW_SHADER_DIR}/rw_postfx.frag" fragment
+               "rw_postfx_native_filtered_frag" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_POSTFX_NATIVE=1 -DRW_POSTFX_INTEGER_STENCIL=0)
+list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
+
+set(SHADER_OUTPUTS "")
 compile_shader("${LIBRW_SHADER_DIR}/rw_im2d.frag" fragment
                "rw_im2d_nocoverage_frag" "${LIBRW_SPIRV_DIR}"
                "${LIBRW_SHADER_DIR}" -DRW_IM2D_COVERAGE=0)

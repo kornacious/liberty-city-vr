@@ -119,6 +119,7 @@ int main()
         frame.worldOcclusion.sourceProjected=110;frame.worldOcclusion.sourceProjectionRejected=70;
         frame.worldOcclusion.sourceSmall=5;frame.worldOcclusion.sourceBudgetSkipped=64;
         frame.worldOcclusion.sourceTopSamples=8;frame.worldOcclusion.sourceTopModel=1417;
+        frame.fxaaIntegerSamplingEnabled=i%2;frame.fxaaIntegerSamplingActive=i%4==1;
         frame.worldOcclusion.footprintCandidates=90;frame.worldOcclusion.footprintRejected=17;
         frame.worldOcclusion.footprintUncertain=3;frame.worldOcclusion.footprintSelected=32;frame.worldOcclusion.footprintCapacitySkipped=10;
           frame.worldBackfaceEnabled=i%2;frame.worldBackface.draws=7;frame.worldBackface.indices=6000000000ULL+i;frame.worldBackface.certifyMs=.123456;
@@ -204,6 +205,8 @@ int main()
           assert(std::stoi(row[column("world_occlusion_source_budget_skipped")])==64);
           assert(std::stoi(row[column("world_occlusion_source_top_samples")])==8);
           assert(std::stoi(row[column("world_occlusion_source_top_model")])==1417);
+          assert(std::stoi(row[column("fxaa_integer_sampling_enabled")])==int(id%2));
+          assert(std::stoi(row[column("fxaa_integer_sampling_active")])==int(id%4==1));
           assert(std::stoi(row[column("world_occlusion_footprint_candidates")])==90);
           assert(std::stoi(row[column("world_occlusion_footprint_rejected")])==17);
           assert(std::stoi(row[column("world_occlusion_footprint_uncertain")])==3);

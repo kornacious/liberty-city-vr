@@ -7,6 +7,16 @@
 int main()
 {
 	using rw::vulkan::useNativePostFx;
+	using rw::vulkan::selectNativePostFxVariant;
+	using rw::vulkan::NativePostFxVariant;
+	assert(selectNativePostFxVariant(false,true,true)==NativePostFxVariant::Filtered);
+	assert(selectNativePostFxVariant(true,true,true)==NativePostFxVariant::Integer);
+	assert(selectNativePostFxVariant(true,false,true)==NativePostFxVariant::Filtered);
+	assert(selectNativePostFxVariant(true,false,false)==NativePostFxVariant::General);
+	assert(selectNativePostFxVariant(false,true,false)==NativePostFxVariant::General);
+	assert(selectNativePostFxVariant(false,false,false)==NativePostFxVariant::General);
+	assert(selectNativePostFxVariant(true,true,false)==NativePostFxVariant::Integer);
+	assert(selectNativePostFxVariant(false,false,true)==NativePostFxVariant::Filtered);
 	float colourValues[4] = {.8f,.7f,.6f,.4f};
 	uint32_t mode[4] = {1, 1, 1512, 1584};
 	uint32_t upscale[4] = {1512, 1584, 0, 100};

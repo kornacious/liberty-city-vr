@@ -4,6 +4,9 @@
 #ifndef RW_POSTFX_NATIVE
 #define RW_POSTFX_NATIVE 0
 #endif
+#ifndef RW_POSTFX_INTEGER_STENCIL
+#define RW_POSTFX_INTEGER_STENCIL 1
+#endif
 
 // Snapdragon Game Super Resolution 1 integration.
 // Copyright (c) 2025, Qualcomm Innovation Center, Inc.
@@ -67,7 +70,7 @@ vec3 SampleColour(vec2 uv)
 	                    float(gl_ViewIndex))).rgb;
 }
 
-#if RW_POSTFX_NATIVE
+#if RW_POSTFX_NATIVE && RW_POSTFX_INTEGER_STENCIL
 // CPU eligibility proves a native 1:1 viewport, no jitter/temporal upscale,
 // and matching scene/output sizes. These stencil positions are texel centers;
 // integer fetches avoid normalized UV/clamp/filter setup for their reads.
@@ -295,7 +298,7 @@ vec3 ApplySgsr1(vec2 uv)
 vec3 ApplyFxaa(vec2 uv, vec3 middle)
 {
 	vec2 texel = 1.0 / ImageSize();
-#if RW_POSTFX_NATIVE
+#if RW_POSTFX_NATIVE && RW_POSTFX_INTEGER_STENCIL
 	ivec2 pixel = ivec2(gl_FragCoord.xy);
 	vec3 nw = FetchNativeScene(pixel + ivec2(-1, -1));
 	vec3 ne = FetchNativeScene(pixel + ivec2( 1, -1));
@@ -537,7 +540,7 @@ void main()
 		postFx.upscale.z == 2u || postFx.upscale.z == 3u ||
 		postFx.upscale.z == 4u;
 #endif
-#if RW_POSTFX_NATIVE
+#if RW_POSTFX_NATIVE && RW_POSTFX_INTEGER_STENCIL
 	vec4 source = vec4(FetchNativeScene(ivec2(gl_FragCoord.xy)), 1.0);
 #else
 	vec4 source = vec4(SampleColour(uv), 1.0);
