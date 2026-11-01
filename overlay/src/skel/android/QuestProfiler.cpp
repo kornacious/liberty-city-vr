@@ -272,6 +272,7 @@ StartFrameCapture(void)
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
+	details += "postfx_native_sampling_policy,integer_center_diagonals_linear_directional_v1\n";
 	details += "masked_alpha_bound_policy,world_unorm_material_upper_bound_margin_1_over_1024_v1\n";
 	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
 	details += "lod_fade_transition_at_start," + std::to_string(VrWorldLod::FadeTransitions()?1:0) + "\n";

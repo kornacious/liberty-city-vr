@@ -67,6 +67,20 @@ vec3 SampleColour(vec2 uv)
 	                    float(gl_ViewIndex))).rgb;
 }
 
+#if RW_POSTFX_NATIVE
+// CPU eligibility proves a native 1:1 viewport, no jitter/temporal upscale,
+// and matching scene/output sizes. These stencil positions are texel centers;
+// integer fetches avoid normalized UV/clamp/filter setup for their reads.
+// Preserve edge replication explicitly and retain linear filtering for the
+// fractional directional FXAA samples below.
+vec3 FetchNativeScene(ivec2 pixel)
+{
+	ivec2 size = ivec2(postFx.mode.zw);
+	return texelFetch(sceneColour,
+		ivec3(clamp(pixel, ivec2(0), size-ivec2(1)), int(gl_ViewIndex)), 0).rgb;
+}
+#endif
+
 vec2 SampleCombinedMotion(vec2 uv)
 {
 	vec2 dynamicMotion = texture(sceneMotion,
@@ -281,10 +295,18 @@ vec3 ApplySgsr1(vec2 uv)
 vec3 ApplyFxaa(vec2 uv, vec3 middle)
 {
 	vec2 texel = 1.0 / ImageSize();
+#if RW_POSTFX_NATIVE
+	ivec2 pixel = ivec2(gl_FragCoord.xy);
+	vec3 nw = FetchNativeScene(pixel + ivec2(-1, -1));
+	vec3 ne = FetchNativeScene(pixel + ivec2( 1, -1));
+	vec3 sw = FetchNativeScene(pixel + ivec2(-1,  1));
+	vec3 se = FetchNativeScene(pixel + ivec2( 1,  1));
+#else
 	vec3 nw = SampleColour(uv + vec2(-1.0, -1.0) * texel);
 	vec3 ne = SampleColour(uv + vec2( 1.0, -1.0) * texel);
 	vec3 sw = SampleColour(uv + vec2(-1.0,  1.0) * texel);
 	vec3 se = SampleColour(uv + vec2( 1.0,  1.0) * texel);
+#endif
 	float lm = Luma(middle);
 	float lnw = Luma(nw);
 	float lne = Luma(ne);
@@ -515,7 +537,11 @@ void main()
 		postFx.upscale.z == 2u || postFx.upscale.z == 3u ||
 		postFx.upscale.z == 4u;
 #endif
+#if RW_POSTFX_NATIVE
+	vec4 source = vec4(FetchNativeScene(ivec2(gl_FragCoord.xy)), 1.0);
+#else
 	vec4 source = vec4(SampleColour(uv), 1.0);
+#endif
 	if(postFx.mode.y != 0u)
 		source.rgb = ApplyFxaa(uv, source.rgb);
 #if !RW_POSTFX_NATIVE

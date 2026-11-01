@@ -20,15 +20,18 @@ foreach ($native in @(0, 1)) {
     $assembly = (& (Join-Path $ShaderTools 'spirv-dis.exe') $binary) -join "`n"
     if ($LASTEXITCODE -ne 0) { throw 'Postprocess shader disassembly failed.' }
     if ($native -eq 1) {
-        if ($assembly -match 'Binding [1-4]\b|OpImageGather|OpImageFetch|OpImageQuery') {
+        if ($assembly -match 'Binding [1-4]\b|OpImageGather|OpImageQuery') {
             throw 'Native postprocess retained temporal/upscale resources or operations.'
         }
         $samples = ([regex]::Matches($assembly, 'OpImageSample')).Count
-        if ($samples -ne 9) { throw "Native FXAA must retain its centre and eight neighbor samples; found $samples." }
+        $fetches = ([regex]::Matches($assembly, 'OpImageFetch')).Count
+        if ($samples -ne 4 -or $fetches -ne 5) {
+            throw "Native FXAA must use five integer stencil fetches and four filtered directional samples; found $fetches/$samples."
+        }
     } elseif ($assembly -notmatch 'Binding 4\b' -or $assembly -notmatch 'OpImageFetch') {
         throw 'General postprocess lost temporal/upscale support.'
     }
 }
-& (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir (Join-Path $output 'host') -Sources @('test-postfx-native.cpp','test-postfx-colour.cpp')
+& (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir (Join-Path $output 'host') -Sources @('test-postfx-native.cpp','test-postfx-colour.cpp','test-postfx-texels.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Postprocess policy tests failed.' }
 Write-Host 'PASS: both postprocess shaders validate; native mode retains FXAA without temporal resources; fallback policy checked.'

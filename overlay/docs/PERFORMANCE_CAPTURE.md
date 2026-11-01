@@ -135,6 +135,32 @@ respawn, and relocation can also be loading, teleportation or scripted movement.
 
 ## Before/after comparison
 
+### Native-resolution FXAA stencil sampling
+
+The native 1:1 postprocess shader uses integer mip-zero fetches for the center
+and four diagonal FXAA contrast samples. Integer coordinates come from the
+current fragment and clamp to the source image bounds, preserving replicated
+borders and eye-layer selection. Four fractional directional FXAA reads remain
+linearly filtered; contrast thresholds, edge direction and colour filtering
+are unchanged. The existing native pipeline eligibility requires matching
+scene/output dimensions and draw constants with temporal/upscaling disabled.
+General temporal/upscale processing retains normalized filtered sampling.
+
+Session metadata identifies this as `postfx_native_sampling_policy` =
+`integer_center_diagonals_linear_directional_v1`. This records the compiled
+policy, not proof that a particular frame used the native pipeline. Host tests
+check ideal texel-center equivalence; device filtering precision can differ
+slightly from normalized-coordinate sampling, so visual comparison remains
+necessary. The shader retains five contrast-stencil reads and four directional
+reads: this changes sample addressing/filter work, not the number of texels
+needed by FXAA or its intended quality.
+
+Compare two normal-launch playbacks against the preceding unhooked runs using
+the same 1512 x 1584 / 120 Hz settings, Forward View ON, AGGRESSIVE LOD, LOD Fade
+Transition OFF and World Occlusion OFF. RenderDoc and auto capture stay OFF.
+Inspect fine edges and image borders, and compare source-matched
+resolve/postprocess timing before attributing any FPS change to this pass.
+
 ### Stereo world occlusion experiment
 
 Open **Graphics -> Optimizations -> World Occlusion**. `VR/WorldOcclusion`
