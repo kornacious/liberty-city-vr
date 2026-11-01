@@ -149,7 +149,7 @@ bool Process(CPlayerPed *player)
     const float right=paused ? 0 : CPad::GetPad(0)->GetPedWalkLeftRight()/128.0f;
     const float forward=paused ? 0 : -CPad::GetPad(0)->GetPedWalkUpDown()/128.0f;
     const float up=paused ? 0 : (input.a ? 1.0f : 0.0f)-(input.b ? 1.0f : 0.0f);
-    const auto step=VrTraversal::Step(right,forward,up,!paused && input.leftStickClick,seconds,flight);
+    const auto step=VrTraversal::Step(right,forward,up,!paused && input.rightStickClick,seconds,flight);
     CVector front=TheCamera.Cams[TheCamera.ActiveCam].Front;
     front.z=0;
     if(front.MagnitudeSqr()<0.001f) front=CVector(0,1,0);

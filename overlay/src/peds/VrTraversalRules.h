@@ -9,7 +9,7 @@ inline Motion Step(float right, float forward, float up, bool boost, float secon
     if(!std::isfinite(right) || !std::isfinite(forward) || !std::isfinite(up) || !std::isfinite(seconds)) return {0,0,0};
     if(!flight) up=0;
     const float length=std::sqrt(right*right+forward*forward+up*up);
-    const float scale=(flight ? (boost ? 30.0f : 6.0f) : (boost ? 8.0f : 3.0f)) *
+    const float scale=(flight ? (boost ? 300.0f : 6.0f) : (boost ? 80.0f : 3.0f)) *
         (seconds < 0 ? 0 : seconds > 0.1f ? 0.1f : seconds) / (length > 1 ? length : 1);
     return {right*scale, forward*scale, up*scale};
 }

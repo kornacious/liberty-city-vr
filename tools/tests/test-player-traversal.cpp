@@ -56,7 +56,7 @@ struct CCutsceneMgr{static bool active;static bool IsRunning(){return active;}st
 struct Frontend{bool m_bMenuActive=false;}FrontEndMenuManager;
 struct CGame{static bool playingIntro;};bool CGame::playingIntro;
 namespace androidgame{
-struct Input{bool a=false,b=false,leftStickClick=false;}input;
+struct Input{bool a=false,b=false,leftStickClick=false,rightStickClick=false;}input;
 static bool menu=false;
 bool VrMenuConsumesInput(){return menu;}
 const Input &GetPadInput(){return input;}
@@ -105,8 +105,9 @@ int main(){
   Check(std::fabs(std::sqrt(m.right*m.right+m.forward*m.forward+m.up*m.up)*hz-6)<0.001f,"flight speed is frame independent and diagonal normalized");
  }
  Check(VrTraversal::Step(0,0,1,true,0.1f,false).up==0,"noclip alone cannot fly");
- Check(VrTraversal::Step(0,1,0,true,0.1f,true).forward==3,"boost is 30 units per second");
- Check(VrTraversal::Step(0,1,0,true,10,true).forward==3,"stalls cannot cause giant jumps");
+ Check(VrTraversal::Step(0,1,0,true,0.1f,true).forward==30,"flight boost is 300 units per second, ten times the previous boost");
+ Check(VrTraversal::Step(0,1,0,true,0.1f,false).forward==8,"walking noclip boost is 80 units per second, ten times the previous boost");
+ Check(VrTraversal::Step(0,1,0,true,10,true).forward==30,"stalls remain capped at one tenth of a second");
  Check(VrTraversal::OutOfBounds(1950,0,0)&&VrTraversal::OutOfBounds(0,0,-81)&&VrTraversal::OutOfBounds(0,0,1001),"world boundaries recover");
  Check(VrTraversal::OutOfBounds(std::numeric_limits<float>::quiet_NaN(),0,0),"invalid position recovers");
  Check(VrTraversal::TerrainModelName("twnhl_lndnite")&&VrTraversal::TerrainModelName("COM_LAND050")&&VrTraversal::TerrainModelName("rd_Road1C50kb"),"terrain model names include generic ground and road tiles");
@@ -117,6 +118,17 @@ int main(){
  Check(!TerrainModel(),"model context does not leak into gameplay collision");
  terrainQuery=false;
  CPlayerPed p;Clear(p);
+ ToggleFlight();CPad::pad.y=-128;androidgame::input.leftStickClick=true;Process(&p);
+ Check(std::fabs(p.position.y-0.12f)<0.001f,"left thumbstick click no longer boosts flight");
+ androidgame::input.leftStickClick=false;androidgame::input.rightStickClick=true;Process(&p);
+ Check(std::fabs(p.position.y-6.12f)<0.001f,"right thumbstick click boosts flight to 300 units per second");
+ androidgame::menu=true;Process(&p);
+ Check(std::fabs(p.position.y-6.12f)<0.001f,"held boost cannot move the player while the menu consumes input");
+ Clear(p);ToggleNoclip();CPad::pad.y=-128;androidgame::input.rightStickClick=true;Process(&p);
+ Check(std::fabs(p.position.y-1.6f)<0.001f&&p.position.z==1,"right thumbstick click boosts walking noclip while preserving the ground");
+ Clear(p);ToggleFlight();CPad::pad.x=128;androidgame::input.rightStickClick=true;CWorld::obstacle=true;Process(&p);
+ Check(p.position.x<=0.4f,"faster boost still sweeps against thin obstacles");
+ Clear(p);
  Check(ToggleFlight()&&Flight(),"flight toggles on");
  androidgame::input.a=true;Process(&p);
  Check(p.position.z>1&&!p.bUsesCollision,"A ascends and native physics is suspended");

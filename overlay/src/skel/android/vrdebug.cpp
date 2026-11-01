@@ -5061,7 +5061,7 @@ DrawQuestCheatPage(void)
 	snprintf(heading, sizeof(heading), "CHEATS / %s",
 		VrCheatMenu::CategoryName(gVrCheatCategory));
 	BeginFullVrMenuPage(heading,
-		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / LEFT CLICK BOOST" : nullptr);
+		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / RIGHT CLICK BOOST" : nullptr);
 	const int cheatCount = VrCheatMenu::Count(gVrCheatCategory,
 		GetVrCheatCount());
 	const int count = cheatCount+1;
