@@ -45,8 +45,10 @@ you may want to import again.
 **Perform**
 saves the complete order atomically on the headset, while **Cancel** discards
 pending edits. A library changed since Refresh must be refreshed before saving.
-New imports append after the explicitly ordered tracks, and deleted files are
-ignored. The custom station plays this order sequentially and wraps at the end;
+Each successful import persists at the bottom of the current playlist. Existing
+tracks keep their order, including libraries that have never been manually
+reordered, so numbered filenames from different folders cannot mix import
+batches together. Deleted files are ignored. The custom station plays this order sequentially and wraps at the end;
 a rescan retains the currently playing file and its position.
 
 The dashboard uses the same metadata caption. Long captions scroll left to right

@@ -104,7 +104,7 @@ public final class MusicProvider extends ContentProvider {
         try {
             File root = root();
             if ("info".equals(method)) {
-                result.put("version", 3);
+                result.put("version", 4);
                 result.put("count", count(root)); result.put("free", root.getUsableSpace());
                 result.put("duration", totalDuration(root));
                 JSONArray names = new JSONArray(); File[] files = root.listFiles();
@@ -170,7 +170,7 @@ public final class MusicProvider extends ContentProvider {
                     }
                     if (duration <= 0 || duration > 2073600000L) throw new Exception("Invalid or excessive audio duration");
                     if (totalDuration(root) + duration > 2073600000L) throw new Exception("Library exceeds 24 days total duration");
-                    if (!temp.renameTo(destination)) throw new Exception("Cannot finalize upload");
+                    MusicPlaylistStore.commitImport(root, temp, name);
                     result.put("duration", duration);
                 }
                 result.put("bytes", destination.length());

@@ -54,6 +54,27 @@ public final class MusicPlaylistStore {
             Files.move(temp.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } finally { if (temp.exists()) temp.delete(); }
     }
+    public static void commitImport(File root, File staged, String name) throws Exception {
+        if (name == null || name.isEmpty() || name.startsWith(".") || name.contains("/") || name.contains("\\") || name.length() > 200 || name.matches(".*[\\p{Cntrl}].*"))
+            throw new IOException("Invalid import filename");
+        // Snapshot the visible order before exposing the new file. This also pins
+        // legacy, unlisted tracks so later numbered imports cannot sort among them.
+        List<File> existing = ordered(root); List<String> order = new ArrayList<>();
+        for (File file : existing) order.add(file.getName());
+        if (order.size() >= 1000) throw new IOException("Library exceeds 1000 files");
+        File destination = new File(root,name);
+        if (destination.exists()) throw new IOException("Destination already exists");
+        Files.move(staged.toPath(),destination.toPath());
+        try {
+            if (!music(destination)) throw new IOException("Invalid imported music file");
+            order.add(name);
+            atomic(new File(root,".playlist-v1"), (String.join("\n",order) + "\n").getBytes(StandardCharsets.UTF_8));
+        } catch (Exception failure) {
+            try { Files.move(destination.toPath(),staged.toPath()); }
+            catch (Exception rollback) { failure.addSuppressed(rollback); }
+            throw failure;
+        }
+    }
     public static void apply(File root, List<String> order, List<String> deleted, String expected) throws Exception {
         List<File> current = ordered(root);
         if (!revision(current).equals(expected)) throw new IOException("Library changed; refresh before deleting music");

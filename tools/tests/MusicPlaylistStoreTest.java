@@ -43,6 +43,33 @@ public class MusicPlaylistStoreTest {
             List<String> remaining = new ArrayList<>(); for(File f:MusicPlaylistStore.ordered(root)) remaining.add(f.getName());
             MusicPlaylistStore.apply(root,Collections.emptyList(),remaining,MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)));
             check(MusicPlaylistStore.ordered(root).isEmpty());
+            Files.write(new File(root,"02-old.mp3").toPath(), new byte[]{1});
+            Files.write(new File(root,"10-old.mp3").toPath(), new byte[]{2});
+            List<String> expected = new ArrayList<>(Arrays.asList("02-old.mp3","10-old.mp3"));
+            // Two numbered import batches must remain after the older visible order,
+            // even when each new filename sorts before the previously imported ones.
+            for (String name : Arrays.asList("01-album-a.mp3","02-album-a.mp3","01-album-b.mp3","02-album-b.mp3")) {
+                File upload = new File(root,".incoming"); Files.write(upload.toPath(),name.getBytes());
+                MusicPlaylistStore.commitImport(root,upload,name); expected.add(name);
+                List<String> actual = new ArrayList<>(); for (File f:MusicPlaylistStore.ordered(root)) actual.add(f.getName());
+                check(actual.equals(expected));
+            }
+            Collections.reverse(expected);
+            MusicPlaylistStore.save(root,expected,MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)));
+            File upload = new File(root,".incoming"); Files.write(upload.toPath(),new byte[]{3});
+            String beforeFailure = MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root));
+            File blocked = new File(root,".playlist-v1.tmp"); check(blocked.mkdir());
+            try { MusicPlaylistStore.commitImport(root,upload,"00-latest.mp3"); throw new AssertionError(); } catch(IOException failure) {}
+            check(upload.isFile() && !new File(root,"00-latest.mp3").exists());
+            check(MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)).equals(beforeFailure));
+            check(!blocked.exists() || blocked.delete());
+            MusicPlaylistStore.commitImport(root,upload,"00-latest.mp3"); expected.add("00-latest.mp3");
+            List<String> actual = new ArrayList<>(); for (File f:MusicPlaylistStore.ordered(root)) actual.add(f.getName());
+            check(actual.equals(expected));
+            Files.write(upload.toPath(),new byte[]{4});
+            try { MusicPlaylistStore.commitImport(root,upload,"00-latest.mp3"); throw new AssertionError(); } catch(IOException failure) {}
+            check(upload.isFile() && new File(root,"00-latest.mp3").length() == 1);
+            System.out.println("PASS Java numbered import batches append after legacy/manual order, rollback safely and refuse overwrite");
             System.out.println("PASS Java multi-delete, delete-all, stale/traversal rejection, staging cleanup and rollback");
             System.out.println("PASS Java playlist insertion, persistence, revisions, duplicate rejection, append and metadata fallback");
         } finally { for(File f:root.listFiles()) Files.delete(f.toPath()); Files.delete(root.toPath()); }

@@ -1,5 +1,21 @@
 # Manager migration verification
 
+## Append imported music batches (2026-11-01)
+
+The headset previously finalized imports without persisting their playlist
+positions, so unlisted numbered filenames from separate folders interleaved in
+the filename-sort fallback. Successful imports now snapshot the existing visible
+order and append the new filename in the same commit path. This also pins legacy
+libraries that have no complete saved playlist. A playlist-write failure restores
+the staged upload before returning an error; existing audio is never overwritten.
+
+Host Java regressions passed for two numbered batches after legacy tracks,
+appending after manually reversed order, refusing duplicate destinations and
+restoring staging/order on a failed playlist write. Native playlist parsing and
+the existing **57/57 Windows / 58/58 Linux** manager checks passed. The complete
+native/Android APK build succeeded and updated the **personal Quest 3 device**.
+Tests used synthetic files; no personal music was imported, reordered or deleted.
+
 ## Inclusive music endpoints and multi-file import (2026-11-01)
 
 Reproduced a failing UI regression where Ctrl was held for mouse press and
