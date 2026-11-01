@@ -30,9 +30,16 @@ static bool IsQuestDualWieldEnabled(int){return false;}
 static int GetQuestCalibrationValue(int,int,int){return 360;}
 static int GetQuestWeaponLaserOverride(int){return -1;}
 }
-static int nativeCount = 36;
+static int nativeCount = 38;
 static int activatedSource = -1, activationCount, cycledSource = -1, cycleDirection;
 static bool godMode, unlimitedRun, neverWanted, carInvincibility;
+namespace VrPlayerTraversal {
+static bool flight,noclip;
+static bool Flight(){return flight;}
+static bool Noclip(){return noclip;}
+static bool ToggleFlight(){flight=!flight; return true;}
+static bool ToggleNoclip(){noclip=!noclip; return true;}
+}
 namespace TimeCheatFixture { static bool ActivateVrTimeCheat(int); bool GetVrCheatToggleState(int, bool*); }
 static int GetVrCheatCount() { return nativeCount; }
 static int GetVrMissionCategoryCount() { return 0; }
@@ -40,7 +47,7 @@ static int GetVrMissionCount(int) { return 0; }
 static const char *GetVrCheatName(int source);
 static bool GetVrCheatToggleState(int source, bool *enabled)
 {
-	if(source == 35) return TimeCheatFixture::GetVrCheatToggleState(source, enabled);
+	if(source >= 35) return TimeCheatFixture::GetVrCheatToggleState(source, enabled);
 	if(source != 2 && source != 3 && source != 4 && source != 5) return false;
 	*enabled = source == 2 ? godMode : source == 3 ? unlimitedRun : source == 4 ? neverWanted : carInvincibility;
 	return true;
@@ -54,6 +61,8 @@ static bool ActivateVrCheat(int source)
 	if(source == 3) unlimitedRun = !unlimitedRun;
 	if(source == 4) neverWanted = !neverWanted;
 	if(source == 5) carInvincibility = !carInvincibility;
+	if(source == 36) return VrPlayerTraversal::ToggleFlight();
+	if(source == 37) return VrPlayerTraversal::ToggleNoclip();
 	if(source >= 29) return TimeCheatFixture::ActivateVrTimeCheat(source-6);
 	return source != 0 && source != 1; // Vehicle spawning can be unavailable without a player.
 }
@@ -197,9 +206,9 @@ int main()
   Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(i) == sortedModels[i], "production catalog sorts case-insensitively and breaks ties by model ID");
  Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(-1) == -1 && VehicleCatalogFixture::GetVrSpawnVehicleModel(4) == -1, "invalid catalog rows have no model");
 
-	const int expectedCounts[] = {6, 3, 1, 14, 3, 5, 3};
-	int seen[36] = {};
-	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 36 retained cheats");
+	const int expectedCounts[] = {8, 3, 1, 14, 3, 5, 3};
+	int seen[38] = {};
+	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 38 retained cheats");
 	Check(VR_SPECIAL_SPAWN_NEXT_CAR == 0 && VR_SPECIAL_SPAWN_NEXT_BOAT == 1 &&
 		VR_SPECIAL_GOD_MODE == 2 && VR_SPECIAL_RUN_WITHOUT_LIMITS == 3 &&
 		VR_SPECIAL_NEVER_WANTED == 4 && VR_SPECIAL_CAR_INVINCIBILITY == 5 &&
@@ -251,7 +260,7 @@ int main()
 			Check(rows[item].text != "PASS CURRENT MISSION", "removed mission-pass entry cannot be rendered or activated");
 			if(expectedCounts[category] < VR_CHEAT_ITEMS_PER_PAGE)
 				Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back is present on the last page");
-			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source == 35;
+			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source >= 35;
 			Check(rows[item].off == isToggle && !rows[item].on, "toggle state uses mapped source before activation");
 			activatedSource = -1;
 			ActivateQuestCheatMenuSelection();
@@ -348,8 +357,8 @@ int main()
 		Check(SourceIndex(category, 0, nativeCount) == -1, "invalid category cannot dispatch");
 	}
 	Check(SourceIndex(GENERAL, -1, nativeCount) == -1, "negative row cannot dispatch");
-	Check(SourceIndex(GENERAL, 6, nativeCount) == -1, "Back row has no native index");
-	Check(SourceIndex(GENERAL, 6, nativeCount+1) == nativeCount, "future backend cheat remains reachable in General");
+	Check(SourceIndex(GENERAL, 8, nativeCount) == -1, "Back row has no native index");
+	Check(SourceIndex(GENERAL, 8, nativeCount+1) == nativeCount, "future backend cheat remains reachable in General");
 	Check(Count(GENERAL, 0) == 0, "empty backend still supports a Back-only menu");
 
 	ResetMenuNavigationRepeat();

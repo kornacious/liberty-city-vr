@@ -1,0 +1,165 @@
+--- a/src/core/Pad.cpp
++++ b/src/core/Pad.cpp
+@@ -12,6 +12,7 @@
+ #endif
+ 
+ #include "Pad.h"
++#include "VrPlayerTraversal.h"
+ #include "Script.h"
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+@@ -390,7 +391,7 @@
+ 	"MIDNIGHT (00:00)",
+ 	"FAST FORWARD ONE HOUR",
+ 	"REWIND ONE HOUR",
+-	"STOP MISSION TIMER"
++	"STOP MISSION TIMER", "FLIGHT", "NOCLIP"
+ };
+ 
+ enum eVrSpecialCheatIndex {
+@@ -715,6 +716,12 @@
+ 
+ bool GetVrCheatToggleState(int index, bool *enabled)
+ {
++	if(enabled && index == VR_SPECIAL_CHEAT_COUNT+30){
++		*enabled=VrPlayerTraversal::Flight(); return true;
++	}
++	if(enabled && index == VR_SPECIAL_CHEAT_COUNT+31){
++		*enabled=VrPlayerTraversal::Noclip(); return true;
++	}
+ 	if(enabled && index == VR_SPECIAL_CHEAT_COUNT+29){
+ 		*enabled = COnscreenTimer::bVrMissionTimerStopped;
+ 		return true;
+@@ -930,6 +937,8 @@
+ 		return true;
+ 	}
+ 	const int legacyIndex = index-VR_SPECIAL_CHEAT_COUNT;
++	if(legacyIndex == 30) return VrPlayerTraversal::ToggleFlight();
++	if(legacyIndex == 31) return VrPlayerTraversal::ToggleNoclip();
+ 	if(ActivateVrTimeCheat(legacyIndex)) return true;
+ 	if(!FindPlayerPed() && !(legacyIndex >= 12 && legacyIndex <= 16))
+ 		return false;
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -3,6 +3,7 @@
+ 
+ #include "RwHelper.h"
+ #include "PlayerPed.h"
++#include "VrPlayerTraversal.h"
+ #include "Wanted.h"
+ #include "Fire.h"
+ #include "DMAudio.h"
+@@ -106,6 +107,7 @@
+ 
+ CPlayerPed::~CPlayerPed()
+ {
++	VrPlayerTraversal::Reset(this);
+ 	delete m_pWanted;
+ }
+ 
+@@ -308,6 +310,7 @@
+ void
+ CPlayerPed::SetInitialState(void)
+ {
++	VrPlayerTraversal::Reset(this);
+ 	m_bAdrenalineActive = false;
+ 	m_nAdrenalineTime = 0;
+ 	CTimer::SetTimeScale(1.0f);
+@@ -2048,6 +2051,7 @@
+ void
+ CPlayerPed::ProcessControl(void)
+ {
++	if(VrPlayerTraversal::Process(this)) return;
+ 	if (m_nEvadeAmount != 0)
+ 		--m_nEvadeAmount;
+ 
+--- a/src/collision/Collision.cpp
++++ b/src/collision/Collision.cpp
+@@ -21,6 +21,8 @@
+ #include "SurfaceTable.h"
+ #include "Lines.h"
+ #include "Collision.h"
++#include "VrPlayerTraversal.h"
++#include "VrTraversalRules.h"
+ #include "Frontend.h"
+ 
+ #ifdef VU_COLLISION
+@@ -1623,6 +1625,27 @@
+ 	const CMatrix &matrix, CColModel &model,
+ 	CColPoint &point, float &mindist, bool ignoreSeeThrough, CStoredCollPoly *poly)
+ {
++	// Traversal's ground-only query keeps roads/terrain without making roofs,
++	// props or a building sharing the same COL model solid to a noclip ped.
++	if(VrPlayerTraversal::TerrainQuery()){
++		CMatrix inverse;
++		Invert(matrix,inverse);
++		CColLine local(inverse*line.p0,inverse*line.p1);
++		if(!TestLineBox(local,model.boundingBox)) return false;
++		CalculateTrianglePlanes(&model);
++		float distance=mindist;
++		for(int i=0;i<model.numTriangles;++i){
++			if(!VrTraversal::GroundSurface(model.triangles[i].surface,VrPlayerTraversal::TerrainModel())) continue;
++			ProcessLineTriangle(local,model.vertices,model.triangles[i],model.trianglePlanes[i],point,distance);
++		}
++		if(distance>=mindist) return false;
++		point.point=matrix*point.point;
++		point.normal=Multiply3x3(matrix,point.normal);
++		mindist=distance;
++		if(poly) poly->valid=false;
++		return true;
++	}
++
+ #ifdef VU_COLLISION
+ 	static CStoredCollPoly TempStoredPoly;
+ 	CMatrix matTransform;
+@@ -1813,6 +1836,24 @@
+ 	const CMatrix &matrixB, CColModel &modelB,
+ 	CColPoint *spherepoints, CColPoint *linepoints, float *linedists)
+ {
++	if(VrPlayerTraversal::TerrainQuery()){
++		CMatrix inverse;
++		Invert(matrixB,inverse);
++		CalculateTrianglePlanes(&modelB);
++		// This scoped path is only used by traversal's ground-only sphere
++		// sweep. Shared model volumes and normal world collision stay intact.
++		for(int sphere=0;sphere<modelA.numSpheres;++sphere){
++			CColSphere local=modelA.spheres[sphere];
++			local.center=inverse*(matrixA*local.center);
++			for(int triangle=0;triangle<modelB.numTriangles;++triangle){
++				if(!VrTraversal::GroundSurface(modelB.triangles[triangle].surface,VrPlayerTraversal::TerrainModel())) continue;
++				if(TestSphereTriangle(local,modelB.vertices,modelB.triangles[triangle],modelB.trianglePlanes[triangle]))
++					return 1;
++			}
++		}
++		return 0;
++	}
++
+ #ifdef VU_COLLISION
+ 	CVuVector *aSpheresA = (CVuVector*)SPR(0x0000);
+ 	CVuVector *aSpheresB = (CVuVector*)SPR(0x0800);
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -25,6 +25,7 @@
+ #include "TempColModels.h"
+ #include "WaterLevel.h"
+ #include "World.h"
++#include "VrPlayerTraversal.h"
+ #ifdef GTA_VR_WEAPONS
+ #include "VrRagdoll.h"
+ #endif
+@@ -451,6 +452,7 @@
+ 			e->m_scanCode = GetCurrentScanCode();
+ 
+ 			colmodel = CModelInfo::GetColModel(e->GetModelIndex());
++			VrPlayerTraversal::TerrainModelScope groundModel(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+ 			if(CCollision::ProcessVerticalLine(line, e->GetMatrix(), *colmodel, point, mindist,
+ 			                                   ignoreSeeThrough, poly))
+ 				entity = e;
+@@ -962,6 +964,7 @@
+ 
+ 				if(e->GetBoundRadius() + radius > distance) {
+ 					CColModel *eCol = CModelInfo::GetColModel(e->GetModelIndex());
++					VrPlayerTraversal::TerrainModelScope groundModel(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+ 					int collidedSpheres =
+ 					    CCollision::ProcessColModels(sphereMat, OurColModel, e->GetMatrix(), *eCol,
+ 					                                 gaTempSphereColPoints, nil, nil);

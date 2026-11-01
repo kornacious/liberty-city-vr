@@ -178,6 +178,12 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   per-weapon and per-seat calibration.
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
   graphics and model-set menus.
+- Player cheats include Flight and Noclip. In Flight, move with the left stick,
+  hold A to rise, B to descend, and the left stick click for a speed boost.
+  Noclip alone retains roads and terrain; combining it with Flight bypasses
+  all collision. Leaving the map returns the player to the Town Hall forecourt
+  on Staunton Island and turns both modes off. Traversal is suspended in
+  vehicles, cutscenes and scripted control sequences.
 - Optional articulated ragdolls respond to bullets, explosions, cars and nearby world geometry.
   Body weight, car braking, grip and bullet response can be tuned in the menu.
 - Optional vehicle deformation affects opaque body panels, bumpers and grilles.

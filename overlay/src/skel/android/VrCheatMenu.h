@@ -45,7 +45,9 @@ static const unsigned char kSourceCategories[] = {
 	WEATHER,          // MIDNIGHT (00:00)
 	WEATHER,          // FAST FORWARD ONE HOUR
 	WEATHER,          // REWIND ONE HOUR
-	WEATHER           // STOP MISSION TIMER
+	WEATHER,          // STOP MISSION TIMER
+	GENERAL,          // FLIGHT
+	GENERAL           // NOCLIP
 };
 
 inline const char *CategoryName(int category)

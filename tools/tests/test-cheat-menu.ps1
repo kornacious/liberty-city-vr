@@ -31,7 +31,7 @@ $legacyMatch = [regex]::Match($pad, '(?s)static const char \*gVrCheatNames\[\]\s
 $legacy = @([regex]::Matches($legacyMatch.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $mappingMatch = [regex]::Match($header, '(?s)kSourceCategories\[\]\s*=\s*\{(.*?)\};')
 $labels = @([regex]::Matches($mappingMatch.Groups[1].Value, '// ([^\r\n]+)') | ForEach-Object { $_.Groups[1].Value.Trim() })
-if ($special.Count -ne 6 -or $legacy.Count -ne 30 -or $labels.Count -ne $special.Count + $legacy.Count) {
+if ($special.Count -ne 6 -or $legacy.Count -ne 32 -or $labels.Count -ne $special.Count + $legacy.Count) {
     throw 'The native cheat catalog changed; review the category mapping and its coverage.'
 }
 if ($pad -match 'VR_SPECIAL_PASS_CURRENT_MISSION|PassCurrentVrMission|VrMissionPassEntry|gVrMissionPassEntries|PASS CURRENT MISSION' -or

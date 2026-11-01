@@ -426,3 +426,10 @@ on-headset compilation latency, startup time or the resulting frame pacing.
 or truncated/error transfers before creating placeholders, traversal rejection,
 verified writes and protection of existing local captures. `TestPerfCaptureFiles`
 also covers the .rdc provider boundary and rejection of arbitrary game files.
+
+`test-player-traversal.ps1` compiles the production traversal controller with
+host engine adapters. It checks normalized movement and boost across frame
+rates, collision mode combinations, ground preservation, terrain model
+classification, pause/cutscene/vehicle/death guards, collision restoration and
+Town Hall recovery. World collision and streaming are adapters; map traversal
+and headset comfort still require in-headset verification.

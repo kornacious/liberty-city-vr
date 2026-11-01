@@ -5051,7 +5051,8 @@ DrawQuestCheatPage(void)
 	char heading[96];
 	snprintf(heading, sizeof(heading), "CHEATS / %s",
 		VrCheatMenu::CategoryName(gVrCheatCategory));
-	BeginFullVrMenuPage(heading);
+	BeginFullVrMenuPage(heading,
+		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / LEFT CLICK BOOST" : nullptr);
 	const int cheatCount = VrCheatMenu::Count(gVrCheatCategory,
 		GetVrCheatCount());
 	const int count = cheatCount+1;
@@ -5069,7 +5070,7 @@ DrawQuestCheatPage(void)
 		bool toggleEnabled = false;
 		const bool isToggle = source >= 0 &&
 			GetVrCheatToggleState(source, &toggleEnabled);
-		DrawFullVrMenuRow(name, 158+row*37, 2,
+		DrawFullVrMenuRow(name, (gVrCheatCategory == VrCheatMenu::GENERAL ? 178 : 158)+row*37, 2,
 			item == gVrCheatSelection, true,
 			isToggle && !toggleEnabled, isToggle && toggleEnabled);
 	}

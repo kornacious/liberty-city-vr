@@ -197,6 +197,9 @@ if(NOT LIBERTYVR_BRINGUP)
 		file(GLOB _dir_sources "${RE3_ROOT}/src/${d}/*.cpp")
 		list(APPEND GAME_SOURCES ${_dir_sources})
 	endforeach()
+	set(QUEST_TRAVERSAL_SOURCE "${RE3_ROOT}/src/peds/VrPlayerTraversal.cpp")
+	list(REMOVE_ITEM GAME_SOURCES "${QUEST_TRAVERSAL_SOURCE}")
+	list(APPEND GAME_SOURCES "${QUEST_TRAVERSAL_SOURCE}")
 	# Keep this explicit because file(GLOB) does not cause an already configured
 	# Ninja graph to notice a newly added source file.
 	set(QUEST_PROFILER_SOURCE
