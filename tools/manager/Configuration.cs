@@ -80,6 +80,7 @@ public sealed record ActionOptions
     public bool DownloadModels { get; set; }
     public bool UpdateDryRun { get; set; }
     public string MusicSource { get; set; } = "";
+    public string[] MusicSources { get; set; } = [];
     public string BoardExport { get; set; } = "";
     public string ModelArchive { get; set; } = "";
     public string ModelSource { get; set; } = "";

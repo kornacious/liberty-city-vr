@@ -140,6 +140,19 @@ await Test("Music validation-only never queries ADB", async () =>
     await new MusicImporter(config, runner, log, _ => throw new Exception("Unexpected headset access")).Import(new() { MusicSource = file, ValidateMusicOnly = true }, default);
     Assert(runner.Calls.Count == 1 && runner.Calls[0].Args.Contains("-show_streams"));
 });
+await Test("Explicit music selection imports only chosen files and supports mixed folder/file input", async () =>
+{
+    var folder = Path.GetFullPath(Path.Combine(root,"selected-music")); Directory.CreateDirectory(folder);
+    var a = Path.Combine(folder,"A.mp3"); var b = Path.Combine(folder,"B.mp3"); var c = Path.Combine(folder,"C.mp3");
+    File.WriteAllText(a,"a"); File.WriteAllText(b,"b"); File.WriteAllText(c,"c"); File.WriteAllText(Path.Combine(folder,"ignored.txt"),"text");
+    var options = new ActionOptions { MusicSource = folder, MusicSources = [a,c], ValidateMusicOnly = true };
+    Assert(MusicImporter.SourcePaths(options).SequenceEqual(new[] {a,c}));
+    var runner = new FakeRunner { Probe = goodProbe }; using var log = new PrivateLog();
+    await new MusicImporter(config,runner,log,_ => throw new Exception("Unexpected headset access")).Import(options,default);
+    Assert(runner.Calls.Count == 2 && runner.Calls.All(call => call.Args[^1] == a || call.Args[^1] == c));
+    Assert(MusicImporter.SourcePaths(new() { MusicSources = [a,folder,c] }).Order().SequenceEqual(new[] {a,b,c}.Order()));
+    Assert(MusicImporter.SourcePaths(new() { MusicSource = folder }).Length == 3);
+});
 await Test("Malformed IMG directories and out-of-range entries fail", () =>
 {
     var img = Path.Combine(root, "bad.img"); var dir = Path.ChangeExtension(img, ".dir"); File.WriteAllBytes(img, new byte[2048]); File.WriteAllBytes(dir, [1]);

@@ -17,6 +17,8 @@ public sealed class MusicManagementView : View
     private readonly TextField source, board;
     private readonly CheckBox validate;
     private readonly IApplication app;
+    private string[] importPaths = [];
+    private string importCaption = "";
     private int dragged = -1;
     private bool dragMoved, extendClick, updating, rangeEnd;
     private readonly Label selectionInfo = new() { X = 32, Y = 2, Width = Dim.Fill() };
@@ -26,6 +28,7 @@ public sealed class MusicManagementView : View
         this.app = app; Width = Dim.Fill(); Height = Dim.Fill(); CanFocus = true;
         SetScheme(ManagerUi.Theme()); Tracks.SetScheme(ManagerUi.Theme()); details.SetScheme(ManagerUi.Theme());
         source = new TextField { Text = options.MusicSource, X = 8, Width = Dim.Fill(12) };
+        if (options.MusicSources.Length > 0) SetImportPaths(options.MusicSources);
         board = new TextField { Text = options.BoardExport, Y = Pos.AnchorEnd(1), Width = Dim.Fill(12) };
         source.SetScheme(ManagerUi.Theme()); board.SetScheme(ManagerUi.Theme());
         Add(new Label { Text = "Import:", Y = 0 }, source, Browse(source, OpenMode.Mixed, 0, settings));
@@ -69,11 +72,25 @@ public sealed class MusicManagementView : View
         button.Accepting += (_, e) =>
         {
             e.Handled = true;
-            using var dialog = new OpenDialog { Title = mode == OpenMode.Mixed ? "Import audio file or folder" : "Export radio board placement", OpenMode = mode, MustExist = mode == OpenMode.Mixed };
+            var importing = mode == OpenMode.Mixed;
+            using var dialog = new OpenDialog { Title = importing ? "Import audio · Ctrl-click/Space: select · Alt-click: range" : "Export radio board placement", OpenMode = mode, MustExist = importing, AllowsMultipleSelection = importing };
             dialog.SetScheme(ManagerUi.Theme());
-            dialog.Path = File.Exists(field.Text) || Directory.Exists(field.Text) ? field.Text : Directory.Exists(settings.Workplace) ? settings.Workplace : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            app.Run(dialog); if (!dialog.Canceled) field.Text = dialog.Path;
+            if (importing) dialog.AllowedTypes.Add(new AllowedType("Audio", ".mp3", ".m4a", ".ogg", ".opus", ".flac", ".wav"));
+            var initial = importing && importPaths.Length > 0 && field.Text == importCaption ? importPaths[0] : field.Text;
+            dialog.Path = File.Exists(initial) || Directory.Exists(initial) ? initial : Directory.Exists(settings.Workplace) ? settings.Workplace : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            app.Run(dialog);
+            if (!dialog.Canceled)
+            {
+                if (importing) SetImportPaths(dialog.FilePaths.Count > 0 ? dialog.FilePaths : new[] { dialog.Path });
+                else field.Text = dialog.Path;
+            }
         }; return button;
+    }
+    private void SetImportPaths(IEnumerable<string> paths)
+    {
+        importPaths = paths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
+        importCaption = importPaths.Length > 1 ? $"{importPaths.Length} items selected" : importPaths.FirstOrDefault() ?? "";
+        source.Text = importCaption;
     }
     public void Load(MusicLibrarySnapshot snapshot)
     {
@@ -85,7 +102,8 @@ public sealed class MusicManagementView : View
     }
     public void ReadOptions(ActionOptions options)
     {
-        options.MusicSource = source.Text.Trim(); options.BoardExport = board.Text.Trim(); options.ValidateMusicOnly = validate.Value == CheckState.Checked;
+        options.MusicSources = importPaths.Length > 1 && source.Text == importCaption ? importPaths.ToArray() : [];
+        options.MusicSource = options.MusicSources.Length > 0 ? "" : source.Text.Trim(); options.BoardExport = board.Text.Trim(); options.ValidateMusicOnly = validate.Value == CheckState.Checked;
         options.MusicRevision = Playlist.Dirty ? Playlist.Revision : "";
         options.MusicOrder = Playlist.Dirty ? Playlist.Tracks.Select(t => t.Name).ToArray() : [];
         options.MusicDeleted = Playlist.Dirty ? Playlist.Deleted.ToArray() : [];
@@ -96,8 +114,15 @@ public sealed class MusicManagementView : View
         try
         {
             var previous = Tracks.SelectedItem ?? 0;
+            var top = Tracks.Viewport.Y;
             Tracks.SetSource(new ObservableCollection<string>(Playlist.Tracks.Select((t, i) => $"{(Playlist.Selection.Contains(t.Name) ? '●' : ' ')}{i + 1,3}. {t.Display}")));
-            if (Playlist.Tracks.Count > 0) Tracks.SelectedItem = Math.Clamp(focus ?? previous, 0, Playlist.Tracks.Count - 1);
+            if (Playlist.Tracks.Count > 0)
+            {
+                var index = Math.Clamp(focus ?? previous, 0, Playlist.Tracks.Count - 1);
+                Tracks.SelectedItem = index;
+                Tracks.EnsureSelectedItemVisible();
+                if (index >= top && index < top + Tracks.Viewport.Height) Tracks.Viewport = Tracks.Viewport with { Y = top };
+            }
             UpdateSelectionInfo();
         }
         finally { updating = false; }
@@ -109,7 +134,7 @@ public sealed class MusicManagementView : View
         rangeEnd = false; UpdateSelectionInfo();
         if (Playlist.Selection.Count == 0) return;
         // A remembered import folder must not immediately re-import deleted tracks.
-        source.Text = "";
+        SetImportPaths([]);
         Playlist.DeleteSelection(); RenderRows(Math.Max(0, Playlist.SelectionStart)); ShowDetails();
     }
     public void MoveSelected(int delta)
@@ -137,13 +162,19 @@ public sealed class MusicManagementView : View
         else if (dragged >= 0 && mouse.Flags.HasFlag(MouseFlags.LeftButtonReleased))
         {
             var from = dragged; dragged = -1; app.Mouse.UngrabMouse();
-            if (dragMoved || row != from)
+            if (extendClick)
+            {
+                // Range selection follows the release endpoint, including that row;
+                // pointer movement during a modifier-click must never reorder music.
+                Playlist.Select(row, true);
+            }
+            else if (dragMoved || row != from)
             {
                 if (position.X >= 0 && position.X < Tracks.Viewport.Width && !Playlist.Selection.Contains(Playlist.Tracks[row].Name))
                     Playlist.MoveSelection(Math.Min(row, Playlist.Tracks.Count - Playlist.Selection.Count));
             }
-            else if (!extendClick) Playlist.Select(row, false);
-            RenderRows(dragMoved ? Math.Max(0, Playlist.SelectionStart) : row);
+            else Playlist.Select(row, false);
+            RenderRows(!extendClick && dragMoved ? Math.Max(0, Playlist.SelectionStart) : row);
             ShowDetails(); mouse.Handled = true;
         }
         else if (dragged >= 0 && mouse.Flags.HasFlag(MouseFlags.PositionReport))
@@ -151,7 +182,8 @@ public sealed class MusicManagementView : View
             if (position.Y < 0) row = Math.Max(0, Tracks.Viewport.Y - 1);
             if (position.Y >= Tracks.Viewport.Height) row = Math.Min(Playlist.Tracks.Count - 1, Tracks.Viewport.Bottom);
             if (row != dragged) dragMoved = true;
-            updating = true; try { Tracks.SelectedItem = row; } finally { updating = false; }
+            if (extendClick) { Playlist.Select(row, true); RenderRows(row); }
+            else { updating = true; try { Tracks.SelectedItem = row; } finally { updating = false; } }
             mouse.Handled = true;
         }
         else if (mouse.Flags.HasFlag(MouseFlags.LeftButtonClicked)) mouse.Handled = true;

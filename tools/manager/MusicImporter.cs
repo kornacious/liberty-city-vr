@@ -51,11 +51,17 @@ public sealed class MusicImporter(ManagerSettings settings, ICommandRunner runne
         return duration;
     }
 
+    public static string[] SourcePaths(ActionOptions options)
+    {
+        var sources = options.MusicSources.Length > 0 ? options.MusicSources : string.IsNullOrWhiteSpace(options.MusicSource) ? [] : new[] { options.MusicSource };
+        return sources.SelectMany(source => Directory.Exists(source)
+                ? Directory.GetFiles(source).Where(p => Codecs.ContainsKey(Path.GetExtension(p))).Order(StringComparer.Ordinal)
+                : new[] { source }.AsEnumerable())
+            .Select(Path.GetFullPath).Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal).ToArray();
+    }
     public async Task Import(ActionOptions options, CancellationToken token)
     {
-        var paths = string.IsNullOrWhiteSpace(options.MusicSource) ? [] : Directory.Exists(options.MusicSource)
-            ? Directory.GetFiles(options.MusicSource).Where(p => Codecs.ContainsKey(Path.GetExtension(p))).Order(StringComparer.Ordinal).ToArray()
-            : new[] { options.MusicSource };
+        var paths = SourcePaths(options);
         if (paths.Length == 0 && string.IsNullOrWhiteSpace(options.BoardExport)) throw new IOException("Choose a music file, a folder containing audio, or a board export destination.");
         var accepted = new List<MusicTrack>();
         var seen = new HashSet<string>();

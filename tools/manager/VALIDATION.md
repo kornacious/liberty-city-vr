@@ -1,5 +1,26 @@
 # Manager migration verification
 
+## Inclusive music endpoints and multi-file import (2026-11-01)
+
+Reproduced a failing UI regression where Ctrl was held for mouse press and
+movement, then released before mouse-up on the next row: the range omitted the
+release endpoint and could reorder tracks. Range gestures now include the
+release row, never reorder during selection and retain the visible scroll
+position when redrawing a selection.
+
+Verified **57/57 Windows** and **58/58 Linux** manager checks and real-terminal UI
+checks on both platforms. UI coverage includes forward/reverse scrolled endpoints,
+moving Ctrl selection with no modifier on release, selecting two nonadjacent
+files in the actual import dialog, excluding the unselected file, Browse Cancel
+retaining the selection, and a typed folder replacing it. Importer checks verify
+that only explicitly selected files are probed, mixed file/folder selections are
+deduplicated and legacy whole-folder import remains supported. Existing group
+movement, deletion, Cancel and save-transfer UI checks also passed.
+
+Both self-contained published managers were refreshed. Only synthetic audio
+fixtures were used; no headset transfer, APK build or original game data was
+needed for these manager-only changes.
+
 ## Terminal-compatible music range selection (2026-11-01)
 
 Windows Terminal reserves Shift-click for terminal text selection, preventing

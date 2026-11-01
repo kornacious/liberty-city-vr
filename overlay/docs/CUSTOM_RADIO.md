@@ -30,6 +30,8 @@ text selection and does not send it to the application
 Selected rows are highlighted and marked with a dot. Drag a selected
 row to move the whole selection together, preserving its internal order while
 the intervening rows shift. **Up/Down** and **Alt+Up/Alt+Down** also move the group.
+Range selection includes both endpoints and follows the pointer through mouse
+release; moving during Ctrl-click extends the range rather than reordering it.
 
 **Delete** queues the selected files for removal from the headset. The list and
 pending deletion count update immediately; **Perform** actually deletes them,
@@ -55,8 +57,13 @@ The terminal library preserves Unicode metadata. Earlier imports whose original
 filename was not recorded can recover it by re-importing the same source file;
 the audio is recognized as a duplicate and is not uploaded again.
 
-Use the optional **Import** field and its integrated browser for a supported audio
-file or flat folder. **Validate only** checks local files without writing music
+Use the optional **Import** field and its integrated browser for supported audio
+files or flat folders. In the browser, **Ctrl-click** or **Space** selects multiple
+individual entries; **Alt-click** extends a range. Accepting a multi-selection
+shows its item count in the Import field and imports only those chosen entries.
+Selecting a folder imports its supported audio files without recursing. Cancelling
+Browse retains the previous selection; typing a path replaces it.
+**Validate only** checks local files without writing music
 or playlist order. ADB and ffprobe paths are configured in **Settings**.
 
 ### Historical importer reference

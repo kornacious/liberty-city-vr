@@ -70,6 +70,19 @@ internal static class UiChecks
                 }
                 TerminalClick(0); TerminalClick(2, 16);
                 if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3", "3.mp3" })) throw new Exception("ANSI Ctrl-click did not select the range.");
+                TerminalClick(0);
+                Mouse(1, MouseFlags.LeftButtonPressed | MouseFlags.Ctrl);
+                Mouse(2, MouseFlags.LeftButtonPressed | MouseFlags.PositionReport | MouseFlags.Ctrl);
+                Mouse(2, MouseFlags.LeftButtonReleased);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3", "3.mp3" }) || music.Playlist.Dirty) throw new Exception("Ctrl range did not include the release endpoint, or reordered tracks while selecting.");
+                music.Load(new(new string('a',64), Enumerable.Range(1,40).Select(i => new MusicEntry { Name = i + ".mp3" }).ToArray()));
+                music.Tracks.Viewport = music.Tracks.Viewport with { Y = 10 };
+                TerminalClick(0); TerminalClick(2,16);
+                if (!music.Playlist.Selection.SetEquals(new[] { "11.mp3", "12.mp3", "13.mp3" })) throw new Exception("Scrolled Ctrl range omitted its endpoint.");
+                TerminalClick(2); TerminalClick(0,16);
+                if (!music.Playlist.Selection.SetEquals(new[] { "11.mp3", "12.mp3", "13.mp3" })) throw new Exception("Reverse scrolled range omitted its endpoint.");
+                music.Load(new(new string('a',64), Enumerable.Range(1,12).Select(i => new MusicEntry { Name = i + ".mp3", Title = "Track " + i }).ToArray()));
+                music.Tracks.SelectedItem = 0; music.Tracks.Viewport = music.Tracks.Viewport with { Y = 0 };
                 TerminalClick(1); TerminalClick(0, 16);
                 if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3" })) throw new Exception("Reverse Ctrl-click did not select the range.");
                 TerminalClick(1);
@@ -94,6 +107,39 @@ internal static class UiChecks
                 music.ReadOptions(options);
                 if (options.MusicDeleted.Length != 12 || options.MusicOrder.Length != 0) throw new Exception("Delete-all did not retain an empty pending playlist.");
                 music.Load(new(new string('b',64), []));
+                var importFolder = Path.GetFullPath(Path.Combine(directory,"import-fixture")); Directory.CreateDirectory(importFolder);
+                foreach (var name in new[] {"A.mp3", "B.mp3", "C.mp3"}) File.WriteAllText(Path.Combine(importFolder,name), name);
+                var importField = Descendants(music).OfType<TextField>().First(); importField.Text = importFolder;
+                app.AddTimeout(TimeSpan.FromMilliseconds(350), () =>
+                {
+                    try
+                    {
+                        if (app.TopRunnable is not OpenDialog dialog || !dialog.AllowsMultipleSelection || dialog.OpenMode != OpenMode.Mixed) throw new Exception("Music browser did not enable multiple file selection.");
+                        var table = Descendants(dialog).OfType<TableView>().Single(); table.SetFocus(); app.LayoutAndDraw(true);
+                        int Row(string name) => Enumerable.Range(0,table.Table!.Rows).Single(i => table.Table[i,0].ToString()!.EndsWith(name,StringComparison.Ordinal));
+                        void FileClick(int row, bool control)
+                        {
+                            var y = Enumerable.Range(0,table.Viewport.Height).First(i => table.ScreenToCell(3,i,out _)?.Y == row);
+                            var point = table.ViewportToScreen(new System.Drawing.Point(3,y));
+                            app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = point, Flags = MouseFlags.LeftButtonClicked | (control ? MouseFlags.Ctrl : 0) });
+                        }
+                        FileClick(Row("A.mp3"),false); FileClick(Row("C.mp3"),true);
+                        dialog.InvokeCommand(Command.Accept);
+                    }
+                    catch(Exception error) { File.WriteAllText(Path.Combine(directory,"import-error.txt"),error.ToString()); failure = error; app.RequestStop(); }
+                    return false;
+                });
+                Descendants(music).OfType<Button>().First(b => b.Text == "Browse").InvokeCommand(Command.Accept);
+                if (failure is not null) throw failure;
+                music.ReadOptions(options);
+                if (!options.MusicSources.ToHashSet().SetEquals(new[] { Path.Combine(importFolder,"A.mp3"),Path.Combine(importFolder,"C.mp3") }) || options.MusicSource.Length != 0) throw new Exception("Music browser did not return both chosen files and exclude the unselected file.");
+                // Cancelling Browse must retain the prior multi-file selection.
+                app.AddTimeout(TimeSpan.FromMilliseconds(200), () => { app.RequestStop(); return false; });
+                Descendants(music).OfType<Button>().First(b => b.Text == "Browse").InvokeCommand(Command.Accept);
+                var retained = new ActionOptions(); music.ReadOptions(retained);
+                if (!retained.MusicSources.SequenceEqual(options.MusicSources)) throw new Exception("Browse Cancel changed the selected import files.");
+                importField.Text = importFolder; music.ReadOptions(options);
+                if (options.MusicSources.Length != 0 || options.MusicSource != importFolder) throw new Exception("Typing a folder did not replace the explicit import selection.");
                 Button("_Cancel").InvokeCommand(Command.Accept);
                 var cancelled = Descendants(ui.Window).OfType<MusicManagementView>().Single().Playlist;
                 if (cancelled.Dirty || cancelled.Deleted.Count != 0) throw new Exception("Cancel retained pending music changes.");
@@ -127,7 +173,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: ANSI Ctrl-click ranges, Range end/Escape, Shift-click, plain click reset, group drag/movement, deletion/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: inclusive/moving/scrolled music ranges, multi-file import browser/Cancel, group movement/deletion, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

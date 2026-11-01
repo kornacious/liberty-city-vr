@@ -93,7 +93,9 @@ the order; **Cancel** discards pending changes. Refresh reloads the headset libr
 New imports append after ordered tracks. Concurrent library changes require a
 refresh before saving. The game preserves the playing file and position on rescan.
 
-The optional Import field accepts one supported file or a flat audio folder. It uses
+The optional Import field accepts a path or a selection of multiple audio files
+and folders from Browse. In the browser, Ctrl-click or Space chooses individual
+entries and Alt-click extends a range; only chosen entries are imported. It uses
 ffprobe to validate codec, channels, sample rate, size and duration before any
 transfer. Validation only needs no headset. Imports use provider staging and
 SHA256-verified commits, skip duplicates and preserve existing tracks. Optional
