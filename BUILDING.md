@@ -6,9 +6,11 @@ The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 dotnet run --project tools/manager -c Release
 ```
 
-On Windows, `MANAGE.bat` opens the same application. The existing BAT shortcuts
-open its action pages. Keep the complete source kit together. Standalone
-PowerShell, Bash and Python entrypoints have been integrated into the manager.
+Launch it with `MANAGE.bat` on Windows or `./MANAGE.sh` on Linux. The launchers
+prefer the published manager in `out/manager-windows` or `out/manager-linux`,
+falling back to the .NET 10 SDK. Keep the complete source kit together. The old
+per-action root BAT shortcuts have been removed; select actions in the manager.
+Standalone PowerShell, Bash and Python action entrypoints have been integrated into the manager.
 See [the manager guide](tools/manager/README.md) for publishing standalone Windows
 and Linux binaries, dependencies, auxiliary runtimes and command-line use.
 

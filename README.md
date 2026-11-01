@@ -3,7 +3,8 @@
 > **NO APK IS PROVIDED. THIS IS A SOURCE-BUILD RELEASE.**
 >
 > Open the cross-platform **Liberty City VR Manager** with `MANAGE.bat` on
-> Windows, or `dotnet run --project tools/manager -c Release` on Windows/Linux.
+> Windows or `./MANAGE.sh` on Linux. Both also support
+> `dotnet run --project tools/manager -c Release`.
 > Select **Build and install**, configure the action, then choose **Perform**.
 > The .NET 10 / Terminal.Gui 2.5.0 application also includes the vehicle editor
 > builder, music importer, Modern model installer, game-file repair, updater,

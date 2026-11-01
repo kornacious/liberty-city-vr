@@ -1,5 +1,15 @@
 # Manager migration verification
 
+## Manager launcher cleanup (2026-11-01)
+
+Removed the six root per-action BAT shortcuts and retained `MANAGE.bat`. Added
+an executable, LF-normalized `MANAGE.sh` that prefers the published Linux manager
+and otherwise runs the .NET project. Verified shell syntax and launching the
+published manager from `/tmp` under Linux. Temporary fixtures verified SDK
+fallback, repository and argument paths with spaces, exit-status propagation and
+missing-SDK guidance. The .NET manager compiled with zero warnings/errors.
+No APK build, device operations or game data were needed for this launcher change.
+
 ## Append imported music batches (2026-11-01)
 
 The headset previously finalized imports without persisting their playlist

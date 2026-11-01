@@ -11,10 +11,12 @@ From the repository root:
 dotnet run --project tools/manager -c Release
 ```
 
-Windows users can double-click `MANAGE.bat`. The existing six BAT shortcuts
-open the corresponding page. They need the complete checkout and .NET 10 SDK,
-or a published manager in `out/manager-windows`. They no longer download a kit
-or launch separate PowerShell/Python scripts.
+Windows users can double-click `MANAGE.bat`; Linux users run `./MANAGE.sh`.
+Both launchers prefer the published executable in `out/manager-windows` or
+`out/manager-linux`, otherwise they use the .NET 10 SDK. The Linux launcher also
+works from another working directory and forwards command-line arguments.
+The six per-action root BAT shortcuts have been removed; select actions in the
+manager or pass `--page ACTION` to either launcher. Keep the complete checkout.
 
 Choose an action on the left, configure it on the right, then **Perform**.
 **Cancel** discards unperformed edits and returns focus to navigation. During
