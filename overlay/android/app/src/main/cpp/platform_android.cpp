@@ -619,6 +619,43 @@ audioProbeDuration(const char *path)
     releaseEnv(attached); return duration;
 }
 
+std::string
+audioProbeTitle(const char *path)
+{
+    bool attached=false; JNIEnv *env=getEnv(&attached); if(!env) return {};
+    std::string result;
+    jclass cls=env->FindClass("android/media/MediaMetadataRetriever");
+    if(cls && !checkJavaException(env,"music title class")) {
+        jmethodID ctor=env->GetMethodID(cls,"<init>","()V");
+        jmethodID source=env->GetMethodID(cls,"setDataSource","(Ljava/lang/String;)V");
+        jmethodID extract=env->GetMethodID(cls,"extractMetadata","(I)Ljava/lang/String;");
+        jmethodID release=env->GetMethodID(cls,"release","()V");
+        jobject metadata=env->NewObject(cls,ctor); jstring file=env->NewStringUTF(path);
+        if(metadata && file && !checkJavaException(env,"music title ctor")) {
+            env->CallVoidMethod(metadata,source,file);
+            if(!checkJavaException(env,"music title source")) {
+                for(int key:{2,1,7}) {
+                    std::string part;
+                    jstring value=(jstring)env->CallObjectMethod(metadata,extract,key);
+                    if(!checkJavaException(env,"music title field") && value) {
+                        const char *chars=env->GetStringUTFChars(value,nullptr);
+                        if(chars) { part=chars; env->ReleaseStringUTFChars(value,chars); }
+                        env->DeleteLocalRef(value);
+                    }
+                    for(char &c:part) if((unsigned char)c<32) c=' ';
+                    auto first=part.find_first_not_of(" \t\r\n"), last=part.find_last_not_of(" \t\r\n");
+                    part=first==std::string::npos?"":part.substr(first,last-first+1);
+                    if(key==7 && part.empty() && !result.empty()) { const char *name=strrchr(path,'/'); part=name?name+1:path; }
+                    if(!part.empty()) { if(!result.empty()) result+=" - "; result+=part.substr(0,960); }
+                }
+            }
+            env->CallVoidMethod(metadata,release); checkJavaException(env,"music title release");
+        }
+        if(file) env->DeleteLocalRef(file); if(metadata) env->DeleteLocalRef(metadata); env->DeleteLocalRef(cls);
+    }
+    checkJavaException(env,"music title"); releaseEnv(attached); return result;
+}
+
 bool
 audioLoadStream(int stream, const char *absolutePath, int positionMs,
 	bool loop, bool autoStart)

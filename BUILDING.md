@@ -86,7 +86,14 @@ requires Visual Studio/Build Tools with the Desktop C++ workload. Linux needs a 
 Ninja, OpenGL/X11/GLFW development dependencies. Device transfer is routed through
 the packaged manager; its embedded bridge needs configured Python 3 and ADB.
 
-**Import music** accepts one supported file or a flat audio folder. It uses
+**Manage music** lists the connected headset's music and shows selected-file
+metadata, size, format, bitrate, channels and sampling rate. Drag entries or use
+Up/Down (Alt+Up/Down) to insert them at a new playlist position. **Perform** saves
+the order; **Cancel** discards pending changes. Refresh reloads the headset library.
+New imports append after ordered tracks. Concurrent library changes require a
+refresh before saving. The game preserves the playing file and position on rescan.
+
+The optional Import field accepts one supported file or a flat audio folder. It uses
 ffprobe to validate codec, channels, sample rate, size and duration before any
 transfer. Validation only needs no headset. Imports use provider staging and
 SHA256-verified commits, skip duplicates and preserve existing tracks. Optional

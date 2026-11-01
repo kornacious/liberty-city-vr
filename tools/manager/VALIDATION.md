@@ -1,5 +1,27 @@
 # Manager migration verification
 
+## Manage music extension (2026-11-01)
+
+Verified **52/52 Windows** and **53/53 Linux** manager checks, plus real-terminal
+UI checks on both platforms using synthetic tracks and mouse press/move/release
+events. Checks cover drag insertion, selected-file details, pending Perform
+options, Cancel/reset, tenth-to-second insertion, metadata fallback, paginated
+library reads, changed revisions, duplicate entries and verified playlist upload
+with temporary-file cleanup. Windows/Linux self-contained publishing passed.
+
+The host Java playlist tests passed for persisted insertion order, stale revision
+and duplicate rejection, newly added tracks and metadata fallback. Linux native
+tests passed for shared order-file parsing, stale/missing entries, UTF-8 glyph
+handling and left-to-right marquee motion, pause and repeat. The existing radio
+timeline/layout regression test also passed.
+
+The complete native/Android APK build succeeded and updated the **personal Quest
+3 device** through the privacy-protected workflow. A local read of the installed
+provider returned the existing 16-track library and metadata successfully. The
+headset's actual playlist was not reordered and no music was uploaded for tests.
+Headset visual/playback QA remains manual; the existing dashboard font supports
+ASCII with common Latin accent transliteration, with `?` for other glyphs.
+
 ## Transfer save extension (2026-11-01)
 
 The dedicated Transfer save page was verified with **47/47 Windows** and

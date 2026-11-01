@@ -7,7 +7,7 @@ using Attribute = Terminal.Gui.Drawing.Attribute;
 
 namespace LibertyManager;
 
-public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSettings initial) : IDisposable
+public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSettings initial, bool loadMusicOnOpen = true) : IDisposable
 {
     public const int SettingsPage = 7;
     public const int ToolsPage = 8;
@@ -51,6 +51,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
     private bool disposed;
     private string? auxiliary;
     private string auxiliaryArguments = "";
+    private MusicManagementView? music;
+    private bool musicRefresh;
 
     public void Initialize(int page = 0)
     {
@@ -61,7 +63,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Import music", "Modern models", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
+        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Modern models", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
@@ -112,14 +114,14 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         if (running is { IsCompleted: false }) return;
         selected = page; draft = settings with { Actions = new(settings.Actions) };
         options = page < SettingsPage && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
-        auxiliary = null; readFields.Clear(); row = 0;
+        auxiliary = null; music = null; musicRefresh = false; readFields.Clear(); row = 0;
         if (form is not null) { configuration.Remove(form); form.Dispose(); }
         form = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(2), CanFocus = true,
             ViewportSettings = ViewportSettingsFlags.HasVerticalScrollBar };
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
         perform.Text = page == SettingsPage ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "IMPORT MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "SETTINGS", "TOOLS AND TESTS"];
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "SETTINGS", "TOOLS AND TESTS"];
         configuration.Title = titles[page];
         switch (page)
         {
@@ -136,11 +138,11 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Toggle("Create a ZIP package", options.PackageEditor, v => options.PackageEditor = v);
                 Note("Windows: Visual Studio 2022 C++ tools. Linux: C++, Ninja and GLFW build dependencies."); break;
             case 2:
-                Note("Import validated audio through the music provider.");
-                Field("Audio file or flat folder", options.MusicSource, v => options.MusicSource = v, OpenMode.Mixed);
-                Toggle("Validate only (no headset access)", options.ValidateMusicOnly, v => options.ValidateMusicOnly = v);
-                Field("Optional radio board export file", options.BoardExport, v => options.BoardExport = v, OpenMode.File, false);
-                Note("MP3, AAC/M4A, Ogg, Opus, FLAC, PCM WAV. Mono/stereo, 44.1/48 kHz. Requires ffprobe."); break;
+                music = new MusicManagementView(app, options, draft); form.Add(music);
+                readFields.Add(() => music.ReadOptions(options));
+                music.RefreshRequested = () => { musicRefresh = true; Start(); };
+                if (loadMusicOnOpen) app.Invoke(() => { if (!disposed && selected == 2 && running is not { IsCompleted: false }) { musicRefresh = true; Start(); } });
+                break;
             case 3:
                 Note("Build and verify the pinned Xbox HD re3 Modern overlay.");
                 Field("Source ZIP (blank: cached pack)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
@@ -197,7 +199,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 }
                 break;
         }
-        form.SetContentHeight(row + 1);
+        if (page != 2) form.SetContentHeight(row + 1);
     }
 
     private void Note(string text)
@@ -274,10 +276,10 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             if (selected == SettingsPage)
             { store.Save(draft); settings = draft with { }; pending.Enqueue("Settings saved to " + store.FilePath); navigationButtons[SettingsPage].SetFocus(); return; }
             if (selected == ToolsPage && auxiliary is null) { pending.Enqueue("Select a tool first."); return; }
-            if (selected < SettingsPage)
+            if (selected < SettingsPage && !musicRefresh)
             {
                 // License consent is explicit for each run rather than inferred from a saved checkbox.
-                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false };
+                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [] };
                 store.Save(draft); settings = draft with { Actions = new(draft.Actions) };
             }
         }
@@ -289,6 +291,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         var selectedOptions = options with { };
         var selectedTool = auxiliary;
         var arguments = auxiliaryArguments;
+        var refresh = musicRefresh; musicRefresh = false; var musicTarget = music;
         form!.Enabled = false; perform.Enabled = false;
         foreach (var button in navigationButtons) button.Enabled = false;
         logPath = Path.Combine(store.DirectoryPath, "logs", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6] + ".log");
@@ -302,8 +305,13 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 log.Write("Started " + action + ". Log: " + logPath);
                 var runner = new CommandRunner(log);
                 var workflows = new Workflows(snapshot, runner, log, ChooseDevice);
-                if (selectedTool is not null) await new AuxiliaryTools(snapshot, runner, log, ChooseDevice).Run(selectedTool, AuxiliaryTools.ParseArguments(arguments), token);
-                else await workflows.Perform(action, selectedOptions, token);
+                if (refresh) { var library = await workflows.MusicLibrary(token); app.Invoke(() => musicTarget?.Load(library)); }
+                else if (selectedTool is not null) await new AuxiliaryTools(snapshot, runner, log, ChooseDevice).Run(selectedTool, AuxiliaryTools.ParseArguments(arguments), token);
+                else
+                {
+                    await workflows.Perform(action, selectedOptions, token);
+                    if (musicTarget is not null && !selectedOptions.ValidateMusicOnly) { var library = await workflows.MusicLibrary(token); app.Invoke(() => musicTarget.Load(library)); }
+                }
                 log.Write("Action completed.");
             }
             catch (OperationCanceledException) { log.Write("Action cancelled. Completed build products are retained."); }

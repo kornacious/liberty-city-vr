@@ -22,7 +22,7 @@ internal static class Program
                 Liberty City VR Manager (.NET 10 / Terminal.Gui 2.5.0)
                 Run with no arguments to open the TUI.
                 --run ACTION REQUEST.json   Run a configured action without the TUI.
-                Actions: BuildAndInstall, BuildVehicleEditor, ImportMusic,
+                Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
                          InstallModernModels, RepairGameFiles, Update, TransferSave.
                 TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),
                                       SaveSlot 1..8, PcSaveDirectory.

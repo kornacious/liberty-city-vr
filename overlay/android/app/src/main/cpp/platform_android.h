@@ -2,6 +2,7 @@
 
 #include <android/log.h>
 #include <stdint.h>
+#include <string>
 
 #define MIAMIVR_LOG_TAG "MiamiVR"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  MIAMIVR_LOG_TAG, __VA_ARGS__)
@@ -53,6 +54,7 @@ bool resolveGamePathCaseInsensitive(char *buffer, size_t bufferSize, const char 
 // audio backend.  SFX are mixed through AAudio; long MP3/ADF tracks stay in the
 // platform decoder so radio and cutscenes do not consume game-thread time.
 uint32_t audioProbeDuration(const char *absolutePath);
+std::string audioProbeTitle(const char *absolutePath);
 bool audioLoadStream(int stream, const char *absolutePath, int positionMs,
 	bool loop, bool autoStart);
 void audioPlayStream(int stream);

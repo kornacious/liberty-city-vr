@@ -7,6 +7,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
 {
     private readonly Toolchain tools = new(settings, runner, log);
     public string? LastApk { get; private set; }
+    private QuestDevice? connected;
     public async Task Perform(ManagerAction action, ActionOptions options, CancellationToken token)
     {
         settings.Validate();
@@ -16,7 +17,13 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         {
             case ManagerAction.BuildAndInstall: await Build(options, false, token); break;
             case ManagerAction.BuildVehicleEditor: await Editor(options, token); break;
-            case ManagerAction.ImportMusic: await new MusicImporter(settings, runner, log, Connect).Import(options, token); break;
+            case ManagerAction.ManageMusic:
+                if (!options.ValidateMusicOnly && options.MusicRevision.Length > 0)
+                    await new MusicLibraryClient(await Connect(token) ?? throw new IOException("Connect an authorized Quest 3."), settings, log).SaveOrder(options.MusicRevision, options.MusicOrder, token);
+                if (!string.IsNullOrWhiteSpace(options.MusicSource) || !string.IsNullOrWhiteSpace(options.BoardExport))
+                    await new MusicImporter(settings, runner, log, Connect).Import(options, token);
+                else if (options.MusicRevision.Length == 0) log.Write("No imports or playlist changes selected. Use Refresh to load the headset library.");
+                break;
             case ManagerAction.InstallModernModels:
                 var models = new ModernModels(settings, runner, log);
                 var output = await models.Prepare(options, token);
@@ -41,10 +48,12 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
 
     private async Task<QuestDevice?> Connect(CancellationToken token)
     {
+        if (connected is not null) return connected;
         var adb = tools.FindAdb();
         if (adb is null) { log.Write("ADB is unavailable. Device deployment skipped."); return null; }
-        return await QuestDevice.Connect(runner, log, adb, chooseDevice, token);
+        return connected = await QuestDevice.Connect(runner, log, adb, chooseDevice, token);
     }
+    public async Task<MusicLibrarySnapshot> MusicLibrary(CancellationToken token) => await new MusicLibraryClient(await Connect(token) ?? throw new IOException("Connect an authorized Quest 3 and press Refresh."), settings, log).Read(token);
 
     public async Task Build(ActionOptions options, bool updateOnly, CancellationToken token)
     {

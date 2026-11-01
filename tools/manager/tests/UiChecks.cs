@@ -17,7 +17,7 @@ internal static class UiChecks
         var settings = new ManagerSettings();
         var store = new SettingsStore(Path.Combine(directory, "settings"));
         using var app = Application.Create().Init();
-        using var ui = new ManagerUi(app, store, settings);
+        using var ui = new ManagerUi(app, store, settings, loadMusicOnOpen: false);
         ui.Initialize();
         Exception? failure = null;
         Button Button(string text) => Descendants(ui.Window).OfType<Button>().Single(b => b.Text == text);
@@ -35,6 +35,23 @@ internal static class UiChecks
                 Button("_Save").InvokeCommand(Command.Accept);
                 if (store.Load().Workplace != settings.Workplace) throw new Exception("Settings did not persist.");
                 File.WriteAllText(Path.Combine(directory, "settings.txt"), app.ToString());
+                Button("Manage music").InvokeCommand(Command.Accept);
+                var music = Descendants(ui.Window).OfType<MusicManagementView>().Single();
+                music.Load(new(new string('a', 64), Enumerable.Range(1, 12).Select(i => new MusicEntry { Name = i + ".mp3", Artist = "Artist", Album = "Album", Title = "Track " + i, SampleRate = 48000 }).ToArray()));
+                ui.Window.Layout();
+                app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = music.Tracks.ViewportToScreen(new System.Drawing.Point(1, 0)), Flags = MouseFlags.LeftButtonPressed });
+                app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = music.Tracks.ViewportToScreen(new System.Drawing.Point(1, 1)), Flags = MouseFlags.LeftButtonPressed | MouseFlags.PositionReport });
+                app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = music.Tracks.ViewportToScreen(new System.Drawing.Point(1, 1)), Flags = MouseFlags.LeftButtonReleased });
+                if (music.Playlist.Tracks[1].Name != "1.mp3" || music.Playlist.Tracks[0].Name != "2.mp3") throw new Exception("Drag did not insert track at second position.");
+#pragma warning disable CS0618
+                if (!Descendants(music).OfType<TextView>().Single().Text.Contains("Track 1")) throw new Exception("Selected file details did not follow the drag.");
+#pragma warning restore CS0618
+                var options = new ActionOptions(); music.ReadOptions(options);
+                if (options.MusicOrder[1] != "1.mp3") throw new Exception("Perform did not capture playlist order.");
+                app.LayoutAndDraw(true);
+                File.WriteAllText(Path.Combine(directory, "music.txt"), app.ToString());
+                Button("_Cancel").InvokeCommand(Command.Accept);
+                if (Descendants(ui.Window).OfType<MusicManagementView>().Single().Playlist.Dirty) throw new Exception("Cancel retained pending playlist order.");
                 Button("Tools and tests").InvokeCommand(Command.Accept);
                 if (Descendants(ui.Window).OfType<Button>().Any(b => b.Text.Contains("save_transfer", StringComparison.Ordinal) || b.Text.Contains("transfer-vr-save", StringComparison.Ordinal) || b.Text.Contains("convert_vr_save", StringComparison.Ordinal)))
                     throw new Exception("Legacy save transfer is still visible in auxiliary tools.");
@@ -65,7 +82,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: save direction/slot selectors, Cancel, hidden legacy entries, saved settings and integrated folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: music drag insertion/details/Perform options/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

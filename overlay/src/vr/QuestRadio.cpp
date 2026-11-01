@@ -4,6 +4,7 @@
 #include "VehiclePlacement.h"
 #include "ModelSets.h"
 #include "RadioBoardLayout.h"
+#include "RadioTitleMarquee.h"
 #include "QuestMusic.h"
 #include "android.h"
 #include "platform_android.h"
@@ -202,6 +203,23 @@ void Text(const Plane &p,const char *text,float cx,float y,float scale,int r,int
             if(rows[row]&(1<<(4-col))) Rect(p,x+col*scale,y+row*scale,scale,scale,r,g,b,.002f);
     }
 }
+void TrackTitle(const Plane &p,const char *text) {
+    static std::string previous; static double start=0;
+    std::string value=RadioTitle::Glyphs(text);
+    if(value!=previous) { previous=value; start=Now(); }
+    const float scale=1.6f, left=16, right=496;
+    float x=RadioTitle::LeftToRight(Now()-start,value.size()*6*scale,left,right);
+    for(char c:value) {
+        if(x+5*scale>=left && x<right) {
+            const unsigned char *rows=androidgame::VrRadioGlyph(c);
+            for(int row=0;row<7;++row) for(int col=0;col<5;++col) if(rows[row]&(1<<(4-col))) {
+                float l=std::max(left,x+col*scale), r=std::min(right,x+(col+1)*scale);
+                if(r>l) Rect(p,l,40+row*scale,r-l,scale,110,240,180,.002f);
+            }
+        }
+        x+=6*scale;
+    }
+}
 }
 const char *MenuStatus() { return notice; }
 void CloseEditor() { edit=false; }
@@ -301,7 +319,7 @@ void Render() {
     Rect(p,0,0,512,256,18,19,25,0);
     Rect(p,8,8,496,58,4,14,12,.001f);
     Text(p,StationName(),256,14,2,255,206,104);
-    Text(p,MusicManager.GetNextTrack()==USERTRACK?QuestMusic::Title():"LIBERTY CITY RADIO",256,40,1.6f,110,240,180);
+    TrackTitle(p,MusicManager.GetNextTrack()==USERTRACK?QuestMusic::Title():"LIBERTY CITY RADIO");
     bool custom=MusicManager.GetNextTrack()==USERTRACK;
     for(int i=0;i<8;++i) {
         const auto &b=RadioBoard::Buttons[i]; bool disabled=i>=4 && i<=6 && !custom;

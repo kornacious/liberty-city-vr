@@ -42,7 +42,7 @@ public final class MusicProvider extends ContentProvider {
     }
     private File staged(String name) throws Exception { return new File(root(), ".incoming-" + name(name)); }
     private boolean music(File file) {
-        return file.isFile() && !file.getName().startsWith(".") && file.getName().matches("(?i).*\\.(mp3|m4a|ogg|opus|wav|flac)");
+        return MusicPlaylistStore.music(file);
     }
     private long duration(File file, Properties cache) {
         String key = file.getName(), prefix = file.length() + "," + file.lastModified() + ",";
@@ -81,6 +81,8 @@ public final class MusicProvider extends ContentProvider {
                 File file = new File(root().getParentFile(), "radio_board_export.ini");
                 return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
             }
+            if (uri.getPathSegments().size() == 1 && "playlist".equals(uri.getLastPathSegment()) && ("w".equals(mode) || "wt".equals(mode)))
+                return ParcelFileDescriptor.open(new File(root(), ".incoming-playlist"), ParcelFileDescriptor.MODE_CREATE | ParcelFileDescriptor.MODE_WRITE_ONLY | ParcelFileDescriptor.MODE_TRUNCATE);
             if (uri.getPathSegments().size() != 2 || !"upload".equals(uri.getPathSegments().get(0)) || !("w".equals(mode) || "wt".equals(mode)))
                 throw new Exception("Expected upload/<safe music filename> in write mode");
             if (root().getUsableSpace() < RESERVE) throw new Exception("Keep at least 1 GiB free");
@@ -102,11 +104,37 @@ public final class MusicProvider extends ContentProvider {
         try {
             File root = root();
             if ("info".equals(method)) {
+                result.put("version", 2);
                 result.put("count", count(root)); result.put("free", root.getUsableSpace());
                 result.put("duration", totalDuration(root));
                 JSONArray names = new JSONArray(); File[] files = root.listFiles();
                 if (files != null) for (File file : files) if (music(file)) names.put(file.getName());
                 result.put("names", names);
+            } else if ("library".equals(method)) {
+                String[] request = (arg == null ? "0" : arg).split(":", 2);
+                int offset = Integer.parseInt(request[0]);
+                java.util.List<File> files = MusicPlaylistStore.ordered(root);
+                String revision = MusicPlaylistStore.revision(files);
+                if (offset < 0 || offset > files.size() || (request.length == 2 && !revision.equals(request[1]))) throw new Exception("Library changed; refresh again");
+                MusicCatalog catalog = new MusicCatalog(root); JSONArray tracks = new JSONArray();
+                for (int i = offset; i < Math.min(files.size(), offset + 50); ++i) tracks.put(catalog.describe(files.get(i)));
+                catalog.persist();
+                if (!revision.equals(MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)))) throw new Exception("Library changed; refresh again");
+                result.put("revision", revision); result.put("total", files.size()); result.put("tracks", tracks);
+            } else if ("set-order".equals(method)) {
+                File staged = new File(root, ".incoming-playlist");
+                try {
+                    if (!staged.isFile() || staged.length() > 262144) throw new Exception("Missing or oversized playlist upload");
+                    JSONArray json = new JSONArray(new String(java.nio.file.Files.readAllBytes(staged.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+                    java.util.List<String> names = new java.util.ArrayList<>();
+                    for (int i = 0; i < json.length(); ++i) names.add(json.getString(i));
+                    MusicPlaylistStore.save(root, names, arg);
+                    result.put("revision", MusicPlaylistStore.revision(MusicPlaylistStore.ordered(root)));
+                } finally { if (staged.exists()) staged.delete(); }
+            } else if ("original-name".equals(method)) {
+                JSONObject hint = new JSONObject(arg); String safe = name(hint.getString("name"));
+                if (!new File(root, safe).isFile()) throw new Exception("Music file is not installed");
+                MusicCatalog catalog = new MusicCatalog(root); catalog.original(safe, hint.getString("filename")); catalog.persist(); MusicPlaylistStore.rescan(root);
             } else if ("check".equals(method)) {
                 if (arg == null || !arg.contains(":")) throw new Exception("Expected filename:sha256");
                 String[] parts = arg.split(":", 2); File destination = new File(root, name(parts[0]));

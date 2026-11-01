@@ -2,6 +2,7 @@
 #ifdef AUDIO_ANDROID
 #include "QuestMusic.h"
 #include "QuestMusicTimeline.h"
+#include "QuestMusicPlaylist.h"
 #include "platform_android.h"
 #include "MusicManager.h"
 #include "Timer.h"
@@ -21,7 +22,7 @@
 
 namespace QuestMusic {
 namespace {
-struct Track { std::string name; uint64_t bytes; int64_t modified; uint32_t duration; bool failed=false; };
+struct Track { std::string name; uint64_t bytes; int64_t modified; uint32_t duration; std::string display; bool failed=false; };
 struct Library { std::vector<Track> tracks; Timeline timeline; unsigned rejected=0; };
 Library library, pending;
 std::mutex publication;
@@ -31,7 +32,8 @@ bool active=false, userPaused=false, gamePaused=false;
 size_t current=0;
 unsigned failures=0;
 std::string root;
-char status[160]="NO CUSTOM MUSIC", title[128]="";
+char status[160]="NO CUSTOM MUSIC";
+std::string title;
 uint32_t lastSave=0, lastMarkerCheck=0;
 int64_t rescanStamp=-1;
 
@@ -47,6 +49,10 @@ void Scan() {
     Track t;
     while(input >> std::quoted(t.name) >> t.bytes >> t.modified >> t.duration)
         cache[t.name]=t;
+    std::map<std::string, Track> displays;
+    std::ifstream display(root+"/.display-v1");
+    while(display >> std::quoted(t.name) >> t.bytes >> t.modified >> std::quoted(t.display))
+        if(t.name.size()<=200 && t.display.size()<=4096) displays[t.name]=t;
     std::vector<std::string> names;
     if(DIR *dir=opendir(root.c_str())) {
         while(auto e=readdir(dir)) {
@@ -59,7 +65,7 @@ void Scan() {
         }
         closedir(dir);
     }
-    std::sort(names.begin(),names.end());
+    std::ifstream playlist(root+"/.playlist-v1"); names=OrderedNames(std::move(names),playlist);
     for(const auto &name:names) {
         if(cancel) break;
         struct stat st{}; std::string path=root+"/"+name;
@@ -74,7 +80,12 @@ void Scan() {
             ms=old->second.duration;
         else ms=platform::audioProbeDuration(path.c_str());
         if(!result.timeline.Add(ms)) { ++result.rejected; LOGW("Custom music rejected: %s (duration/format/limit)",name.c_str()); continue; }
-        result.tracks.push_back({name,uint64_t(st.st_size),int64_t(st.st_mtime),ms,false});
+        std::string caption;
+        auto metadata=displays.find(name);
+        if(metadata!=displays.end() && metadata->second.bytes==uint64_t(st.st_size) && metadata->second.modified==st.st_mtime) caption=metadata->second.display;
+        else caption=platform::audioProbeTitle(path.c_str());
+        if(caption.empty()) caption=name;
+        result.tracks.push_back({name,uint64_t(st.st_size),int64_t(st.st_mtime),ms,caption,false});
     }
     if(!cancel) {
         std::ofstream out(root+"/.index-v1.tmp",std::ios::trunc);
@@ -98,13 +109,7 @@ bool Load(uint32_t local) {
     for(size_t tried=0; tried<library.tracks.size(); ++tried) {
         auto &t=library.tracks[current];
         if(!t.failed && platform::audioLoadStream(0,(root+"/"+t.name).c_str(),local,false,!userPaused && !gamePaused)) {
-            // Display is ASCII on the existing glyph font; filenames remain
-            // untouched. The desktop importer supplies safe names for Unicode.
-            std::string stem=t.name.substr(0,t.name.find_last_of('.'));
-            auto dash=stem.find_last_of('-');
-            if(dash!=std::string::npos && stem.size()-dash==17 && stem.find_first_not_of("0123456789abcdef",dash+1)==std::string::npos) stem.resize(dash);
-            snprintf(title,sizeof(title),"%.*s",80,stem.c_str());
-            for(char *p=title;*p;++p) if((unsigned char)*p<32 || (unsigned char)*p>126) *p='?';
+            title=t.display;
             active=true; return true;
         }
         t.failed=true; current=(current+1)%library.tracks.size(); local=0;
@@ -140,7 +145,7 @@ void Skip(int direction) {
 }
 void TogglePause() { if(active) { userPaused=!userPaused; platform::audioPauseStream(0,userPaused || gamePaused); } }
 bool UserPaused() { return userPaused; }
-const char *Title() { return title; }
+const char *Title() { return title.c_str(); }
 const char *Status() { return status; }
 void Service() {
     uint32_t clock=CTimer::GetTimeInMillisecondsPauseMode();

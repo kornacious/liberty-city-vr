@@ -92,7 +92,11 @@ public sealed class MusicImporter(ManagerSettings settings, ICommandRunner runne
         foreach (var track in accepted)
         {
             if (names.Contains(track.Name) && (await Provider(device, "check", track.Name + ":" + track.Sha256.ToLowerInvariant(), token)).GetProperty("exists").GetBoolean())
+            {
+                if (info.TryGetProperty("version", out var version) && version.GetInt32() >= 2)
+                    await Provider(device, "original-name", JsonSerializer.Serialize(new { name = track.Name, filename = Path.GetFileName(track.Path) }), token);
                 log.Write("Already present: " + Path.GetFileName(track.Path));
+            }
             else fresh.Add(track);
         }
         if (info.GetProperty("count").GetInt32() + fresh.Count > 1000 ||
@@ -109,6 +113,8 @@ public sealed class MusicImporter(ManagerSettings settings, ICommandRunner runne
                 await device.Shell("content write --uri " + QuestDevice.Quote("content://com.libertyvr.quest.music/upload/" + track.Name) + " < " + QuestDevice.Quote(remote), token);
                 var committed = await Provider(device, "commit", track.Name + ":" + track.Sha256.ToLowerInvariant(), token);
                 if (committed.GetProperty("bytes").GetInt64() != track.Size) throw new IOException("Verified music size differs from local source.");
+                if (info.TryGetProperty("version", out var version) && version.GetInt32() >= 2)
+                    await Provider(device, "original-name", JsonSerializer.Serialize(new { name = track.Name, filename = Path.GetFileName(track.Path) }), token);
                 log.Write("Imported " + Path.GetFileName(track.Path));
             }
             catch
@@ -126,7 +132,7 @@ public sealed class MusicImporter(ManagerSettings settings, ICommandRunner runne
         log.Write($"Music import complete: {fresh.Count} imported. The game rescans automatically.");
     }
 
-    private static async Task<JsonElement> Provider(QuestDevice device, string method, string? arg, CancellationToken token)
+    public static async Task<JsonElement> Provider(QuestDevice device, string method, string? arg, CancellationToken token)
     {
         List<string> args = ["shell", "content", "call", "--uri", "content://com.libertyvr.quest.music", "--method", method];
         if (arg is not null) args.AddRange(["--arg", QuestDevice.Quote(arg)]);

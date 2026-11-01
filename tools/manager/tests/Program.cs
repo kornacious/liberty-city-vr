@@ -204,6 +204,28 @@ await Test("Native privacy staged and history scans", async () =>
     await ThrowsAsync<InvalidDataException>(() => guard.Run("pre-push", pushInput: "refs/heads/master " + new string('a', 40) + " refs/checkpoint/local " + new string('0', 40)));
 });
 
+await Test("Playlist insertion moves tenth to second and preserves every other entry", () =>
+{
+    var music = new OrderedMusic();
+    music.Load(new(new string('a', 64), Enumerable.Range(1, 12).Select(i => new MusicEntry { Name = i + ".mp3" }).ToArray()));
+    Assert(music.Move(9, 1));
+    Assert(music.Tracks.Select(t => t.Name).SequenceEqual(new[] { 1, 10, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12 }.Select(i => i + ".mp3")));
+    Assert(music.Dirty && !music.Move(-1, 2) && !music.Move(1, 12));
+    Assert(music.Move(1, 9) && music.Tracks[9].Name == "10.mp3");
+    music.Load(new("revision", [])); Assert(!music.Dirty && music.Tracks.Count == 0);
+    return Task.CompletedTask;
+});
+await Test("Music metadata display and file details retain original filename fallback", () =>
+{
+    var entry = new MusicEntry { Name = "hashed.mp3", Filename = "Original song.mp3", Artist = " Artist ", Album = "Album", Title = "Title", SampleRate = 48000, Channels = 2, Bytes = 1048576, Format = "MP3" };
+    Assert(entry.Display == "Artist - Album - Title");
+    Assert((entry with { Title = "" }).Display == "Artist - Album - Original song.mp3");
+    Assert(new MusicEntry { Name = "plain.ogg" }.Display == "plain.ogg");
+    Assert(entry.Details.Contains("48,000") && entry.Details.Contains("Original song.mp3") && entry.Details.Contains("1.00 MiB"));
+    Assert((int)ManagerAction.ManageMusic == (int)ManagerAction.ImportMusic);
+    return Task.CompletedTask;
+});
+await MusicChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");
 return failures == 0 ? 0 : 1;

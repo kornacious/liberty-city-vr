@@ -11,7 +11,36 @@ incrementally. Songs are not loaded or decoded wholesale into game memory.
 Music is independent of the APK and stays in app storage across APK updates.
 Uninstalling the app removes its music, settings and game data; keep originals.
 
-## Import music from a computer
+## Manage music from a computer
+
+Open **Manage music** in the Windows/Linux manager with the updated APK installed
+and an authorized Quest 3 connected. The page loads its current library. **Refresh**
+reloads the list. Select a row to inspect filename, artist, album, title, track
+number, genre, year, size, duration, format, sample rate, channels and bitrate.
+Missing metadata fields remain empty. Captions use **Artist - Album - Title**,
+using the original filename when a title tag is missing.
+
+Drag a row to insert it at another position; the intervening rows shift one
+place. **Up/Down** and **Alt+Up/Alt+Down** provide keyboard alternatives. **Perform**
+saves the complete order atomically on the headset, while **Cancel** discards
+pending edits. A library changed since Refresh must be refreshed before saving.
+New imports append after the explicitly ordered tracks, and deleted files are
+ignored. The custom station plays this order sequentially and wraps at the end;
+a rescan retains the currently playing file and its position.
+
+The dashboard uses the same metadata caption. Long captions scroll left to right
+through the clipped title area at 40 pixels/second, pause three seconds after
+passing through, then repeat. Short titles stay centered. The existing dashboard
+font transliterates common Latin accents; unsupported characters display `?`.
+The terminal library preserves Unicode metadata. Earlier imports whose original
+filename was not recorded can recover it by re-importing the same source file;
+the audio is recognized as a duplicate and is not uploaded again.
+
+Use the optional **Import** field and its integrated browser for a supported audio
+file or flat folder. **Validate only** checks local files without writing music
+or playlist order. ADB and ffprobe paths are configured in **Settings**.
+
+### Historical importer reference
 
 Install the updated APK first. Enable Quest USB debugging, accept the headset's
 ADB authorization prompt, and install Python 3, Android Platform Tools (`adb`)

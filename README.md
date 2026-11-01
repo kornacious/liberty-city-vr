@@ -78,7 +78,9 @@ hand asset under `overlay/gamefiles/models/vrhands/`.
 
 ## Custom music and radio board
 
-Choose **Import music** in the manager to import your own audio. The adjustable
+Choose **Manage music** in the manager to browse headset tracks, inspect metadata,
+import your own audio and drag tracks into playlist order. **Perform** saves the
+order; **Cancel** discards pending changes. The adjustable
 vehicle-mounted radio board provides station, volume and custom-track controls.
 See [Custom radio](overlay/docs/CUSTOM_RADIO.md) for formats, limits, calibration,
 placement sharing, and the ADB/ffprobe prerequisites.
