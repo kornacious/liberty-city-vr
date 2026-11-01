@@ -18,8 +18,8 @@ public sealed class MusicManagementView : View
     private readonly CheckBox validate;
     private readonly IApplication app;
     private int dragged = -1;
-    private bool dragMoved, shiftClick, updating;
-    private readonly Label selectionInfo = new() { X = 19, Y = 2, Width = Dim.Fill() };
+    private bool dragMoved, extendClick, updating, rangeEnd;
+    private readonly Label selectionInfo = new() { X = 32, Y = 2, Width = Dim.Fill() };
     public Action? RefreshRequested { get; set; }
     public MusicManagementView(IApplication app, ActionOptions options, ManagerSettings settings)
     {
@@ -32,13 +32,15 @@ public sealed class MusicManagementView : View
         Add(Button("Refresh", 0, () => RefreshRequested?.Invoke()), Button("↑ Up", 12, () => MoveSelected(-1)), Button("↓ Down", 21, () => MoveSelected(1)), Button("Delete", 32, DeleteSelected));
         validate = new CheckBox { Text = "Validate only", X = 0, Y = 2, Value = options.ValidateMusicOnly ? CheckState.Checked : CheckState.UnChecked };
         validate.SetScheme(ManagerUi.Theme()); Add(validate, selectionInfo);
-        var list = new FrameView { Title = "PLAYLIST · Shift-click range", Y = 3, Width = Dim.Percent(55), Height = Dim.Fill(2) };
+        var range = Button("Range end", 17, () => { rangeEnd = !rangeEnd; UpdateSelectionInfo(); Tracks.SetFocus(); });
+        range.Y = 2; Add(range);
+        var list = new FrameView { Title = "PLAYLIST · Ctrl-click range", Y = 3, Width = Dim.Percent(55), Height = Dim.Fill(2) };
         var info = new FrameView { Title = "FILE INFO", X = Pos.Right(list), Y = 3, Width = Dim.Fill(), Height = Dim.Fill(2) };
         list.Add(Tracks); info.Add(details); Add(list, info);
         Add(new Label { Text = "Board export (optional):", Y = Pos.AnchorEnd(2) }, board, Browse(board, OpenMode.File, Pos.AnchorEnd(1), settings));
         Tracks.ValueChanged += (_, _) =>
         {
-            if (!updating && dragged < 0 && Tracks.SelectedItem is { } index) { Playlist.Select(index, false); RenderRows(index); }
+            if (!updating && dragged < 0 && Tracks.SelectedItem is { } index) { rangeEnd = false; Playlist.Select(index, false); RenderRows(index); }
             ShowDetails();
         };
         Tracks.RowRender += (_, e) => { if (e.Row >= 0 && e.Row < Playlist.Tracks.Count && Playlist.Selection.Contains(Playlist.Tracks[e.Row].Name)) e.RowAttribute = ManagerUi.Theme().Focus; };
@@ -49,10 +51,11 @@ public sealed class MusicManagementView : View
             if (e == Key.CursorDown.WithAlt) { MoveSelected(1); e.Handled = true; }
             if (e == Key.CursorUp.WithShift || e == Key.CursorDown.WithShift)
             {
+                rangeEnd = false;
                 var index = Math.Clamp((Tracks.SelectedItem ?? 0) + (e == Key.CursorUp.WithShift ? -1 : 1), 0, Math.Max(0, Playlist.Tracks.Count - 1));
                 Playlist.Select(index, true); RenderRows(index); ShowDetails(); e.Handled = true;
             }
-            if (e == Key.Esc && dragged >= 0) { dragged = -1; app.Mouse.UngrabMouse(); e.Handled = true; }
+            if (e == Key.Esc && (dragged >= 0 || rangeEnd)) { dragged = -1; rangeEnd = false; app.Mouse.UngrabMouse(); UpdateSelectionInfo(); e.Handled = true; }
         };
     }
     private Button Button(string text, int x, Action click)
@@ -75,7 +78,7 @@ public sealed class MusicManagementView : View
     public void Load(MusicLibrarySnapshot snapshot)
     {
         var selected = Tracks.SelectedItem is { } index && index >= 0 && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Name : "";
-        Playlist.Load(snapshot);
+        rangeEnd = false; Playlist.Load(snapshot);
         var found = Playlist.Tracks.FindIndex(t => t.Name == selected);
         Playlist.Select(Math.Max(0, found), false); RenderRows(Math.Max(0, found));
         ShowDetails();
@@ -95,13 +98,15 @@ public sealed class MusicManagementView : View
             var previous = Tracks.SelectedItem ?? 0;
             Tracks.SetSource(new ObservableCollection<string>(Playlist.Tracks.Select((t, i) => $"{(Playlist.Selection.Contains(t.Name) ? '●' : ' ')}{i + 1,3}. {t.Display}")));
             if (Playlist.Tracks.Count > 0) Tracks.SelectedItem = Math.Clamp(focus ?? previous, 0, Playlist.Tracks.Count - 1);
-            selectionInfo.Text = $"{Playlist.Selection.Count} selected · {Playlist.Deleted.Count} to delete";
+            UpdateSelectionInfo();
         }
         finally { updating = false; }
     }
+    private void UpdateSelectionInfo() => selectionInfo.Text = rangeEnd ? "Click last track" : $"{Playlist.Selection.Count} sel; {Playlist.Deleted.Count} delete";
     private void ShowDetails() => details.Text = (Playlist.Selection.Count > 1 ? $"{Playlist.Selection.Count} tracks selected\n\n" : "") + (Tracks.SelectedItem is { } index && index >= 0 && index < Playlist.Tracks.Count ? Playlist.Tracks[index].Details : "No music files found. Perform applies pending deletions; Cancel discards them.");
     public void DeleteSelected()
     {
+        rangeEnd = false; UpdateSelectionInfo();
         if (Playlist.Selection.Count == 0) return;
         // A remembered import folder must not immediately re-import deleted tracks.
         source.Text = "";
@@ -109,6 +114,7 @@ public sealed class MusicManagementView : View
     }
     public void MoveSelected(int delta)
     {
+        rangeEnd = false; UpdateSelectionInfo();
         var to = Playlist.SelectionStart + delta;
         if (!Playlist.MoveSelection(to)) return;
         RenderRows(to); ShowDetails();
@@ -120,8 +126,12 @@ public sealed class MusicManagementView : View
         if (mouse.Flags.HasFlag(MouseFlags.LeftButtonPressed) && !mouse.Flags.HasFlag(MouseFlags.PositionReport) && dragged < 0)
         {
             if (position.Y < 0 || position.Y >= Tracks.Viewport.Height || Tracks.Viewport.Y + position.Y >= Playlist.Tracks.Count) return;
-            dragged = row; dragMoved = false; shiftClick = mouse.Flags.HasFlag(MouseFlags.Shift);
-            if (shiftClick || !Playlist.Selection.Contains(Playlist.Tracks[row].Name)) Playlist.Select(row, shiftClick);
+            dragged = row; dragMoved = false;
+            // Windows Terminal reserves Shift-click for terminal text selection.
+            // Ctrl-click and the one-shot Range end button reach the app normally.
+            extendClick = rangeEnd || mouse.Flags.HasFlag(MouseFlags.Shift) || mouse.Flags.HasFlag(MouseFlags.Ctrl);
+            rangeEnd = false;
+            if (extendClick || !Playlist.Selection.Contains(Playlist.Tracks[row].Name)) Playlist.Select(row, extendClick);
             RenderRows(row); Tracks.SetFocus(); app.Mouse.GrabMouse(Tracks); mouse.Handled = true;
         }
         else if (dragged >= 0 && mouse.Flags.HasFlag(MouseFlags.LeftButtonReleased))
@@ -132,7 +142,7 @@ public sealed class MusicManagementView : View
                 if (position.X >= 0 && position.X < Tracks.Viewport.Width && !Playlist.Selection.Contains(Playlist.Tracks[row].Name))
                     Playlist.MoveSelection(Math.Min(row, Playlist.Tracks.Count - Playlist.Selection.Count));
             }
-            else if (!shiftClick) Playlist.Select(row, false);
+            else if (!extendClick) Playlist.Select(row, false);
             RenderRows(dragMoved ? Math.Max(0, Playlist.SelectionStart) : row);
             ShowDetails(); mouse.Handled = true;
         }

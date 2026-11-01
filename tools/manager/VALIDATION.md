@@ -1,5 +1,22 @@
 # Manager migration verification
 
+## Terminal-compatible music range selection (2026-11-01)
+
+Windows Terminal reserves Shift-click for terminal text selection, preventing
+that mouse input from reaching the manager. The earlier injected Shift-click
+checks only established behavior when the application received those events.
+The manager now offers Ctrl-click ranges and a one-shot **Range end** button;
+Shift-click remains supported where a terminal forwards it.
+
+The updated UI checks passed in Windows and Linux terminals, decoding actual
+SGR mouse escape sequences before routing Ctrl-click input through the UI. They
+cover forward/reverse ranges, unmodified clicks resetting selection, Range end
+with an ordinary endpoint click, one-shot behavior, Escape cancellation and the
+existing group movement/deletion checks. These are automated parser/UI tests,
+not physical mouse tests in Windows Terminal. The unchanged manager suite passed
+**56/56 Windows** and **57/57 Linux** checks; both published managers were refreshed.
+No APK, device transfer or game data was needed for this manager-only fix.
+
 ## Music range selection and deletion (2026-11-01)
 
 Verified **56/56 Windows** and **57/57 Linux** manager checks. Real-terminal UI

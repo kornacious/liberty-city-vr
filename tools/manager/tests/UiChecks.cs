@@ -1,5 +1,6 @@
 using LibertyManager;
 using Terminal.Gui.App;
+using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
@@ -59,7 +60,27 @@ internal static class UiChecks
                 if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3", "3.mp3" })) throw new Exception("Shift-click did not include the endpoints and intervening track.");
                 Click(1);
                 if (!music.Playlist.Selection.SetEquals(new[] { "2.mp3" })) throw new Exception("Plain click did not collapse the range selection.");
-                Click(0, true);
+                // Exercise the terminal wire format, not pre-decoded modifier flags.
+                void TerminalClick(int row, int modifier = 0)
+                {
+                    var point = music.Tracks.ViewportToScreen(new System.Drawing.Point(1, row));
+                    var parser = new AnsiMouseParser();
+                    app.Mouse.RaiseMouseEvent(parser.ProcessMouseInput($"\u001b[<{modifier};{point.X + 1};{point.Y + 1}M")!);
+                    app.Mouse.RaiseMouseEvent(parser.ProcessMouseInput($"\u001b[<{modifier};{point.X + 1};{point.Y + 1}m")!);
+                }
+                TerminalClick(0); TerminalClick(2, 16);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3", "3.mp3" })) throw new Exception("ANSI Ctrl-click did not select the range.");
+                TerminalClick(1); TerminalClick(0, 16);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3" })) throw new Exception("Reverse Ctrl-click did not select the range.");
+                TerminalClick(1);
+                Button("Range end").InvokeCommand(Command.Accept); TerminalClick(0);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3", "2.mp3" })) throw new Exception("Range end did not extend selection with an ordinary click.");
+                TerminalClick(0);
+                if (!music.Playlist.Selection.SetEquals(new[] { "1.mp3" })) throw new Exception("Range end was not one-shot.");
+                Button("Range end").InvokeCommand(Command.Accept);
+                app.Keyboard.RaiseKeyDownEvent(Key.Esc); TerminalClick(1);
+                if (!music.Playlist.Selection.SetEquals(new[] { "2.mp3" })) throw new Exception("Escape did not cancel Range end.");
+                TerminalClick(0, 16);
                 Mouse(0, MouseFlags.LeftButtonPressed); Mouse(2, MouseFlags.LeftButtonPressed | MouseFlags.PositionReport); Mouse(2, MouseFlags.LeftButtonReleased);
                 if (music.Playlist.Tracks[2].Name != "1.mp3" || music.Playlist.Tracks[3].Name != "2.mp3" || music.Playlist.Selection.Count != 2) throw new Exception("Group drag did not preserve the selected tracks and order.");
                 Button("↓ Down").InvokeCommand(Command.Accept);
@@ -106,7 +127,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: music range selection, plain click reset, group drag/movement, staged deletion/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: ANSI Ctrl-click ranges, Range end/Escape, Shift-click, plain click reset, group drag/movement, deletion/Cancel, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

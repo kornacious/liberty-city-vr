@@ -20,9 +20,14 @@ number, genre, year, size, duration, format, sample rate, channels and bitrate.
 Missing metadata fields remain empty. Captions use **Artist - Album - Title**,
 using the original filename when a title tag is missing.
 
-Click a row to select only that track. **Shift-click** another row selects both
-endpoints and every track between them; **Shift+Up/Down** extends the range by
-keyboard. Selected rows are highlighted and marked with a dot. Drag a selected
+Click a row to select only that track. **Ctrl-click** another row selects both
+endpoints and every track between them. Alternatively, click **Range end**, then
+click the last track without holding a modifier; Escape cancels this one-shot
+mode. **Shift+Up/Down** extends the range by keyboard. **Shift-click** also works
+when the terminal forwards it, but Windows Terminal reserves it for terminal
+text selection and does not send it to the application
+([Microsoft documentation](https://learn.microsoft.com/en-us/windows/terminal/tips-and-tricks)).
+Selected rows are highlighted and marked with a dot. Drag a selected
 row to move the whole selection together, preserving its internal order while
 the intervening rows shift. **Up/Down** and **Alt+Up/Alt+Down** also move the group.
 
