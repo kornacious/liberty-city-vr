@@ -1241,8 +1241,8 @@ createSwapchain(void)
 	}
 	int renderScalePercent = (int)GetPrivateProfileIntA(
 		"VR", "RenderScalePercent", 100, settingsPath);
-	if(renderScalePercent < 100)
-		renderScalePercent = 100;
+	if(renderScalePercent < 75)
+		renderScalePercent = 75;
 	else if(renderScalePercent > 175)
 		renderScalePercent = 175;
 	const uint32_t recommendedWidth =
@@ -1324,10 +1324,10 @@ createSwapchain(void)
 	// reached. If the runtime cannot allocate the requested swapchain, retain
 	// the persisted request and retry the nearest lower menu presets for this
 	// launch only.
-	int scaleCandidates[4];
+	int scaleCandidates[6];
 	int scaleCandidateCount = 0;
 	scaleCandidates[scaleCandidateCount++] = renderScalePercent;
-	static const int lowerScalePresets[] = { 150, 125, 100 };
+	static const int lowerScalePresets[] = { 150, 125, 100, 90, 75 };
 	for(int preset : lowerScalePresets)
 		if(preset < renderScalePercent)
 			scaleCandidates[scaleCandidateCount++] = preset;

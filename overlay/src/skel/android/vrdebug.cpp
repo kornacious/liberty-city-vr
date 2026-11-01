@@ -1379,7 +1379,7 @@ LoadVrSettings(void)
 			".\\vr_settings.ini") != 0;
 #endif
 	{
-		static const int scales[] = { 100, 125, 150, 175 };
+		static const int scales[] = { 75, 90, 100, 125, 150, 175 };
 		const int savedScale = GetPrivateProfileIntA("VR", "RenderScalePercent",
 			100, ".\\vr_settings.ini");
 		int best = 0;
@@ -2999,7 +2999,7 @@ VrDebugUpdate(const PadInput &in)
 				gVrMenuPage = VR_MENU_PAGE_OPTIMIZATIONS;
 				gVrOptimizationSelection = 0;
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_RENDER_SCALE){
-				static const int scales[] = { 100, 125, 150, 175 };
+				static const int scales[] = { 75, 90, 100, 125, 150, 175 };
 				int index = 0;
 				for(int i = 0; i < (int)ARRAY_SIZE(scales); i++)
 					if(scales[i] == gQuestRenderScalePercent)
