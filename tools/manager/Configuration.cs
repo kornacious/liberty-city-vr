@@ -89,6 +89,7 @@ public sealed record ActionOptions
     public string EditorOutput { get; set; } = "";
     public SaveTransferDirection SaveDirection { get; set; } = SaveTransferDirection.QuestToPc;
     public int SaveSlot { get; set; } = 1;
+    public int[]? SaveSlots { get; set; }
     public string PcSaveDirectory { get; set; } = "";
     public string MusicRevision { get; set; } = "";
     public string[] MusicOrder { get; set; } = [];

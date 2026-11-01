@@ -63,6 +63,11 @@ internal static class SaveTransferChecks
             var original = new ManagerSettings { Actions = new() { [ManagerAction.TransferSave] = new() { SaveDirection = SaveTransferDirection.PcToQuest, SaveSlot = 8, PcSaveDirectory = "chosen folder" } } };
             var saved = JsonSerializer.Deserialize<ManagerSettings>(JsonSerializer.Serialize(original))!;
             Check(saved.Actions[ManagerAction.TransferSave].SaveSlot == 8 && saved.Actions[ManagerAction.TransferSave].SaveDirection == SaveTransferDirection.PcToQuest);
+            Check(SaveTransfer.SelectedSlots(saved.Actions[ManagerAction.TransferSave]).SequenceEqual(new[] {8}));
+            original.Actions[ManagerAction.TransferSave].SaveSlots = [1,8,9];
+            saved = JsonSerializer.Deserialize<ManagerSettings>(JsonSerializer.Serialize(original))!;
+            Check(SaveTransfer.SelectedSlots(saved.Actions[ManagerAction.TransferSave]).SequenceEqual(new[] {1,8,9}));
+            Check(SaveTransfer.FileName(9) == "GTA3sfautosave.b");
             return Task.CompletedTask;
         });
 
@@ -82,6 +87,59 @@ internal static class SaveTransferChecks
         }
         string[] Backups(ManagerSettings s) => Directory.Exists(Path.Combine(s.Workplace, "save-transfer/backups"))
             ? Directory.GetFiles(Path.Combine(s.Workplace, "save-transfer/backups"), "*.bak", SearchOption.AllDirectories) : [];
+
+        async Task Batch(SaveTransferDirection direction, Func<ManagerSettings, ActionOptions, BatchSlots, Task> check)
+        {
+            var work = Path.Combine(root,"batch-" + Guid.NewGuid().ToString("N"));
+            var pc = Path.Combine(work,"pc"); Directory.CreateDirectory(pc);
+            var settings = new ManagerSettings { Repository = Path.Combine(work,"source"), Workplace = Path.Combine(work,"work") };
+            await check(settings,new() { SaveDirection = direction, SaveSlots = [1,9], PcSaveDirectory = pc },new());
+        }
+        async Task PerformBatch(ManagerSettings s, ActionOptions o, BatchSlots d)
+        {
+            using var log = new PrivateLog();
+            await new SaveTransfer(s,log,(_,_) => Task.FromResult<ISaveSlotDevice>(d)).Perform(o,default);
+        }
+        await test("Batch export includes Autosave, backs up every destination and leaves unselected slots alone", () => Batch(SaveTransferDirection.QuestToPc, async (s,o,d) =>
+        {
+            var old = Save(40); var untouched = Save(41);
+            foreach (var slot in new[] {1,9}) File.WriteAllBytes(Path.Combine(o.PcSaveDirectory,SaveTransfer.FileName(slot)),old);
+            File.WriteAllBytes(Path.Combine(o.PcSaveDirectory,"GTA3sf2.b"),untouched);
+            await PerformBatch(s,o,d);
+            foreach (var slot in new[] {1,9}) Check(File.ReadAllBytes(Path.Combine(o.PcSaveDirectory,SaveTransfer.FileName(slot))).SequenceEqual(d.Bytes[slot]!));
+            Check(!File.Exists(Path.Combine(o.PcSaveDirectory,"GTA3sf9.b")) && Backups(s).Length == 2);
+            Check(File.ReadAllBytes(Path.Combine(o.PcSaveDirectory,"GTA3sf2.b")).SequenceEqual(untouched) && d.Stops == 1 && d.Writes.Count == 0);
+        }));
+        await test("Batch import verifies manual and Autosave writes and stops the game once", () => Batch(SaveTransferDirection.PcToQuest, async (s,o,d) =>
+        {
+            var incoming = Save(56); var untouched = d.Bytes[2]!.ToArray();
+            foreach (var slot in new[] {1,9}) File.WriteAllBytes(Path.Combine(o.PcSaveDirectory,SaveTransfer.FileName(slot)),incoming);
+            await PerformBatch(s,o,d);
+            Check(d.Bytes[1]!.SequenceEqual(incoming) && d.Bytes[9]!.SequenceEqual(incoming) && d.Bytes[2]!.SequenceEqual(untouched));
+            Check(d.Stops == 1 && d.Writes.SequenceEqual(new[] {1,9}) && Backups(s).Length == 2);
+        }));
+        await test("Batch export validates every source before changing any PC destination", () => Batch(SaveTransferDirection.QuestToPc, async (s,o,d) =>
+        {
+            var file = Path.Combine(o.PcSaveDirectory,"GTA3sf1.b"); var old = Save(60); File.WriteAllBytes(file,old); d.Bytes[9] = null;
+            await Reject<IOException>(() => PerformBatch(s,o,d));
+            Check(File.ReadAllBytes(file).SequenceEqual(old) && Backups(s).Length == 0 && d.Writes.Count == 0);
+        }));
+        await test("Missing batch PC sources fail before connecting or writing", () => Batch(SaveTransferDirection.PcToQuest, async (s,o,d) =>
+        {
+            File.WriteAllBytes(Path.Combine(o.PcSaveDirectory,"GTA3sf1.b"),Save(60));
+            using var log = new PrivateLog();
+            await Reject<IOException>(() => new SaveTransfer(s,log,(_,_) => throw new Exception("Unexpected connection")).Perform(o,default));
+            Check(d.Writes.Count == 0);
+        }));
+        await test("Autosave read-back failure restores its backup after earlier completed slots", () => Batch(SaveTransferDirection.PcToQuest, async (s,o,d) =>
+        {
+            var incoming = Save(57); var before = d.Bytes[9]!.ToArray();
+            foreach (var slot in new[] {1,9}) File.WriteAllBytes(Path.Combine(o.PcSaveDirectory,SaveTransfer.FileName(slot)),incoming);
+            d.CorruptSlot = 9;
+            await Reject<IOException>(() => PerformBatch(s,o,d));
+            Check(d.Bytes[1]!.SequenceEqual(incoming) && d.Bytes[9]!.SequenceEqual(before) && d.Writes.SequenceEqual(new[] {1,9,9}));
+            Check(Backups(s).Length == 2);
+        }));
 
         await test("Quest to PC backs up the old destination and exports exact bytes", () => Exercise(SaveTransferDirection.QuestToPc, async (file, s, o, d) =>
         {
@@ -144,7 +202,9 @@ internal static class SaveTransferChecks
         await test("Invalid slots and transfer directions never connect", async () =>
         {
             using var log = new PrivateLog(); var service = new SaveTransfer(new(), log, (_, _) => throw new Exception("Unexpected connection"));
-            await Reject<ArgumentException>(() => service.Perform(new() { SaveSlot = 9 }, default));
+            await Reject<ArgumentException>(() => service.Perform(new() { SaveSlot = 10 }, default));
+            await Reject<ArgumentException>(() => service.Perform(new() { SaveSlots = [] }, default));
+            await Reject<ArgumentException>(() => service.Perform(new() { SaveSlots = [1,1] }, default));
             await Reject<ArgumentException>(() => service.Perform(new() { SaveDirection = (SaveTransferDirection)99 }, default));
         });
         await test("ADB save adapter preserves binary data through sync files", async () =>
@@ -155,6 +215,8 @@ internal static class SaveTransferChecks
             var adapter = new QuestSaveSlots(device, folder, log); await adapter.StopGame(default);
             Check((await adapter.Read(8, default))!.SequenceEqual(runner.Bytes!)); var next = Save(17);
             await adapter.Write(8, next, default); Check((await adapter.Read(8, default))!.SequenceEqual(next));
+            Check((await adapter.Read(9,default))!.SequenceEqual(next)); await adapter.Write(9,next,default);
+            Check(runner.Calls.SelectMany(a => a).Any(a => a.Contains("/slot/9",StringComparison.Ordinal)));
             Check(runner.Calls.All(a => a[0] == "-s" && a[1] == "synthetic-target"));
             Check(runner.Calls.Any(a => a.Contains("pull")) && runner.Calls.Any(a => a.Contains("push")));
             Check(runner.Calls.SelectMany(a => a).All(a => !a.Contains("miamivr")) && runner.Remote.Count == 0 && Directory.GetFiles(folder).Length == 0);
@@ -165,6 +227,21 @@ internal static class SaveTransferChecks
             using var log = new PrivateLog(); var runner = new SaveRunner { QueryError = true };
             await Reject<IOException>(() => new QuestSaveSlots(new QuestDevice(runner, log, "adb", "synthetic-target"), folder, log).Read(1, default));
         });
+    }
+
+    private sealed class BatchSlots : ISaveSlotDevice
+    {
+        public Dictionary<int,byte[]?> Bytes { get; } = new() { [1] = Save(1), [2] = Save(2), [9] = Save(9) };
+        public int Stops, CorruptSlot;
+        public List<int> Writes { get; } = [];
+        public Task StopGame(CancellationToken token) { token.ThrowIfCancellationRequested(); Stops++; return Task.CompletedTask; }
+        public Task<byte[]?> Read(int slot,CancellationToken token) { token.ThrowIfCancellationRequested(); return Task.FromResult(Bytes.GetValueOrDefault(slot)?.ToArray()); }
+        public Task Write(int slot,byte[] data,CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested(); Writes.Add(slot); Bytes[slot] = data.Length == 0 ? null : data.ToArray();
+            if (slot == CorruptSlot) { Bytes[slot]![0] ^= 1; CorruptSlot = 0; }
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class Slots : ISaveSlotDevice
@@ -201,7 +278,7 @@ internal static class SaveTransferChecks
             var a = arguments.ToArray(); Calls.Add(a); Check(!showOutput && input is null);
             var args = a.Skip(2).ToArray(); var output = "";
             if (args.SequenceEqual(new[] { "shell", "pm", "path", QuestDevice.Package })) output = "package:/installed.apk";
-            else if (args.Contains("query")) output = QueryError ? "Error while accessing provider" : $"Row: 0 _display_name=GTA3sf{args[4][^1]}.b, _size={Bytes?.Length ?? 0}";
+            else if (args.Contains("query")) output = QueryError ? "Error while accessing provider" : $"Row: 0 _display_name={SaveTransfer.FileName(int.Parse(args[4].Split('/')[^1]))}, _size={Bytes?.Length ?? 0}";
             else if (args[0] == "pull") File.WriteAllBytes(args[2], Remote[args[1]]);
             else if (args[0] == "push") Remote[args[2]] = File.ReadAllBytes(args[1]);
             else if (args[0] == "shell" && args.Length == 2)

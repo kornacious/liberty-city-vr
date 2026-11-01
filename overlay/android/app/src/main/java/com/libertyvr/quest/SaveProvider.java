@@ -20,7 +20,7 @@ import java.io.FileNotFoundException;
  * Android's scoped external storage lets the release app create its saves but
  * prevents the ADB shell from reading those app-owned files.  Making the APK
  * debuggable merely to transfer saves would weaken the release.  This provider
- * instead exposes exactly eight files and accepts only calls from the app
+ * instead exposes eight manual files and the dedicated autosave, and accepts only calls from the app
  * itself, root, or Android's shell UID used by `adb shell content`.
  */
 public final class SaveProvider extends ContentProvider {
@@ -73,7 +73,7 @@ public final class SaveProvider extends ContentProvider {
     private int parseSlot(Uri uri) throws FileNotFoundException {
         if (uri == null || uri.getPathSegments().size() != 2 ||
                 !"slot".equals(uri.getPathSegments().get(0))) {
-            throw new FileNotFoundException("Expected content://.../slot/1 through /slot/8");
+            throw new FileNotFoundException("Expected content://.../slot/1 through /slot/9 (Autosave)");
         }
         final int slot;
         try {
@@ -81,8 +81,8 @@ public final class SaveProvider extends ContentProvider {
         } catch (NumberFormatException error) {
             throw new FileNotFoundException("Invalid save slot");
         }
-        if (slot < 1 || slot > 8) {
-            throw new FileNotFoundException("Save slot must be between 1 and 8");
+        if (slot < 1 || slot > 9) {
+            throw new FileNotFoundException("Save slot must be between 1 and 9 (Autosave)");
         }
         return slot;
     }
@@ -95,7 +95,7 @@ public final class SaveProvider extends ContentProvider {
         if (externalRoot == null) {
             throw new FileNotFoundException("External files directory is unavailable");
         }
-        // The current Quest frontend stores 1.b..8.b in gamedata.  Keep this
+        // The Quest frontend stores 1.b..8.b and autosave.b in gamedata. Keep this
         // bridge aligned with that on-disk contract; the transfer tools hide
         // the platform-specific name from users.
         final File gameData = new File(externalRoot, "gamedata");
@@ -113,7 +113,7 @@ public final class SaveProvider extends ContentProvider {
                         "Cannot create game-data child " + directory);
             }
         }
-        return new File(gameData, slot + ".b");
+        return new File(gameData, slot == 9 ? "autosave.b" : slot + ".b");
     }
 
     @Override
@@ -148,7 +148,7 @@ public final class SaveProvider extends ContentProvider {
             final MatrixCursor.RowBuilder row = cursor.newRow();
             for (String column : columns) {
                 if (OpenableColumns.DISPLAY_NAME.equals(column)) {
-                    row.add("GTA3sf" + slot + ".b");
+                    row.add(slot == 9 ? "GTA3sfautosave.b" : "GTA3sf" + slot + ".b");
                 } else if (OpenableColumns.SIZE.equals(column)) {
                     row.add(file.isFile() ? file.length() : 0L);
                 } else {

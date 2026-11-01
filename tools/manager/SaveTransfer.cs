@@ -67,7 +67,7 @@ public sealed class QuestSaveSlots(QuestDevice device, string temporaryDirectory
     private const int MaximumBackupBytes = 4 * 1024 * 1024;
     private static string Uri(int slot)
     {
-        if (slot is < 1 or > 8) throw new ArgumentOutOfRangeException(nameof(slot));
+        _ = SaveTransfer.FileName(slot);
         return QuestDevice.SaveUri + "/slot/" + slot;
     }
     public async Task StopGame(CancellationToken token)
@@ -83,7 +83,7 @@ public sealed class QuestSaveSlots(QuestDevice device, string temporaryDirectory
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(token); limit.CancelAfter(TimeSpan.FromSeconds(60));
         var query = await device.Run(["shell", "content", "query", "--uri", uri, "--projection", "_display_name:_size"], limit.Token);
         var sizes = Regex.Matches(query.Output, @"\b_size=(\d+)\b");
-        if (!query.Output.Contains("_display_name=GTA3sf" + slot + ".b", StringComparison.Ordinal) || sizes.Count != 1 ||
+        if (!query.Output.Contains("_display_name=" + SaveTransfer.FileName(slot), StringComparison.Ordinal) || sizes.Count != 1 ||
             !long.TryParse(sizes[0].Groups[1].Value, out var size) || size > MaximumBackupBytes)
             throw new IOException("Save provider did not return a valid slot size. No save was changed.");
         if (size == 0) return null;
@@ -127,75 +127,112 @@ public sealed class QuestSaveSlots(QuestDevice device, string temporaryDirectory
 public sealed class SaveTransfer(ManagerSettings settings, PrivateLog log,
     Func<string, CancellationToken, Task<ISaveSlotDevice>> connect)
 {
+    public const int AutosaveSlot = 9;
+    public static string FileName(int slot) => slot switch
+    {
+        >= 1 and <= 8 => "GTA3sf" + slot + ".b",
+        AutosaveSlot => "GTA3sfautosave.b",
+        _ => throw new ArgumentOutOfRangeException(nameof(slot))
+    };
+    public static string SlotLabel(int slot) => slot == AutosaveSlot ? "Autosave" : "Slot " + slot;
+    public static int[] SelectedSlots(ActionOptions options)
+    {
+        var selected = options.SaveSlots ?? [options.SaveSlot];
+        if (selected.Length is < 1 or > 9 || selected.Any(s => s is < 1 or > AutosaveSlot) || selected.Distinct().Count() != selected.Length)
+            throw new ArgumentException("Select one or more manual save slots or Autosave.");
+        return selected.Order().ToArray();
+    }
     public static string DefaultPcDirectory(ManagerSettings settings) => Path.Combine(settings.Workplace, "save-transfer", "pc");
     public async Task Perform(ActionOptions options, CancellationToken token)
     {
-        if (!Enum.IsDefined(options.SaveDirection) || options.SaveSlot is < 1 or > 8)
-            throw new ArgumentException("Select a transfer direction and a save slot from 1 through 8.");
+        if (!Enum.IsDefined(options.SaveDirection)) throw new ArgumentException("Select a transfer direction.");
+        var slots = SelectedSlots(options);
         var directory = string.IsNullOrWhiteSpace(options.PcSaveDirectory) ? DefaultPcDirectory(settings) : Path.GetFullPath(options.PcSaveDirectory);
         Paths.NoLinks(directory);
         if (Paths.Within(settings.Repository, directory)) throw new IOException("Choose a PC save folder outside the source repository.");
-        var fileName = "GTA3sf" + options.SaveSlot + ".b";
-        var destination = Paths.Child(directory, fileName);
-        var previousPc = await ReadLocal(destination, token);
-        if (options.SaveDirection == SaveTransferDirection.PcToQuest)
+        var pc = new Dictionary<int, byte[]?>();
+        foreach (var slot in slots)
         {
-            if (previousPc is null) throw new IOException("PC save was not found: " + fileName + ". Choose the folder containing that slot.");
-            LibertySave.Validate(previousPc);
+            var bytes = await ReadLocal(Paths.Child(directory, FileName(slot)), token); pc[slot] = bytes;
+            if (options.SaveDirection == SaveTransferDirection.PcToQuest)
+            {
+                if (bytes is null) throw new IOException("PC save was not found: " + FileName(slot) + ". Choose the folder containing that slot.");
+                LibertySave.Validate(bytes);
+            }
         }
         var root = Path.Combine(settings.Workplace, "save-transfer"); Paths.NoLinks(root);
         var scratch = Path.Combine(root, ".transfer-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(scratch);
+        var completed = 0;
         try
         {
             var device = await connect(scratch, token);
             await device.StopGame(token);
-            var previousQuest = await device.Read(options.SaveSlot, token);
-            if (options.SaveDirection == SaveTransferDirection.QuestToPc)
+            var quest = new Dictionary<int, byte[]?>();
+            foreach (var slot in slots)
             {
-                if (previousQuest is null) throw new IOException("The selected Quest save slot is empty.");
-                LibertySave.Validate(previousQuest);
-                if (previousPc is not null) Backup(root, fileName, "pc", previousPc);
-                token.ThrowIfCancellationRequested();
-                if (!Equal(previousPc, await ReadLocal(destination, token))) throw new IOException("The PC save changed during transfer. Retry after closing the PC game.");
-                Directory.CreateDirectory(directory);
-                var stage = Path.Combine(directory, ".lcvr-save-" + Guid.NewGuid().ToString("N"));
-                try
+                var bytes = await device.Read(slot, token); quest[slot] = bytes;
+                if (options.SaveDirection == SaveTransferDirection.QuestToPc)
                 {
-                    WriteDurable(stage, previousQuest);
-                    token.ThrowIfCancellationRequested();
-                    File.Move(stage, destination, overwrite: previousPc is not null);
+                    if (bytes is null) throw new IOException("The selected Quest " + SlotLabel(slot) + " is empty.");
+                    LibertySave.Validate(bytes);
                 }
-                finally { if (File.Exists(stage)) File.Delete(stage); }
-                log.Write("Exported Quest slot " + options.SaveSlot + " to " + destination + ". Save bytes preserved and verified.");
             }
-            else
+            // Validate every selected source and create every destination backup
+            // before replacing the first save. Each slot retains read-back recovery.
+            foreach (var slot in slots)
             {
-                if (previousQuest is not null) Backup(root, fileName, "quest-native", previousQuest);
-                if (!Equal(previousQuest, await device.Read(options.SaveSlot, token))) throw new IOException("The Quest slot changed during transfer. Retry after closing other save tools.");
-                token.ThrowIfCancellationRequested();
-                try
+                var previous = options.SaveDirection == SaveTransferDirection.QuestToPc ? pc[slot] : quest[slot];
+                if (previous is not null) Backup(root, FileName(slot), options.SaveDirection == SaveTransferDirection.QuestToPc ? "pc" : "quest-native", previous);
+            }
+            foreach (var slot in slots)
+            {
+                var fileName = FileName(slot); var destination = Paths.Child(directory, fileName);
+                var previousPc = pc[slot]; var previousQuest = quest[slot];
+                if (options.SaveDirection == SaveTransferDirection.QuestToPc)
                 {
-                    await device.Write(options.SaveSlot, previousPc!, token);
-                    if (!Equal(previousPc, await device.Read(options.SaveSlot, token))) throw new IOException("Quest save read-back differs from the PC source.");
-                }
-                catch
-                {
-                    // The existing provider truncates on write. Recover even after caller cancellation.
-                    using var recovery = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    token.ThrowIfCancellationRequested();
+                    if (!Equal(previousPc, await ReadLocal(destination, token))) throw new IOException("The PC save changed during transfer. Retry after closing the PC game.");
+                    Directory.CreateDirectory(directory);
+                    var stage = Path.Combine(directory, ".lcvr-save-" + Guid.NewGuid().ToString("N"));
                     try
                     {
-                        await device.Write(options.SaveSlot, previousQuest ?? [], recovery.Token);
-                        if (!Equal(previousQuest, await device.Read(options.SaveSlot, recovery.Token))) throw new IOException("Restore verification failed.");
-                        log.Write("Previous Quest slot restored after an interrupted or failed transfer.");
+                        WriteDurable(stage, previousQuest!);
+                        token.ThrowIfCancellationRequested();
+                        File.Move(stage, destination, overwrite: previousPc is not null);
                     }
-                    catch (Exception e) when (e is IOException or OperationCanceledException)
-                    { log.Write("Automatic slot recovery failed. Keep the game stopped and restore the local backup before using this slot."); }
-                    throw;
+                    finally { if (File.Exists(stage)) File.Delete(stage); }
+                    log.Write("Exported Quest " + SlotLabel(slot) + " to " + destination + ". Save bytes preserved and verified.");
                 }
-                log.Write("Imported " + fileName + " into Quest slot " + options.SaveSlot + "; byte-for-byte read-back verified.");
+                else
+                {
+                    if (!Equal(previousQuest, await device.Read(slot, token))) throw new IOException("The Quest slot changed during transfer. Retry after closing other save tools.");
+                    token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        await device.Write(slot, previousPc!, token);
+                        if (!Equal(previousPc, await device.Read(slot, token))) throw new IOException("Quest save read-back differs from the PC source.");
+                    }
+                    catch
+                    {
+                        // The existing provider truncates on write. Recover even after caller cancellation.
+                        using var recovery = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        try
+                        {
+                            await device.Write(slot, previousQuest ?? [], recovery.Token);
+                            if (!Equal(previousQuest, await device.Read(slot, recovery.Token))) throw new IOException("Restore verification failed.");
+                            log.Write("Previous Quest slot restored after an interrupted or failed transfer.");
+                        }
+                        catch (Exception e) when (e is IOException or OperationCanceledException)
+                        { log.Write("Automatic slot recovery failed. Keep the game stopped and restore the local backup before using this slot."); }
+                        throw;
+                    }
+                    log.Write("Imported " + fileName + " into Quest " + SlotLabel(slot) + "; byte-for-byte read-back verified.");
+                }
+                completed++;
             }
-            log.Write("Transfer complete. The Quest game is stopped; launch it when ready.");
+            log.Write($"Transfer complete: {completed} saves. The Quest game is stopped; launch it when ready.");
         }
+        catch { log.Write($"Transfer stopped: {completed}/{slots.Length} saves completed. Remaining slots were not transferred."); throw; }
         finally { Directory.Delete(scratch, recursive: true); }
     }
     private static bool Equal(byte[]? a, byte[]? b) => (a is null || a.Length == 0) && (b is null || b.Length == 0) || a is not null && b is not null && a.AsSpan().SequenceEqual(b);

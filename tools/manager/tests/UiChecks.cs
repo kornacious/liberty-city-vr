@@ -148,12 +148,22 @@ internal static class UiChecks
                     throw new Exception("Legacy save transfer is still visible in auxiliary tools.");
                 Button("Transfer save").InvokeCommand(Command.Accept);
                 var choices = Descendants(ui.Window).OfType<OptionSelector>().ToArray();
-                if (choices.Length != 2 || choices[0].Labels?.Count != 2 || choices[1].Labels?.Count != 8)
+                var saveSlots = Descendants(ui.Window).OfType<ListView>().Single();
+                if (choices.Length != 1 || choices[0].Labels?.Count != 2 || saveSlots.Source?.Count != 9 || !saveSlots.ShowMarks || !saveSlots.MarkMultiple)
                     throw new Exception("Save direction/slot options are missing.");
-                choices[0].Value = 1; choices[1].Value = 7;
+                choices[0].Value = 1;
+                ui.Window.Layout();
+                app.Mouse.RaiseMouseEvent(new Mouse { ScreenPosition = saveSlots.ViewportToScreen(new System.Drawing.Point(1,1)), Flags = MouseFlags.LeftButtonClicked });
+                if (!saveSlots.GetAllMarkedItems().ToHashSet().SetEquals(new[] {0,1})) throw new Exception("Clicking another save checkbox cleared the first slot.");
+                saveSlots.SetFocus(); saveSlots.SelectedItem = 7; app.Keyboard.RaiseKeyDownEvent(Key.Space);
+                saveSlots.SelectedItem = 8; app.Keyboard.RaiseKeyDownEvent(Key.Space);
+                if (!saveSlots.GetAllMarkedItems().ToHashSet().SetEquals(new[] {0,1,7,8}) || !saveSlots.Source!.ToList()![8]!.ToString()!.Contains("Autosave")) throw new Exception("Save list did not retain multiple manual slots and Autosave.");
+                app.Keyboard.RaiseKeyDownEvent(Key.A.WithCtrl);
+                if (saveSlots.GetAllMarkedItems().Count() != 9) throw new Exception("Select all did not include every save slot and Autosave.");
                 Button("_Cancel").InvokeCommand(Command.Accept);
                 choices = Descendants(ui.Window).OfType<OptionSelector>().ToArray();
-                if (choices[0].Value != 0 || choices[1].Value != 0 || ui.Window.MostFocused?.Text != "Transfer save")
+                saveSlots = Descendants(ui.Window).OfType<ListView>().Single();
+                if (choices[0].Value != 0 || !saveSlots.GetAllMarkedItems().SequenceEqual(new[] {0}) || ui.Window.MostFocused?.Text != "Transfer save")
                     throw new Exception("Save transfer Cancel did not reset choices and navigation focus.");
                 Button("Transfer save").InvokeCommand(Command.Accept);
                 app.AddTimeout(TimeSpan.FromMilliseconds(400), () =>
@@ -173,7 +183,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: inclusive/moving/scrolled music ranges, multi-file import browser/Cancel, group movement/deletion, save selectors, settings and folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: save checkboxes/Autosave/select-all/Cancel, music selection/import/deletion, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

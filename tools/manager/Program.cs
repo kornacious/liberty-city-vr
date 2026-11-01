@@ -25,7 +25,8 @@ internal static class Program
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
                          InstallModernModels, RepairGameFiles, Update, TransferSave.
                 TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),
-                                      SaveSlot 1..8, PcSaveDirectory.
+                                      SaveSlots [1..9], PcSaveDirectory (9 = Autosave).
+                                      Legacy SaveSlot selects one slot when SaveSlots is omitted.
                 Request JSON: {"Settings":{...},"Options":{...}}
                 --settings PATH            Use another local settings directory.
                 --page ACTION              Open an action page (or Settings/Tools).

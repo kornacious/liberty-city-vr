@@ -1,5 +1,27 @@
 # Manager migration verification
 
+## Multi-slot save transfer and Autosave (2026-11-01)
+
+Replaced the single manual-slot selector with a checkbox list containing slots
+1–8 and Autosave. Click/Space toggles independently; Ctrl+A selects all. The
+native workflow accepts `SaveSlots` while retaining legacy `SaveSlot` requests.
+Autosave uses `GTA3sfautosave.b` on PC and the dedicated `autosave.b` on Quest,
+exposed through provider slot 9 without creating a numbered `9.b` file.
+
+Verified **62/62 Windows** and **63/63 Linux** manager checks, including synthetic
+multi-slot exports/imports, destination backups, unselected-slot preservation,
+single game stop, missing/empty-source preflight, Autosave read-back rollback,
+legacy settings and binary Autosave transport. Terminal UI checks passed on both
+platforms for independent checkbox clicks, multiple manual marks plus Autosave,
+Ctrl+A and Cancel resetting selections. Both published managers were refreshed.
+
+The complete native/Android APK build succeeded and updated the **personal Quest
+3 device**. A metadata-only query confirmed the installed Autosave URI/display
+name; no personal save contents were read or written. Batch data was synthetic.
+All selected sources and destination backups are prepared before replacement;
+if a later write fails, already completed slots remain transferred and the
+failed Quest slot receives the existing independent recovery attempt.
+
 ## Manager launcher cleanup (2026-11-01)
 
 Removed the six root per-action BAT shortcuts and retained `MANAGE.bat`. Added

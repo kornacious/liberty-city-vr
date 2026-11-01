@@ -122,7 +122,8 @@ network/build/device access. Build only produces the APK without installing.
 For release signatures set `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` to your private
 signing properties and select Release. Keep keys and signing values out of Git.
 
-**Transfer save** offers Quest → PC and PC → Quest, manual slot 1–8, and a PC
+**Transfer save** offers Quest → PC and PC → Quest, a multi-select checkbox list
+for manual slots 1–8 and Autosave, and a PC
 save-folder browser. It uses the selected slot's `GTA3sfN.b`, validates the GTA III
 compatible save format/checksum, backs up existing destinations under the
 workplace's `save-transfer/backups`, and verifies Quest read-back. Both directions

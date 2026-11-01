@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using Terminal.Gui.App;
 using Terminal.Gui.Drawing;
 using Terminal.Gui.ViewBase;
@@ -164,11 +165,13 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 var direction = new OptionSelector { X = 1, Y = row, Labels = ["Quest → PC", "PC → Quest"], Value = (int)options.SaveDirection, Width = Dim.Fill(2), Height = 2 };
                 direction.SetScheme(Theme()); form.Add(direction); row += 3;
                 readFields.Add(() => options.SaveDirection = (SaveTransferDirection)(direction.Value ?? 0));
-                form.Add(new Label { Text = "Save slot", X = 1, Y = row }); row++;
-                var slot = new OptionSelector { X = 1, Y = row, Labels = ["1", "2", "3", "4", "5", "6", "7", "8"], Orientation = Orientation.Horizontal, Value = options.SaveSlot - 1, Width = Dim.Fill(2), Height = 1 };
-                slot.SetScheme(Theme()); form.Add(slot); row += 2;
-                readFields.Add(() => options.SaveSlot = (slot.Value ?? 0) + 1);
-                Field("PC save folder (GTA3sf1.b … GTA3sf8.b)", string.IsNullOrWhiteSpace(options.PcSaveDirectory) ? SaveTransfer.DefaultPcDirectory(draft) : options.PcSaveDirectory,
+                form.Add(new Label { Text = "Save slots · click/Space: toggle · Ctrl+A: all", X = 1, Y = row }); row++;
+                var slots = new ListView { X = 1, Y = row, Width = Dim.Fill(2), Height = 9, ShowMarks = true, MarkMultiple = true };
+                slots.SetSource(new ObservableCollection<string>(Enumerable.Range(1,9).Select(SaveTransfer.SlotLabel)));
+                foreach (var savedSlot in (options.SaveSlots ?? [options.SaveSlot]).Where(s => s is >= 1 and <= 9)) slots.Source!.SetMark(savedSlot - 1, true);
+                slots.SetScheme(Theme()); form.Add(slots); row += 10;
+                readFields.Add(() => { options.SaveSlots = slots.GetAllMarkedItems().Select(i => i + 1).ToArray(); options.SaveSlot = options.SaveSlots.FirstOrDefault(1); });
+                Field("PC save folder (manual saves and Autosave)", string.IsNullOrWhiteSpace(options.PcSaveDirectory) ? SaveTransfer.DefaultPcDirectory(draft) : options.PcSaveDirectory,
                     v => options.PcSaveDirectory = v, OpenMode.Directory, false);
                 Note("Close the PC game first. The Quest game will be stopped. Existing destination saves are backed up before replacement.");
                 Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));

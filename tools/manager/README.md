@@ -35,7 +35,7 @@ Forms scroll and every path field has a terminal file/directory browser.
 | Modern models | Pinned ZIP or extracted source, optional explicit ModDB download, generated `modern` output folder, build only. Verifies source hashes, merges IMG archives, repairs wheel texture references, compresses textures, writes and validates manifests, stages and verifies device transfers before activation with rollback. Existing verified overlays can be reused. |
 | Repair game files | Optional port `gamefiles` folder; otherwise obtains the pinned source. Requires an existing game installation and repairs the allowlisted replacement text/frontend files. |
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean master, fetches official master, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
-| Transfer save | Quest → PC or PC → Quest, manual slot 1–8, and PC save-folder browser. Validates the compatible GTA III container/checksum, backs up the destination, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
+| Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
 | Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake and optional auxiliary runtimes; pinned tool download preference. |
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
 
@@ -57,7 +57,9 @@ can succeed while deployment is skipped for missing ADB or an eligible device.
 Signature/install failures stop without uninstalling or clearing application data.
 
 The **Transfer save** page uses `GTA3sfN.b` in the chosen PC folder and the same
-Quest slot N. Its default PC folder is `<workplace>/save-transfer/pc`. Existing
+Quest slot N. Autosave uses `GTA3sfautosave.b` on PC and `autosave.b` on Quest.
+Click or Space toggles a slot checkbox; Ctrl+A selects all nine. Its default PC
+folder is `<workplace>/save-transfer/pc`. Existing
 destinations are backed up under `<workplace>/save-transfer/backups` before
 replacement. Close both games and other save-transfer tools first; the Quest
 app is force-stopped and left stopped. Failed/interrupted Quest writes trigger
