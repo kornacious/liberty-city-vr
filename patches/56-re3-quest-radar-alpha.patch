@@ -1,0 +1,43 @@
+diff --git a/src/core/Radar.cpp b/src/core/Radar.cpp
+index 38fd1e7..95b2131 100644
+--- a/src/core/Radar.cpp
++++ b/src/core/Radar.cpp
+@@ -898,7 +898,28 @@ void CRadar::DrawRadarMap()
+ 	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
+ #endif
+ 	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, (void*)FALSE);
++#ifdef RW_VULKAN
++	// Retail radar tiles encode roads in alpha, often with the same RGB as
++	// the surrounding blocks. The direct HUD needs the same dark foundation
++	// as the offscreen map; drawing RGB alone fills in those roads.
++	const uint32 savedAlphaTest = rw::GetRenderState(rw::ALPHATESTFUNC);
++	rw::SetRenderState(rw::ALPHATESTFUNC, rw::ALPHAALWAYS);
++	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)TRUE);
++	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, nil);
++	CVector2D background[24];
++	CVector2D backgroundUV[24] = {};
++	for (int i = 0; i < 24; i++) {
++		const float angle = i * TWOPI / 24;
++		CRadar::TransformRadarPointToScreenSpace(background[i],
++			CVector2D(Cos(angle), Sin(angle)));
++	}
++	CSprite2d::SetVertices(24, (float*)background, (float*)backgroundUV,
++		CRGBA(0, 0, 0, 255));
++	GameRender::SubmitImmediate2D(rwPRIMTYPETRIFAN,
++		CSprite2d::GetVertices(), 24, GameRender::IMMEDIATE2D_DRAW_SPRITE);
++#else
+ 	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, (void*)FALSE);
++#endif
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
+ 	RwRenderStateSet(rwRENDERSTATETEXTUREPERSPECTIVE, (void*)FALSE);
+ 
+@@ -911,6 +932,9 @@ void CRadar::DrawRadarMap()
+ 	DrawRadarSection(x - 1, y + 1);
+ 	DrawRadarSection(x, y + 1);
+ 	DrawRadarSection(x + 1, y + 1);
++#ifdef RW_VULKAN
++	rw::SetRenderState(rw::ALPHATESTFUNC, savedAlphaTest);
++#endif
+ }
+ 
+ void CRadar::DrawRadarMask() 
