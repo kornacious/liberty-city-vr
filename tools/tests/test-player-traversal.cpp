@@ -56,7 +56,7 @@ struct CCutsceneMgr{static bool active;static bool IsRunning(){return active;}st
 struct Frontend{bool m_bMenuActive=false;}FrontEndMenuManager;
 struct CGame{static bool playingIntro;};bool CGame::playingIntro;
 namespace androidgame{
-struct Input{bool a=false,b=false,leftStickClick=false,rightStickClick=false;}input;
+struct Input{bool a=false,b=false,leftStickClick=false,rightStickClick=false;float rightTrigger=0;}input;
 static bool menu=false;
 bool VrMenuConsumesInput(){return menu;}
 const Input &GetPadInput(){return input;}
@@ -121,13 +121,21 @@ int main(){
  ToggleFlight();CPad::pad.y=-128;androidgame::input.leftStickClick=true;Process(&p);
  Check(std::fabs(p.position.y-0.12f)<0.001f,"left thumbstick click no longer boosts flight");
  androidgame::input.leftStickClick=false;androidgame::input.rightStickClick=true;Process(&p);
- Check(std::fabs(p.position.y-6.12f)<0.001f,"right thumbstick click boosts flight to 300 units per second");
+ Check(std::fabs(p.position.y-0.24f)<0.001f,"right thumbstick click no longer boosts flight");
+ androidgame::input.rightStickClick=false;androidgame::input.rightTrigger=0.54f;Process(&p);
+ Check(std::fabs(p.position.y-0.36f)<0.001f,"right trigger below threshold does not boost");
+ androidgame::input.rightTrigger=0.55f;Process(&p);
+ Check(std::fabs(p.position.y-6.36f)<0.001f,"right index trigger boosts flight to 300 units per second");
  androidgame::menu=true;Process(&p);
- Check(std::fabs(p.position.y-6.12f)<0.001f,"held boost cannot move the player while the menu consumes input");
- Clear(p);ToggleNoclip();CPad::pad.y=-128;androidgame::input.rightStickClick=true;Process(&p);
- Check(std::fabs(p.position.y-1.6f)<0.001f&&p.position.z==1,"right thumbstick click boosts walking noclip while preserving the ground");
- Clear(p);ToggleFlight();CPad::pad.x=128;androidgame::input.rightStickClick=true;CWorld::obstacle=true;Process(&p);
+ Check(std::fabs(p.position.y-6.36f)<0.001f,"held boost cannot move the player while the menu consumes input");
+ Clear(p);ToggleNoclip();CPad::pad.y=-128;androidgame::input.rightTrigger=1.0f;Process(&p);
+ Check(std::fabs(p.position.y-1.6f)<0.001f&&p.position.z==1,"right index trigger boosts walking noclip while preserving the ground");
+ Clear(p);ToggleFlight();CPad::pad.x=128;androidgame::input.rightTrigger=1.0f;CWorld::obstacle=true;Process(&p);
  Check(p.position.x<=0.4f,"faster boost still sweeps against thin obstacles");
+ Clear(p);ToggleFlight();androidgame::input.rightTrigger=1;androidgame::input.a=true;Process(&p);
+ Check(std::fabs(p.position.z-7)<0.001f,"right trigger boost combines with A ascent");
+ androidgame::input.a=false;androidgame::input.b=true;Process(&p);
+ Check(std::fabs(p.position.z-1)<0.001f,"right trigger boost combines with B descent");
  Clear(p);
  Check(ToggleFlight()&&Flight(),"flight toggles on");
  androidgame::input.a=true;Process(&p);

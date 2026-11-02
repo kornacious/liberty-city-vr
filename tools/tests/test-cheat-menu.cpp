@@ -75,7 +75,7 @@ static bool CycleVrCheatSelection(int source, int direction)
 	cycleDirection = direction;
 	return true;
 }
-static int spawnCount = 22, spawnedModel = -1;
+static int spawnCount = 30, spawnedModel = -1;
 static bool spawnedInside;
 static int GetVrSpawnVehicleCount() { return spawnCount; }
 static int GetVrSpawnVehicleModel(int index) { return index >= 0 && index < spawnCount ? 100+index : -1; }
@@ -148,6 +148,14 @@ bool CWanted::bNoWantedCheat;
 static const char *GetVrCheatName(int source)
 {
 	Check(source >= 0 && source < nativeCount, "draw uses a known native cheat");
+	// Match the legacy backend's preformatted special-toggle names.
+	if(source >= 2 && source <= 5){
+		static char label[96];
+		bool enabled = false;
+		GetVrCheatToggleState(source, &enabled);
+		std::snprintf(label, sizeof(label), "%s - %s", nativeNames[source], enabled ? "ON" : "OFF");
+		return label;
+	}
 	return nativeNames[source];
 }
 
@@ -264,7 +272,7 @@ int main()
 			for(const auto &row : rows)
 				Check(row.text != "BACK TO CHEAT CATEGORIES", "no redundant category Back row");
 			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source == 22 || source >= 35;
-			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+": OFF", "toggle text shows OFF");
+			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+" - OFF", "toggle text shows OFF");
 			Check(rows[item].off == isToggle && !rows[item].on, "toggle state uses mapped source before activation");
 			activatedSource = -1;
 			ActivateQuestCheatMenuSelection();
@@ -273,7 +281,7 @@ int main()
 			Check(std::strcmp(gVrCheatStatus, (source == 0 || source == 1) ? "UNAVAILABLE RIGHT NOW" : "CHEAT ACTIVATED") == 0,
 				"activation feedback survives categorisation");
 			DrawQuestCheatPage();
-			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+": ON", "toggle text shows ON");
+			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+" - ON", "toggle text shows ON");
 			Check(rows[item].on == isToggle && !rows[item].off, "toggle state updates after activation");
 			for(int direction : {-1, 1}){
 				cycledSource = -1;
@@ -295,14 +303,16 @@ int main()
  OpenCheatMenu();
  gVrCheatCategorySelection = VEHICLE_SELECTOR;
  ActivateQuestCheatMenuSelection();
- Check(SpawnVehiclePageCount() == 3, "22 vehicles span three pages");
+ Check(SpawnVehiclePageCount() == 3, "30 vehicles span three pages");
  for(int page = 0; page < 3; ++page){
   Check(gVrSpawnVehiclePage == page, "next page selects expected page");
-  const int count = page == 2 ? 4 : 9;
+  const int count = page == 2 ? 4 : 13;
   Check(CurrentMenuItemCount() == count+1, "page input includes only toggle and vehicles");
   DrawQuestCheatPage();
   CheckDrawSelection(0);
-  Check(rows[0].text == std::string("SPAWN INSIDE VEHICLE: ")+(gVrSpawnInsideVehicle ? "ON" : "OFF"), "toggle is first on every page");
+  Check((int)rows.size() == count+1, "page draws exactly its selectable rows");
+  if(page < 2) Check(rows.back().y == 639, "full page fills available space above page indicator");
+  Check(rows[0].text == std::string("SPAWN INSIDE VEHICLE - ")+(gVrSpawnInsideVehicle ? "ON" : "OFF"), "toggle is first on every page");
   Check(rows[1].y-rows[0].y == 37, "vehicles follow toggle without a blank row");
   const bool oldInside = gVrSpawnInsideVehicle;
   ActivateQuestCheatMenuSelection();
@@ -313,9 +323,9 @@ int main()
    gVrCheatSelection = row;
    DrawQuestCheatPage();
    CheckDrawSelection(row);
-   Check(rows[row].text == GetVrVehicleModelName(100+page*9+row-1), "row shows exact page model");
+   Check(rows[row].text == GetVrVehicleModelName(100+page*13+row-1), "row shows exact page model");
    ActivateQuestCheatMenuSelection();
-   Check(spawnedModel == 100+page*9+row-1 && spawnedInside == gVrSpawnInsideVehicle, "A spawns displayed vehicle with toggle state");
+   Check(spawnedModel == 100+page*13+row-1 && spawnedInside == gVrSpawnInsideVehicle, "A spawns displayed vehicle with toggle state");
   }
   Check(CycleQuestCheatMenuSelection(1), "dedicated next-page control works");
  }
@@ -328,7 +338,7 @@ int main()
  gVrCheatCategory = VEHICLE_SELECTOR;
  gVrSpawnVehiclePage = 0;
  Check(SpawnVehiclePageCount() == 1 && CurrentMenuItemCount() == 1, "empty catalog has only the toggle");
- spawnCount = 22;
+ spawnCount = 30;
 	OpenCheatMenu();
 	gVrCheatCategorySelection = CATEGORY_COUNT;
 	ActivateQuestCheatMenuSelection();

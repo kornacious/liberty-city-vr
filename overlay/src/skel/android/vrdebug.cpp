@@ -80,6 +80,7 @@ enum {
 	VR_MENU_WIDTH = 1024,
 	VR_MENU_HEIGHT = 768,
 	VR_CHEAT_ITEMS_PER_PAGE = 14,
+	VR_SPAWN_VEHICLES_PER_PAGE = VR_CHEAT_ITEMS_PER_PAGE-1,
 };
 
 // --- verbatim from OpenXRVR.cpp -------------------------------------------
@@ -2199,13 +2200,13 @@ ReturnFromCheatMenu(void)
 static int
 SpawnVehiclePageCount(void)
 {
-	return Max(1, (GetVrSpawnVehicleCount()+8)/9);
+	return Max(1, (GetVrSpawnVehicleCount()+VR_SPAWN_VEHICLES_PER_PAGE-1)/VR_SPAWN_VEHICLES_PER_PAGE);
 }
 
 static int
 SpawnVehiclePageSize(void)
 {
-	return Max(0, Min(9, GetVrSpawnVehicleCount()-gVrSpawnVehiclePage*9));
+	return Max(0, Min((int)VR_SPAWN_VEHICLES_PER_PAGE, GetVrSpawnVehicleCount()-gVrSpawnVehiclePage*VR_SPAWN_VEHICLES_PER_PAGE));
 }
 
 static bool
@@ -2261,7 +2262,7 @@ ActivateQuestCheatMenuSelection(void)
 		if(gVrCheatSelection == 0){
 			gVrSpawnInsideVehicle = !gVrSpawnInsideVehicle;
 		}else if(gVrCheatSelection > 0 && gVrCheatSelection <= vehicles){
-			const int model = GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+gVrCheatSelection-1);
+			const int model = GetVrSpawnVehicleModel(gVrSpawnVehiclePage*VR_SPAWN_VEHICLES_PER_PAGE+gVrCheatSelection-1);
 			const bool spawned = SpawnVrVehicle(model, gVrSpawnInsideVehicle);
 			snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
 				spawned ? "VEHICLE SPAWNED" : "UNAVAILABLE RIGHT NOW");
@@ -5029,13 +5030,13 @@ DrawQuestCheatPage(void)
 	if(gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR){
 		BeginFullVrMenuPage("CHEATS / VEHICLE SPAWN");
 		char spawnToggle[64];
-		snprintf(spawnToggle, sizeof(spawnToggle), "SPAWN INSIDE VEHICLE: %s",
+		snprintf(spawnToggle, sizeof(spawnToggle), "SPAWN INSIDE VEHICLE - %s",
 			gVrSpawnInsideVehicle ? "ON" : "OFF");
 		DrawFullVrMenuRow(spawnToggle, 158, 2,
 			gVrCheatSelection == 0, true, !gVrSpawnInsideVehicle, gVrSpawnInsideVehicle);
 		const int vehicles = SpawnVehiclePageSize();
 		for(int row = 0; row < vehicles; ++row){
-			const char *name = GetVrVehicleModelName(GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+row));
+			const char *name = GetVrVehicleModelName(GetVrSpawnVehicleModel(gVrSpawnVehiclePage*VR_SPAWN_VEHICLES_PER_PAGE+row));
 			DrawFullVrMenuRow(name, 195+row*37, 2, gVrCheatSelection == row+1);
 		}
 		char page[48];
@@ -5050,7 +5051,7 @@ DrawQuestCheatPage(void)
 	snprintf(heading, sizeof(heading), "CHEATS / %s",
 		VrCheatMenu::CategoryName(gVrCheatCategory));
 	BeginFullVrMenuPage(heading,
-		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / RIGHT CLICK BOOST" : nullptr);
+		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / R2 BOOST" : nullptr);
 	const int cheatCount = VrCheatMenu::Count(gVrCheatCategory,
 		GetVrCheatCount());
 	const int count = cheatCount;
@@ -5068,8 +5069,17 @@ DrawQuestCheatPage(void)
 		const bool isToggle = source >= 0 &&
 			GetVrCheatToggleState(source, &toggleEnabled);
 		char label[128];
-		snprintf(label, sizeof(label), isToggle ? "%s: %s" : "%s",
-			name, toggleEnabled ? "ON" : "OFF");
+		int nameLength = (int)strlen(name);
+		// Older backend names already carry a state suffix. Render it once,
+		// using the live toggle state for both old and new cheats.
+		if(isToggle){
+			if(nameLength >= 5 && strcmp(name+nameLength-5, " - ON") == 0)
+				nameLength -= 5;
+			else if(nameLength >= 6 && strcmp(name+nameLength-6, " - OFF") == 0)
+				nameLength -= 6;
+		}
+		snprintf(label, sizeof(label), isToggle ? "%.*s - %s" : "%.*s",
+			nameLength, name, toggleEnabled ? "ON" : "OFF");
 		DrawFullVrMenuRow(label, (gVrCheatCategory == VrCheatMenu::GENERAL ? 178 : 158)+row*37, 2,
 			item == gVrCheatSelection, true,
 			isToggle && !toggleEnabled, isToggle && toggleEnabled);

@@ -131,7 +131,7 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
   graphics and model-set menus.
 - Player cheats include Flight and Noclip. In Flight, move with the left stick,
-  hold A to rise, B to descend, and the right stick click for a speed boost.
+  hold A to rise, B to descend, and the right index trigger (R2) for a speed boost.
   Noclip alone retains roads and terrain; combining it with Flight bypasses
   all collision. Leaving the map returns the player to the Town Hall forecourt
   on Staunton Island and turns both modes off. Traversal is suspended in
