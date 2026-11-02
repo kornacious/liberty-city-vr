@@ -215,7 +215,8 @@ bool IsImmersiveBikeSidearm(int weaponType);
 bool IsImmersiveVehicleSidearm(int weaponType);
 bool ConsumePhysicalMeleeStrike(int hand, int *slot, int *weaponType,
 	CVector *sweepStart, CVector *sweepEnd, float *speed = nil,
-	CVector *rootStart = nil, CVector *rootEnd = nil);
+	CVector *rootStart = nil, CVector *rootEnd = nil,
+	float *impactScale = nil);
 void ResolvePhysicalMeleeStrike(int hand, bool contact);
 
 #ifdef GTA_VR_WEAPONS

@@ -464,3 +464,12 @@ rates, collision mode combinations, ground preservation, terrain model
 classification, pause/cutscene/vehicle/death guards, collision restoration and
 Town Hall recovery. World collision and streaming are adapters; map traversal
 and headset comfort still require in-headset verification.
+
+`test-quest-melee.ps1 -StageRoot <assembled-tree>` compiles the production
+motion detector for fists, bats and all held gun types. It checks speed/travel
+strength limits, slow follow-throughs, both hands, multiple frame rates,
+locomotion compensation, one-contact latching and pending-strike cancellation
+on tracking loss, support grip, vehicle entry and gameplay restriction. Guns
+retain native firing/ammo coverage in `test-weapon-cadence.ps1`. In-headset
+checks are still needed for reach, comfort and physical impact feel on peds
+and cars; host fixtures do not simulate the full collision world.

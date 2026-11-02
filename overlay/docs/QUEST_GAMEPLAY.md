@@ -18,7 +18,15 @@ the shot; weapon damage rules remain native. Rockets use their own path.
 Physical melee follows the full calibrated blade, including the first deliberate
 swing after drawing. Contact latching, player-motion compensation and tracking
 gap rejection prevent a continuous contact or a tracking jump from repeatedly
-counting as a new swing. Run Without Limits bypasses the usual weapon-specific
+counting as a new swing. Fists, the bat and held guns scale blunt damage and
+knockback with speed at contact and distance travelled during the stroke. Slow
+brushes do negligible damage; moderate strokes deal reduced damage. Full native
+damage requires roughly 3 m/s over 30 cm for a fist, or 4 m/s over 55 cm for a
+bat or gun. Damage never exceeds native strength. A slowed follow-through loses
+strength rather than retaining the swing's peak. Guns use their calibrated
+grip-to-muzzle reach and bat-like blunt damage without spending ammunition.
+Native pedestrian and car melee targets and obstruction checks still apply.
+Run Without Limits bypasses the usual weapon-specific
 sprint restrictions while enabled.
 
 Vehicle entry distinguishes movement held during the approach from a new cancel

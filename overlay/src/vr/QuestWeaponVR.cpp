@@ -263,11 +263,11 @@ struct MeleeStrike
 	int slot, weaponType;
 	CVector tipStart, tipEnd;
 	CVector rootStart, rootEnd;
-	float speed;
+	float speed, impactScale;
 	uint32 frame;
 
 	MeleeStrike() : pending(false), slot(-1), weaponType(-1),
-		speed(0.0f), frame(0)
+		speed(0.0f), impactScale(0.0f), frame(0)
 	{}
 };
 
@@ -279,12 +279,12 @@ struct MeleeMotion
 	CVector previousTrackingTip, previousTrackingRoot;
 	uint32 previousFrame, lastStrikeTime, calmSince;
 	bool strikeInProgress;
-	float strikePeakSpeed;
+	float swingTravel;
 	uint32 strikeContinueUntil;
 
 	MeleeMotion() : valid(false), armed(false), slot(-1), weaponType(-1),
 		previousFrame(0), lastStrikeTime(0), calmSince(0),
-		strikeInProgress(false), strikePeakSpeed(0.0f),
+		strikeInProgress(false), swingTravel(0.0f),
 		strikeContinueUntil(0)
 	{}
 };
@@ -2176,11 +2176,55 @@ UpdateHolsterInput(uint32 blockedHands)
 }
 
 static CVector
+GetWeaponLocalMuzzle(int weaponType)
+{
+	switch(weaponType){
+	case WEAPONTYPE_COLT45:
+		return CVector(0.275f, 0.0004f, 0.0812f);
+	case WEAPONTYPE_UZI:
+		return CVector(0.241f, -0.0015f, 0.0817f);
+	case WEAPONTYPE_SHOTGUN:
+		return CVector(0.812f, -0.086f, 0.103f);
+	case WEAPONTYPE_AK47:
+		return CVector(0.638f, -0.047f, 0.083f);
+	case WEAPONTYPE_M16:
+		return CVector(0.741f, -0.066f, 0.137f);
+	case WEAPONTYPE_SNIPERRIFLE:
+		return CVector(0.770f, -0.0902f, 0.0902f);
+	case WEAPONTYPE_ROCKETLAUNCHER:
+		if(ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
+		   ModelSets::MODEL_SET_MODERN)
+			// Centre of the front opening, not an approximate point beside it.
+			return CVector(-0.070460401f, 0.114642583f, 0.783905983f);
+		return CVector(0.553f, 0.000f, 0.000f);
+	case WEAPONTYPE_FLAMETHROWER:
+		return CVector(0.780f, -0.058f, 0.095f);
+	default:
+		return CVector(0.250f, 0.0f, 0.080f);
+	}
+}
+
+// Full native strength requires both speed at contact and a deliberate stroke.
+// A fast tracking twitch or a slow follow-through cannot deliver full damage.
+static float
+MeleeImpactScale(float speed, float travel, bool fist)
+{
+	const float minimumSpeed = fist ? 0.35f : 0.30f;
+	const float fullSpeed = fist ? 3.0f : 4.0f;
+	const float fullTravel = fist ? 0.30f : 0.55f;
+	const float velocity = Min(1.0f, Max(0.0f,
+		(speed-minimumSpeed)/(fullSpeed-minimumSpeed)));
+	const float distance = Min(1.0f, Max(0.0f, travel/fullTravel));
+	return velocity*velocity*distance;
+}
+
+static CVector
 MeleeModelTip(int weaponType)
 {
 	switch(weaponType){
 	case WEAPONTYPE_BASEBALLBAT: return CVector(0.068f, -0.019f, 0.680f);
-	default: return CVector(0.0f, 0.0f, 0.11f);
+	default: return IsPhysicalGun(weaponType) ?
+		GetWeaponLocalMuzzle(weaponType) : CVector(0.0f, 0.0f, 0.11f);
 	}
 }
 
@@ -2224,6 +2268,7 @@ UpdateMelee()
 			gMeleeStrike[hand].pending = false;
 		if(!IsGameplayAvailable() || FindPlayerVehicle() ||
 		   !gPoseValid[hand] || IsSupportHand(hand)){
+			gMeleeStrike[hand].pending = false;
 			gMeleeMotion[hand] = MeleeMotion();
 			continue;
 		}
@@ -2233,18 +2278,20 @@ UpdateMelee()
 		CVector root, tip;
 		if(slot >= 0){
 			weaponType = GetVrWeaponTypeForSlot(slot);
-			enabled = IsPhysicalMelee(weaponType);
+			enabled = IsPhysicalMelee(weaponType) || IsPhysicalGun(weaponType);
 			if(!enabled){
+				gMeleeStrike[hand].pending = false;
 				gMeleeMotion[hand] = MeleeMotion();
 				continue;
 			}
-			// Build the calibrated visible blade from this input sample. The
+			// Build the calibrated visible weapon from this input sample. The
 			// render cache belongs to the previous frame and camera anchor; using
 			// it here both delays a hit and measures old world points against the
-			// new camera. Missing renders also used to shorten a katana to 45 cm.
+			// new camera. Use the same full reach for collision as for rendering.
 			CMatrix model;
 			WeaponCalibration *calibration = GetCalibration(hand, weaponType);
 			if(!calibration || !BuildWeaponModelMatrix(hand, *calibration, &model)){
+				gMeleeStrike[hand].pending = false;
 				gMeleeMotion[hand] = MeleeMotion();
 				continue;
 			}
@@ -2258,7 +2305,8 @@ UpdateMelee()
 			root = gGripMatrix[hand].GetPosition();
 			tip = root+gAimMatrix[hand].GetForward()*0.11f;
 		}
-		if(!IsPhysicalMelee(weaponType)){
+		if(!enabled){
+			gMeleeStrike[hand].pending = false;
 			gMeleeMotion[hand] = MeleeMotion();
 			continue;
 		}
@@ -2268,6 +2316,7 @@ UpdateMelee()
 		if(!motion.valid || motion.slot != slot ||
 		   motion.weaponType != weaponType ||
 		   frame-motion.previousFrame > 2U || dt > 0.10f){
+			gMeleeStrike[hand].pending = false;
 			motion = MeleeMotion();
 			motion.valid = true;
 			// The first sample establishes a baseline and never hits. Permit a
@@ -2291,11 +2340,12 @@ UpdateMelee()
 		const float rootSpeed =
 			(trackingRoot-motion.previousTrackingRoot).Magnitude()/dt;
 		const float threshold =
-			slot == WEAPONSLOT_UNARMED ? 1.25f : 0.70f;
+			slot == WEAPONSLOT_UNARMED ? 0.35f : 0.30f;
 		const bool calm = slot == WEAPONSLOT_UNARMED ?
-			tipSpeed <= 0.48f :
-			tipSpeed <= 0.40f && rootSpeed <= 0.30f;
+			tipSpeed <= 0.22f :
+			tipSpeed <= 0.20f && rootSpeed <= 0.20f;
 		if(calm){
+			if(!motion.strikeInProgress) motion.swingTravel = 0.0f;
 			if(motion.calmSince == 0)
 				motion.calmSince = now;
 			if(slot == WEAPONSLOT_UNARMED ||
@@ -2309,7 +2359,10 @@ UpdateMelee()
 		// Large discontinuities are tracking loss or recenter events, never
 		// superhuman attacks. Keep the new sample but require calm to rearm.
 		if(trackingTravel > 0.65f){
+			gMeleeStrike[hand].pending = false;
 			motion.armed = false;
+			motion.strikeInProgress = false;
+			motion.swingTravel = 0.0f;
 			motion.previousRoot = root;
 			motion.previousTip = tip;
 			motion.previousTrackingRoot = trackingRoot;
@@ -2318,20 +2371,20 @@ UpdateMelee()
 			continue;
 		}
 		const bool deliberate = slot == WEAPONSLOT_UNARMED ?
-			rootSpeed >= 0.75f : rootSpeed >= 0.25f ||
+			rootSpeed >= 0.30f : rootSpeed >= 0.20f ||
 			(trackingTip-trackingRoot-motion.previousTrackingTip+
 			 motion.previousTrackingRoot).Magnitude()/dt >= 0.50f;
 		if(motion.strikeInProgress && now > motion.strikeContinueUntil){
 			motion.strikeInProgress = false;
-			motion.strikePeakSpeed = 0.0f;
+			motion.swingTravel = 0.0f;
 		}
+		if(enabled && motion.armed && !calm)
+			motion.swingTravel += trackingTravel;
 		const bool fastStrikeSample = enabled && motion.armed &&
 			tipSpeed >= threshold && deliberate &&
 			now-motion.lastStrikeTime >= 220U;
 		if(fastStrikeSample){
 			motion.strikeInProgress = true;
-			motion.strikePeakSpeed =
-				Max(motion.strikePeakSpeed, tipSpeed);
 			motion.strikeContinueUntil = now+180U;
 		}
 		// Once a genuine fast swing has started, keep publishing its slower
@@ -2355,7 +2408,9 @@ UpdateMelee()
 			strike.tipEnd = tip;
 			strike.rootStart = motion.previousRoot;
 			strike.rootEnd = root;
-			strike.speed = Max(tipSpeed, motion.strikePeakSpeed);
+			strike.speed = tipSpeed;
+			strike.impactScale = MeleeImpactScale(tipSpeed, motion.swingTravel,
+				slot == WEAPONSLOT_UNARMED);
 			strike.frame = frame;
 		}
 		motion.previousRoot = root;
@@ -2392,35 +2447,6 @@ GetWeaponLocalBarrelDirection(int weaponType)
 		return CVector(1.0f, 0.0f, 0.0f);
 	default:
 		return CVector(1.0f, 0.0f, 0.0f);
-	}
-}
-
-static CVector
-GetWeaponLocalMuzzle(int weaponType)
-{
-	switch(weaponType){
-	case WEAPONTYPE_COLT45:
-		return CVector(0.275f, 0.0004f, 0.0812f);
-	case WEAPONTYPE_UZI:
-		return CVector(0.241f, -0.0015f, 0.0817f);
-	case WEAPONTYPE_SHOTGUN:
-		return CVector(0.812f, -0.086f, 0.103f);
-	case WEAPONTYPE_AK47:
-		return CVector(0.638f, -0.047f, 0.083f);
-	case WEAPONTYPE_M16:
-		return CVector(0.741f, -0.066f, 0.137f);
-	case WEAPONTYPE_SNIPERRIFLE:
-		return CVector(0.770f, -0.0902f, 0.0902f);
-	case WEAPONTYPE_ROCKETLAUNCHER:
-		if(ModelSets::GetCalibrationSetForCategory(ModelSets::MODEL_CATEGORY_WEAPONS) !=
-		   ModelSets::MODEL_SET_MODERN)
-			// Centre of the front opening, not an approximate point beside it.
-			return CVector(-0.070460401f, 0.114642583f, 0.783905983f);
-		return CVector(0.553f, 0.000f, 0.000f);
-	case WEAPONTYPE_FLAMETHROWER:
-		return CVector(0.780f, -0.058f, 0.095f);
-	default:
-		return CVector(0.250f, 0.0f, 0.080f);
 	}
 }
 
@@ -3884,7 +3910,7 @@ GetTrackedVisualHandAimRay(int hand, CVector *origin, CVector *direction)
 
 bool ConsumePhysicalMeleeStrike(int hand, int *slot, int *weaponType,
 	CVector *sweepStart, CVector *sweepEnd, float *speed,
-	CVector *rootStart, CVector *rootEnd)
+	CVector *rootStart, CVector *rootEnd, float *impactScale)
 {
 	if(hand < 0 || hand >= VR_HAND_COUNT || !slot || !weaponType ||
 	   !sweepStart || !sweepEnd || !gMeleeStrike[hand].pending)
@@ -3901,6 +3927,7 @@ bool ConsumePhysicalMeleeStrike(int hand, int *slot, int *weaponType,
 	if(rootStart) *rootStart = strike.rootStart;
 	if(rootEnd) *rootEnd = strike.rootEnd;
 	if(speed) *speed = strike.speed;
+	if(impactScale) *impactScale = strike.impactScale;
 	strike.pending = false;
 	return true;
 }
@@ -3914,7 +3941,7 @@ ResolvePhysicalMeleeStrike(int hand, bool contact)
 	// reach the target; a real contact latches until the hand slows down.
 	gMeleeMotion[hand].armed = false;
 	gMeleeMotion[hand].strikeInProgress = false;
-	gMeleeMotion[hand].strikePeakSpeed = 0.0f;
+	gMeleeMotion[hand].swingTravel = 0.0f;
 	gMeleeMotion[hand].strikeContinueUntil = 0;
 	gMeleeMotion[hand].lastStrikeTime =
 		CTimer::GetTimeInMillisecondsNonClipped();

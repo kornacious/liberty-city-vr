@@ -7,6 +7,9 @@
 using uint32 = uint32_t;
 #define nil nullptr
 #define DEGTORAD(a) ((a)*0.017453292519943295f)
+namespace ModelSets { enum { MODEL_CATEGORY_WEAPONS, MODEL_SET_MODERN };
+static int GetCalibrationSetForCategory(int){return 0;} }
+template<class T> T Min(T a,T b) { return std::min(a,b); }
 template<class T> T Max(T a,T b) { return std::max(a,b); }
 static int checks;
 static void Require(bool v,const char *text) {
@@ -52,7 +55,8 @@ struct CTimer {
 };
 static bool IsGameplayAvailable(){return gameplay;}
 static bool FindPlayerVehicle(){return inVehicle;}
-static bool IsSupportHand(int){return false;}
+static bool supportHand=false;
+static bool IsSupportHand(int){return supportHand;}
 static int GetVrWeaponTypeForSlot(int slot){return type[slot==WEAPONSLOT_UNARMED?0:1];}
 static CVector VectorFromArray(const float *v){return {v[0],v[1],v[2]};}
 namespace rw { namespace vulkan {
@@ -77,7 +81,7 @@ static void Pose(int hand,float x,float angle=0.0f){
 }
 static void Tick(){++testFrame;testTime+=static_cast<uint32>(testDt*1000.0f+0.5f);UpdateMelee();}
 static void Reset(int hand,int weapon=WEAPONTYPE_BASEBALLBAT){
-    camera=CMatrix();gameplay=true;inVehicle=false;testTime=1000;testFrame=100;
+    camera=CMatrix();supportHand=false;gameplay=true;inVehicle=false;testTime=1000;testFrame=100;
     type[0]=WEAPONTYPE_UNARMED;type[1]=weapon;
     for(int i=0;i<2;++i){gMeleeMotion[i]=MeleeMotion();gMeleeStrike[i]=MeleeStrike();
         gPoseValid[i]=i==hand;gHeldSlot[i]=i==hand?WEAPONSLOT_MELEE:-1;
@@ -85,10 +89,11 @@ static void Reset(int hand,int weapon=WEAPONTYPE_BASEBALLBAT){
     Tick();Require(!gMeleeStrike[hand].pending,"baseline must not hit");
 }
 static bool Consume(int hand,CVector *tipOut=nullptr){
-    int slot,weapon;CVector a,b,r0,r1;float speed;
-    const bool hit=ConsumePhysicalMeleeStrike(hand,&slot,&weapon,&a,&b,&speed,&r0,&r1);
+    int slot,weapon;CVector a,b,r0,r1;float speed, scale;
+    const bool hit=ConsumePhysicalMeleeStrike(hand,&slot,&weapon,&a,&b,&speed,&r0,&r1,&scale);
     if(hit){Require(slot==gHeldSlot[hand],"held inventory slot preserved");
         Require(weapon==type[1],"held weapon type preserved");
+        Require(scale>=0.0f && scale<=1.0f,"impact remains bounded by native damage");
         Require(speed>=0.08f,"sweep carries deliberate speed");
         if(tipOut)*tipOut=b;
         if(weapon==WEAPONTYPE_BASEBALLBAT)
@@ -116,8 +121,52 @@ int main(){
         for(int i=0;i<20;++i){camera.SetRotateZ(0.1f*static_cast<float>(i));camera.p={0.4f*i,0,0};Pose(hand,0);Tick();
             Require(!Consume(hand),"walking and snap turning a stationary held blade cannot attack");}
     }
-    for(int weapon:{WEAPONTYPE_BASEBALLBAT}){
+    for(int weapon:{WEAPONTYPE_BASEBALLBAT,WEAPONTYPE_COLT45,WEAPONTYPE_UZI,WEAPONTYPE_SHOTGUN,WEAPONTYPE_AK47,WEAPONTYPE_M16,WEAPONTYPE_SNIPERRIFLE,WEAPONTYPE_ROCKETLAUNCHER,WEAPONTYPE_FLAMETHROWER}){
         testDt=1.0f/90.0f;Reset(1,weapon);Pose(1,0.04f);Tick();Require(Consume(1),"other tracked melee weapons still emit sweeps");
+    }
+    for(int hand=0;hand<2;++hand) for(float hz:{30.0f,60.0f,90.0f,120.0f}) {
+        testDt=1/hz;Reset(hand);gHeldSlot[hand]=-1;Tick();
+        for(int i=1;i<=int(0.4f*hz/3.5f)+1;++i) {
+            Pose(hand,3.5f*i/hz);Tick();
+            int slot,weapon;CVector a,b;float strength;
+            Require(ConsumePhysicalMeleeStrike(hand,&slot,&weapon,&a,&b,nullptr,nullptr,nullptr,&strength),"closed fist emits strike");
+            Require(slot==WEAPONSLOT_UNARMED && weapon==WEAPONTYPE_UNARMED,"fist uses native unarmed damage");
+        }
+        Require(gMeleeStrike[hand].impactScale>0.99f,"long fast fist reaches normal damage");
+        gGrip[hand]=0;Pose(hand,1);Tick();Require(!gMeleeStrike[hand].pending,"open hand cannot strike");
+    }
+    for(int invalid=0;invalid<5;++invalid) {
+        testDt=1/90.0f;Reset(1,WEAPONTYPE_COLT45);Pose(1,0.05f);Tick();
+        Require(gMeleeStrike[1].pending,"test has an unconsumed strike");
+        if(invalid==0) gPoseValid[1]=false;
+        if(invalid==1) gameplay=false;
+        if(invalid==2) inVehicle=true;
+        if(invalid==3) supportHand=true;
+        if(invalid==4) Pose(1,2);
+        Tick();Require(!Consume(1),"invalid input clears pending strike immediately");
+    }
+    for(bool fist:{false,true}) {
+        Require(MeleeImpactScale(0.2f,1.0f,fist)==0.0f,"resting contact has no damage");
+        const float weak=MeleeImpactScale(0.6f,0.1f,fist);
+        const float medium=MeleeImpactScale(2.0f,0.3f,fist);
+        Require(weak>0 && weak<0.01f,"slow short swing barely interacts");
+        Require(medium>weak && medium<1,"moderate swing has intermediate strength");
+        Require(MeleeImpactScale(6,1,fist)==1,"fast long swing reaches normal damage");
+        Require(MeleeImpactScale(20,5,fist)==1,"extreme speed cannot exceed native damage");
+        Require(MeleeImpactScale(6,0.02f,fist)<0.1f,"fast tiny twitch cannot deal full damage");
+        Require(MeleeImpactScale(0.5f,1,fist)<0.01f,"slow contact cannot inherit peak swing speed");
+    }
+    // Exercise strength through the actual motion detector at different rates.
+    for(float hz:{30.0f,60.0f,90.0f,120.0f}) for(int weapon:{WEAPONTYPE_BASEBALLBAT,WEAPONTYPE_COLT45,WEAPONTYPE_UZI}) {
+        testDt=1/hz;Reset(1,weapon);
+        for(int i=1;i<=int(0.7f*hz/4.5f)+1;++i) {
+            Pose(1,4.5f*i/hz);Tick();
+            Require(Consume(1),"held blunt weapon emits continuous swing segments");
+        }
+        Require(gMeleeStrike[1].impactScale>0.99f,"long fast motion produces full strength");
+        Pose(1,gGripMatrix[1].p.x+0.1f/hz);Tick();
+        Require(Consume(1),"tail continues for collision testing");
+        Require(gMeleeStrike[1].impactScale==0,"slow tail loses impact energy");
     }
     std::printf("Quest production melee detector: %d checks passed\n",checks);
 }

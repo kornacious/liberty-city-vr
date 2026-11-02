@@ -1,0 +1,151 @@
+--- a/src/weapons/Weapon.h
++++ b/src/weapons/Weapon.h
+@@ -44,7 +44,7 @@
+ 	bool FireMelee     (CEntity *shooter, CVector &fireSource,
+ 		CEntity *physicalTarget = nil,
+ 		const CColPoint *physicalContact = nil,
+-		bool physicalHeadShot = false);
++		bool physicalHeadShot = false, float physicalImpactScale = 1.0f);
+ 	bool FireInstantHit(CEntity *shooter, CVector *fireSource);
+ 	
+ 	void AddGunshell   (CEntity *shooter, CVector const &source, CVector2D const &direction, float size);
+--- a/src/weapons/Weapon.cpp
++++ b/src/weapons/Weapon.cpp
+@@ -396,11 +396,15 @@
+ bool
+ CWeapon::FireMelee(CEntity *shooter, CVector &fireSource,
+ 	CEntity *physicalTarget, const CColPoint *physicalContact,
+-	bool physicalHeadShot)
++	bool physicalHeadShot, float physicalImpactScale)
+ {
+ 	if(androidgame::SimulationReplayProtected(shooter)) return false;
+ 	ASSERT(shooter!=nil);
+ 
++	// Scale this contact locally, leaving shared weapon info unchanged.
++	const float impactScale = physicalTarget ?
++		Min(1.0f, Max(0.0f, physicalImpactScale)) : 1.0f;
++	if(impactScale <= 0.0f) return false;
+ 	CWeaponInfo *info = GetInfo();
+ 
+ 	bool anim2Playing = false;
+@@ -485,24 +489,25 @@
+ 							if ( isBat && victimPed->OnGround() )
+ 								hitLevel = HITLEVEL_GROUND;
+ 
+-							victimPed->StartFightDefend(localDir, hitLevel, 10);
++							if(impactScale >= 0.15f)
++								victimPed->StartFightDefend(localDir, hitLevel, 10);
+ 
+ 							if ( !victimPed->DyingOrDead() )
+ 							{
+ 								if ( shooterPed->IsPlayer() && isBat && anim2Playing )
+-									victimPed->InflictDamage(shooterPed, m_eWeaponType, 100.0f, physicalPiece, localDir, physicalHeadShot);
++									victimPed->InflictDamage(shooterPed, m_eWeaponType, 100.0f*impactScale, physicalPiece, localDir, physicalHeadShot);
+ 								else if ( shooterPed->IsPlayer() && ((CPlayerPed*)shooterPed)->m_bAdrenalineActive )
+-									victimPed->InflictDamage(shooterPed, m_eWeaponType, 3.5f*info->m_nDamage, physicalPiece, localDir, physicalHeadShot);
++									victimPed->InflictDamage(shooterPed, m_eWeaponType, 3.5f*info->m_nDamage*impactScale, physicalPiece, localDir, physicalHeadShot);
+ 								else
+ 								{
+ 									if ( victimPed->IsPlayer() && isBat ) // wtf, it's not fair
+-										victimPed->InflictDamage(shooterPed, m_eWeaponType, 2.0f*info->m_nDamage, physicalPiece, localDir, physicalHeadShot);
++										victimPed->InflictDamage(shooterPed, m_eWeaponType, 2.0f*info->m_nDamage*impactScale, physicalPiece, localDir, physicalHeadShot);
+ 									else
+-										victimPed->InflictDamage(shooterPed, m_eWeaponType,      info->m_nDamage, physicalPiece, localDir, physicalHeadShot);
++										victimPed->InflictDamage(shooterPed, m_eWeaponType,      info->m_nDamage*impactScale, physicalPiece, localDir, physicalHeadShot);
+ 								}
+ 							}
+ 
+-							if ( CGame::nastyGame )
++							if ( CGame::nastyGame && impactScale >= 0.25f )
+ 							{
+ 								if ( victimPed->GetIsOnScreen() )
+ 								{
+@@ -525,14 +530,14 @@
+ 								}
+ 							}
+ 
+-							if ( !victimPed->OnGround() )
++							if ( !victimPed->OnGround() && impactScale >= 0.5f )
+ 							{
+ 								if ( victimPed->m_fHealth > 0.0f
+ 									&& (victimPed->m_fHealth < 20.0f && victimPedHealth > 20.0f || isBat && !victimPed->IsPlayer()) )
+ 								{
+ 									posOffset.Normalise();
+ 									victimPed->bIsStanding = false;
+-									victimPed->ApplyMoveForce(posOffset.x*-5.0f, posOffset.y*-5.0f, 3.0f);
++									victimPed->ApplyMoveForce(posOffset.x*(-5.0f*impactScale), posOffset.y*(-5.0f*impactScale), 3.0f*impactScale);
+ 
+ 									if ( isBat && victimPed->IsPlayer() )
+ 										victimPed->SetFall(3000, AnimationId(ANIM_STD_HIGHIMPACT_FRONT + localDir), false);
+@@ -547,7 +552,7 @@
+ 							{
+ 								posOffset.Normalise();
+ 								victimPed->bIsStanding = false;
+-								victimPed->ApplyMoveForce(posOffset.x*-5.0f, posOffset.y*-5.0f, 3.0f);
++								victimPed->ApplyMoveForce(posOffset.x*(-5.0f*impactScale), posOffset.y*(-5.0f*impactScale), 3.0f*impactScale);
+ 							}
+ 
+ 							m_eWeaponState = WEAPONSTATE_MELEE_MADECONTACT;
+@@ -574,12 +579,12 @@
+ 		{
+ 			const CColPoint &contact = physicalContact ?
+ 				*physicalContact : gaTempSphereColPoints[0];
+-			for( int32 i=0; i<4; i++ )
++			for( int32 i=0; i<(int32)ceilf(4.0f*impactScale); i++ )
+ 			{
+ 				CParticle::AddParticle(PARTICLE_SPARK_SMALL, contact.point, CVector(0.0f, 0.0f, 0.3f));
+ 				CParticle::AddParticle(PARTICLE_SPARK, contact.point, contact.normal * 0.1f);
+ 			}
+-			nearCar->VehicleDamage(info->m_nDamage * (0.01f * nearCar->pHandling->fMass),
++			nearCar->VehicleDamage(impactScale * info->m_nDamage * (0.01f * nearCar->pHandling->fMass),
+ 				physicalContact ? physicalContact->pieceB : gaTempSphereColPoints[0].pieceB);
+ 			if (nearCar->m_fHealth < oldHealth)
+ 			{
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -1476,10 +1476,10 @@
+ 		int vrStrikeSlot = -1;
+ 		int vrStrikeWeaponType = -1;
+ 		CVector vrSweepStart, vrSweepEnd, vrRootStart, vrRootEnd;
+-		float vrStrikeSpeed = 0.0f;
++		float vrStrikeSpeed = 0.0f, vrImpactScale = 0.0f;
+ 		if(!OculusVR::ConsumePhysicalMeleeStrike(hand, &vrStrikeSlot,
+ 		   &vrStrikeWeaponType, &vrSweepStart, &vrSweepEnd,
+-		   &vrStrikeSpeed, &vrRootStart, &vrRootEnd))
++		   &vrStrikeSpeed, &vrRootStart, &vrRootEnd, &vrImpactScale))
+ 			continue;
+ 		if(vrStrikeSlot < WEAPONSLOT_UNARMED ||
+ 		   vrStrikeSlot >= TOTAL_WEAPON_SLOTS)
+@@ -1494,21 +1494,27 @@
+ 			continue;
+ 		CWeapon &vrMeleeWeapon = GetWeapon((uint8)vrStrikeWeaponType);
+ 		if((int)vrMeleeWeapon.m_eWeaponType != vrStrikeWeaponType ||
+-		   !OculusVR::IsPhysicalMeleeType(vrMeleeWeapon.m_eWeaponType))
++		   (!OculusVR::IsPhysicalMeleeType(vrMeleeWeapon.m_eWeaponType) &&
++		    !OculusVR::IsPhysicalGunType(vrMeleeWeapon.m_eWeaponType)))
+ 			continue;
++		// Gun strikes use blunt bat damage without changing gun ammo/state.
++		CWeapon vrBluntWeapon(OculusVR::IsPhysicalGunType(vrStrikeWeaponType) ?
++			WEAPONTYPE_BASEBALLBAT : (eWeaponType)vrStrikeWeaponType, 0);
++		if(vrImpactScale < 0.005f) continue;
+ 		CVector vrImpactPoint;
+ 		CEntity *vrContactEntity = nil;
+ 		CColPoint vrPhysicalContact;
+-		eVrPhysicalMeleeContact vrContact = FindVrPhysicalMeleeContact(this, vrMeleeWeapon,
++		eVrPhysicalMeleeContact vrContact = FindVrPhysicalMeleeContact(this, vrBluntWeapon,
+ 			vrRootStart, vrRootEnd, vrSweepStart, vrSweepEnd,
+ 			&vrImpactPoint, &vrContactEntity, &vrPhysicalContact);
+ 		if(vrContact != VR_MELEE_DAMAGEABLE)
+ 			continue;
+ 
+ 		OculusVR::ResolvePhysicalMeleeStrike(hand, true);
+-		DMAudio.PlayOneShot(m_audioEntityId, SOUND_WEAPON_BAT_ATTACK, 0.0f);
+-		vrMeleeWeapon.FireMelee(this, vrImpactPoint, vrContactEntity,
+-			&vrPhysicalContact, false);
++		if(vrImpactScale >= 0.15f)
++			DMAudio.PlayOneShot(m_audioEntityId, SOUND_WEAPON_BAT_ATTACK, 0.0f);
++		vrBluntWeapon.FireMelee(this, vrImpactPoint, vrContactEntity,
++			&vrPhysicalContact, false, vrImpactScale);
+ 		debug("[OpenXR] Physical melee strike: hand=%d type=%d speed=%.2f head=0\n",
+ 			hand, vrStrikeWeaponType, vrStrikeSpeed);
+ 	}

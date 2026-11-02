@@ -10644,9 +10644,9 @@ if (-not (Test-Path -LiteralPath $path)) { $path = Join-Path $StageRoot 'overlay
 $source = [IO.File]::ReadAllText($path)
 $parts = @(
     '(?ms)^struct MeleeStrike\r?\n.*?(?=^struct ManualReloadState)',
-    '(?ms)^static bool\r?\nIsPhysicalMelee\(.*?(?=^static bool\r?\nIsPhysicalThrowable)',
+    '(?ms)^static bool\r?\nIsPhysicalGun\(.*?(?=^static bool\r?\nIsPhysicalThrowable)',
     '(?ms)^static bool\r?\nBuildTrackedWeaponHandBasis\(.*?(?=^static bool\r?\nBuildCanonicalSupportFrame)',
-    '(?ms)^static CVector\r?\nMeleeModelTip\(.*?(?=^static CVector\r?\nGetWeaponLocalBarrelDirection)',
+    '(?ms)^static CVector\r?\nGetWeaponLocalMuzzle\(.*?(?=^static CVector\r?\nGetWeaponLocalBarrelDirection)',
     '(?ms)^bool ConsumePhysicalMeleeStrike\(.*?(?=^int\r?\nGetQuestWeaponSettingCount)'
 )
 $definitions = @()
