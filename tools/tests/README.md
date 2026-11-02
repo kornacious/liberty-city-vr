@@ -6,6 +6,13 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-stair-camera.cpp` compiles with the assembled `src/core` include path,
+with and without `__ANDROID__`. It exercises the production zone queries over
+768 combinations and repeated zone entry/exit: Quest ignores the fixed stair
+camera while desktop retains it, and rain, collision and other zone attributes
+remain intact. No game data is read. Safehouse stairs, Belleville Park's
+underground bathroom and physical/stick turning still need headset QA.
+
 `python tools/tests/test-car-windows.py <assembled-tree>` compiles the production
 immersive car-window gates, toggle persistence, Vulkan mesh filter and renderer
 state restoration. It checks third-person/default/motion isolation, other cars,

@@ -9,6 +9,10 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Keep Quest's normal player camera in stair camera zones, including safehouse
+  stairs and Belleville Park's underground bathroom, so their desktop fixed
+  camera cannot lock the player's turning direction.
+
 - Consolidate model assets into Classic and Modern (Xbox HD), migrate old Xbox
   selections, and load the HD pack as a whole. Restore desktop re3's shared
   generic texture fallback on Quest and preserve opaque vehicle body depth

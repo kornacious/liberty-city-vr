@@ -1,0 +1,19 @@
+diff --git a/src/core/ZoneCull.h b/src/core/ZoneCull.h
+--- a/src/core/ZoneCull.h
++++ b/src/core/ZoneCull.h
+@@ -114,7 +114,15 @@ public:
+ 		float minz, float maxz,
+ 		uint16 flag, int16 wantedLevel);
+ 	static bool CamCloseInForPlayer(void) { return (CurrentFlags_Player & ATTRZONE_CAMCLOSEIN) != 0; }
++#ifdef __ANDROID__
++	// Safehouse stairs and the Belleville Park bathroom use a fixed outside
++	// camera on desktop. It ignores look input and replaces the heading used
++	// by Quest's head-relative anchor. Keep the normal player camera in VR.
++	// Leave the zone flags intact for rain, collision and visibility queries.
++	static bool CamStairsForPlayer(void) { return false; }
++#else
+ 	static bool CamStairsForPlayer(void) { return (CurrentFlags_Player & ATTRZONE_STAIRS) != 0; }
++#endif
+ 	static bool Cam1stPersonForPlayer(void) { return (CurrentFlags_Player & ATTRZONE_1STPERSON) != 0; }
+ 	static bool NoPolice(void) { return (CurrentFlags_Player & ATTRZONE_NOPOLICE) != 0; }
+ 	static bool DoINeedToLoadCollision(void) { return (CurrentFlags_Player & ATTRZONE_DOINEEDCOLLISION) != 0; }
