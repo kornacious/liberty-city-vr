@@ -3,6 +3,7 @@
 #include "History.h"
 #include "Preferences.h"
 #include "Process.h"
+#include "Speedometer.h"
 #ifdef _WIN32
 // Windows' obsolete memory-model macros collide with RenderWare math locals.
 #undef near
@@ -35,6 +36,8 @@ static Vec seat, eye;
 static bool cameraInitialized = false, autoResetCamera = false, vsync = true, invertX = false,
             invertY = false;
 static int fpsLimit = 0;
+static bool speedometerAnalog = false, speedometerMetric = false;
+static float speedometerPreviewKmh = 77.f;
 static fs::path preferencesPath;
 static std::string imguiSettingsPath, preferencesError, savedPreferences, observedPreferences;
 static bool preferencesWritable = true;
@@ -102,6 +105,9 @@ static Preferences capturePreferences() {
     p.set("Modelset", set);
     p.set("EditLayer", layer);
     p.set("Element", element);
+    p.set("SpeedometerAnalog", speedometerAnalog);
+    p.set("SpeedometerMetric", speedometerMetric);
+    p.set("SpeedometerPreviewKmh", speedometerPreviewKmh);
     p.set("Gizmo", operation);
     p.set("CameraInitialized", cameraInitialized);
     p.set("CameraX", eye.x);
@@ -139,6 +145,9 @@ static void applyPreferences(const Preferences &p) {
     set = editor::canonicalModelSet((int)p.get("Modelset"));
     layer = (int)p.get("EditLayer");
     element = (int)p.get("Element");
+    speedometerAnalog = p.get("SpeedometerAnalog") != 0;
+    speedometerMetric = p.get("SpeedometerMetric") != 0;
+    speedometerPreviewKmh = p.get("SpeedometerPreviewKmh");
     operation = (int)p.get("Gizmo");
     cameraInitialized = (bool)p.get("CameraInitialized");
     eye.x = (float)p.get("CameraX");
@@ -744,6 +753,25 @@ static void renderPlacement() {
             panelText(p, width, height, n == 4 ? "RADIO   MUSIC   <<  >  >>" : text[n]);
         }
     }
+    if (showHud) {
+        auto p = namedPanel(dashboard(w, v), v, "Speedometer");
+        float scale = v["SpeedometerSize"] * .01f * v["DashSize"] * .01f;
+        static Speedometer::Mesh mesh;
+        // Placement preview uses a sample handling estimate, not live simulation.
+        Speedometer::build(mesh, speedometerAnalog, speedometerMetric, speedometerPreviewKmh,
+                           Speedometer::dialMaximum(180.f, speedometerMetric));
+        std::vector<rw::RWDEVICE::Im3DVertex> verts;
+        for (const auto &a : mesh.vertices) {
+            Vec point = p.position + (p.right*a.x + p.up*a.y - p.forward*a.z)*scale;
+            verts.push_back(vertex(point, rw::makeRGBA(a.color.r, a.color.g, a.color.b, 255)));
+        }
+        rw::SetRenderStatePtr(rw::TEXTURERASTER, nullptr);
+        rw::SetRenderState(rw::CULLMODE, rw::CULLNONE);
+        rw::SetRenderState(rw::ZWRITEENABLE, 1);
+        rw::im3d::Transform(verts.data(), (int)verts.size(), nullptr, rw::im3d::VERTEXXYZ | rw::im3d::VERTEXRGBA);
+        rw::im3d::RenderPrimitive(rw::PRIMTYPETRILIST);
+        rw::im3d::End();
+    }
     rw::SetRenderState(rw::ZWRITEENABLE, 1);
 }
 static std::string status(int s, const Vehicle &car) {
@@ -880,6 +908,7 @@ static void gizmo() {
     Basis b = element == 0   ? w
               : element == 1 ? d
               : element == 6 ? radio(seat, assets.vehicles[selected].boat(), v)
+              : element == 7 ? namedPanel(d, v, "Speedometer")
                              : panel(d, v, element - 2);
     float m[16] = {
         b.right.x,    b.right.y,    b.right.z,    0, b.up.x,       b.up.y,       b.up.z,       0,
@@ -911,6 +940,7 @@ static void gizmo() {
                     (100 / scale);
                 std::string prefix = element == 1   ? "Dash"
                                      : element == 6 ? "Radio"
+                                     : element == 7 ? "Speedometer"
                                                     : panelName(element - 2);
                 setValue(prefix + "X", p.x);
                 setValue(prefix + "Y", p.y);
@@ -930,6 +960,7 @@ static void gizmo() {
             std::string prefix = element == 0   ? "Wheel"
                                  : element == 1 ? "Dash"
                                  : element == 6 ? "Radio"
+                                     : element == 7 ? "Speedometer"
                                                 : panelName(element - 2);
             setValue(prefix + "Pitch", angles.x);
             setValue(prefix + "Yaw", angles.y);
@@ -1165,8 +1196,8 @@ static void ui() {
         ImGui::Checkbox("Preview effective game values", &effectivePreview);
         auto v = values();
         const char *elements[] = {"Virtual wheel", "Dashboard group",     "Map", "Status", "Clock",
-                                  "Ammo",          "Radio / music player"};
-        ImGui::Combo("Element", &element, elements, 7);
+                                  "Ammo",          "Radio / music player", "Speedometer"};
+        ImGui::Combo("Element", &element, elements, 8);
         const char *operations[] = {"Move gizmo", "Rotate gizmo"};
         ImGui::Combo("Gizmo", &operation, operations, 2);
         ImGui::PushItemWidth(160);
@@ -1198,7 +1229,14 @@ static void ui() {
             }
             transformFields("Dash", v, true);
         } else
-            transformFields(element == 6 ? "Radio" : panelName(element - 2), v, true);
+            transformFields(element == 6 ? "Radio" : element == 7 ? "Speedometer" : panelName(element - 2), v, true);
+        if (element == 7) {
+            ImGui::TextWrapped("Bottom-centre pivot. Both styles share this dashboard-relative placement.");
+            ImGui::Checkbox("Preview analog speedometer", &speedometerAnalog);
+            ImGui::Checkbox("Preview KM/h", &speedometerMetric);
+            ImGui::SliderFloat("Preview speed (km/h)", &speedometerPreviewKmh, 0, 360);
+            ImGui::TextWrapped("Preview controls are editor preferences; select style and units in the game Vehicles menu.");
+        }
         if (ImGui::Button("Create fixed dashboard at wheel")) {
             remember();
             auto w = wheel(seat, assets.vehicles[selected].boat(), v);

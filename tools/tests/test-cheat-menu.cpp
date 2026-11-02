@@ -6,6 +6,7 @@
 #include <vector>
 #include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
 #include "../../overlay/src/vr/QuestRadio.h"
+#include "../../overlay/src/vr/QuestSpeedometer.h"
 namespace QuestRadio { void CloseEditor() {} }
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
@@ -405,5 +406,18 @@ int main()
 	}
 	ReturnFromCurrentMenuPage();
 	Check(gVrMenuPage==VR_MENU_PAGE_WEAPONS,"calibration root Back returns to Weapons");
+    gVrMenuPage=VR_MENU_PAGE_SPEEDOMETER;
+    Check(CurrentMenuItemCount()==QuestSpeedometer::MenuRows,"speedometer page exposes both styles, units and placement");
+    for(int row=0;row<QuestSpeedometer::MenuRows;++row) {
+        *CurrentMenuSelection()=row;
+        Check(CurrentMenuValueRepeats()==(row>=QuestSpeedometer::FirstPlacementRow && row<=QuestSpeedometer::LastPlacementRow),
+              "only speedometer transform fields repeat while held");
+    }
+    for(int parent : {VR_MENU_PAGE_HUD,VR_MENU_PAGE_VEHICLE}) {
+        gVrSpeedometerReturnPage=parent;
+        gVrMenuPage=VR_MENU_PAGE_SPEEDOMETER;
+        ReturnFromCurrentMenuPage();
+        Check(gVrMenuPage==parent,"speedometer Back returns to the page that opened it");
+    }
 	std::printf("PASS: %d checks; cheat categories, alphabetical vehicle catalog, paginated spawning, persistent toggle, rendering, Back and navigation.\n", checks);
 }

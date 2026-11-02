@@ -1,7 +1,7 @@
 # Liberty City Vehicle Placement Editor
 
 Standalone, non-VR Windows/Linux editor for GTA III virtual wheels and the
-map, status, clock, ammo and radio/music dashboard panels. It reads your local game assets
+map, status, clock, ammo, radio/music and speedometer dashboard elements. It reads your local game assets
 directly; no game process, headset or converted/exported models are required.
 No game data is distributed with the tool or uploaded by it.
 
@@ -45,7 +45,7 @@ personal settings. Never put original game files in this workspace or a release.
    explicit clear-personal action identify masked templates; turn effective preview
    off to author a template independently (gizmos are disabled while masked). Field labels show
    their source; Reset removes the active layer's field and reveals the layer below.
-4. Select the wheel, dashboard group, an individual HUD panel or the radio/music player. Sliders, numeric
+4. Select the wheel, dashboard group, an individual HUD panel, radio/music player or speedometer. Sliders, numeric
    entry and move/rotation gizmos update the 3D preview. Size is uniform; wheel
    size is its radius. Units are centimetres, degrees and percent.
 5. Use **Driver view**, **Exterior**, mouse look/orbit/pan/dolly and WASD. The field
@@ -79,6 +79,29 @@ not run gameplay, controller interaction or a live minimap. Imported vehicle
 HUD settings from before `VehicleHudAnchorVersion=1` use the same migrated
 dashboard defaults as the game. Classic/Modern legacy wheel settings remain
 ambiguous shared fallback values until explicit entries are authored.
+
+The speedometer has one **bottom-centre pivot** shared by Digital pod and
+Classic analog. Its position, intrinsic pitch/yaw/roll and uniform size are saved
+per vehicle model and modelset, using `SpeedometerX/Y/Z`,
+`SpeedometerPitch/Yaw/Roll` and `SpeedometerSize`. Units are centimetres, degrees
+and percent. It follows the dashboard group, including group scale, but never
+physical steering rotation. Style changes keep the base of the instrument fixed;
+the analog face extends higher than the digital pod.
+
+Select **Speedometer** in Placement to preview either style, MPH or KM/h, and
+a sample speed. These preview controls are editor preferences, not placement
+fields. The editor uses the same procedural instrument geometry as the game,
+with a sample handling estimate of 180 km/h. Actual in-game analog ranges use
+each car's cruise-velocity handling estimate with 10% headroom and rounded
+ranges; the scale stays independent of current speed. The needle clamps at the
+end of its sweep, while the numeric reading can exceed the dial's maximum.
+
+In game, open **Vehicles → Speedometer** or **HUD → Vehicle speedometer**.
+Visibility, style and units persist in VR settings; placement edits save
+immediately into the current model/modelset's personal placement pack.
+Reset removes only those personal speedometer fields and reveals inherited
+template/bundled values. Both styles render in immersive car driving; editor
+placement in a boat does not enable an in-game boat speedometer.
 
 Modern reads the Xbox HD assets prepared under `modelsets/modern` in the selected
 game folder, with Classic fallback for missing files. Old Modern or Xbox editor

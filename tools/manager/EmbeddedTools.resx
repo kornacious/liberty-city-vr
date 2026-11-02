@@ -14083,11 +14083,11 @@ def limits(key):
         return 8, 40
     if key in ('WheelVisible', 'DashFollowWheel'):
         return 0, 1
-    if re.fullmatch(r'(Dash|Map|Status|Clock|Ammo|Radio)Size', key):
+    if re.fullmatch(r'(Dash|Map|Status|Clock|Ammo|Radio|Speedometer)Size', key):
         return 40, 250
-    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio)(X|Y|Z)', key):
+    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio|Speedometer)(X|Y|Z)', key):
         return -200, 200
-    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio)(Pitch|Yaw|Roll)', key):
+    if re.fullmatch(r'(Wheel|Dash|Map|Status|Clock|Ammo|Radio|Speedometer)(Pitch|Yaw|Roll)', key):
         return (-90, 90) if key.startswith('Wheel') else (-180, 180)
     if re.fullmatch(r'(Default)?Seat(Height|Distance)', key):
         return (-200, 250) if key.endswith('Height') else (-200, 200)
@@ -14403,12 +14403,14 @@ spec.loader.exec_module(b)
 
 class PackTests(unittest.TestCase):
     def test_validation_and_roundtrip(self):
-        entries = {'xbox:95': {'WheelX': 2, 'DashFollowWheel': 0, 'MapPitch': 33, 'RadioX': 35, 'RadioRoll': -180, 'RadioSize': 125}}
+        entries = {'xbox:95': {'WheelX': 2, 'DashFollowWheel': 0, 'MapPitch': 33, 'RadioX': 35, 'RadioRoll': -180, 'RadioSize': 125, 'SpeedometerX': 4, 'SpeedometerY': 8, 'SpeedometerZ': 22, 'SpeedometerPitch': -15, 'SpeedometerYaw': 20, 'SpeedometerRoll': -180, 'SpeedometerSize': 125}}
         self.assertEqual(b.parse(b.serialize(entries)), entries)
         for text in ('[Placement]\nVersion=2', '[Placement]\nVersion=1\n[xbox:95]\nWheelX=nan',
                      '[Placement]\nVersion=1\n[xbox:95]\nWheelVisible=.3',
                      '[Placement]\nVersion=1\n[xbox:95]\nWheelRadius=1',
                      '[Placement]\nVersion=1\n[xbox:95]\nUnknown=3',
+                     '[Placement]\nVersion=1\n[xbox:95]\nSpeedometerSize=0',
+                     '[Placement]\nVersion=1\n[xbox:95]\nSpeedometerPitch=181',
                      '[Placement]\nVersion=1\n[xbox:95]\nWheelX=1\nWheelX=2'):
             with self.assertRaises(b.BridgeError):
                 b.parse(text)

@@ -272,6 +272,7 @@ if(NOT LIBERTYVR_BRINGUP)
 		"${RE3_ROOT}/src/vr/VRHandModel.cpp"
 		"${RE3_ROOT}/src/vr/QuestDrivingVR.cpp"
 		"${RE3_ROOT}/src/vr/QuestRadio.cpp"
+		"${RE3_ROOT}/src/vr/QuestSpeedometer.cpp"
 		"${RE3_ROOT}/src/vr/QuestWeaponVR.cpp")
 	# Player full-body presentation IK is intentionally isolated from the
 	# weapon module. Keep it explicit so incremental Ninja graphs notice the

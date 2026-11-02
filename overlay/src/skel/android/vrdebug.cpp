@@ -14,6 +14,7 @@
 #include "platform_android.h"
 #include "OculusVR.h"
 #include "QuestRadio.h"
+#include "QuestSpeedometer.h"
 #include "QuestMusic.h"
 #include "QuestProfiler.h"
 #include "SimulationReplay.h"
@@ -561,6 +562,7 @@ enum {
 	VR_MENU_PAGE_VEHICLE,
 	VR_MENU_PAGE_VEHICLE_CALIBRATION,
 	VR_MENU_PAGE_RADIO,
+	VR_MENU_PAGE_SPEEDOMETER,
 	VR_MENU_PAGE_LOCOMOTION,
 	VR_MENU_PAGE_CONTROLS,
 	VR_MENU_PAGE_CALIBRATION,
@@ -570,6 +572,8 @@ enum {
 	VR_MENU_PAGE_ABOUT,
 	VR_MENU_PAGE_SIMULATION,
 };
+
+static int gVrSpeedometerReturnPage = VR_MENU_PAGE_VEHICLE;
 
 enum eVrLightingMenuItem {
 	VR_LIGHTING_MODE = 0,
@@ -659,6 +663,7 @@ enum eVrHudMenuItem {
 	VR_HUD_WRIST_IN_VEHICLE,
 	VR_HUD_WEAPON_PANEL,
 	VR_HUD_CLOCK,
+	VR_HUD_SPEEDOMETER,
 	VR_HUD_BACK,
 	VR_HUD_ITEM_COUNT
 };
@@ -802,6 +807,7 @@ enum eVrVehicleMenuItem {
 	VR_VEHICLE_BIKE_VISUAL_LEAN,
 	VR_VEHICLE_BIKE_VIEW_TILT,
 	VR_VEHICLE_BIKE_THROW_RIDER,
+	VR_VEHICLE_SPEEDOMETER,
 	VR_VEHICLE_CALIBRATION,
 	VR_VEHICLE_BACK,
 	VR_VEHICLE_ITEM_COUNT
@@ -2283,6 +2289,7 @@ static int *
 CurrentMenuSelection(void)
 {
 	static int simulationSelection = 0;
+	static int speedometerSelection = 0;
 	switch(gVrMenuPage){
 	case VR_MENU_PAGE_SIMULATION: return &simulationSelection;
 	case VR_MENU_PAGE_GRAPHICS: return &gVrGraphicsSelection;
@@ -2297,6 +2304,7 @@ CurrentMenuSelection(void)
 	case VR_MENU_PAGE_DEFORMATION: return &gVrDeformationSelection;
 	case VR_MENU_PAGE_MODEL_ASSETS: return &gVrModelAssetsSelection;
 	case VR_MENU_PAGE_RADIO: return &gVrRadioSelection;
+	case VR_MENU_PAGE_SPEEDOMETER: return &speedometerSelection;
 	case VR_MENU_PAGE_VEHICLE: return &gVrVehicleSelection;
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return &gVrVehicleCalibrationSelection;
@@ -2332,6 +2340,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_DEFORMATION: return VR_DEFORMATION_ITEM_COUNT;
 	case VR_MENU_PAGE_MODEL_ASSETS: return VR_MODEL_ASSETS_ITEM_COUNT;
 	case VR_MENU_PAGE_RADIO: return QuestRadio::MenuRows;
+	case VR_MENU_PAGE_SPEEDOMETER: return QuestSpeedometer::MenuRows;
 	case VR_MENU_PAGE_VEHICLE: return VR_VEHICLE_ITEM_COUNT;
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return Max(1,
@@ -2453,6 +2462,7 @@ IsMenuItemVisible(int page, int item)
 static bool
 CurrentMenuValueRepeats(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_SPEEDOMETER) return *CurrentMenuSelection() >= QuestSpeedometer::FirstPlacementRow && *CurrentMenuSelection() <= QuestSpeedometer::LastPlacementRow;
 	if(gVrMenuPage == VR_MENU_PAGE_RADIO) return gVrRadioSelection >= QuestRadio::FirstPlacementRow && gVrRadioSelection <= QuestRadio::LastPlacementRow;
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION)
 		return VrWeaponCalibrationMenu::ValueItem(
@@ -2499,6 +2509,7 @@ CurrentMenuValueRepeats(void)
 static void
 ReturnFromCurrentMenuPage(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_SPEEDOMETER) { gVrMenuPage = gVrSpeedometerReturnPage; return; }
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION){
 		if(gVrCalibrationGroup >= 0){
 			gVrCalibrationSelection = VrWeaponCalibrationMenu::AIM_OFFSET+gVrCalibrationGroup;
@@ -3398,6 +3409,10 @@ VrDebugUpdate(const PadInput &in)
 				gHudClock = !gHudClock;
 				SaveVrInteger("HudClock", gHudClock ? 1 : 0);
 				break;
+			case VR_HUD_SPEEDOMETER:
+				gVrSpeedometerReturnPage = VR_MENU_PAGE_HUD;
+				gVrMenuPage = VR_MENU_PAGE_SPEEDOMETER;
+				break;
 			case VR_HUD_BACK:
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 				break;
@@ -3545,6 +3560,9 @@ VrDebugUpdate(const PadInput &in)
 				gVrMenuPage = VR_MENU_PAGE_HUD;
 				break;
 			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_SPEEDOMETER && (positivePulse || decreasePulse)){
+			if(*CurrentMenuSelection() == QuestSpeedometer::BackRow) ReturnFromCurrentMenuPage();
+			else QuestSpeedometer::MenuAction(*CurrentMenuSelection(), (decreasePulse ? -1 : 1)*repeatMagnitude);
 		}else if(gVrMenuPage == VR_MENU_PAGE_RADIO && (positivePulse || decreasePulse)){
             if(gVrRadioSelection == QuestRadio::BackRow) { QuestRadio::CloseEditor(); gVrMenuPage = VR_MENU_PAGE_SETTINGS; }
             else QuestRadio::MenuAction(gVrRadioSelection, (decreasePulse ? -1 : 1)*repeatMagnitude);
@@ -3634,6 +3652,10 @@ VrDebugUpdate(const PadInput &in)
 				break;
 			case VR_VEHICLE_BIKE_THROW_RIDER:
 				OculusVR::ToggleQuestBikeRiderCanBeThrown();
+				break;
+			case VR_VEHICLE_SPEEDOMETER:
+				gVrSpeedometerReturnPage = VR_MENU_PAGE_VEHICLE;
+				gVrMenuPage = VR_MENU_PAGE_SPEEDOMETER;
 				break;
 			case VR_VEHICLE_CALIBRATION:
 				if(OculusVR::IsQuestVehicleCalibrationAvailable()){
@@ -4554,6 +4576,7 @@ DrawQuestHudPage(void)
 		"WEAPON ICON AND AMMO  < %s >", gHudWeaponPanel ? "ON" : "OFF");
 	snprintf(rows[VR_HUD_CLOCK], sizeof(rows[0]),
 		"CLOCK  < %s >", gHudClock ? "ON" : "OFF");
+	strcpy(rows[VR_HUD_SPEEDOMETER], "VEHICLE SPEEDOMETER  < OPEN >");
 	strcpy(rows[VR_HUD_BACK], "BACK TO SETTINGS");
 	int visibleRow = 0;
 	for(int item = 0; item < VR_HUD_ITEM_COUNT; item++){
@@ -4756,6 +4779,7 @@ DrawQuestVehiclePage(void)
 		"CONTROL CALIBRATION  < %s >",
 		OculusVR::IsQuestVehicleCalibrationAvailable() ?
 			"OPEN" : "ENTER VEHICLE");
+	strcpy(rows[VR_VEHICLE_SPEEDOMETER], "SPEEDOMETER  < OPEN >");
 	strcpy(rows[VR_VEHICLE_BACK], "BACK TO SETTINGS");
 	int visibleRow = 0;
 	for(int item = 0; item < VR_VEHICLE_ITEM_COUNT; item++){
@@ -4773,6 +4797,18 @@ DrawQuestVehiclePage(void)
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+}
+
+static void
+DrawQuestSpeedometerPage(void)
+{
+	BeginFullVrMenuPage("VEHICLE SPEEDOMETER");
+	for(int row=0; row<QuestSpeedometer::MenuRows; ++row) {
+		char text[112]; QuestSpeedometer::MenuRow(row,text,sizeof(text));
+		DrawFullVrMenuRow(text,158+row*36,2,row==*CurrentMenuSelection(),true);
+	}
+	DrawVrMenuText(QuestSpeedometer::Status(),VR_MENU_WIDTH/2,640,2,240,178,48);
+	DrawVrMenuText("PLACEMENT SAVES PER MODEL / MODELSET - BOTH STYLES SHARE IT",VR_MENU_WIDTH/2,678,2,210,190,145);
 }
 
 static void
@@ -5326,6 +5362,9 @@ VrDebugPixels(int *width, int *height)
 			break;
 		case VR_MENU_PAGE_MODEL_ASSETS:
 			DrawQuestModelAssetsPage();
+			break;
+		case VR_MENU_PAGE_SPEEDOMETER:
+			DrawQuestSpeedometerPage();
 			break;
 		case VR_MENU_PAGE_RADIO:
 			DrawQuestRadioPage();

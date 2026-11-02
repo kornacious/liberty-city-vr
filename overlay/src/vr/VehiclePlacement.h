@@ -120,9 +120,9 @@ inline bool limits(const std::string &key, float &lo, float &hi) {
         lo = 40;
         hi = 250;
         return key == "DashSize" || key == "MapSize" || key == "StatusSize" || key == "ClockSize" ||
-               key == "AmmoSize" || key == "RadioSize";
+               key == "AmmoSize" || key == "RadioSize" || key == "SpeedometerSize";
     }
-    static const char *prefix[] = {"Wheel", "Dash", "Map", "Status", "Clock", "Ammo", "Radio"};
+    static const char *prefix[] = {"Wheel", "Dash", "Map", "Status", "Clock", "Ammo", "Radio", "Speedometer"};
     for (auto p : prefix) {
         std::string k = p;
         if (key == k + "Pitch" || key == k + "Yaw" || key == k + "Roll") {
@@ -491,6 +491,12 @@ inline Values legacyDefaults(int set, int model, bool boat) {
     v["RadioZ"] = 30;
     v["RadioPitch"] = v["RadioYaw"] = v["RadioRoll"] = 0;
     v["RadioSize"] = 100;
+    // One bottom-centre pivot for both speedometer styles, in dashboard space.
+    v["SpeedometerX"] = 0;
+    v["SpeedometerY"] = 8;
+    v["SpeedometerZ"] = 22;
+    v["SpeedometerPitch"] = v["SpeedometerYaw"] = v["SpeedometerRoll"] = 0;
+    v["SpeedometerSize"] = 100;
     return v;
 }
 inline Basis radio(Vec seat, bool boat, Vec offset, Vec angles) {
@@ -567,12 +573,14 @@ inline Basis dashboard(const Basis &wheel, const Values &v) {
     spec.angles = Vec(v.at("DashPitch"), v.at("DashYaw"), v.at("DashRoll"));
     return dashboard(wheel, spec);
 }
-inline Basis panel(const Basis &anchor, const Values &v, int n) {
+inline Basis namedPanel(const Basis &anchor, const Values &v, const std::string &p) {
     Basis b = anchor;
-    std::string p = panelName(n);
     b.position = anchor.point(Vec(v.at(p + "X"), v.at(p + "Y"), v.at(p + "Z")) *
                               (.01f * v.at("DashSize") * .01f));
     b.turn(v.at(p + "Pitch"), v.at(p + "Yaw"), v.at(p + "Roll"));
     return b;
+}
+inline Basis panel(const Basis &anchor, const Values &v, int n) {
+    return namedPanel(anchor, v, panelName(n));
 }
 } // namespace VehiclePlacement

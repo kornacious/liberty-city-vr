@@ -208,7 +208,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         var ninja = Path.Combine(bin, "ninja" + (OperatingSystem.IsWindows() ? ".exe" : ""));
         if (File.Exists(ninja)) arguments.Add("-DCMAKE_MAKE_PROGRAM=" + ninja);
         await runner.Run(cmake, arguments, token: token);
-        await runner.Run(cmake, ["--build", build, "--config", "Release", "--target", "liberty-vehicle-editor", "placement-tests", "placement-runtime-tests", "placement-process-tests", "--parallel"], token: token);
+        await runner.Run(cmake, ["--build", build, "--config", "Release", "--target", "liberty-vehicle-editor", "placement-tests", "placement-runtime-tests", "placement-process-tests", "speedometer-tests", "--parallel"], token: token);
         await runner.Run(ctest, ["--test-dir", build, "-C", "Release", "--output-on-failure"], token: token);
         await runner.Run(cmake, ["--install", build, "--config", "Release", "--prefix", output], token: token);
         if (options.PackageEditor) await runner.Run(cpack, ["-G", "ZIP", "-C", "Release"], build, token: token);
