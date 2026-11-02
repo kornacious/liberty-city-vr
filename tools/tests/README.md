@@ -16,6 +16,14 @@ bit set, so that bit must not exclude the bathroom thread. An explicit
 regression covers that saved-state combination through repeated dispatches.
 Desktop and actual mission-flagged scripts retain their behavior.
 The test reads no game data; headset traversal still requires in-game QA.
+It also checks both Ammu-Nation thread names, mission isolation and exact name
+matching: only fixed camera setup/takeover is bypassed while the shop scripts
+continue to run. Shop entry, turning, purchases and exit need headset QA.
+`test-shop-camera-dispatch.cpp` executes the two production `Script2.cpp`
+camera cases extracted into `shop-camera-dispatch.inc`. Compile with that
+include directory, with and without `__ANDROID__`. It verifies both camera
+operations are suppressed only for the shops on Quest, and all opcode
+parameters are still consumed so the script continues at the correct position.
 
 `test-stair-camera.cpp` compiles with the assembled `src/core` include path,
 with and without `__ANDROID__`. It exercises the production zone queries over

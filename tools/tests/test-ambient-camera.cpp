@@ -8,6 +8,20 @@ int main()
     const char names[][8] = {"camera", "noname", "intro", "safehou", "gates",
         "love3", "cam", "camera1", {'c','a','m','e','r','a','x','x'}};
     unsigned checks=0;
+    const char shops[][8]={"i_ammu", "c_ammu", "camera", "love3", "noname",
+        "i_ammu1", "c_ammu1", {'i','_','a','m','m','u','x','x'}};
+    for (unsigned i=0; i<sizeof(shops)/sizeof(shops[0]); ++i)
+        for (int flag=0; flag<2; ++flag) {
+            bool expected=false;
+#ifdef __ANDROID__
+            expected=i<2 && !flag;
+#endif
+            Check(QuestKeepShopPlayerCamera(shops[i], flag)==expected);
+            // The shop scripts must continue running to maintain the clerk
+            // and purchases, even though their fixed camera is suppressed.
+            Check(!QuestSkipAmbientCameraScript(shops[i], true, flag) || i==2);
+            ++checks;
+        }
     for (const auto &name : names)
         for (int mission=0; mission<2; ++mission)
             for (int flag=0; flag<2; ++flag) {
