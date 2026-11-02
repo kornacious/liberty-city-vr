@@ -14568,4 +14568,30 @@ if __name__ == '__main__':
     unittest.main()
 </value>
   </data>
+  <data name="tools/tests/test-garage-exit.ps1" xml:space="preserve">
+    <value>param(
+ [Parameter(Mandatory=$true)][string]$StageRoot,
+ [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) (&apos;garage-exit-&apos; + [Guid]::NewGuid().ToString(&apos;N&apos;)))
+)
+$ErrorActionPreference=&apos;Stop&apos;
+$source=[IO.File]::ReadAllText((Join-Path $StageRoot &apos;src/control/Garages.cpp&apos;))
+$function=[regex]::Match($source,&apos;(?ms)^bool CGarage::IsEntityEntirelyOutside\([^\n]*\)\r?\n\{.*?^\}&apos;).Value
+if($function -notmatch &apos;VrGetViewBasis&apos;){throw &apos;Missing production headset clearance check.&apos;}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;garage-exit-helper.inc&apos;),$function)
+$camera=[regex]::Match($source,&apos;(?ms)^void CGarage::Update\(\)\r?\n\{(.*?)(?=\tif \(m_bDeactivated)&apos;).Groups[1].Value
+if($camera -notmatch &apos;#ifndef __ANDROID__&apos;){throw &apos;Missing Quest garage camera bypass.&apos;}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;garage-camera-helper.inc&apos;),(&apos;void CGarage::UpdateCamera() {&apos;+&quot;`n&quot;+$camera+&quot;`n}&quot;))
+$mission=[regex]::Match($source,&apos;(?s)\tcase GARAGE_MISSION:\r?\n\t\tswitch.*?(?=\tcase GARAGE_COLLECTSPECIFICCARS:)&apos;).Value
+$closing=[regex]::Match($mission,&apos;(?s)case GS_CLOSING:\s*(.*?)(?=\t\t\tm_fDoorPos)&apos;).Groups[1].Value
+if($closing -notmatch &apos;SetEnablePlayerControls&apos;){throw &apos;Missing delivery closure interlock.&apos;}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;garage-closing-helper.inc&apos;),(&apos;void CGarage::UpdateClosing() { do {&apos;+&quot;`n&quot;+$closing+&quot;`n advancedDoor=true; } while(false); }&quot;))
+&amp; (Join-Path $PSScriptRoot &apos;test-ragdoll.ps1&apos;) -KitRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) -OutDir $OutDir -Sources @(&apos;test-garage-exit.cpp&apos;)
+if($LASTEXITCODE -ne 0){throw &apos;Garage exit regression failed.&apos;}
+$wrapper=Join-Path $PSScriptRoot &apos;test-garage-exit-desktop.cpp&apos;
+try {
+ [IO.File]::WriteAllText($wrapper,(&apos;#define GARAGE_DESKTOP 1&apos;+&quot;`n&quot;+&apos;#include &quot;test-garage-exit.cpp&quot;&apos;))
+ &amp; (Join-Path $PSScriptRoot &apos;test-ragdoll.ps1&apos;) -KitRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) -OutDir ($OutDir+&apos;-desktop&apos;) -Sources @(&apos;test-garage-exit-desktop.cpp&apos;)
+ if($LASTEXITCODE -ne 0){throw &apos;Desktop garage exit regression failed.&apos;}
+} finally { Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue }</value>
+  </data>
 </root>

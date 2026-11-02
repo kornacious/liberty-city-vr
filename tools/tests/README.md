@@ -6,6 +6,18 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-garage-exit.ps1 -StageRoot <assembled-tree>` extracts and compiles the
+production garage outside test in Android and desktop configurations. It checks
+that a room-scale headset still inside the garage blocks delivery even when
+Claude's collision body is outside, all four exit directions, caller clearance
+margins, tracking fallback, other entities and collision sphere overlap. It reads
+no game data. It also executes the production camera registration block and
+mission closure interlock: Quest garages retain the player camera, side/back
+rectangle exits cannot accept a delivery, both body and eye must clear an actual
+doorway, and returning inside during closure reopens the door and restores
+controls. Desktop camera/closing behavior remains covered. Replay Kenji's Grand
+Theft Auto deliveries on the headset to verify door behavior in the mission.
+
 `python tools/tests/test-cutscene-cameras.py` compiles the production camera
 lookup and render selection with synthetic original and skinned actors. It
 checks named head-frame detection, actor/director switching, unavailable heads,
