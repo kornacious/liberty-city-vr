@@ -11,7 +11,10 @@ the production bathroom script policy, normalized/new/restored thread names,
 all mission flags, unrelated scripts and bounded non-terminated names. The
 Quest dispatcher yields before reading an opcode from the ambient `camera`
 thread; this suppresses its fixed views, fades, control freezes and staged
-repositioning together. Desktop and mission scripts retain their behavior.
+repositioning together. Retail saved ambient threads have the mission-launch
+bit set, so that bit must not exclude the bathroom thread. An explicit
+regression covers that saved-state combination through repeated dispatches.
+Desktop and actual mission-flagged scripts retain their behavior.
 The test reads no game data; headset traversal still requires in-game QA.
 
 `test-stair-camera.cpp` compiles with the assembled `src/core` include path,

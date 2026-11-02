@@ -13,21 +13,30 @@ int main()
             for (int flag=0; flag<2; ++flag) {
                 bool expected=false;
 #ifdef __ANDROID__
-                expected=!mission && !flag && &name==&names[0];
+                expected=!flag && &name==&names[0];
 #endif
                 Check(QuestSkipAmbientCameraScript(name, mission, flag)==expected);
                 ++checks;
             }
-    // The first command assigns the normalized name. The next dispatch must
-    // yield immediately, and a thread restored at any hallway state must yield.
+    // Retail saved camera threads have m_bIsMissionScript=true and
+    // m_bMissionFlag=false. The former is also used by ambient launchers.
+    // Keep this explicit regression independent of the combination matrix.
+#ifdef __ANDROID__
+    Check(QuestSkipAmbientCameraScript("camera", true, false));
+    Check(!QuestSkipAmbientCameraScript("camera", true, true));
+#else
+    Check(!QuestSkipAmbientCameraScript("camera", true, false));
+#endif
+    // A newly named or restored mission-launched ambient thread must yield at
+    // every dispatch, not just the first command following SCRIPT_NAME.
     char current[8]="noname";
     Check(!QuestSkipAmbientCameraScript(current, false, false));
     std::memcpy(current, "camera\0", 8);
     for (int frame=0; frame<100; ++frame) {
 #ifdef __ANDROID__
-        Check(QuestSkipAmbientCameraScript(current, false, false));
+        Check(QuestSkipAmbientCameraScript(current, true, false));
 #else
-        Check(!QuestSkipAmbientCameraScript(current, false, false));
+        Check(!QuestSkipAmbientCameraScript(current, true, false));
 #endif
         ++checks;
     }

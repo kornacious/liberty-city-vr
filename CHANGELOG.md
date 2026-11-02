@@ -11,7 +11,9 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 - Bypass the ambient Belleville Park bathroom camera script on Quest, removing
   its fixed hallway views, fades, control freezes and staged repositioning so
-  the player can walk through and turn normally in VR.
+  the player can walk through and turn normally in VR. Include retail saved
+  threads marked as mission-launched; this launch bit does not mean the
+  ambient camera belongs to an active story mission.
 
 - Keep Quest's normal player camera in stair camera zones, including safehouse
   stairs, so their desktop fixed camera cannot lock the player's turning
