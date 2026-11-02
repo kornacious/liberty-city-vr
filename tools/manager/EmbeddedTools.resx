@@ -14599,4 +14599,27 @@ try {
  if($LASTEXITCODE -ne 0){throw &apos;Desktop garage exit regression failed.&apos;}
 } finally { Remove-Item -LiteralPath $wrapper -ErrorAction SilentlyContinue }</value>
   </data>
+  <data name="tools/tests/test-ped-vehicle-damage.ps1" xml:space="preserve">
+    <value>param(
+    [Parameter(Mandatory=$true)][string]$StageRoot,
+    [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) (&apos;lcvr-ped-damage-&apos; + [Guid]::NewGuid().ToString(&apos;N&apos;)))
+)
+$ErrorActionPreference=&apos;Stop&apos;
+# Compile the actual patched damage-record function with small entity adapters.
+$physical=[IO.File]::ReadAllText((Join-Path $StageRoot &apos;src/entities/Physical.cpp&apos;))
+$m=[regex]::Match($physical,&apos;(?m)^void\s+CPhysical::SetDamagedPieceRecord\([^)]*\)\s*\{&apos;)
+if(-not $m.Success){throw &apos;Missing production damage-record function.&apos;}
+$end=$m.Index+$m.Length;$depth=1
+while($depth -gt 0 -and $end -lt $physical.Length){
+    if($physical[$end]-eq&apos;{&apos;){$depth++}elseif($physical[$end]-eq&apos;}&apos;){$depth--};$end++
+}
+if($depth-ne0){throw &apos;Unterminated production function.&apos;}
+$function=$physical.Substring($m.Index,$end-$m.Index)
+foreach($mode in @(&apos;fixed&apos;,&apos;legacy&apos;)){
+    $prefix=if($mode-eq&apos;fixed&apos;){&quot;#define FIX_BUGS`n&quot;}else{&apos;&apos;}
+    [IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;ped-vehicle-damage-production.inc&apos;),$prefix+$function,[Text.UTF8Encoding]::new($false))
+    &amp; (Join-Path $PSScriptRoot &apos;test-ragdoll.ps1&apos;) -KitRoot $StageRoot -OutDir ($OutDir+&apos;-&apos;+$mode) -Sources @(&apos;test-ped-vehicle-damage.cpp&apos;)
+    if($LASTEXITCODE-ne0){throw &quot;Pedestrian vehicle damage fixture failed: $mode&quot;}
+}</value>
+  </data>
 </root>
