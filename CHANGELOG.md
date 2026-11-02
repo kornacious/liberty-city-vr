@@ -10,8 +10,8 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 ### GTA III integration, controls and reliability
 
 - Keep the normal Quest player camera inside both Ammu-Nation shops so their
-  fixed overview cannot lock VR turning. Keep shopkeeper and purchase logic
-  and the existing entry/exit sequence running.
+  fixed overview cannot lock VR turning, and remove their entry/exit fades.
+  Keep shopkeeper, purchase and other entry/exit logic running.
 
 - Bypass the ambient Belleville Park bathroom camera script on Quest, removing
   its fixed hallway views, fades, control freezes and staged repositioning so

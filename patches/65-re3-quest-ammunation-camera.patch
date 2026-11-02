@@ -27,3 +27,13 @@ diff --git a/src/control/Script2.cpp b/src/control/Script2.cpp
  			CVector(*(float*)&ScriptParams[0], *(float*)&ScriptParams[1], *(float*)&ScriptParams[2]),
  			CVector(*(float*)&ScriptParams[3], *(float*)&ScriptParams[4], *(float*)&ScriptParams[5]));
  		return 0;
+@@ -395,7 +399,8 @@
+ 	case COMMAND_DO_FADE:
+ 		CollectParameters(&m_nIp, 2);
+-		TheCamera.Fade(ScriptParams[0] / 1000.0f, ScriptParams[1]);
++		if (!QuestKeepShopPlayerCamera(m_abScriptName, m_bMissionFlag))
++			TheCamera.Fade(ScriptParams[0] / 1000.0f, ScriptParams[1]);
+ 		return 0;
+ 	case COMMAND_GET_FADING_STATUS:
+ 		UpdateCompareFlag(TheCamera.GetFading());
+ 		return 0;

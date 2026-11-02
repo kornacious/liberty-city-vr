@@ -20,7 +20,7 @@ inline bool QuestSkipAmbientCameraScript(const char *name, bool missionScript,
 }
 
 // Ammu-Nation threads also create the shopkeeper and maintain shop state.
-// Run those threads normally, but keep their fixed overview out of VR.
+// Run those threads normally, but keep their fixed overview and fades out of VR.
 inline bool QuestKeepShopPlayerCamera(const char *name, bool missionFlag)
 {
 #ifdef __ANDROID__
