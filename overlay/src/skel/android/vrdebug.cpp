@@ -5029,7 +5029,7 @@ DrawQuestHolsterPage(void)
 				OculusVR::GetQuestHolsterPointName(item),
 				'<', slotName, '>');
 		}else if(item == points)
-			snprintf(row, sizeof(row), "WEAPON GRAB DISTANCE  < %s >",
+			snprintf(row, sizeof(row), "FRONT GRAB DISTANCE  < %s >",
 				OculusVR::GetQuestHolsterGrabDistanceName());
 		else
 			strcpy(row, "BACK TO SETTINGS");

@@ -8850,6 +8850,9 @@ foreach ($name in @('GetWeaponTypeForSlot', 'GetVrHolsterSlotName', 'GetVrWeapon
     $parts += $match.Value
 }
 foreach ($pattern in @(
+    '(?m)^static const float kHolsterGrabRadii[^\r\n]+',
+    '(?m)^static int gHolsterGrabDistance[^\r\n]+',
+    '(?ms)^static bool\r?\nIsHolsterWithinGrabDistance\(.*?^\}',
     '(?ms)^static bool\r?\nIsPhysicalGun\(.*?^\}',
     '(?ms)^static bool\r?\nIsPhysicalMelee\(.*?^\}',
     '(?ms)^static bool\r?\nIsPhysicalThrowable\(.*?^\}',

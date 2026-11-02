@@ -47,6 +47,21 @@ void Check(bool ok, const char *message) {
     if (!ok) { std::fprintf(stderr,"FAIL: %s\n",message); std::exit(1); }
 }
 int main() {
+    const float frontRadii[] = {0.27f, 0.20f, 0.14f};
+    for(int setting=0; setting<3; ++setting) {
+        gHolsterGrabDistance=setting;
+        for(int point=0; point<HOLSTER_POINT_COUNT; ++point) {
+            const bool back=point==HOLSTER_BACK_LEFT || point==HOLSTER_BACK_RIGHT;
+            const float radius=back ? 0.27f : frontRadii[setting];
+            Check(IsHolsterWithinGrabDistance(point,radius),"grab accepts each holster boundary");
+            Check(!IsHolsterWithinGrabDistance(point,radius+0.001f),"grab rejects outside each holster boundary");
+        }
+        Check(IsHolsterWithinGrabDistance(HOLSTER_BACK_LEFT,0.26f),"left shoulder retains far reach");
+        Check(IsHolsterWithinGrabDistance(HOLSTER_BACK_RIGHT,0.26f),"right shoulder retains far reach");
+    }
+    Check(!IsHolsterWithinGrabDistance(-1,0.0f),"unassigned holster cannot be grabbed");
+    Check(!IsHolsterWithinGrabDistance(HOLSTER_POINT_COUNT,0.0f),"invalid holster cannot be grabbed");
+    gHolsterGrabDistance=0;
     for(int slot : {-1,(int)WEAPONSLOT_PROJECTILE,(int)WEAPONSLOT_GRENADE,(int)WEAPONSLOT_HANDGUN}) {
         gHolsterPointSlot[4]=slot;
         NormalizeLoadedCentre();

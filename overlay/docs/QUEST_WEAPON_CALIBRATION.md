@@ -32,10 +32,11 @@ generic weapon profiles and checkpoint namespace. Modern is separate.
 The laser remains a per-weapon setting and is not included in a hand checkpoint.
 The Weapons page laser switch disables all weapon lasers, including saved ON
 overrides. Enable it to use the individual weapon choices again.
-Holster Loadout saves **Weapon Grab Distance**: FAR (27 cm, the original reach),
-MEDIUM (20 cm), CLOSE (14 cm), VERY CLOSE (9 cm), and PRECISE (5 cm).
-Distance is measured from the controller grip to the holster point. PRECISE
-requires the hand to overlap that space, with a small contact tolerance.
+Holster Loadout saves **Front Grab Distance**: FAR (27 cm, the original reach),
+MEDIUM (20 cm), and CLOSE (14 cm). This applies to waist and chest holsters.
+Shoulder/back holsters always use FAR (27 cm), regardless of this setting.
+Distance is measured from the controller grip to the holster point. Previously
+saved VERY CLOSE or PRECISE settings load as CLOSE.
 This controls drawing from holsters; returning and catching weapons retain
 their existing distances.
 

@@ -351,8 +351,8 @@ static WeaponCalibration
 static bool gSettingsLoaded;
 static bool gHandsEnabled = true;
 static bool gHolsterHighlights = true;
-// Metres from the holster anchor; Precise allows hand-sized contact slack.
-static const float kHolsterGrabRadii[] = { 0.27f, 0.20f, 0.14f, 0.09f, 0.05f };
+// Metres from front holster anchors. Back/shoulder points keep the full reach.
+static const float kHolsterGrabRadii[] = { 0.27f, 0.20f, 0.14f };
 static int gHolsterGrabDistance = 0;
 static bool gWeaponLaser;
 struct WeaponLaserOverride {
@@ -1426,6 +1426,14 @@ BuildCanonicalSupportFrame(const CVector &forwardCandidate,
 }
 
 static bool
+IsHolsterWithinGrabDistance(int point, float distance)
+{
+	const bool behind = point == HOLSTER_BACK_LEFT || point == HOLSTER_BACK_RIGHT;
+	return point >= 0 && point < HOLSTER_POINT_COUNT &&
+		distance <= kHolsterGrabRadii[behind ? 0 : gHolsterGrabDistance];
+}
+
+static bool
 BuildHolsterMatrix(int slot, CMatrix *matrix, int copy = -1)
 {
 	if(!matrix || slot <= WEAPONSLOT_UNARMED ||
@@ -2147,6 +2155,7 @@ UpdateHolsterInput(uint32 blockedHands)
 					CMatrix holster;
 					if(!BuildHolsterMatrix(slot, &holster, copy)) continue;
 					const float distance = (gGripMatrix[hand].GetPosition()-holster.GetPosition()).Magnitude();
+					if(!IsHolsterWithinGrabDistance(FindHolsterPoint(slot, copy), distance)) continue;
 					if(distance < closestDistance){
 						closestDistance = distance;
 						closestSlot = slot;
@@ -2154,7 +2163,7 @@ UpdateHolsterInput(uint32 blockedHands)
 					}
 				}
 			}
-			if(closestSlot >= 0 && closestDistance <= kHolsterGrabRadii[gHolsterGrabDistance]){
+			if(closestSlot >= 0){
 				GiveWeaponToHand(hand, closestSlot, closestCopy);
 				gGripLatched[hand] = true;
 			}
@@ -4250,7 +4259,7 @@ const char *
 GetQuestHolsterGrabDistanceName()
 {
 	LoadSettings();
-	static const char *names[] = { "FAR", "MEDIUM", "CLOSE", "VERY CLOSE", "PRECISE" };
+	static const char *names[] = { "FAR", "MEDIUM", "CLOSE" };
 	return names[gHolsterGrabDistance];
 }
 
