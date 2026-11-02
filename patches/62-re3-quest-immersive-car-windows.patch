@@ -1,0 +1,48 @@
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -30,6 +30,9 @@
+ #include "custompipes.h"
+ #include "Debug.h"
+ #include "GameRenderCommand.h"
++#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#include "OculusVR.h"
++#endif
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "CarCtrl.h"
+ #endif
+@@ -379,6 +382,10 @@
+ 		BACKFACE_CULLING_OFF;
+ 	}
+ 
++#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++	const bool32 savedHideWindows = rw::vulkan::setHideVehicleWindows(
++		e->IsVehicle() && OculusVR::ShouldHideQuestCarWindows((CVehicle*)e));
++#endif
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ 	const uint64 bodySubmitStartedNs =
+ 		profileRenderEntity && e->IsVehicle() ?
+@@ -428,6 +435,10 @@
+ 		androidgame::QuestVehicleVisualBudgetEndVehicle();
+ #endif
+ 	}
++
++#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++	rw::vulkan::setHideVehicleWindows(savedHideWindows);
++#endif
+ 
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ 	const uint64 vehicleLightingRemoveStartedNs =
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -339,6 +339,11 @@
+ 		// atomics and makes the complete car appear translucent.
+ 		const bool isWindscreen =
+ 			(GetAtomicId(node->item.atomic) & ATOMIC_FLAG_WINDSCREEN) != 0;
++		// Windscreen atomics can use an opaque material for the glass.
++#ifdef RW_VULKAN
++		if(isWindscreen && rw::vulkan::getHideVehicleWindows())
++			continue;
++#endif
+ 		if(isWindscreen)
+ 			RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, FALSE);
+ #endif

@@ -514,6 +514,7 @@ static bool gVrSpawnInsideVehicle;
 static int gVrCheatCategory = -1;
 static int gVrCheatCategorySelection;
 static int gVrVehicleSelection;
+static int gVrVehicleSubpage;
 static int gVrRadioSelection;
 static int gVrVehicleCalibrationSelection;
 static int gVrVehicleCalibrationHand;
@@ -797,6 +798,7 @@ enum eVrVehicleMenuItem {
 	VR_VEHICLE_GLOBAL_SEAT_FORWARD,
 	VR_VEHICLE_MODEL_SEAT_HEIGHT,
 	VR_VEHICLE_MODEL_SEAT_FORWARD,
+	VR_VEHICLE_WINDOWS_VISIBLE,
 	VR_VEHICLE_MOTION_HAND,
 	VR_VEHICLE_WHEEL_VISIBLE,
 	VR_VEHICLE_MODEL_WHEEL_VISIBLE,
@@ -809,6 +811,7 @@ enum eVrVehicleMenuItem {
 	VR_VEHICLE_BIKE_THROW_RIDER,
 	VR_VEHICLE_SPEEDOMETER,
 	VR_VEHICLE_CALIBRATION,
+	VR_VEHICLE_PAGE,
 	VR_VEHICLE_BACK,
 	VR_VEHICLE_ITEM_COUNT
 };
@@ -2418,6 +2421,11 @@ IsMenuItemVisible(int page, int item)
 		return false;
 	}
 	if(page == VR_MENU_PAGE_VEHICLE){
+		const bool controlItem = (item >= VR_VEHICLE_MOTION_HAND &&
+			item <= VR_VEHICLE_BIKE_THROW_RIDER) || item == VR_VEHICLE_CALIBRATION;
+		if(item != VR_VEHICLE_KIND && item != VR_VEHICLE_PAGE &&
+		   item != VR_VEHICLE_BACK && controlItem != (gVrVehicleSubpage == 1))
+			return false;
 		const int kind = OculusVR::GetQuestVehicleKind();
 		const bool thirdPerson = OculusVR::IsQuestVehicleKindThirdPerson();
 		const bool driven =
@@ -2427,6 +2435,9 @@ IsMenuItemVisible(int page, int item)
 		const bool carDriven = driven && wheelKind;
 		const bool bikeDriven = driven && !wheelKind;
 		switch(item){
+		case VR_VEHICLE_WINDOWS_VISIBLE:
+			return kind == 0 && !thirdPerson &&
+				!strcmp(OculusVR::GetQuestVehicleKindDrivingTypeName(), "IMMERSIVE");
 		case VR_VEHICLE_FORWARD_FIRE:
 			return !driven && kind != 2;
 		case VR_VEHICLE_WHEEL_VISIBLE:
@@ -2546,6 +2557,11 @@ ReturnFromCurrentMenuPage(void)
 		}
 		gVrCheatStatusFrames = 0;
 		ResetMenuNavigationRepeat();
+		return;
+	}
+	if(gVrMenuPage == VR_MENU_PAGE_VEHICLE && gVrVehicleSubpage == 1){
+		gVrVehicleSubpage = 0;
+		gVrVehicleSelection = VR_VEHICLE_PAGE;
 		return;
 	}
 	if(gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION){
@@ -2917,6 +2933,7 @@ VrDebugUpdate(const PadInput &in)
 			}else if(gVrMenuSelection == VR_MAIN_VEHICLE_SETTINGS){
 				gVrMenuPage = VR_MENU_PAGE_VEHICLE;
 				gVrVehicleSelection = 0;
+				gVrVehicleSubpage = 0;
 			}else if(gVrMenuSelection == VR_MAIN_LOCOMOTION_SETTINGS){
 				gVrMenuPage = VR_MENU_PAGE_LOCOMOTION;
 				gVrLocomotionSelection = 0;
@@ -3572,6 +3589,8 @@ VrDebugUpdate(const PadInput &in)
 			// Forward button fire also applies to the third-person fallback.
 			const bool cockpitLocked =
 				OculusVR::IsQuestVehicleThirdPerson() &&
+				gVrVehicleSelection != VR_VEHICLE_KIND &&
+				gVrVehicleSelection != VR_VEHICLE_PAGE &&
 				gVrVehicleSelection != VR_VEHICLE_THIRD_PERSON &&
 				gVrVehicleSelection != VR_VEHICLE_SITTING_BODY_IK &&
 				gVrVehicleSelection != VR_VEHICLE_FORWARD_FIRE &&
@@ -3623,6 +3642,12 @@ VrDebugUpdate(const PadInput &in)
 				OculusVR::AdjustQuestVehicleModelSeatDistanceCm(
 					direction*repeatMagnitude);
 				break;
+			case VR_VEHICLE_WINDOWS_VISIBLE:
+				OculusVR::ToggleQuestImmersiveCarWindowsVisible();
+				break;
+			case VR_VEHICLE_PAGE:
+				gVrVehicleSubpage = 1-gVrVehicleSubpage;
+				break;
 			case VR_VEHICLE_MOTION_HAND:
 				OculusVR::ToggleQuestMotionSteeringHand();
 				break;
@@ -3668,7 +3693,7 @@ VrDebugUpdate(const PadInput &in)
 				}
 				break;
 			case VR_VEHICLE_BACK:
-				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+				ReturnFromCurrentMenuPage();
 				break;
 			}
 		}else if(gVrMenuPage ==
@@ -4679,7 +4704,7 @@ static void
 DrawQuestVehiclePage(void)
 {
 	LoadPersistentBodyIKSettings();
-	BeginFullVrMenuPage("VEHICLE SETTINGS",
+	BeginFullVrMenuPage(gVrVehicleSubpage ? "VEHICLES / CONTROLS (2/2)" : "VEHICLES / VIEW (1/2)",
 		"DRIVING CONTROLS AND PER-VEHICLE CALIBRATION");
 	char rows[VR_VEHICLE_ITEM_COUNT][112];
 	// Third person is a per-kind choice now, so the page reads the one it is
@@ -4744,6 +4769,11 @@ DrawQuestVehiclePage(void)
 		strcpy(rows[VR_VEHICLE_MODEL_SEAT_HEIGHT], "MODEL HEIGHT  < ENTER VEHICLE >");
 		strcpy(rows[VR_VEHICLE_MODEL_SEAT_FORWARD], "MODEL FORWARD  < ENTER VEHICLE >");
 	}
+	snprintf(rows[VR_VEHICLE_WINDOWS_VISIBLE], sizeof(rows[0]),
+		"IMMERSIVE CAR WINDOWS  < %s >",
+		OculusVR::AreQuestImmersiveCarWindowsVisible() ? "VISIBLE" : "HIDDEN");
+	snprintf(rows[VR_VEHICLE_PAGE], sizeof(rows[0]),
+		"%s  < OPEN >", gVrVehicleSubpage ? "VIEW SETTINGS (1/2)" : "CONTROLS (2/2)");
 	snprintf(rows[VR_VEHICLE_MOTION_HAND], sizeof(rows[0]),
 		"MOTION STEERING HAND  < %s >",
 		OculusVR::GetQuestMotionSteeringHand() == 0 ?
@@ -4782,7 +4812,7 @@ DrawQuestVehiclePage(void)
 		OculusVR::IsQuestVehicleCalibrationAvailable() ?
 			"OPEN" : "ENTER VEHICLE");
 	strcpy(rows[VR_VEHICLE_SPEEDOMETER], "SPEEDOMETER  < OPEN >");
-	strcpy(rows[VR_VEHICLE_BACK], "BACK TO SETTINGS");
+	strcpy(rows[VR_VEHICLE_BACK], gVrVehicleSubpage ? "BACK TO VIEW SETTINGS" : "BACK TO SETTINGS");
 	int visibleRow = 0;
 	for(int item = 0; item < VR_VEHICLE_ITEM_COUNT; item++){
 		if(!IsMenuItemVisible(VR_MENU_PAGE_VEHICLE, item))

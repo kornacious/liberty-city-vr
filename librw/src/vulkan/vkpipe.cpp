@@ -31,6 +31,16 @@ namespace rw {
 namespace vulkan {
 
 static bool32 vehicleAlphaPass;
+static bool32 hideVehicleWindows;
+
+bool32 setHideVehicleWindows(bool32 enabled)
+{
+	const bool32 previous = hideVehicleWindows;
+	hideVehicleWindows = enabled;
+	return previous;
+}
+
+bool32 getHideVehicleWindows() { return hideVehicleWindows; }
 static bool32 dynamicObjectPass;
 static AtomicSubmissionStats gAtomicSubmissionStats;
 static WorldBackface::Stats gWorldBackfaceStats;
@@ -947,6 +957,10 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	InstanceData *inst = header->inst;
 	for(uint32 i = 0; i < header->numMeshes; i++, inst++){
 		Material *material = inst->material;
+		// Glass shares atomics with opaque doors/bodywork. Preserve those
+		// meshes and texture cutouts while hiding translucent glass materials.
+		if(hideVehicleWindows && material && material->color.alpha < 255)
+			continue;
 		Raster *raster = material && material->texture ?
 			material->texture->raster : nil;
 		const bool textureAlpha = rasterHasAlpha(raster);

@@ -192,6 +192,7 @@ VehicleKindFor(CVehicle *vehicle)
 // One switch per kind that has a wheel. Hiding the rim in cars, where the
 // dashboard already draws one, says nothing about a boat, where the helm
 // is the only thing to hold.
+static bool gImmersiveCarWindowsVisible = true;
 static bool gImmersiveCarWheelVisible[2] = { true, true };
 // The marker teaches the grip, and every immersive vehicle has one to
 // teach, so each kind carries its own switch. On until a player who has
@@ -444,6 +445,8 @@ LoadDrivingSettings()
 			gVehicleThirdPerson[kind] = GetPrivateProfileIntA("VR",
 				key[kind], legacy, kSettingsPath) != 0;
 	}
+	gImmersiveCarWindowsVisible = GetPrivateProfileIntA(
+		"VR", "ImmersiveCarWindowsVisible", 1, kSettingsPath) != 0;
 	gImmersiveCarWheelVisible[0] = GetPrivateProfileIntA(
 		"VR", "ImmersiveCarWheelVisible", 1, kSettingsPath) != 0;
 	// The car key is the boat's fallback, so a choice made before boats had
@@ -3187,6 +3190,26 @@ ToggleQuestMotionSteeringHand()
 
 // The page reads the kind it is showing; the world reads the kind being
 // driven.
+bool AreQuestImmersiveCarWindowsVisible()
+{
+	LoadDrivingSettings();
+	return gImmersiveCarWindowsVisible;
+}
+
+void ToggleQuestImmersiveCarWindowsVisible()
+{
+	LoadDrivingSettings();
+	gImmersiveCarWindowsVisible = !gImmersiveCarWindowsVisible;
+	SaveSetting("ImmersiveCarWindowsVisible", gImmersiveCarWindowsVisible);
+}
+
+bool ShouldHideQuestCarWindows(CVehicle *vehicle)
+{
+	LoadDrivingSettings();
+	return !gImmersiveCarWindowsVisible && vehicle && vehicle->IsCar() &&
+		IsImmersiveCarActive(vehicle);
+}
+
 bool IsQuestImmersiveCarWheelVisible()
 {
 	LoadDrivingSettings();

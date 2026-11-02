@@ -88,6 +88,8 @@ bool32 rasterHasNormalizedAlpha(const Raster *raster);
 // the Vulkan object pipeline can keep depth writes for the body while leaving
 // the glass out of the depth buffer.
 void setVehicleAlphaPass(bool32 enabled);
+bool32 setHideVehicleWindows(bool32 enabled);
+bool32 getHideVehicleWindows();
 // Marks the synchronous entity/clump submission as a moving game object.
 // Used only by the optional temporal diagnostic path.
 void setDynamicObjectPass(bool32 enabled);

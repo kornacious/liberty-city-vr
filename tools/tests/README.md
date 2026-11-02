@@ -6,6 +6,14 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`python tools/tests/test-car-windows.py <assembled-tree>` compiles the production
+immersive car-window gates, toggle persistence, Vulkan mesh filter and renderer
+state restoration. It checks third-person/default/motion isolation, other cars,
+opaque bodywork, windscreen atomics, and both Vehicles pages across 108 vehicle,
+view and seat contexts (at most 12 visible rows). Without an assembled tree it
+runs the source-only gates, mesh filter and menu cases. Requires a C++17 compiler;
+no game data or device is used. Window appearance still requires headset QA.
+
 `test-siren-input.cpp` compiles directly with a C++17 compiler and exercises
 the production Quest siren input helper. It checks double taps at 30–120 FPS,
 the 500 ms gap boundary, held horns, repeated taps, control/vehicle changes,
