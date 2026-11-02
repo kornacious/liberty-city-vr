@@ -1,0 +1,38 @@
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1,6 +1,9 @@
+ #include "common.h"
++#ifdef __ANDROID__
++#include "QuestSirenInput.h"
++#endif
+ #include "SimulationReplay.h"
+ #include "VehicleCapture.h"
+ #include "QuestGameTime.h"
+ #include "QuestPhysicsSleep.h"
+ #include "main.h"
+@@ -1000,6 +1003,16 @@
+ 					printf("m_bSirenOrAlarm toggled to %d\n", m_bSirenOrAlarm);
+ 				}
+ 			}else if(UsesSiren(GetModelIndex())){
++#ifdef __ANDROID__
++				// Pad and virtual wheel horn share a real-time double tap.
++				static QuestSirenInput sirenInput;
++				const bool horn = Pads[0].GetHorn();
++				if(sirenInput.Update(this, horn,
++				   !Pads[0].ArePlayerControlsDisabled(),
++				   CTimer::GetTimeInMillisecondsPauseMode(), CTimer::GetFrameCounter()))
++					m_bSirenOrAlarm = !m_bSirenOrAlarm;
++				m_nCarHornTimer = horn ? 1 : 0;
++#else
+ 				if(Pads[0].bHornHistory[Pads[0].iCurrHornHistory]){
+ 					if(Pads[0].bHornHistory[(Pads[0].iCurrHornHistory+CPad::HORNHISTORY_SIZE-1) % CPad::HORNHISTORY_SIZE] &&
+ 					   Pads[0].bHornHistory[(Pads[0].iCurrHornHistory+CPad::HORNHISTORY_SIZE-2) % CPad::HORNHISTORY_SIZE])
+@@ -1013,6 +1026,7 @@
+ 				}else
+ 					m_nCarHornTimer = 0;
++#endif
+ 			}else if(GetModelIndex() != MI_YARDIE && !CVehicle::bCheat3){
+ 				if(Pads[0].GetHorn())
+ 					m_nCarHornTimer = 1;
+ 				else

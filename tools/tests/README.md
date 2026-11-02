@@ -6,6 +6,12 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-siren-input.cpp` compiles directly with a C++17 compiler and exercises
+the production Quest siren input helper. It checks double taps at 30–120 FPS,
+the 500 ms gap boundary, held horns, repeated taps, control/vehicle changes,
+missed player updates and clock wrap. Both L3 and virtual wheel horns use this
+handler; physical horn interaction still requires headset validation.
+
 `test-garage-exit.ps1 -StageRoot <assembled-tree>` extracts and compiles the
 production garage outside test in Android and desktop configurations. It checks
 that a room-scale headset still inside the garage blocks delivery even when
