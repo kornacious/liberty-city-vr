@@ -40,7 +40,11 @@ Enabled(void)
 bool
 VehicleEnabled(void)
 {
-	return androidgame::VrVehicleBodyIKEnabled();
+	// Third-person vehicle views keep the native occupant/steering animation.
+	// gVrFirstPersonActive also covers their stereo rendering, so it cannot
+	// decide whether tracked hands should own the seated player's skeleton.
+	return androidgame::VrVehicleBodyIKEnabled() &&
+		!OculusVR::IsQuestVehicleThirdPerson();
 }
 
 void
