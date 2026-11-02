@@ -349,6 +349,8 @@ void AdjustQuestCalibrationValue(int hand, int weaponType, int item,
 void SaveQuestCalibrationDefault(int hand, int weaponType);
 void RestoreQuestCalibrationDefault(int hand, int weaponType, bool factory = false);
 void CopyQuestCalibrationToOtherHand(int hand, int weaponType);
+const char *GetQuestHolsterGrabDistanceName();
+void CycleQuestHolsterGrabDistance(int direction);
 int GetQuestHolsterPointCount();
 const char *GetQuestHolsterPointName(int point);
 int GetQuestHolsterPointSlot(int point);

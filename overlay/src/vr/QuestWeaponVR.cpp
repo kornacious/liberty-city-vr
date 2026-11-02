@@ -351,6 +351,9 @@ static WeaponCalibration
 static bool gSettingsLoaded;
 static bool gHandsEnabled = true;
 static bool gHolsterHighlights = true;
+// Metres from the holster anchor; Precise allows hand-sized contact slack.
+static const float kHolsterGrabRadii[] = { 0.27f, 0.20f, 0.14f, 0.09f, 0.05f };
+static int gHolsterGrabDistance = 0;
 static bool gWeaponLaser;
 struct WeaponLaserOverride {
 	bool loaded;
@@ -495,6 +498,9 @@ LoadSettings()
 		kSettingsPath) != 0;
 	gHolsterHighlights = GetPrivateProfileIntA("VR", "HolsterHighlights", 0,
 		kSettingsPath) != 0;
+	gHolsterGrabDistance = clamp((int)(int32)GetPrivateProfileIntA(
+		"VR", "HolsterGrabDistance", 0, kSettingsPath), 0,
+		(int)ARRAY_SIZE(kHolsterGrabRadii)-1);
 	gManualReload = GetPrivateProfileIntA("VR", "ManualReloading", 0,
 		kSettingsPath) != 0;
 	gPistolHoldToRepeat = GetPrivateProfileIntA("VR", "PistolHoldToRepeat", 0,
@@ -2148,7 +2154,7 @@ UpdateHolsterInput(uint32 blockedHands)
 					}
 				}
 			}
-			if(closestSlot >= 0 && closestDistance <= 0.27f){
+			if(closestSlot >= 0 && closestDistance <= kHolsterGrabRadii[gHolsterGrabDistance]){
 				GiveWeaponToHand(hand, closestSlot, closestCopy);
 				gGripLatched[hand] = true;
 			}
@@ -4238,6 +4244,25 @@ AdjustQuestCalibrationValue(int hand, int weaponType, int item,
 	if(item >= 12 && calibration->supportPoseVersion < SUPPORT_GRIP_MODEL_BOUND_V5)
 		calibration->supportPoseVersion = SUPPORT_GRIP_MODEL_BOUND_V5;
 	SaveQuestCalibration(hand, weaponType, *calibration);
+}
+
+const char *
+GetQuestHolsterGrabDistanceName()
+{
+	LoadSettings();
+	static const char *names[] = { "FAR", "MEDIUM", "CLOSE", "VERY CLOSE", "PRECISE" };
+	return names[gHolsterGrabDistance];
+}
+
+void
+CycleQuestHolsterGrabDistance(int direction)
+{
+	LoadSettings();
+	const int count = (int)ARRAY_SIZE(kHolsterGrabRadii);
+	gHolsterGrabDistance = (gHolsterGrabDistance + (direction < 0 ? count-1 : 1)) % count;
+	char value[16];
+	sprintf(value, "%d", gHolsterGrabDistance);
+	WritePrivateProfileStringA("VR", "HolsterGrabDistance", value, kSettingsPath);
 }
 
 int

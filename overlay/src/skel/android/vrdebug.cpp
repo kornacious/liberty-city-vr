@@ -2349,7 +2349,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_CONTROLS: return VR_CONTROLS_ITEM_COUNT;
 	case VR_MENU_PAGE_CALIBRATION: return VrWeaponCalibrationMenu::Count(gVrCalibrationGroup);
 	case VR_MENU_PAGE_HOLSTERS:
-		return OculusVR::GetQuestHolsterPointCount()+1;
+		return OculusVR::GetQuestHolsterPointCount()+2;
 	case VR_MENU_PAGE_CHEATS:
 		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+1 :
 			gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
@@ -3887,7 +3887,9 @@ VrDebugUpdate(const PadInput &in)
 				OculusVR::CycleQuestHolsterPointSlot(
 					gVrHolsterSelection,
 					decreasePulse ? -1 : 1);
-			else if(gVrHolsterSelection == points && positivePulse)
+			else if(gVrHolsterSelection == points && (positivePulse || decreasePulse))
+				OculusVR::CycleQuestHolsterGrabDistance(decreasePulse ? -1 : 1);
+			else if(gVrHolsterSelection == points+1 && positivePulse)
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 		}else if(gVrMenuPage == VR_MENU_PAGE_CHEATS){
 			if((increasePulse || decreasePulse) && !selectPulse)
@@ -5017,7 +5019,7 @@ DrawQuestHolsterPage(void)
 	BeginFullVrMenuPage("HOLSTER LOADOUT",
 		"SEVEN BODY POINTS - CENTER SELECTS GRENADE OR MOLOTOV");
 	const int points = OculusVR::GetQuestHolsterPointCount();
-	for(int item = 0; item <= points; item++){
+	for(int item = 0; item <= points+1; item++){
 		char row[128];
 		if(item < points){
 			const int slot =
@@ -5026,9 +5028,12 @@ DrawQuestHolsterPage(void)
 			snprintf(row, sizeof(row), "%s  %c %s %c",
 				OculusVR::GetQuestHolsterPointName(item),
 				'<', slotName, '>');
-		}else
+		}else if(item == points)
+			snprintf(row, sizeof(row), "WEAPON GRAB DISTANCE  < %s >",
+				OculusVR::GetQuestHolsterGrabDistanceName());
+		else
 			strcpy(row, "BACK TO SETTINGS");
-		DrawFullVrMenuRow(row, 180+item*55, 3,
+		DrawFullVrMenuRow(row, 180+item*48, 3,
 			item == gVrHolsterSelection);
 	}
 	DrawVrMenuText(
