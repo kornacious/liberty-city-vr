@@ -9,9 +9,13 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Bypass the ambient Belleville Park bathroom camera script on Quest, removing
+  its fixed hallway views, fades, control freezes and staged repositioning so
+  the player can walk through and turn normally in VR.
+
 - Keep Quest's normal player camera in stair camera zones, including safehouse
-  stairs and Belleville Park's underground bathroom, so their desktop fixed
-  camera cannot lock the player's turning direction.
+  stairs, so their desktop fixed camera cannot lock the player's turning
+  direction.
 
 - Consolidate model assets into Classic and Modern (Xbox HD), migrate old Xbox
   selections, and load the HD pack as a whole. Restore desktop re3's shared

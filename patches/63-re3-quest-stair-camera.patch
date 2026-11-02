@@ -6,8 +6,8 @@ diff --git a/src/core/ZoneCull.h b/src/core/ZoneCull.h
  		uint16 flag, int16 wantedLevel);
  	static bool CamCloseInForPlayer(void) { return (CurrentFlags_Player & ATTRZONE_CAMCLOSEIN) != 0; }
 +#ifdef __ANDROID__
-+	// Safehouse stairs and the Belleville Park bathroom use a fixed outside
-+	// camera on desktop. It ignores look input and replaces the heading used
++	// Automatic stair zones use a fixed outside camera on desktop.
++	// That camera ignores look input and replaces the heading used
 +	// by Quest's head-relative anchor. Keep the normal player camera in VR.
 +	// Leave the zone flags intact for rain, collision and visibility queries.
 +	static bool CamStairsForPlayer(void) { return false; }

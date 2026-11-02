@@ -6,12 +6,21 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-ambient-camera.cpp` compiles with and without `__ANDROID__` and checks
+the production bathroom script policy, normalized/new/restored thread names,
+all mission flags, unrelated scripts and bounded non-terminated names. The
+Quest dispatcher yields before reading an opcode from the ambient `camera`
+thread; this suppresses its fixed views, fades, control freezes and staged
+repositioning together. Desktop and mission scripts retain their behavior.
+The test reads no game data; headset traversal still requires in-game QA.
+
 `test-stair-camera.cpp` compiles with the assembled `src/core` include path,
 with and without `__ANDROID__`. It exercises the production zone queries over
 768 combinations and repeated zone entry/exit: Quest ignores the fixed stair
 camera while desktop retains it, and rain, collision and other zone attributes
-remain intact. No game data is read. Safehouse stairs, Belleville Park's
-underground bathroom and physical/stick turning still need headset QA.
+remain intact. No game data is read. Safehouse stairs and physical/stick
+turning still need headset QA. The bathroom also has a separate ambient script,
+covered by `test-ambient-camera.cpp` above.
 
 `python tools/tests/test-car-windows.py <assembled-tree>` compiles the production
 immersive car-window gates, toggle persistence, Vulkan mesh filter and renderer
