@@ -40,14 +40,14 @@ static bool Noclip(){return noclip;}
 static bool ToggleFlight(){flight=!flight; return true;}
 static bool ToggleNoclip(){noclip=!noclip; return true;}
 }
-namespace TimeCheatFixture { static bool ActivateVrTimeCheat(int); bool GetVrCheatToggleState(int, bool*); }
+namespace TimeCheatFixture { static bool ActivateVrTimeCheat(int); void ToggleFastWeather(); bool GetVrCheatToggleState(int, bool*); }
 static int GetVrCheatCount() { return nativeCount; }
 static int GetVrMissionCategoryCount() { return 0; }
 static int GetVrMissionCount(int) { return 0; }
 static const char *GetVrCheatName(int source);
 static bool GetVrCheatToggleState(int source, bool *enabled)
 {
-	if(source >= 35) return TimeCheatFixture::GetVrCheatToggleState(source, enabled);
+	if(source == 22 || source >= 35) return TimeCheatFixture::GetVrCheatToggleState(source, enabled);
 	if(source != 2 && source != 3 && source != 4 && source != 5) return false;
 	*enabled = source == 2 ? godMode : source == 3 ? unlimitedRun : source == 4 ? neverWanted : carInvincibility;
 	return true;
@@ -57,6 +57,7 @@ static bool ActivateVrCheat(int source)
 	Check(source >= 0 && source < nativeCount, "activation uses a native source index");
 	activatedSource = source;
 	++activationCount;
+	if(source == 22) TimeCheatFixture::ToggleFastWeather();
 	if(source == 2) godMode = !godMode;
 	if(source == 3) unlimitedRun = !unlimitedRun;
 	if(source == 4) neverWanted = !neverWanted;
@@ -135,6 +136,8 @@ struct COnscreenTimer {
  void Process();
 };
 bool COnscreenTimer::bVrMissionTimerStopped;
+static bool gbFastTime;
+void ToggleFastWeather() { gbFastTime = !gbFastTime; }
 static bool gVrGodModeEnabled, gVrCarInvincibilityEnabled;
 static bool IsVrRunWithoutLimitsEnabled() { return false; }
 struct CWanted { static bool bNoWantedCheat; };
@@ -246,7 +249,7 @@ int main()
 		Check(gVrCheatCategory == category && gVrCheatSelection == 0, "A opens the chosen category at its first row");
 		Check(activationCount == before, "opening a category never activates its first cheat");
 		Check(CurrentMenuSelection() == &gVrCheatSelection, "submenu has independent row selection");
-		Check(CurrentMenuItemCount() == expectedCounts[category]+1, "submenu input count includes Back");
+		Check(CurrentMenuItemCount() == expectedCounts[category], "submenu input count contains only cheats");
 		Check(!CurrentMenuValueRepeats(), "held trigger never repeats cheat activation");
 		for(int item = 0; item < expectedCounts[category]; ++item){
 			const int source = SourceIndex(category, item, nativeCount);
@@ -256,11 +259,12 @@ int main()
 			DrawQuestCheatPage();
 			CheckDrawSelection(item);
 			Check(title == std::string("CHEATS / ")+CategoryName(category), "heading names active category");
-			Check(rows[item].text == nativeNames[source], "display and action share the source mapping");
+			Check(rows[item].text.find(nativeNames[source]) == 0, "display and action share the source mapping");
 			Check(rows[item].text != "PASS CURRENT MISSION", "removed mission-pass entry cannot be rendered or activated");
-			if(expectedCounts[category] < VR_CHEAT_ITEMS_PER_PAGE)
-				Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back is present on the last page");
-			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source >= 35;
+			for(const auto &row : rows)
+				Check(row.text != "BACK TO CHEAT CATEGORIES", "no redundant category Back row");
+			const bool isToggle = source == 2 || source == 3 || source == 4 || source == 5 || source == 22 || source >= 35;
+			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+": OFF", "toggle text shows OFF");
 			Check(rows[item].off == isToggle && !rows[item].on, "toggle state uses mapped source before activation");
 			activatedSource = -1;
 			ActivateQuestCheatMenuSelection();
@@ -269,6 +273,7 @@ int main()
 			Check(std::strcmp(gVrCheatStatus, (source == 0 || source == 1) ? "UNAVAILABLE RIGHT NOW" : "CHEAT ACTIVATED") == 0,
 				"activation feedback survives categorisation");
 			DrawQuestCheatPage();
+			if(isToggle) Check(rows[item].text == std::string(nativeNames[source])+": ON", "toggle text shows ON");
 			Check(rows[item].on == isToggle && !rows[item].off, "toggle state updates after activation");
 			for(int direction : {-1, 1}){
 				cycledSource = -1;
@@ -278,16 +283,6 @@ int main()
 				Check(!model || (cycledSource == source && cycleDirection == direction), "model direction and exact source preserved");
 			}
 		}
-		gVrCheatSelection = expectedCounts[category];
-		DrawQuestCheatPage();
-		CheckDrawSelection(gVrCheatSelection%VR_CHEAT_ITEMS_PER_PAGE);
-		Check(rows.back().text == "BACK TO CHEAT CATEGORIES", "Back appears on the final page");
-		Check(!CycleQuestCheatMenuSelection(1), "Back row cannot cycle a model");
-		const int beforeBack = activationCount;
-		ActivateQuestCheatMenuSelection();
-		Check(gVrCheatCategory == -1 && gVrCheatCategorySelection == category, "Back row remembers parent category");
-		Check(activationCount == beforeBack, "Back row does not activate any cheat");
-		ActivateQuestCheatMenuSelection();
 		ReturnFromCurrentMenuPage();
 		Check(gVrMenuPage == VR_MENU_PAGE_CHEATS && gVrCheatCategory == -1 &&
 			gVrCheatCategorySelection == category, "B returns to exact parent category");
@@ -296,7 +291,7 @@ int main()
 	}
 	for(int source = 0; source < nativeCount; ++source) Check(seen[source] == (source == 14 ? 0 : 1), "retained cheats appear once; appearance is hidden");
 	Check(activationCount == nativeCount-4, "visible native actions dispatch once; vehicle catalog owns spawning");
- // Every page repeats the toggle and blank row, with direct model dispatch.
+ // Every page repeats the toggle immediately above the vehicle rows.
  OpenCheatMenu();
  gVrCheatCategorySelection = VEHICLE_SELECTOR;
  ActivateQuestCheatMenuSelection();
@@ -304,11 +299,11 @@ int main()
  for(int page = 0; page < 3; ++page){
   Check(gVrSpawnVehiclePage == page, "next page selects expected page");
   const int count = page == 2 ? 4 : 9;
-  Check(CurrentMenuItemCount() == count+4, "page input includes toggle, vehicles, navigation and Back");
+  Check(CurrentMenuItemCount() == count+1, "page input includes only toggle and vehicles");
   DrawQuestCheatPage();
   CheckDrawSelection(0);
-  Check(rows[0].text == "SPAWN INSIDE VEHICLE", "toggle is first on every page");
-  Check(rows[1].y-rows[0].y == 74, "blank row separates toggle and vehicles");
+  Check(rows[0].text == std::string("SPAWN INSIDE VEHICLE: ")+(gVrSpawnInsideVehicle ? "ON" : "OFF"), "toggle is first on every page");
+  Check(rows[1].y-rows[0].y == 37, "vehicles follow toggle without a blank row");
   const bool oldInside = gVrSpawnInsideVehicle;
   ActivateQuestCheatMenuSelection();
   Check(gVrSpawnInsideVehicle != oldInside, "toggle can change on every page");
@@ -322,20 +317,17 @@ int main()
    ActivateQuestCheatMenuSelection();
    Check(spawnedModel == 100+page*9+row-1 && spawnedInside == gVrSpawnInsideVehicle, "A spawns displayed vehicle with toggle state");
   }
-  gVrCheatSelection = count+2;
-  ActivateQuestCheatMenuSelection();
+  Check(CycleQuestCheatMenuSelection(1), "dedicated next-page control works");
  }
  Check(gVrSpawnVehiclePage == 0, "next page wraps to first");
- gVrCheatSelection = SpawnVehiclePageSize()+1;
- ActivateQuestCheatMenuSelection();
+ Check(CycleQuestCheatMenuSelection(-1), "dedicated previous-page control works");
  Check(gVrSpawnVehiclePage == 2 && gVrCheatSelection == 0, "previous page wraps and selects persistent toggle");
- gVrCheatSelection = SpawnVehiclePageSize()+3;
- ActivateQuestCheatMenuSelection();
+ ReturnFromCurrentMenuPage();
  Check(gVrCheatCategory == -1, "vehicle Back returns to categories");
  spawnCount = 0;
  gVrCheatCategory = VEHICLE_SELECTOR;
  gVrSpawnVehiclePage = 0;
- Check(SpawnVehiclePageCount() == 1 && CurrentMenuItemCount() == 4, "empty catalog still has toggle and navigation");
+ Check(SpawnVehiclePageCount() == 1 && CurrentMenuItemCount() == 1, "empty catalog has only the toggle");
  spawnCount = 22;
 	OpenCheatMenu();
 	gVrCheatCategorySelection = CATEGORY_COUNT;
@@ -359,7 +351,7 @@ int main()
 	Check(SourceIndex(GENERAL, -1, nativeCount) == -1, "negative row cannot dispatch");
 	Check(SourceIndex(GENERAL, 8, nativeCount) == -1, "Back row has no native index");
 	Check(SourceIndex(GENERAL, 8, nativeCount+1) == nativeCount, "future backend cheat remains reachable in General");
-	Check(Count(GENERAL, 0) == 0, "empty backend still supports a Back-only menu");
+	Check(Count(GENERAL, 0) == 0, "empty backend has no cheat rows");
 
 	ResetMenuNavigationRepeat();
 	Check(MenuNavigationPulse(-0.9f, 1000.0) == 1, "stick tap advances one row");

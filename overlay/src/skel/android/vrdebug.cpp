@@ -2260,24 +2260,13 @@ ActivateQuestCheatMenuSelection(void)
 		const int vehicles = SpawnVehiclePageSize();
 		if(gVrCheatSelection == 0){
 			gVrSpawnInsideVehicle = !gVrSpawnInsideVehicle;
-		}else if(gVrCheatSelection <= vehicles){
+		}else if(gVrCheatSelection > 0 && gVrCheatSelection <= vehicles){
 			const int model = GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+gVrCheatSelection-1);
 			const bool spawned = SpawnVrVehicle(model, gVrSpawnInsideVehicle);
 			snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
 				spawned ? "VEHICLE SPAWNED" : "UNAVAILABLE RIGHT NOW");
 			gVrCheatStatusFrames = 120;
-		}else if(gVrCheatSelection == vehicles+1){
-			CycleQuestCheatMenuSelection(-1);
-		}else if(gVrCheatSelection == vehicles+2){
-			CycleQuestCheatMenuSelection(1);
-		}else{
-			ReturnFromCheatMenu();
 		}
-		return;
-	}
-	const int count = VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount());
-	if(gVrCheatSelection == count){
-		ReturnFromCheatMenu();
 		return;
 	}
 	const int source = VrCheatMenu::SourceIndex(gVrCheatCategory,
@@ -2352,9 +2341,9 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_HOLSTERS:
 		return OculusVR::GetQuestHolsterPointCount()+1;
 	case VR_MENU_PAGE_CHEATS:
-		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+4 :
+		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+1 :
 			gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
-			VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount())+1;
+			VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount());
 	case VR_MENU_PAGE_MISSIONS:
 		return Max(1, gVrMissionCategory < 0 ?
 			GetVrMissionCategoryCount() :
@@ -5039,15 +5028,15 @@ DrawQuestCheatPage(void)
 	}
 	if(gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR){
 		BeginFullVrMenuPage("CHEATS / VEHICLE SPAWN");
-		DrawFullVrMenuRow("SPAWN INSIDE VEHICLE", 158, 2,
+		char spawnToggle[64];
+		snprintf(spawnToggle, sizeof(spawnToggle), "SPAWN INSIDE VEHICLE: %s",
+			gVrSpawnInsideVehicle ? "ON" : "OFF");
+		DrawFullVrMenuRow(spawnToggle, 158, 2,
 			gVrCheatSelection == 0, true, !gVrSpawnInsideVehicle, gVrSpawnInsideVehicle);
 		const int vehicles = SpawnVehiclePageSize();
-		for(int row = 0; row < vehicles+3; ++row){
-			const char *name = row < vehicles ?
-				GetVrVehicleModelName(GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+row)) :
-				row == vehicles ? "PREVIOUS PAGE" :
-				row == vehicles+1 ? "NEXT PAGE" : "BACK TO CHEAT CATEGORIES";
-			DrawFullVrMenuRow(name, 232+row*37, 2, gVrCheatSelection == row+1);
+		for(int row = 0; row < vehicles; ++row){
+			const char *name = GetVrVehicleModelName(GetVrSpawnVehicleModel(gVrSpawnVehiclePage*9+row));
+			DrawFullVrMenuRow(name, 195+row*37, 2, gVrCheatSelection == row+1);
 		}
 		char page[48];
 		snprintf(page, sizeof(page), "PAGE %d OF %d", gVrSpawnVehiclePage+1, SpawnVehiclePageCount());
@@ -5064,7 +5053,7 @@ DrawQuestCheatPage(void)
 		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / RIGHT CLICK BOOST" : nullptr);
 	const int cheatCount = VrCheatMenu::Count(gVrCheatCategory,
 		GetVrCheatCount());
-	const int count = cheatCount+1;
+	const int count = cheatCount;
 	const int first = count > 0 ?
 		(gVrCheatSelection/VR_CHEAT_ITEMS_PER_PAGE)*
 			VR_CHEAT_ITEMS_PER_PAGE : 0;
@@ -5074,12 +5063,14 @@ DrawQuestCheatPage(void)
 		const int item = first+row;
 		const int source = VrCheatMenu::SourceIndex(gVrCheatCategory,
 			item, GetVrCheatCount());
-		const char *name = source < 0 ?
-			"BACK TO CHEAT CATEGORIES" : GetVrCheatName(source);
+		const char *name = GetVrCheatName(source);
 		bool toggleEnabled = false;
 		const bool isToggle = source >= 0 &&
 			GetVrCheatToggleState(source, &toggleEnabled);
-		DrawFullVrMenuRow(name, (gVrCheatCategory == VrCheatMenu::GENERAL ? 178 : 158)+row*37, 2,
+		char label[128];
+		snprintf(label, sizeof(label), isToggle ? "%s: %s" : "%s",
+			name, toggleEnabled ? "ON" : "OFF");
+		DrawFullVrMenuRow(label, (gVrCheatCategory == VrCheatMenu::GENERAL ? 178 : 158)+row*37, 2,
 			item == gVrCheatSelection, true,
 			isToggle && !toggleEnabled, isToggle && toggleEnabled);
 	}
