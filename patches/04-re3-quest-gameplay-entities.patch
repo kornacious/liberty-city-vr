@@ -3264,7 +3264,7 @@ index d6af820..0f52a24 100644
 +			&vrRocketDirection);
 +	if(useVrRocketAim){
 +		vrRocketDirection.Normalise();
-+		vrRocketVelocity = vrRocketDirection*0.35f;
++		vrRocketVelocity = vrRocketDirection*1.25f;
 +		CEntity *savedIgnoreEntity = CWorld::pIgnoreEntity;
 +		CWorld::pIgnoreEntity = shooter;
 +		CEntity *hitEntity = nil;

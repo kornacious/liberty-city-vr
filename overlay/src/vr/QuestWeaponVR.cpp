@@ -2975,9 +2975,16 @@ GetTrackedWeaponFireTriggerHand(int hand, int weaponType)
 	if(hand < 0 || hand >= VR_HAND_COUNT || gHeldSlot[hand] < 0 ||
 	   !gPoseValid[hand] || !IsGameplayAvailable())
 		return -1;
-	if(weaponType != WEAPONTYPE_ROCKETLAUNCHER || FindPlayerVehicle())
+	if(weaponType != WEAPONTYPE_ROCKETLAUNCHER)
 		return hand;
 	const int opposite = 1-hand;
+	// Rockets require a live two-hand grip, including when grip-lock keeps
+	// the launcher in the primary hand or the player is in a vehicle.
+	if(gSupportHand[hand] != opposite || !gPoseValid[opposite] ||
+	   gGrip[hand] <= 0.30f || gGrip[opposite] <= 0.30f)
+		return -1;
+	if(FindPlayerVehicle())
+		return hand;
 	// The RPG model is shouldered from the support side: right-held uses L2,
 	// left-held uses R2. Never steal a trigger from another gun/detonator.
 	if(gHeldSlot[opposite] >= 0 || IsTrackedDetonatorActive(opposite))

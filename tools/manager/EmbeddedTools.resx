@@ -13076,11 +13076,21 @@ $code += Extract '(?ms)^static CVector\r?\nGetWeaponLocalMuzzle\(.*?^}'
 $code += Extract '(?ms)^static bool\r?\nBuildWeaponMuzzleRay\(.*?^}'
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-grip-production.inc'), $code)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'weapon-calibration-production.inc'),
-    (Extract '(?ms)^static int \*\r?\nQuestCalibrationValue\(.*?(?=^int\r?\nGetQuestHolsterPointCount\()'))
+    (Extract '(?ms)^static int \*\r?\nQuestCalibrationValue\(.*?(?=^const char \*\r?\nGetQuestHolsterGrabDistanceName\()'))
 $types = Join-Path $StageRoot 'src/weapons/WeaponType.h'
 if (-not (Test-Path $types)) { throw 'Pass -StageRoot pointing to an assembled Liberty City source tree.' }
 Copy-Item $types (Join-Path $PSScriptRoot 'weapon-grip-types.inc')
-&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-weapon-grip.cpp')
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'rocket-trigger-production.inc'),
+    (Extract '(?ms)^static int\r?\nGetTrackedWeaponFireTriggerHand\(.*?(?=^bool IsTrackedWeaponTriggerJustReleased)'))
+$weapon = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/weapons/Weapon.cpp'))
+$projectile = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/weapons/ProjectileInfo.cpp'))
+if ($weapon -notmatch 'vrRocketVelocity = vrRocketDirection\*1\.25f;' -or
+    $projectile -notmatch 'float vy = 1\.25f;' -or
+    $projectile -notmatch 'time = CTimer::GetTimeInMilliseconds\(\) \+ 1400;' -or
+    $projectile -notmatch 'velocity = \*launchVelocity;') {
+    throw 'Rocket must retain native player launch speed, original fuse and tracked velocity override.'
+}
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-weapon-grip.cpp','test-rocket-handling.cpp')
 </value>
   </data>
   <data name="tools/tests/test-wheel-hand-basis.ps1" xml:space="preserve">
