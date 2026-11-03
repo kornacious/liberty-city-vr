@@ -11,7 +11,9 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 - Keep the normal Quest player camera inside both Ammu-Nation shops so their
   fixed overview cannot lock VR turning, and remove their entry/exit fades.
-  Keep shopkeeper, purchase and other entry/exit logic running.
+  Remove staged player teleports, heading changes, control freezes, camera
+  resets and doorway clearing so players can walk in and out naturally.
+  Keep shopkeeper, purchase and shop-state logic running.
 
 - Bypass the ambient Belleville Park bathroom camera script on Quest, removing
   its fixed hallway views, fades, control freezes and staged repositioning so

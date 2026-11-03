@@ -6,6 +6,17 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-shop-transition.cpp` compiles with the assembled `src/control` include
+path, with and without `__ANDROID__`. Extract the `shopTransitionParams`
+block from `Script.cpp` (ending before `USE_ADVANCED_SCRIPT_DEBUG_OUTPUT`)
+into `shop-transition.inc` and add that directory to the include path. It
+executes the production dispatch guard for both shop scripts: teleports,
+heading changes, control freezes, camera resets and staged doorway clearing
+consume their arguments without performing the action on Quest. Two crossings
+exercise entry and exit, while clerk, purchase-state and other gameplay
+commands still dispatch. Mission and desktop behavior remain covered. No game
+data is read. Seamless traversal and purchases still require headset QA.
+
 `test-ambient-camera.cpp` compiles with and without `__ANDROID__` and checks
 the production bathroom script policy, normalized/new/restored thread names,
 all mission flags, unrelated scripts and bounded non-terminated names. The

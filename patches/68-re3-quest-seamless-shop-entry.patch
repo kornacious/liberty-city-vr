@@ -1,0 +1,23 @@
+diff --git a/src/control/Script.cpp b/src/control/Script.cpp
+--- a/src/control/Script.cpp
++++ b/src/control/Script.cpp
+@@ -3,6 +3,7 @@
+ #include "Script.h"
+ #include "ScriptCommands.h"
+ #include "QuestAmbientCamera.h"
++#include "QuestShopTransition.h"
+ 
+ #include "AnimBlendAssociation.h"
+ #include "AudioManager.h"
+@@ -767,6 +768,11 @@ int8 CRunningScript::ProcessOneCommand()
+ 	int32 command = (uint16)CTheScripts::Read2BytesFromScript(&m_nIp);
+ 	m_bNotFlag = (command & 0x8000);
+ 	command &= 0x7FFF;
++	const int shopTransitionParams = QuestShopTransitionParameterCount(m_abScriptName, m_bMissionFlag, command);
++	if (shopTransitionParams >= 0) {
++		CollectParameters(&m_nIp, shopTransitionParams);
++		return 0;
++	}
+ #ifdef USE_ADVANCED_SCRIPT_DEBUG_OUTPUT
+ 	LogBeforeProcessingCommand(command);
+ #endif
