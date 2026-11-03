@@ -14642,7 +14642,7 @@ function Definition([string]$name, [string]$returnType) {
     if ($depth -ne 0) { throw "Unclosed production function: $name" }
     return $returnType + "`n" + $source.Substring($match.Index, $end - $match.Index)
 }
-$parts = @((Definition 'QuestSunSightClear' 'static bool'), (Definition 'CCoronas::Render' 'void'))
+$parts = @((Definition 'QuestSunSightClear' 'static bool'), (Definition 'CCoronas::Render' 'void'), (Definition 'CRegisteredCorona::Update' 'void'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'sun-occlusion-production.inc'), ($parts -join "`n"), [Text.UTF8Encoding]::new($false))
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -OutDir $OutDir -Sources @('test-sun-occlusion.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Sun occlusion regression failed.' }

@@ -1,10 +1,11 @@
 diff --git a/src/renderer/Coronas.cpp b/src/renderer/Coronas.cpp
 --- a/src/renderer/Coronas.cpp
 +++ b/src/renderer/Coronas.cpp
-@@ -278,6 +278,31 @@
+@@ -277,6 +277,31 @@
+ 		aCoronas[i].someAngle = someAngle;
  	}
  }
- 
++
 +#ifdef RW_VULKAN
 +// The 150 m sun position is only a projection/size reference. It must not
 +// limit visibility: distant buildings can still cover the sun. Trace from
@@ -29,40 +30,10 @@ diff --git a/src/renderer/Coronas.cpp b/src/renderer/Coronas.cpp
 +		true, false, false, false, false, false);
 +}
 +#endif
-+
+ 
  static RwIm2DVertex vertexbufferX[2];
  
- void
-@@ -296,6 +321,9 @@
- 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDONE);
- 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
- 
-+#ifdef RW_VULKAN
-+	bool sunSightClear = true, sunSightChecked = false;
-+#endif
- 	for(i = 0; i < NUMCORONAS; i++){
- 		for(j = 5; j > 0; j--){
- 			aCoronas[i].prevX[j] = aCoronas[i].prevX[j-1];
-@@ -311,6 +339,18 @@
- 		   aCoronas[i].fadeAlpha == 0 && aCoronas[i].alpha == 0)
- 			continue;
- 
-+#ifdef RW_VULKAN
-+		// Do not leave either the core or its lens flare visible while the
-+		// legacy fade catches up after moving behind a wall.
-+		if(aCoronas[i].id == SUN_CORE || aCoronas[i].id == SUN_CORONA){
-+			if(!sunSightChecked){
-+				sunSightClear = QuestSunSightClear();
-+				sunSightChecked = true;
-+			}
-+			if(!sunSightClear)
-+				continue;
-+		}
-+#endif
- 		CVector spriteCoors;
- 		float spritew, spriteh;
- 		if(!CSprite::CalcScreenCoors(aCoronas[i].coors, &spriteCoors, &spritew, &spriteh, true)){
-@@ -359,7 +399,18 @@
+@@ -359,6 +384,18 @@
  				float distanceFade = spriteCoors.z < fadeDistance ? 1.0f : 1.0f - (spriteCoors.z - fadeDistance)/fadeDistance;
  				int totalFade = aCoronas[i].fadeAlpha * distanceFade;
  
@@ -74,14 +45,14 @@ diff --git a/src/renderer/Coronas.cpp b/src/renderer/Coronas.cpp
 +					spriteCoors.z = 0.9999f * RwCameraGetFarClipPlane(Scene.camera);
 +					recipz = 1.0f/spriteCoors.z;
 +				}
-+				if(aCoronas[i].LOScheck && !sun)
-+#else
- 				if(aCoronas[i].LOScheck)
 +#endif
++				// The core stays depth-tested against buildings. The glow and
++				// lens ghosts use the LOS-driven fadeAlpha transition, so they
++				// smoothly disappear/reappear instead of switching off in Render.
+ 				if(aCoronas[i].LOScheck)
  					RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
  				else
- 					RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)TRUE);
-@@ -367,8 +418,10 @@
+@@ -367,8 +404,10 @@
  				// render corona itself
  				if(aCoronas[i].texture){
  					float fogscale = CWeather::Foggyness*Min(spriteCoors.z, 40.0f)/40.0f + 1.0f;
@@ -92,29 +63,31 @@ diff --git a/src/renderer/Coronas.cpp b/src/renderer/Coronas.cpp
  					RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(aCoronas[i].texture));
  					spriteCoors.z -= 1.5f;
  
-@@ -405,6 +458,12 @@
+@@ -405,6 +444,12 @@
  
  				// render flares
  				if(aCoronas[i].flareType != FLARE_NONE){
 +#ifdef RW_VULKAN
-+					// Lens ghosts are optical overlays, gated by the sun source
-+					// visibility above, not by geometry at each ghost's position.
++					// Lens ghosts share the corona's LOS fade, rather than
++					// depth testing at each ghost's screen position.
 +					if(aCoronas[i].flareType == FLARE_SUN)
 +						RwRenderStateSet(rwRENDERSTATEZTESTENABLE, (void*)FALSE);
 +#endif
  					FlareDef *flare;
  
  					switch(aCoronas[i].flareType){
-@@ -633,7 +692,12 @@
+@@ -633,7 +678,13 @@
  
  	if(LOScheck &&
  	   (CCoronas::SunBlockedByClouds && id == CCoronas::SUN_CORONA ||
-+	    #ifdef RW_VULKAN
+-	    !CWorld::GetIsLineOfSightClear(coors, TheCamera.GetPosition(), true, false, false, false, false, false))){
++#ifdef RW_VULKAN
 +	    !(id == CCoronas::SUN_CORONA ? QuestSunSightClear() :
-+	      CWorld::GetIsLineOfSightClear(coors, TheCamera.GetPosition(), true, false, false, false, false, false)))){
++	      CWorld::GetIsLineOfSightClear(coors, TheCamera.GetPosition(), true, false, false, false, false, false))
 +#else
- 	    !CWorld::GetIsLineOfSightClear(coors, TheCamera.GetPosition(), true, false, false, false, false, false))){
++	    !CWorld::GetIsLineOfSightClear(coors, TheCamera.GetPosition(), true, false, false, false, false, false)
 +#endif
++	   )){
  		// Corona is blocked, fade out
  		fadeAlpha = Max(fadeAlpha - 15.0f*CTimer::GetTimeStep(), 0.0f);
  	}else if(offScreen){

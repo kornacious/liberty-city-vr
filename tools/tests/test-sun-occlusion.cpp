@@ -10,8 +10,8 @@ using uint8 = unsigned char;
 using uint32 = unsigned;
 using std::min;
 using std::max;
-template<class T> T Min(T a,T b){return min(a,b);}
-template<class T> T Max(T a,T b){return max(a,b);}
+template<class A,class B> auto Min(A a,B b){using T=std::common_type_t<A,B>;return min(T(a),T(b));}
+template<class A,class B> auto Max(A a,B b){using T=std::common_type_t<A,B>;return max(T(a),T(b));}
 template<class T> T sq(T a){return a*a;}
 float Abs(float a){return std::fabs(a);}
 #define RW_VULKAN
@@ -68,17 +68,18 @@ unsigned CWorld::calls=0;
 CVector CWorld::end;
 struct CTimer {static unsigned GetTimeInMilliseconds(){return 100;} static float GetTimeStep(){return 1;}};
 struct CWeather {static constexpr float Foggyness=0;};
-struct Draw {float depth,reciprocal;bool tested;};
+struct Draw {float depth,reciprocal;bool tested;int intensity;};
 std::vector<Draw> draws;
 struct CSprite {
     static bool CalcScreenCoors(CVector,CVector *p,float *w,float *h,bool){*p={500,500,150};*w=*h=1;return true;}
-    static void RenderOneXLUSprite(float,float,float z,float,float,int,int,int,int,float rz,int){draws.push_back({z,rz,depthTest});}
-    static void RenderOneXLUSprite_Rotate_Aspect(float,float,float z,float,float,int,int,int,int,float rz,float,int){draws.push_back({z,rz,depthTest});}
+    static void RenderOneXLUSprite(float,float,float z,float,float,int,int,int,int intensity,float rz,int){draws.push_back({z,rz,depthTest,intensity});}
+    static void RenderOneXLUSprite_Rotate_Aspect(float,float,float z,float,float,int,int,int,int intensity,float rz,float,int){draws.push_back({z,rz,depthTest,intensity});}
 };
 struct Corona {
     unsigned id=0,lastLOScheck=0;
     int fadeAlpha=255,alpha=255,red=255,green=255,blue=255;
     bool offScreen=false,sightClear=true,LOScheck=false;
+    bool registeredThisFrame=true,firstUpdate=true;
     bool hasValue[6]={};
     float prevX[6]={},prevY[6]={};
     int prevRed[6]={},prevGreen[6]={},prevBlue[6]={};
@@ -86,11 +87,15 @@ struct Corona {
     float drawDist=999999,size=10,someAngle=0;
     void *texture=reinterpret_cast<void*>(1);
     int flareType=0;
+    void Update();
 };
+using CRegisteredCorona=Corona;
 constexpr int NUMCORONAS=3;
 struct CCoronas {
     enum {SUN_CORE=1,SUN_CORONA=2,FLARE_NONE=0,FLARE_SUN=1,FLARE_HEADLIGHTS=2};
     static Corona aCoronas[NUMCORONAS];
+    static inline bool SunBlockedByClouds=false,bChangeBrightnessImmediately=false;
+    static inline float LightsMult=1;
     static void Render();
 };
 Corona CCoronas::aCoronas[NUMCORONAS];
@@ -109,15 +114,32 @@ void *gpCoronaTexture[9]={};
 #pragma warning(pop)
 #endif
 int main(){
-    // A wall beyond the historical 150 m endpoint blocks both sun sprites
-    // and the lens ghost, immediately, even with fully visible fade state.
+    // A distant wall drives the normal fade instead of skipping the render.
     auto &core=CCoronas::aCoronas[0], &halo=CCoronas::aCoronas[1];
     core.id=CCoronas::SUN_CORE;halo.id=CCoronas::SUN_CORONA;
     halo.LOScheck=true;halo.flareType=FLARE_SUN;
-    CCoronas::Render();assert(draws.empty());assert(CWorld::calls==1);
+    halo.Update();assert(halo.fadeAlpha==240);assert(CWorld::calls==1);
+    CCoronas::Render();assert(draws.size()==3);
+    assert(draws[0].tested&&!draws[1].tested&&!draws[2].tested);
+    assert(draws[1].intensity==240&&draws[2].intensity==(240*255>>8));
+    // Continue fading to zero while blocked; neither glow nor flare persists.
+    for(int step=0;step<16;++step){
+        const int previous=halo.fadeAlpha;
+        halo.registeredThisFrame=true;halo.Update();
+        assert(halo.fadeAlpha==max(previous-15,0));
+    }
+    assert(halo.fadeAlpha==0&&halo.id==0);
+    draws.clear();CCoronas::Render();assert(draws.size()==1&&draws[0].tested);
+    // Re-register the sun as gameplay does and check the reverse transition.
+    halo.id=CCoronas::SUN_CORONA;
     CWorld::wall=10000;CWorld::calls=0;
-    CCoronas::Render();assert(draws.size()==3);assert(CWorld::calls==1);
-    assert(draws[0].tested&&draws[1].tested&&!draws[2].tested);
+    for(int step=1;step<=17;++step){
+        halo.registeredThisFrame=true;halo.Update();
+        assert(halo.fadeAlpha==min(step*15,255));
+    }
+    draws.clear();CWorld::calls=0;
+    CCoronas::Render();assert(draws.size()==3);assert(CWorld::calls==0);
+    assert(draws[0].tested&&!draws[1].tested&&!draws[2].tested);
     assert(1/draws[0].reciprocal>999&&1/draws[1].reciprocal>999);
     // Ordinary lights retain their original camera depth and LOS policy.
     draws.clear();core.id=3;halo.id=0;CCoronas::Render();
@@ -134,5 +156,5 @@ int main(){
     }
     CWorld::calls=0;TheCamera.position={2500,0,0};
     assert(QuestSunSightClear()&&CWorld::calls==0);
-    std::puts("PASS: production sun rendering and LOS; distant blockers, immediate hiding, background depth, flare state, ordinary lights, angled rays and map bounds.");
+    std::puts("PASS: production sun rendering, Update and LOS; distant blockers, fade out/in to completion, background core depth, flare state, ordinary lights, angled rays and map bounds.");
 }
