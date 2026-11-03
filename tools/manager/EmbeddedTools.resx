@@ -14658,4 +14658,26 @@ $parts = @((Definition 'QuestSunSightClear' 'static bool'), (Definition 'CCorona
 if ($LASTEXITCODE -ne 0) { throw 'Sun occlusion regression failed.' }
 </value>
   </data>
+  <data name="tools/tests/test-dodo-flight.ps1" xml:space="preserve">
+    <value>param(
+    [Parameter(Mandatory=$true)][string]$StageRoot,
+    [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) ('lcvr-dodo-' + [Guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference = 'Stop'
+$vehicle = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/vehicles/Vehicle.cpp'))
+$header = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/vehicles/Vehicle.h'))
+$car = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/vehicles/Automobile.cpp'))
+$constants = [regex]::Match($vehicle, '(?s)const float fRCPropFallOff.*?(?=const CVector vecHeliMoveRes)')
+$wing = [regex]::Match($vehicle, '(?s)case FLIGHT_MODEL_RCPLANE:.*?(?=\s*case FLIGHT_MODEL_HELI:)')
+$classification = [regex]::Match($header, '(?s)bool IsRealPlane\(void\)\s*\{.*?\n\t\}')
+if (!$constants.Success -or !$wing.Success -or !$classification.Success) { throw 'Missing production fixed-wing flight code.' }
+$code = $constants.Value + "`nvoid CVehicle::FixedWing(int flightModel) { switch(flightModel) {`n" + $wing.Value + "`n}}`n" + $classification.Value.Replace('bool IsRealPlane', 'bool CVehicle::IsRealPlane')
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'dodo-flight-production.inc'), $code, [Text.UTF8Encoding]::new($false))
+if ($car -notmatch '(?s)#ifdef __ANDROID__\s*\}else if\(GetModelIndex\(\) == MI_DODO &amp;&amp; CTimer::GetTimeStep\(\) &gt; 0.0f\)\{.*?FlyingControl\(FLIGHT_MODEL_SEAPLANE\);\s*#endif') {
+    throw 'Dodo must dispatch to full fixed-wing flight, including at rest.'
+}
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-dodo-flight.cpp')
+if ($LASTEXITCODE -ne 0) { throw 'Dodo flight regression failed.' }
+</value>
+  </data>
 </root>

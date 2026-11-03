@@ -1,0 +1,113 @@
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1104,6 +1104,12 @@
+ 		if(GetStatus() != STATUS_PLAYER && GetStatus() != STATUS_PLAYER_REMOTE && GetStatus() != STATUS_PHYSICS){
+ 			if(GetModelIndex() == MI_MIAMI_RCRAIDER || GetModelIndex() == MI_MIAMI_SPARROW)
+ 				m_aWheelSpeed[0] = Max(m_aWheelSpeed[0]-0.0005f, 0.0f);
++#ifdef __ANDROID__
++		}else if(GetModelIndex() == MI_DODO && CTimer::GetTimeStep() > 0.0f){
++			// Full fixed-wing flight, including propeller thrust at rest.
++			// The original Dodo model only supports speed-dependent hops.
++			FlyingControl(FLIGHT_MODEL_SEAPLANE);
++#endif
+ 		}else if((GetModelIndex() == MI_DODO || CVehicle::bAllDodosCheat) &&
+ 		         m_vecMoveSpeed.Magnitude() > 0.0f && CTimer::GetTimeStep() > 0.0f){
+ #ifdef ALT_DODO_CHEAT
+diff --git a/src/vehicles/Vehicle.h b/src/vehicles/Vehicle.h
+--- a/src/vehicles/Vehicle.h
++++ b/src/vehicles/Vehicle.h
+@@ -236,7 +236,13 @@
+ 	bool IsPlane(void) { return m_vehType == VEHICLE_TYPE_PLANE; }
+ 	bool IsBike(void) { return m_vehType == VEHICLE_TYPE_BIKE; }
+ 	bool IsRealHeli(void) { return m_vehType == VEHICLE_TYPE_HELI; }
+-	bool IsRealPlane(void) { return m_vehType == VEHICLE_TYPE_PLANE; }
++	bool IsRealPlane(void) {
++#ifdef __ANDROID__
++		// Stored as a car, but must not use VR car steering and interaction.
++		if(GetModelIndex() == MI_DODO) return true;
++#endif
++		return m_vehType == VEHICLE_TYPE_PLANE;
++	}
+ 
+ 	void FlyingControl(eFlightModel flightModel);
+ 	void ProcessWheel(CVector &wheelFwd, CVector &wheelRight, CVector &wheelContactSpeed, CVector &wheelContactPoint,
+diff --git a/src/vehicles/Vehicle.cpp b/src/vehicles/Vehicle.cpp
+--- a/src/vehicles/Vehicle.cpp
++++ b/src/vehicles/Vehicle.cpp
+@@ -291,6 +291,15 @@
+ 	case FLIGHT_MODEL_RCPLANE:
+ 	case FLIGHT_MODEL_SEAPLANE:
+ 	{
++		// Keep aerodynamics after bailing out, without borrowing the player's
++		// current pad or the seaplane's automatic cruise throttle.
++#ifdef __ANDROID__
++		const bool questDodo = GetModelIndex() == MI_DODO;
++#else
++		const bool questDodo = false;
++#endif
++		const bool hasPilotInput = !questDodo ||
++			(GetStatus() == STATUS_PLAYER && bEngineOn && m_fHealth > 0.0f);
+ 		// thrust
+ 		float fThrust = flightModel == FLIGHT_MODEL_RCPLANE ? fRCAeroThrust : fSeaThrust;
+ 		float fThrustFallOff = flightModel == FLIGHT_MODEL_RCPLANE ? fRCPropFallOff : fSeaPropFallOff;
+@@ -298,9 +307,11 @@
+ 		float fForwSpeed = DotProduct(GetMoveSpeed(), GetForward());
+ 		CVector vecTail = GetColModel()->boundingBox.min.y * GetForward();
+ 		float fPedalState = (CPad::GetPad(0)->GetAccelerate() - CPad::GetPad(0)->GetBrake()) / 255.0f;
+-		if (fForwSpeed > 0.1f || (flightModel == FLIGHT_MODEL_RCPLANE && fForwSpeed > 0.02f))
++		if (hasPilotInput && (fForwSpeed > 0.1f || (flightModel == FLIGHT_MODEL_RCPLANE && fForwSpeed > 0.02f)))
+ 			fPedalState += 1.0f;
+ 		else if (fForwSpeed > 0.0f && fPedalState < 0.0f)
++			fPedalState = 0.0f;
++		if (!hasPilotInput)
+ 			fPedalState = 0.0f;
+ 		float fThrustAccel = (fPedalState - fThrustFallOff * fForwSpeed) * fThrust;
+ 			
+@@ -308,7 +319,7 @@
+ 
+ 		// left/right
+ 		float fSideSpeed = -DotProduct(GetMoveSpeed(), GetRight());
+-		float fSteerLR = CPad::GetPad(0)->GetSteeringLeftRight() / 128.0f;
++		float fSteerLR = hasPilotInput ? CPad::GetPad(0)->GetSteeringLeftRight() / 128.0f : 0.0f;
+ 		float fSideSlipAccel;
+ 		if (flightModel == FLIGHT_MODEL_RCPLANE)
+ 			fSideSlipAccel = Abs(fSideSpeed) * fSideSpeed * fRCSideSlipMult;
+@@ -343,11 +354,14 @@
+ 			fStabiliseSpeed = fRCRollStabilise * fStabiliseDirection * (1.0f - DotProduct(GetRight(), vecStabilise)) * (1.0f - Abs(GetForward().z));
+ 		else
+ 			fStabiliseSpeed = fSeaRollStabilise * fStabiliseDirection * (1.0f - DotProduct(GetRight(), vecStabilise)) * (1.0f - Abs(GetForward().z));
+-		ApplyTurnForce(fStabiliseSpeed * m_fTurnMass * GetRight(), GetUp()); // no CTimer::GetTimeStep(), is it right? VC doesn't have it too
++		// Preserve the original 30 FPS strength at Quest refresh rates.
++		if (questDodo)
++			fStabiliseSpeed *= CTimer::GetTimeStepInSeconds() * 30.0f;
++		ApplyTurnForce(fStabiliseSpeed * m_fTurnMass * GetRight(), GetUp());
+ 
+ 		// up/down
+ 		float fTail = -DotProduct(GetSpeed(vecTail), GetUp());
+-		float fSteerUD = -CPad::GetPad(0)->GetSteeringUpDown() / 128.0f;
++		float fSteerUD = hasPilotInput ? -CPad::GetPad(0)->GetSteeringUpDown() / 128.0f : 0.0f;
+ 		float fPitchAccel;
+ 		if (flightModel == FLIGHT_MODEL_RCPLANE)
+ 			fPitchAccel = fRCTailMult * fTail * Abs(fTail) + fRCPitchMult * fSteerUD * fForwSpeed;
+@@ -356,16 +370,18 @@
+ 		ApplyTurnForce(fPitchAccel * m_fTurnMass * GetUp() * CTimer::GetTimeStep(), vecTail);
+ 
+ 		float fLift = DotProduct(GetMoveSpeed(), GetUp()) / Max(0.01f, GetMoveSpeed().Magnitude()); //accel*angle
++		// Reverse taxiing cannot produce forward wing lift.
++		const float liftSpeed = questDodo ? Max(0.0f, fForwSpeed) : fForwSpeed;
+ 		float fLiftAccel;
+ 		if (flightModel == FLIGHT_MODEL_RCPLANE)
+ 			fLiftAccel = (fRCFormLiftMult - fRCAttackLiftMult * fLift) * SQR(fForwSpeed);
+ 		else
+-			fLiftAccel = (fSeaFormLiftMult - fSeaAttackLiftMult * fLift) * SQR(fForwSpeed);
++			fLiftAccel = (fSeaFormLiftMult - fSeaAttackLiftMult * fLift) * SQR(liftSpeed);
+ 		float fLiftImpulse = fLiftAccel * m_fMass * CTimer::GetTimeStep();
+ 		if (GRAVITY * CTimer::GetTimeStep() * m_fMass < fLiftImpulse) {
+ 			if (flightModel == FLIGHT_MODEL_RCPLANE && GetPosition().z > 50.0f)
+ 				fLiftImpulse = CTimer::GetTimeStep() * 0.9f*GRAVITY * m_fMass;
+-			else if (flightModel == FLIGHT_MODEL_SEAPLANE && GetPosition().z > 80.0f)
++			else if (flightModel == FLIGHT_MODEL_SEAPLANE && GetPosition().z > (questDodo ? 200.0f : 80.0f))
+ 				fLiftImpulse = CTimer::GetTimeStep() * 0.9f*GRAVITY * m_fMass;
+ 		}
+ 		ApplyMoveForce(fLiftImpulse * GetUp());

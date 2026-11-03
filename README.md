@@ -128,6 +128,10 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   aiming and physical steering for cars and boats.
 - Remappable face buttons, grips and stick clicks; a swapped-hands layout;
   per-weapon and per-seat calibration.
+- The Dodo uses powered fixed-wing flight on Quest. Hold the right trigger to
+  build runway speed, then gently pull the left stick back to take off. Use
+  left/right to bank, forward/back to pitch, and the left trigger to reduce
+  power for landing. Car motion/physical-wheel modes do not affect aircraft.
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
   graphics and model-set menus.
 - Player cheats include Flight and Noclip. In Flight, move with the left stick,
