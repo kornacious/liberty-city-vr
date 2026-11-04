@@ -18,21 +18,24 @@ enum { PED_IDLE, PED_FALL, PED_GETUP, PED_STAGGER, PED_DIVE_AWAY,
     PED_JUMP, PED_DRIVING, PED_ENTER_CAR, PED_EXIT_CAR };
 enum { WBSTATE_PLAYING, WBSTATE_WASTED, WBSTATE_BUSTED, WBSTATE_FAILED_CRITICAL_MISSION };
 struct CPed {
+    CMatrix body;
     float m_fHealth=100.0f;
     int m_nPedState=PED_IDLE;
     bool skinned=true,vehicle=false;
     void *m_pMyVehicle=nullptr;
     void *GetClump(){return this;} bool IsPlayer(){return true;}
-    bool InVehicle(){return vehicle;} CVector GetPosition(){return {};}
+    bool InVehicle(){return vehicle;} CVector GetPosition(){return body.p;}
+    CVector GetRight(){return body.r;} CVector GetForward(){return body.f;} CVector GetUp(){return body.u;}
 };
 using CPlayerPed = CPed;
 static CPlayerPed *testPlayer;
 static CPlayerPed *FindPlayerPed(){return testPlayer;}
 namespace CWorld {static int PlayerInFocus=0;struct Info {int m_WBState=WBSTATE_PLAYING;};static Info Players[1];}
 static bool IsClumpSkinned(void *p){return static_cast<CPed*>(p)->skinned;}
-static RwFrame *RpClumpGetFrame(void *){return nullptr;}
-struct RwMatrix {CVector pos;};
-static RwMatrix *RwFrameGetMatrix(RwFrame *){static RwMatrix m;return &m;}
+static RwFrame *RpClumpGetFrame(void *){static RwFrame frame;return &frame;}
+struct RwMatrix {CVector pos,right,up,at;};
+static RwMatrix testClumpRoot;
+static RwMatrix *RwFrameGetMatrix(RwFrame *){return &testClumpRoot;}
 static void RwFrameUpdateObjects(RwFrame *){}
 static bool gVrFirstPersonActive=true,ikEnabled=true;
 static bool gameplay=true,ragdoll=false,tracking[2]={true,true};
@@ -188,7 +191,14 @@ int main(){
     }
     player.m_nPedState=PED_IDLE;
     const int before=anchorUpdates;
+    player.skinned=false;
+    player.body.r={0,1,0};player.body.f={-1,0,0};player.body.p={3,4,5};
+    testClumpRoot={{8,9,5},{-1,0,0},{0,-1,0},{0,0,1}};
     gameplay=false;VrBodyIK::Apply(&player);gameplay=true;
+    Near(testClumpRoot.pos,player.body.p,"suspended IK discards previous roomscale translation");
+    Near(testClumpRoot.right,player.body.r,"suspended IK discards previous visual yaw");
+    Near(testClumpRoot.up,player.body.f,"native forward is restored before the gameplay guard");
+    Near(testClumpRoot.at,player.body.u,"native up is restored before the gameplay guard");
     ragdoll=true;VrBodyIK::Apply(&player);ragdoll=false;
     ikEnabled=false;VrBodyIK::Apply(&player);ikEnabled=true;
     VrBodyIK::Apply(nullptr);

@@ -10624,7 +10624,7 @@ if __name__ == "__main__":
 $ErrorActionPreference = 'Stop'
 $body = [IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/peds/VrBodyIK.cpp'))
 $parts = @()
-foreach ($name in @('ToBasisLocal','FromBasisLocal','BuildCrouchPoseBasis','AlignCrouchAxes','AlignCrouchedSkeleton')) {
+foreach ($name in @('ToBasisLocal','FromBasisLocal','BuildCrouchPoseBasis','AlignCrouchAxes','AlignGroundedSkeleton')) {
     $match = [regex]::Match($body, ('(?ms)^static (?:CVector|void|bool) ' + $name + '\(.*?^\}'))
     if (-not $match.Success) { throw "Missing production helper $name" }
     $parts += $match.Value

@@ -420,11 +420,29 @@ static void AlignCrouchAxes(RwMatrix &frame,
 	frame.at = FromBasisLocal(ToBasisLocal(frame.at, poseBody), visualBody);
 }
 
-static void AlignCrouchedSkeleton(CPed *ped, RpHAnimHierarchy *hier,
+static void AlignGroundedSkeleton(CPed *ped, RpHAnimHierarchy *hier,
 	RwMatrix *mats, const CMatrix &visualBody)
 {
-	if(!ped->bIsDucking)
+	if(!ped->bIsDucking){
+		// Upper-body stabilization already follows visualBody. Carry the
+		// animated pelvis and legs from the native heading into that same
+		// frame, retaining gait, foot pitch and pelvis sway.
+		const CMatrix &nativeBody = ped->GetMatrix();
+		const int lowerBody[] = { BONE_waist,
+			BONE_upperlegl, BONE_lowerlegl, BONE_footl,
+			BONE_upperlegr, BONE_lowerlegr, BONE_footr };
+		const CVector root = visualBody.GetPosition();
+		for(unsigned int i = 0; i < sizeof(lowerBody)/sizeof(lowerBody[0]); i++){
+			const int index = RpHAnimIDGetIndex(hier, lowerBody[i]);
+			if(index < 0 || index >= hier->numNodes)
+				continue;
+			RwMatrix &bone = mats[index];
+			bone.pos = root + FromBasisLocal(
+				ToBasisLocal(CVector(bone.pos)-root, nativeBody), visualBody);
+			AlignCrouchAxes(bone, nativeBody, visualBody);
+		}
 		return;
+	}
 	const int leftHip = RpHAnimIDGetIndex(hier, BONE_upperlegl);
 	const int rightHip = RpHAnimIDGetIndex(hier, BONE_upperlegr);
 	if(leftHip < 0 || rightHip < 0 ||
@@ -519,7 +537,7 @@ static bool BuildGroundedVisualBody(CPed *ped,
 		}
 	}
 
-	AlignCrouchedSkeleton(ped, hier, mats, visualBody);
+	AlignGroundedSkeleton(ped, hier, mats, visualBody);
 	return true;
 }
 
@@ -1586,6 +1604,9 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 		// Offset root clump frame in roomscale
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame){
+			if(!ped->bIsDucking)
+				AlignCrouchAxes(*RwFrameGetMatrix(clumpFrame),
+					ped->GetMatrix(), visualBody);
 			if(ped->bIsDucking){
 				RwFrame *leftHip = ped->m_pFrames[PED_UPPERLEGL] ?
 					ped->m_pFrames[PED_UPPERLEGL]->frame : nil;
@@ -1810,13 +1831,18 @@ void Apply(CPed *ped)
 	if(ped->GetClump() != nil && !isSkinned){
 		RwFrame *clumpFrame = RpClumpGetFrame(ped->GetClump());
 		if(clumpFrame != nil){
+			// Discard the previous visual yaw before resolving this frame's
+			// pose, including when gameplay/IK stops owning the skeleton.
+			RwFrameGetMatrix(clumpFrame)->right = ped->GetRight();
+			RwFrameGetMatrix(clumpFrame)->up = ped->GetForward();
+			RwFrameGetMatrix(clumpFrame)->at = ped->GetUp();
 			RwFrameGetMatrix(clumpFrame)->pos = ped->GetPosition();
 			RwFrameUpdateObjects(clumpFrame);
 		}
 	}
 
 	// The non-skinned clump root above must first lose its previous roomscale
-	// offset. Leave native bones untouched and clear caches for recovery.
+	// offset and visual yaw. Leave native bones untouched and clear caches for recovery.
 	if(!BodyIKGameplayContext()){
 		Reset();
 		return;

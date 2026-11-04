@@ -40,7 +40,7 @@ struct CPad {
     int GetPedWalkUpDown(){return y;}
 };
 struct RwMatrix { CVector pos,right,up,at; };
-enum { BONE_upperlegl, BONE_upperlegr };
+enum { BONE_upperlegl, BONE_upperlegr, BONE_waist, BONE_lowerlegl, BONE_footl, BONE_lowerlegr, BONE_footr };
 struct RpHAnimHierarchy { int numNodes; };
 int RpHAnimIDGetIndex(RpHAnimHierarchy *,int tag){return tag;}
 #include "../../overlay/src/peds/QuestCrouch.h"
@@ -71,8 +71,8 @@ int main(){
     RwMatrix bones[2]={{visual.p+CVector(-0.1f,0,-0.6f),{1,0,0},{0,1,0},{0,0,1}},
                        {visual.p+CVector(0.1f,0,-0.6f),{1,0,0},{0,0,1},{0,-1,0}}};
     RpHAnimHierarchy hierarchy{2};
-    AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);Near(bones[0].right,{1,0,0},"standing skeleton remains untouched");
-    player.bIsDucking=true;AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);
+
+    player.bIsDucking=true;AlignGroundedSkeleton(&player,&hierarchy,bones,visual);
     Near(bones[0].pos,visual.p+CVector(0,-0.1f,-0.6f),"legs follow view yaw around translated root and retain crouch height");
     Near(bones[1].pos,visual.p+CVector(0,0.1f,-0.6f),"both hips follow the same heading");
     Near(bones[0].right,visual.r,"leg basis follows visual body");Near(bones[1].up,{0,0,1},"authored crouch pitch is preserved");
@@ -91,12 +91,40 @@ int main(){
         AlignCrouchAxes(clumpRoot,measured,visual);
         // Non-skinned animation keeps its authored pose below the root.
         Near(clumpRoot.right*hipRight.x+clumpRoot.up*hipRight.y,visual.r,"non-skinned authored hip span aligns with torso");
-        AlignCrouchedSkeleton(&player,&hierarchy,bones,visual);
+        AlignGroundedSkeleton(&player,&hierarchy,bones,visual);
         Near(bones[1].pos-bones[0].pos,visual.r*0.3f,"skinned hip span aligns with torso despite authored root yaw");
         Near(bones[0].up,visual.f,"authored forward follows torso heading");
         Near(bones[0].at,visual.u,"crouch vertical axis is preserved");
     }
     CMatrix invalid;
     Check(!BuildCrouchPoseBasis({0,0,0},{0,0,1},visual,invalid),"degenerate hip span is rejected");
+    player.bIsDucking=false;
+    // Physical turning changes the visual heading without changing the entity.
+    // Include an animated foot lift/pitch and a translated roomscale root.
+    for(int view=0;view<8;view++)for(int native=0;native<8;native++){
+        const float v=view*0.785398163f,n=native*0.785398163f;
+        visual.r={std::cos(v),std::sin(v),0};visual.f={-std::sin(v),std::cos(v),0};
+        player.body.r={std::cos(n),std::sin(n),0};player.body.f={-std::sin(n),std::cos(n),0};
+        RwMatrix standingBones[8];
+        const CVector offset{0.2f,-0.7f,0.25f};
+        const CVector pitchedForward{0,0.6f,0.8f};
+        for(auto &bone:standingBones)
+            bone={visual.p+FromBasisLocal(offset,player.body),player.body.r,
+                FromBasisLocal(pitchedForward,player.body),player.body.u};
+        RpHAnimHierarchy standingHierarchy{8};
+        const RwMatrix upper=standingBones[7];
+        AlignGroundedSkeleton(&player,&standingHierarchy,standingBones,visual);
+        for(int i=0;i<7;i++){
+            Near(standingBones[i].pos,visual.p+FromBasisLocal(offset,visual),"standing pelvis and legs follow headset yaw with gait and roomscale offset");
+            Near(standingBones[i].right,visual.r,"standing lower-body axes follow headset yaw");
+            Near(standingBones[i].up,FromBasisLocal(pitchedForward,visual),"animated foot pitch is preserved");
+        }
+        Near(standingBones[7].pos,upper.pos,"upper-body solve position remains untouched");
+        Near(standingBones[7].right,upper.right,"upper-body solve orientation remains untouched");
+        RwMatrix root{{},player.body.r,player.body.f,player.body.u};
+        AlignCrouchAxes(root,player.body,visual);
+        Near(root.right,visual.r,"standing non-skinned root follows headset yaw");
+        Near(root.up,visual.f,"standing non-skinned forward follows headset yaw");
+    }
     std::printf("Quest crouch: %d checks passed\n",checks);
 }
