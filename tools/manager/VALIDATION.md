@@ -179,3 +179,21 @@ dependencies. Native manager tests validate the active C# workflows; historical
 installer tests exercise compatibility source fixtures. Not every specialised
 auxiliary tool, optional download, signing configuration or device action has
 been exercised end to end. Headset visual/gameplay QA was not performed.
+
+## Native radio conversion — 2026-11-04
+
+- Local Windows execution; synthetic audio only. No original game data was
+  needed for automated validation or transferred during this task.
+- Manager Release build and Windows self-contained publish passed. Refreshed
+  `out/manager-windows` for the root launcher; retained the previously locked
+  executable locally under a timestamped previous filename.
+- 73/73 manager checks passed, including all copy/conversion combinations,
+  failure/cancellation preservation and real FFmpeg IMA ADPCM-to-AAC conversion.
+- Native C++17 resolver checks passed under MSVC with `/W4 /WX`.
+- Interactive TUI checks passed, including presence of the new build checkbox.
+- Full freshly assembled arm64 debug APK build passed. Existing upstream native,
+  shader and Gradle/SDK warnings remain; no compilation errors.
+- APK installed with update semantics on the verified personal Quest 3 device.
+  No uninstall, data clearing or retail audio conversion was performed.
+- Actual station playback timing/listening validation remains a headset check
+  after selecting conversion in the manager.

@@ -1,5 +1,12 @@
 # Liberty City VR Manager
 
+Build and install includes an optional **Convert and compress radio stations**
+checkbox. Configure FFmpeg and ffprobe in Settings. It converts locally to
+AAC-LC/M4A for direct Quest playback, either from your PC game folder alongside
+Copy game data or from the installed headset WAVs when Copy is off. Original PC
+files are preserved; headset WAVs are removed after verified replacement.
+Copy alone restores WAV playback. See [the build guide](../../BUILDING.md#build-and-install).
+
 The Windows/Linux project manager is a .NET 10 console application using
 Terminal.Gui **2.5.0**. Its GTA III inspired palette uses midnight blue,
 cream, menu cyan and HUD amber. Use a terminal of at least 80 × 24; 110 × 36

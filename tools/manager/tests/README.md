@@ -7,6 +7,17 @@ fixtures, disposable settings and temporary Git repositories. It reads no retail
 data and performs no device transfers. Native source regression adapters are
 available separately under **Tools and tests**.
 
+Radio checks exercise copy-only, conversion-only and combined transfers with
+fake ADB, plus failed encoding, metadata validation, duration mismatch, full
+decode, upload verification and cancellation. When FFmpeg/ffprobe are available
+on PATH, a synthetic IMA ADPCM station also goes through the real AAC conversion
+and validation pipeline. No retail station files are used.
+
+Compile `radio-stream-path.cpp` with a host C++17 compiler and run the result to
+check the production resolver's compressed preference, WAV fallback, missing
+station and dialogue behavior. For example, in a Visual Studio developer shell:
+`cl /EHsc /std:c++17 tools/manager/tests/radio-stream-path.cpp /Fe.cache/radio-stream-path.exe /Fo.cache/radio-stream-path.obj`.
+
 The checks cover settings persistence and failed-write preservation; corrupt and
 unsupported settings; path/archive traversal; log redaction; binary privacy
 scanning and private refs; explicit Quest 3 targeting, multiple-device selection

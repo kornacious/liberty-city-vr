@@ -38,6 +38,28 @@ copying requires a complete local GTA III PC installation containing `data`,
 The manager copies only the required folders and optional `mp3`, `skins`, `txd`.
 Game files and saves remain local and must never be committed or uploaded.
 
+**Convert and compress radio stations** is optional and off by default. It uses
+local FFmpeg/ffprobe (configure their executable paths in Settings) to encode the
+nine native music stations as AAC-LC, 128 kb/s stereo at 48 kHz in seekable `.m4a`
+containers. The game prefers these files directly, avoiding whole-station WAV
+decoding at tune time. AAC-LC/M4A is supported by Android's media framework
+([supported formats](https://developer.android.com/media/platform/supported-formats)).
+
+- Copy game data only: copies the original WAVs and removes their old compressed
+  overrides so the game uses the WAVs again.
+- Convert only: pulls existing station WAVs from the selected headset into a
+  temporary local workplace folder, converts them and transfers the replacements.
+- Copy and convert: converts the PC station WAVs locally and sends only the
+  compressed stations. PC originals are preserved.
+
+All selected stations are converted and decoded for validation before any station
+is replaced. Each upload is hash verified and renamed into place before its
+headset WAV is removed. A failure preserves that station's WAV; previously
+completed replacements remain usable. Temporary PC files are cleaned up. Missing
+station WAVs are skipped, so conversion can be rerun after a completed or partial
+installation. Mission dialogue, sound effects, custom music and saves are outside
+the conversion. Build only skips conversion and all headset operations.
+
 The x64 tool bootstrap retains the original verified versions:
 
 - Git for Windows 2.55.0.3 (Linux requires installed Git)

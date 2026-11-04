@@ -8,6 +8,7 @@
 #include "QuestMusic.h"
 #include "QuestAudio.h"
 #include "QuestHrtf.h"
+#include "QuestRadioStream.h"
 #include "platform_android.h"
 
 #include <aaudio/AAudio.h>
@@ -324,6 +325,14 @@ estimateMp3Length(const char *path)
 	return 0;
 }
 
+static bool
+resolveStreamPath(char *path, size_t capacity, unsigned int file)
+{
+    return QuestResolveRadioStream(path, capacity, StreamedNameTable[file],
+        file < STREAMED_SOUND_RADIO_MP3_PLAYER,
+        platform::resolveGamePathCaseInsensitive);
+}
+
 static void
 applyStreamVolume(uint8 stream)
 {
@@ -401,9 +410,11 @@ cSampleManager::Initialise(void)
 
 	for(int i = 0; i < TOTAL_STREAMED_SOUNDS; ++i){
 		char path[768];
-		if(platform::resolveGamePathCaseInsensitive(path, sizeof(path),
-			StreamedNameTable[i]))
-			gTrackLengths[i] = estimateMp3Length(path);
+		if(resolveStreamPath(path, sizeof(path), i)){
+            const char *extension = strrchr(path, '.');
+            gTrackLengths[i] = extension && strcasecmp(extension, ".m4a") == 0 ?
+                platform::audioProbeDuration(path) : estimateMp3Length(path);
+        }
 		if(gTrackLengths[i] == 0)
 			gTrackLengths[i] = i <= STREAMED_SOUND_RADIO_POLICE ?
 				60u * 60u * 1000u : 10u * 60u * 1000u;
@@ -626,7 +637,7 @@ void cSampleManager::PreloadStreamedFile(uint8 file, uint8 stream)
 	if(file >= TOTAL_STREAMED_SOUNDS || stream >= MAX_STREAMS) return;
 	if(stream == 0) { QuestMusic::Stop(); gCustomMusic = false; }
 	char path[768];
-	if(platform::resolveGamePathCaseInsensitive(path, sizeof(path), StreamedNameTable[file]))
+	if(resolveStreamPath(path, sizeof(path), file))
 		platform::audioLoadStream(stream, path, 0, gStreamLoop[stream], false);
 }
 void cSampleManager::PauseStream(bool8 pause, uint8 stream)
@@ -649,7 +660,7 @@ bool8 cSampleManager::StartStreamedFile(uint8 file, uint32 position, uint8 strea
     }
     if(stream == 0) { QuestMusic::Stop(); gCustomMusic = false; }
 	char path[768];
-	if(!platform::resolveGamePathCaseInsensitive(path, sizeof(path), StreamedNameTable[file])){
+	if(!resolveStreamPath(path, sizeof(path), file)){
 		LOGE("stream not found: %s", StreamedNameTable[file]);
 		return false;
 	}

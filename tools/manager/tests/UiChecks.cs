@@ -26,6 +26,8 @@ internal static class UiChecks
         {
             try
             {
+                if (!Descendants(ui.Window).OfType<CheckBox>().Any(c => c.Text.Contains("Convert and compress radio stations")))
+                    throw new Exception("Build page lacks radio conversion option.");
                 Button("Settings").InvokeCommand(Command.Accept);
                 var fields = Descendants(ui.Window).OfType<TextField>().ToArray();
                 fields[1].Text = Path.Combine(Path.GetTempPath(), "cancelled-workplace");

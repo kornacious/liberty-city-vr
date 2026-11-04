@@ -86,8 +86,12 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         log.Write("APK updated on personal Quest 3 device.");
         if (updateOnly) { log.Write("Update complete. Launch the game from the headset when ready."); return; }
         await device.Bootstrap(token);
+        await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
+        if (options.ConvertRadioStations)
+            await new RadioStations(settings, runner, log).ConvertAndInstall(device,
+                options.CopyGameData ? gameDirectories.Single(d => Path.GetFileName(d).Equals("Audio", StringComparison.OrdinalIgnoreCase)) : null, token);
         foreach (var directory in gameDirectories)
-            await PushGameTree(device, directory, Path.GetFileName(directory), token);
+            await PushGameTree(device, directory, Path.GetFileName(directory), token, options.ConvertRadioStations);
         await CopyPortAssets(device, Path.Combine(assembled, "gamefiles"), includeHands: true, token);
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
         log.Write("Installation complete. Launch Liberty City VR from the headset.");
@@ -128,16 +132,21 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         return required.Concat(new[] { "mp3", "skins", "txd" }.Where(directories.ContainsKey)).Select(n => directories[n]).ToList();
     }
 
-    private static async Task PushGameTree(QuestDevice device, string source, string relative, CancellationToken token)
+    public static async Task PushGameTree(QuestDevice device, string source, string relative, CancellationToken token, bool convertedRadio = false)
     {
         Paths.NoLinks(source);
         await device.Run(["shell", "content", "call", "--uri", QuestDevice.SaveUri, "--method", "mkdir", "--arg", QuestDevice.Quote(relative)], token);
         foreach (var directory in Directory.GetDirectories(source))
-            await PushGameTree(device, directory, relative + "/" + Path.GetFileName(directory), token);
+            await PushGameTree(device, directory, relative + "/" + Path.GetFileName(directory), token, convertedRadio);
         foreach (var file in Directory.GetFiles(source))
         {
             Paths.NoLinks(file);
-            await device.Push(file, QuestDevice.GameData + "/" + relative + "/" + Path.GetFileName(file), token);
+            var radio = relative.Equals("Audio", StringComparison.OrdinalIgnoreCase);
+            if (radio && (RadioStations.IsStation(file, ".m4a") || (convertedRadio && RadioStations.IsStation(file, ".wav")))) continue;
+            var remote = QuestDevice.GameData + "/" + relative + "/" + Path.GetFileName(file);
+            await device.Push(file, remote, token);
+            if (radio && !convertedRadio && RadioStations.IsStation(file, ".wav"))
+                await device.Shell("rm -f " + QuestDevice.Quote(RadioStations.CompressedPath(remote)), token);
         }
     }
 

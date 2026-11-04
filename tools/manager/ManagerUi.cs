@@ -131,6 +131,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Toggle("Build only (skip installation)", options.BuildOnly, v => options.BuildOnly = v);
                 Toggle("Release (requires your signing configuration)", options.Release, v => options.Release = v);
                 Toggle("Copy my GTA III game data", options.CopyGameData, v => options.CopyGameData = v);
+                Toggle("Convert and compress radio stations", options.ConvertRadioStations, v => options.ConvertRadioStations = v);
+                Note("AAC radio: converts PC stations when copying, otherwise existing headset WAVs. Requires FFmpeg.");
                 Field("GTA III PC installation", draft.GameDirectory, v => draft.GameDirectory = v, OpenMode.Directory);
                 Licenses(); break;
             case 1:
@@ -185,6 +187,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("JDK 21 home (blank: download/reuse)", draft.JavaHome, v => draft.JavaHome = v, OpenMode.Directory);
                 Field("ADB executable (blank: SDK/PATH)", draft.Adb, v => draft.Adb = v, OpenMode.File);
                 Field("ffprobe executable", draft.Ffprobe, v => draft.Ffprobe = v, OpenMode.File);
+                Field("FFmpeg executable", draft.Ffmpeg, v => draft.Ffmpeg = v, OpenMode.File);
                 Field("CMake executable (blank: PATH/SDK)", draft.CMake, v => draft.CMake = v, OpenMode.File);
                 Field("Python 3 executable (auxiliary tools)", draft.Python, v => draft.Python = v, OpenMode.File);
                 Field("PowerShell 7 executable (auxiliary tests)", draft.PowerShell, v => draft.PowerShell = v, OpenMode.File);
