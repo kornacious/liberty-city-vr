@@ -59,14 +59,14 @@ public sealed class RadioStations(ManagerSettings settings, ICommandRunner runne
                 var output = Path.Combine(scratch, converted.Count + ".m4a");
                 log.Write("Converting radio station " + Path.GetFileNameWithoutExtension(remote));
                 var original = await runner.Run(settings.Ffprobe, ["-v", "error", "-show_format", "-show_streams", "-of", "json", local], showOutput: false, token: token);
-                using var metadata = JsonDocument.Parse(original.Output);
+                using var metadata = JsonDocument.Parse(original.StandardOutput);
                 var originalSeconds = double.Parse(metadata.RootElement.GetProperty("format").GetProperty("duration").GetString()!, CultureInfo.InvariantCulture);
                 if (!double.IsFinite(originalSeconds) || originalSeconds <= 0) throw new IOException("Invalid radio source duration.");
                 await runner.Run(settings.Ffmpeg, ["-nostdin", "-v", "error", "-xerror", "-i", local, "-map", "0:a:0", "-vn",
                     "-map_metadata", "-1", "-c:a", "aac", "-profile:a", "aac_low", "-b:a", "128k", "-ar", "48000", "-ac", "2",
                     "-movflags", "+faststart", "-n", output], showOutput: false, token: token);
                 var probe = await runner.Run(settings.Ffprobe, ["-v", "error", "-show_format", "-show_streams", "-of", "json", output], showOutput: false, token: token);
-                var duration = MusicImporter.ValidateProbe(".m4a", new FileInfo(output).Length, probe.Output);
+                var duration = MusicImporter.ValidateProbe(".m4a", new FileInfo(output).Length, probe.StandardOutput);
                 if (Math.Abs(duration - originalSeconds * 1000) > 250) throw new IOException("Converted radio duration differs from source; WAV preserved.");
                 // Decode the complete result to detect corrupt/truncated packets before deleting WAVs.
                 await runner.Run(settings.Ffmpeg, ["-nostdin", "-v", "error", "-xerror", "-i", output, "-f", "null", "-"], showOutput: false, token: token);

@@ -28,6 +28,12 @@ internal static class RadioChecks
                 if (copy) Check(runner.Pushes.Any(p => p.EndsWith("sfx.RAW")) && runner.Pushes.Any(p => p.EndsWith("mission.wav")));
             });
         }
+        await test("Radio source and converted probes accept JSON alongside stderr diagnostics", async () =>
+        {
+            using var log = new PrivateLog(); var runner = new RadioRunner { ProbeDiagnostics = true };
+            await new RadioStations(settings, runner, log).ConvertAndInstall(new(runner, log, "adb", "synthetic-target"), audio, default);
+            Check(runner.Commands.Any(c => c.Contains("&& rm -f")));
+        });
         await test("Copy without conversion copies WAV and clears stale compressed override", async () =>
         {
             using var log = new PrivateLog(); var runner = new RadioRunner();
@@ -73,6 +79,7 @@ internal static class RadioChecks
     {
         public string Failure { get; init; } = "";
         public bool Empty { get; init; }
+        public bool ProbeDiagnostics { get; init; }
         public ICommandRunner? CodecRunner { get; init; }
         public List<string> Commands { get; } = [];
         public List<string> Pushes { get; } = [];
@@ -87,6 +94,11 @@ internal static class RadioChecks
             if (a.Contains("-version")) return Task.FromResult(new CommandResult(0, "fixture"));
             if (executable == "ffprobe")
             {
+                if (ProbeDiagnostics)
+                {
+                    const string json = """{"streams":[{"codec_type":"audio","codec_name":"aac","channels":2,"sample_rate":"48000"}],"format":{"duration":"10"}}""";
+                    return Task.FromResult(new CommandResult(0, "[mp3 @ synthetic] probe diagnostic\n" + json) { StandardOutput = json });
+                }
                 if (Failure == "probe" && a[^1].EndsWith(".m4a")) throw new IOException("Invalid output.");
                 if (Failure == "duration" && a[^1].EndsWith(".m4a")) return Task.FromResult(new CommandResult(0, """{"streams":[{"codec_type":"audio","codec_name":"aac","channels":2,"sample_rate":"48000"}],"format":{"duration":"1"}}"""));
                 return Task.FromResult(new CommandResult(0, """{"streams":[{"codec_type":"audio","codec_name":"aac","channels":2,"sample_rate":"48000"}],"format":{"duration":"10"}}"""));

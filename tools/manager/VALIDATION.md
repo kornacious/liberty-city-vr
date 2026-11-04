@@ -180,6 +180,19 @@ installer tests exercise compatibility source fixtures. Not every specialised
 auxiliary tool, optional download, signing configuration or device action has
 been exercised end to end. Headset visual/gameplay QA was not performed.
 
+## FFprobe diagnostic parsing fix — 2026-11-04
+
+- Command execution previously combined stdout and stderr, allowing FFprobe
+  diagnostics to enter JSON parsing. Radio source/output metadata and music
+  import now parse separately captured stdout; combined diagnostics remain
+  available for existing callers.
+- 75/75 manager checks passed, including a real child process emitting stderr
+  between JSON lines and radio conversion with noisy source/output probes.
+- Windows self-contained manager publish passed and the executable used by
+  `MANAGE.bat` was refreshed and hash verified.
+- Local HEAD WAV metadata was inspected read-only. No game audio was changed or
+  transferred. This manager-only fix requires no APK rebuild or deployment.
+
 ## Native radio conversion — 2026-11-04
 
 - Local Windows execution; synthetic audio only. No original game data was

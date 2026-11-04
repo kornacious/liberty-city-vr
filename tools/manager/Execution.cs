@@ -38,7 +38,12 @@ public sealed class PrivateLog : IDisposable
     public void Dispose() => writer?.Dispose();
 }
 
-public sealed record CommandResult(int ExitCode, string Output);
+public sealed record CommandResult(int ExitCode, string Output)
+{
+    // Keep combined diagnostics for existing callers (e.g. java -version),
+    // but structured-output consumers must never parse stderr as JSON.
+    public string StandardOutput { get; init; } = Output;
+}
 
 public interface ICommandRunner
 {
@@ -65,15 +70,17 @@ public sealed class CommandRunner(PrivateLog log) : ICommandRunner
         if (!process.Start()) throw new IOException("Could not start the required tool.");
         using var registration = timeout.Token.Register(() => { try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } });
         var output = new StringBuilder();
-        async Task Drain(StreamReader stream)
+        var standardOutput = new StringBuilder();
+        async Task Drain(StreamReader stream, bool isStandardOutput)
         {
             while (await stream.ReadLineAsync() is { } line)
             {
                 lock (output) { if (output.Length < 8 * 1024 * 1024) output.AppendLine(line); }
+                if (isStandardOutput && standardOutput.Length < 8 * 1024 * 1024) standardOutput.AppendLine(line);
                 if (showOutput) log.Write(line);
             }
         }
-        var drain = Task.WhenAll(Drain(process.StandardOutput), Drain(process.StandardError));
+        var drain = Task.WhenAll(Drain(process.StandardOutput, true), Drain(process.StandardError, false));
         try
         {
             if (input is not null) await process.StandardInput.WriteAsync(input.AsMemory(), timeout.Token);
@@ -85,7 +92,7 @@ public sealed class CommandRunner(PrivateLog log) : ICommandRunner
         if (check && process.ExitCode != 0)
             throw new IOException($"{Path.GetFileName(executable)} failed (exit {process.ExitCode}). " +
                 (showOutput ? "See the action log." : "Private diagnostics suppressed."));
-        return new(process.ExitCode, output.ToString());
+        return new(process.ExitCode, output.ToString()) { StandardOutput = standardOutput.ToString() };
     }
 }
 

@@ -72,7 +72,7 @@ public sealed class MusicImporter(ManagerSettings settings, ICommandRunner runne
             var file = new FileInfo(path);
             if (!file.Exists) throw new IOException("Music file does not exist.");
             var probe = await runner.Run(settings.Ffprobe, ["-v", "error", "-show_format", "-show_streams", "-of", "json", file.FullName], showOutput: false, token: token);
-            var duration = ValidateProbe(file.Extension, file.Length, probe.Output);
+            var duration = ValidateProbe(file.Extension, file.Length, probe.StandardOutput);
             var hash = Digests.Sha256(file.FullName);
             if (!seen.Add(hash)) { log.Write("Skipping duplicate: " + file.Name); continue; }
             accepted.Add(new(file.FullName, file.Length, duration, hash, SafeName(file.Name, hash)));

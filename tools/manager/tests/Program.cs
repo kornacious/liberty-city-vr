@@ -6,6 +6,15 @@ using LibertyManager;
 
 if (args is ["--ui", var uiDirectory]) return UiChecks.Run(uiDirectory);
 
+if (args is ["--probe-noise"])
+{
+    Console.Error.WriteLine("[mp3 @ synthetic] probe diagnostic");
+    Console.WriteLine("{");
+    Console.Error.WriteLine("[mp3 @ synthetic] another diagnostic");
+    Console.WriteLine("\"format\": {\"duration\": \"10\"}}");
+    return 0;
+}
+
 if (args is ["--child"])
 {
     Console.WriteLine("child ready"); await Task.Delay(TimeSpan.FromMinutes(2)); return 0;
@@ -194,6 +203,17 @@ await Test("All auxiliary source modules are embedded and discoverable", () =>
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-ped-vehicle-damage.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-dodo-flight.ps1"));
     Assert(AuxiliaryTools.Catalog.All(t => !t.Path.Contains("build-and-install"))); return Task.CompletedTask;
+});
+await Test("Command runner keeps stderr diagnostics out of structured stdout", async () =>
+{
+    using var log = new PrivateLog(); var runner = new CommandRunner(log);
+    var host = Environment.ProcessPath!;
+    var childArgs = Path.GetFileNameWithoutExtension(host).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
+        ? new[] { Path.Combine(AppContext.BaseDirectory, "LibertyManager.Tests.dll"), "--probe-noise" } : new[] { "--probe-noise" };
+    var result = await runner.Run(host, childArgs, showOutput: false);
+    using var metadata = JsonDocument.Parse(result.StandardOutput);
+    Assert(metadata.RootElement.GetProperty("format").GetProperty("duration").GetString() == "10");
+    Assert(result.Output.Contains("[mp3 @ synthetic]") && !result.StandardOutput.Contains("diagnostic"));
 });
 await Test("Cancellation terminates the child process", async () =>
 {
