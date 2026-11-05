@@ -1506,6 +1506,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	static CVector trainEyeLocal, trainForwardLocal;
 	static uint32 trainTurnFrame;
 	static bool trainTurnFrameValid;
+	static float trainTurnStartYaw, trainTurnElapsed;
 	CVehicle *passengerCarriage = trainPassenger ? player->m_pMyVehicle : nil;
 	if(trainAnchorPlayer != player || trainAnchorVehicle != passengerCarriage ||
 	   !trainPassenger || playerVehicleState == PED_EXIT_TRAIN ||
@@ -1741,6 +1742,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				trainEyeLocal.z += 0.88f;
 				const CMatrix inverse = Invert(train->GetMatrix());
 				trainForwardLocal = Multiply3x3(inverse, player->GetForward());
+				trainTurnStartYaw = Atan2(trainForwardLocal.y, trainForwardLocal.x);
+				trainTurnElapsed = 0.0f;
 				// Commit after simulation has lined the ped up in the carriage.
 				trainAnchorLatched = postPhysics;
 			}
@@ -1749,23 +1752,25 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			CVector neck, neckForward;
 			if(GetAnimatedPedHeadPose(player, &neck, &neckForward))
 				trainEyeLocal = Invert(train->GetMatrix()) * neck;
-			// Turn toward the boarding-side windows once, at 20 degrees/sec.
+			// Settle toward the boarding-side windows once over 300 ms.
 			// Headset rotation remains additive; sticks never steer this anchor.
 			if(postPhysics && (!trainTurnFrameValid || trainTurnFrame != CTimer::GetFrameCounter())){
 				trainTurnFrame = CTimer::GetFrameCounter();
 				trainTurnFrameValid = true;
-				float yaw = VrKnockdownView::Wrap(Atan2(trainForwardLocal.y, trainForwardLocal.x));
-				const float step = CTimer::GetIsPaused() ? 0.0f : 0.34906585f*CTimer::GetTimeStep()/50.0f;
+				const float dt = CTimer::GetIsPaused() ? 0.0f : CTimer::GetTimeStep()/50.0f;
+				trainTurnElapsed = clamp(trainTurnElapsed+dt, 0.0f, 0.3f);
+				const float t = trainTurnElapsed/0.3f;
+				const float blend = t*t*(3.0f-2.0f*t);
 				const float outsideYaw = trainEyeLocal.x < 0.0f ? 3.14159265f : 0.0f;
-				const float remaining = VrKnockdownView::Wrap(yaw-outsideYaw);
-				yaw -= clamp(remaining, -step, step);
+				const float yaw = trainTurnStartYaw +
+					VrKnockdownView::Wrap(outsideYaw-trainTurnStartYaw)*blend;
 				trainForwardLocal = CVector(Cos(yaw), Sin(yaw), 0.0f);
 			}
 			head = train->GetMatrix() * trainEyeLocal;
 			forward = Multiply3x3(train->GetMatrix(), trainForwardLocal);
 			forward.Normalise();
 			const CVector eyeRight = CrossProduct(forward, train->GetUp());
-			head += train->GetUp()*0.04f + forward*0.10f + eyeRight*0.05f;
+			head += train->GetUp()*0.04f + forward*0.07f + eyeRight*0.02f;
 		}
 
 		// Visible hands/body opt into following the authored crouch head. Keep the

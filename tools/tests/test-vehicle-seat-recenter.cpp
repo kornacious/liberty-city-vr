@@ -286,7 +286,7 @@ static void TrainPassengerMotion() {
  };
  // A pre-physics sample must not commit the still-unsettled occupant pose.
  publish(false);p.position={3,-2,0};publish();
- Check(Near(head.x,-.9f)&&Near(head.y,-1.95f)&&Near(head.z,2.42f),"fallback eye includes forward/right/up neck clearance");
+ Check(Near(head.x,-.87f)&&Near(head.y,-1.98f)&&Near(head.z,2.42f),"fallback eye includes forward/right/up neck clearance");
  Check(VrBodyIK::VehicleEnabled(),"interior train enables normal body IK with tracked hands");
 #ifdef TEST_TRAIN_HUD
  Check(VrWristPanelsRideAlong(),"interior train permits immersive wrist panels without driving mode");
@@ -342,7 +342,7 @@ static void TrainPassengerMotion() {
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
  Check(!OculusVR::IsQuestTrainPassenger(),"stale vehicle pointer after exit does not retain passenger mode");
  p.inVehicle=true;p.state=PED_DRIVING;p.position={10,20,1};publish();
- CVector expected=train.matrix*CVector(-.8f,-2,2.38f)+train.matrix.up*.04f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
+ CVector expected=train.matrix*CVector(-.8f,-2,2.38f)+train.matrix.up*.04f+forward*.07f+CrossProduct(forward,train.matrix.up)*.02f;
  Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"reboarding restores authored interior slot");
  // Start facing along the carriage and verify a slow one-time outward turn.
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
@@ -350,17 +350,19 @@ static void TrainPassengerMotion() {
  ++CTimer::frame;publish();float first=Atan2(forward.y,forward.x);
  Check(first>1.5708f&&first<1.6f,"boarding turn starts gradually toward negative-X windows");
  publish();Check(Near(Atan2(forward.y,forward.x),first),"multiple camera updates cannot double turn rate");
- for(int i=0;i<240;i++){++CTimer::frame;publish();}
- Check(Near(forward.x,-1)&&Near(forward.y,0),"boarding turn faces out through the actual marker side");
+ for(int i=0;i<13;i++){++CTimer::frame;publish();}
+ Check(forward.y>.001f,"boarding turn is still progressing before 300 ms");
+ ++CTimer::frame;publish();
+ Check(Near(forward.x,-1)&&Near(forward.y,0),"boarding turn finishes facing outside at 300 ms");
  for(int slot=1;slot<=2;slot++){
   p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
   train.pPassengers[slot-1]=nullptr;train.pPassengers[slot]=&p;
   p.inVehicle=true;p.state=PED_DRIVING;++CTimer::frame;publish();
-  CVector slotEye=train.matrix*trainModel.m_positions[slot]+train.matrix.up*.92f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
+  CVector slotEye=train.matrix*trainModel.m_positions[slot]+train.matrix.up*.92f+forward*.07f+CrossProduct(forward,train.matrix.up)*.02f;
   Check(Near(head.x,slotEye.x)&&Near(head.y,slotEye.y)&&Near(head.z,slotEye.z),"each door retains its interior fallback and eye clearance");
  }
  trainNeckReady=true;trainNeck={-.4f,1.3f,2.1f};publish();
- expected=trainNeck+train.matrix.up*.04f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
+ expected=trainNeck+train.matrix.up*.04f+forward*.07f+CrossProduct(forward,train.matrix.up)*.02f;
  Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"posed neck replaces marker and gets forward/right/up eye clearance");
  trainNeckReady=false;
  rw::vulkan::setFirstPersonPositionLocked(false);
