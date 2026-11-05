@@ -10676,6 +10676,7 @@ $path = Join-Path $StageRoot 'src\peds\PlayerPed.cpp'
 $source = [IO.File]::ReadAllText($path)
 $parts = @(
     '(?ms)^static bool\r?\nIsRunWithoutLimitsCheatEnabled\(.*?(?=^#ifdef VC_PED_PORTS)',
+    '(?ms)^static bool\r?\nUseQuestDirectionalLocomotion\(.*?(?=^void\r?\nCPlayerPed::SetRealMoveAnim)',
     '(?ms)^void\r?\nCPlayerPed::ProcessAnimGroups\(.*?^\}'
 )
 $definitions = @()
@@ -10684,7 +10685,23 @@ foreach ($pattern in $parts) {
     if (-not $match.Success) { throw "Cannot extract sprint production code: $pattern" }
     $definitions += $match.Value
 }
+if ($source -notmatch '(?ms)CPlayerPed::SetRealMoveAnim\(void\)\s*\{\s*if\(BlendQuestLocomotionToIdle\(this\)\)') {
+    throw 'VR stop blend is not wired into SetRealMoveAnim.'
+}
+$pedSource = [IO.File]::ReadAllText((Join-Path $StageRoot 'src\peds\Ped.cpp'))
+if ($pedSource -notmatch 'if\(ApplyQuestMovementVelocity\(this\)\)') {
+    throw 'VR directional velocity is not wired into CalculateNewVelocity.'
+}
+foreach ($pattern in @('(?ms)^static bool\r?\nApplyQuestMovementVelocity\(.*?^\}', '(?ms)^float\r?\nCPed::WorkOutHeadingForMovingFirstPerson\(.*?^\}')) {
+    $match = [regex]::Match($pedSource, $pattern)
+    if (-not $match.Success) { throw "Cannot extract directional movement production code: $pattern" }
+    $definitions += $match.Value
+}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'quest-sprint-production.inc'), ($definitions -join "`n"), [Text.UTF8Encoding]::new($false))
+$general = [IO.File]::ReadAllText((Join-Path $StageRoot 'src/core/General.h'))
+$angle = [regex]::Match($general, '(?ms)^\tstatic float GetRadianAngleBetweenPoints\(.*?^\t\}')
+if (-not $angle.Success) { throw 'Cannot extract engine heading convention.' }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'quest-sprint-angle.inc'), $angle.Value)
 $animHeader = [IO.File]::ReadAllText((Join-Path $StageRoot 'src\animation\AnimManager.h'))
 $enum = [regex]::Match($animHeader, '(?ms)^enum AssocGroupId.*?^\};')
 if (-not $enum.Success) { throw 'Cannot extract actual animation group enum.' }

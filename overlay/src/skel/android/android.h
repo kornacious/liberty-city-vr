@@ -255,6 +255,9 @@ void EndVrWristPanel(void);
 void VrGetGameplayHudSettings(int *widthPercent, int *scalePercent,
                               int *offsetXCm, int *offsetYCm);
 bool VrUsesHeadRelativeMovement(void);
+// Last active stick direction before HMD yaw is applied; retained on release
+// so directional animation groups can blend to idle without facing forward.
+bool VrGetOnFootAnimationAngle(float *angle);
 // HEAD DIRECTED only: Tommy is reoriented onto the movement direction.
 bool VrUsesHeadDirectedMovement(void);
 bool VrHeadBobbingEnabled(void);

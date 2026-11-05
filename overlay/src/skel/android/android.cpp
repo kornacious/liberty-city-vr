@@ -15,6 +15,7 @@
 #include "android.h"
 #include "VrVehicleSeatRecenter.h"
 #include "VrBodyIK.h"
+#include "QuestMovementDirection.h"
 #include "xr_vulkan_session.h"
 
 #include "main.h"
@@ -631,6 +632,20 @@ float
 androidgame::VrTheaterAspectRatio(void)
 {
 	return 16.0f/9.0f;
+}
+
+static float gQuestOnFootAnimationAngle;
+static bool gQuestOnFootAnimationAvailable;
+
+bool
+androidgame::VrGetOnFootAnimationAngle(float *angle)
+{
+	if(!gVrFirstPersonActive || !gQuestOnFootAnimationAvailable ||
+	   !androidgame::VrUsesHeadRelativeMovement())
+		return false;
+	if(angle)
+		*angle = gQuestOnFootAnimationAngle;
+	return true;
 }
 
 bool
@@ -2149,6 +2164,12 @@ CapturePad(RwInt32 padID)
 		FrontEndMenuManager.m_bGameNotLoaded;
 	const float moveMagnitude =
 		sqrtf(moveStickX*moveStickX+moveStickY*moveStickY);
+	gQuestOnFootAnimationAvailable = onFootGameplay;
+	if(onFootGameplay)
+		gQuestOnFootAnimationAngle = QuestMovementDirection::UpdateAngle(
+			gQuestOnFootAnimationAngle, in.leftStickX, in.leftStickY, stickDeadzone);
+	else
+		gQuestOnFootAnimationAngle = 0.0f;
 	if(!frontendConsumesStick && moveMagnitude > stickDeadzone){
 		state.LeftStickX = (int16)(moveStickX*128.0f);
 		state.LeftStickY = (int16)(-moveStickY*128.0f);

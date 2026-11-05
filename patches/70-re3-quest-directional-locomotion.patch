@@ -1,0 +1,171 @@
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -26,6 +26,7 @@
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ namespace androidgame {
+ bool VrUsesHeadRelativeMovement(void);
++bool VrGetOnFootAnimationAngle(float *angle);
+ bool VrUsesHeadDirectedMovement(void);
+ }
+ #include <android/log.h>
+@@ -345,9 +346,64 @@
+ 	m_fWalkAngle = 0.0f;
+ }
+ 
++static bool
++UseQuestDirectionalLocomotion(CPlayerPed *player)
++{
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	return !player->InVehicle() && !player->bIsInTheAir &&
++		player->m_nPedState != PED_JUMP && player->CanStrafeOrMouseControl() &&
++		androidgame::VrGetOnFootAnimationAngle(nil);
++#else
++	(void)player;
++	return false;
++#endif
++}
++
++static bool
++BlendQuestLocomotionToIdle(CPlayerPed *player)
++{
++	if(!UseQuestDirectionalLocomotion(player) || player->bIsDucking)
++		return false;
++	if(player->m_fMoveSpeed != 0.0f){
++		// A new deflection can arrive before the idle crossfade finishes.
++		// Resume the frozen gait without leaving its fade/delete state armed.
++		const AnimationId gait[] = { ANIM_STD_WALK, ANIM_STD_RUN,
++			ANIM_STD_RUNFAST, ANIM_STD_STARTWALK };
++		for(unsigned int i = 0; i < sizeof(gait)/sizeof(gait[0]); i++){
++			CAnimBlendAssociation *anim = RpAnimBlendClumpGetAssociation(player->GetClump(), gait[i]);
++			if(anim && !anim->IsRunning() && anim->blendDelta < 0.0f){
++				anim->flags &= ~ASSOC_DELETEFADEDOUT;
++				anim->blendDelta = 0.0f;
++				anim->SetRun();
++			}
++		}
++		return false;
++	}
++
++	// The stock RUNSTOP clips translate forwards, regardless of the last
++	// movement group. Freeze the last directional gait and crossfade to idle
++	// instead of introducing a forward step or blocking fresh stick input.
++	const AnimationId moving[] = { ANIM_STD_WALK, ANIM_STD_RUN,
++		ANIM_STD_RUNFAST, ANIM_STD_STARTWALK, ANIM_STD_RUNSTOP1, ANIM_STD_RUNSTOP2 };
++	for(unsigned int i = 0; i < sizeof(moving)/sizeof(moving[0]); i++){
++		CAnimBlendAssociation *anim = RpAnimBlendClumpGetAssociation(player->GetClump(), moving[i]);
++		if(anim){
++			anim->flags &= ~ASSOC_RUNNING;
++			anim->flags |= ASSOC_DELETEFADEDOUT;
++			anim->blendDelta = -8.0f;
++		}
++	}
++	CAnimManager::BlendAnimation(player->GetClump(), player->m_animGroup, ANIM_STD_IDLE, 8.0f);
++	player->m_nMoveState = PEDMOVE_STILL;
++	player->RestoreHeadingRate();
++	return true;
++}
++
+ void
+ CPlayerPed::SetRealMoveAnim(void)
+ {
++	if(BlendQuestLocomotionToIdle(this))
++		return;
+ 	CAnimBlendAssociation *curWalkAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_WALK);
+ 	CAnimBlendAssociation *curRunAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_RUN);
+ 	CAnimBlendAssociation *curSprintAssoc = RpAnimBlendClumpGetAssociation(GetClump(), ANIM_STD_RUNFAST);
+@@ -918,9 +974,8 @@
+ 					0.0f, 0.0f, -leftRight, upDown)-
+ 				TheCamera.Orientation);
+ 			m_fRotationDest = movementHeading;
+-			// Aim the body now, before the animation groups run; the stock
+-			// heading rate would leave a stale stick angle behind and pick
+-			// the strafe set.
++			// Keep the native movement/collision heading responsive. The
++			// visual body uses headset yaw and its own directional anim group.
+ 			m_fRotationCur = movementHeading;
+ 			m_fWalkAngle = 0.0f;
+ 		} else
+@@ -1166,6 +1221,12 @@
+ 	// strafe/back animations supply lateral/reverse root motion in those modes.
+ 	const bool unrestrictedLocomotion = IsRunWithoutLimitsCheatEnabled();
+ 	AssocGroupId groupToSet;
++	float animationWalkAngle = m_fWalkAngle;
++	const bool questDirectional = UseQuestDirectionalLocomotion(this);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(questDirectional)
++		androidgame::VrGetOnFootAnimationAngle(&animationWalkAngle);
++#endif
+ 	CWeapon *locomotionWeapon = unrestrictedLocomotion ?
+ 		&GetWeapon(WEAPONSLOT_UNARMED) : GetWeapon();
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+@@ -1192,12 +1253,12 @@
+ 	const eWeaponType locomotionWeaponType = locomotionWeapon->m_eWeaponType;
+ 
+ #ifdef PC_PLAYER_CONTROLS
+-	if ((m_fWalkAngle <= -DEGTORAD(50.0f) || m_fWalkAngle >= DEGTORAD(50.0f))
+-		&& TheCamera.Cams[TheCamera.ActiveCam].Using3rdPersonMouseCam()
++	if ((animationWalkAngle <= -DEGTORAD(50.0f) || animationWalkAngle >= DEGTORAD(50.0f))
++		&& (questDirectional || TheCamera.Cams[TheCamera.ActiveCam].Using3rdPersonMouseCam())
+ 		&& CanStrafeOrMouseControl()) {
+ 
+-		if (m_fWalkAngle >= -DEGTORAD(130.0f) && m_fWalkAngle <= DEGTORAD(130.0f)) {
+-			if (m_fWalkAngle > 0.0f) {
++		if (animationWalkAngle >= -DEGTORAD(130.0f) && animationWalkAngle <= DEGTORAD(130.0f)) {
++			if (animationWalkAngle > 0.0f) {
+ 				if (locomotionWeaponType == WEAPONTYPE_ROCKETLAUNCHER)
+ 					groupToSet = ASSOCGRP_ROCKETLEFT;
+ 				else
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -46,6 +46,7 @@
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ namespace androidgame {
+ bool VrUsesHeadRelativeMovement(void);
++bool VrGetOnFootAnimationAngle(float *angle);
+ void *VrCutsceneCameraActor(void);
+ bool VrKnockdownPresentationActive(void);
+ }
+@@ -1371,6 +1372,33 @@
+ 	return true;
+ }
+ 
++static bool
++ApplyQuestMovementVelocity(CPed *ped)
++{
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	if(ped != FindPlayerPed() || ped->InVehicle() || ped->bIsInTheAir ||
++	   ped->m_nPedState == PED_JUMP || !ped->CanStrafeOrMouseControl() ||
++	   !androidgame::VrGetOnFootAnimationAngle(nil))
++		return false;
++
++	CPad *pad = CPad::GetPad(0);
++	float speed = ped->m_moved.Magnitude();
++	if(pad->GetPedWalkLeftRight() == 0 && pad->GetPedWalkUpDown() == 0)
++		speed = 0.0f;
++	const float heading = ped->WorkOutHeadingForMovingFirstPerson(
++		TheCamera.Cams[TheCamera.ActiveCam].Front.Heading());
++	// Directional clips carry signed lateral/backwards root motion. Use
++	// its magnitude exactly once and keep the existing head-relative path.
++	ped->m_moved = CVector2D(-Sin(heading), Cos(heading))*speed;
++	TheCamera.Cams[TheCamera.ActiveCam].m_fPlayerVelocity = speed;
++	// Do not run the stock thigh-twist pass on top of the directional pose.
++	return true;
++#else
++	(void)ped;
++	return false;
++#endif
++}
++
+ void
+ CPed::CalculateNewVelocity(void)
+ {
+@@ -1412,6 +1440,9 @@
+ 	} else {
+ 		m_moved = m_moved * (1 / 100.0f);
+ 	}
++
++	if(ApplyQuestMovementVelocity(this))
++		return;
+ 
+ 	if ((!TheCamera.Cams[TheCamera.ActiveCam].GetWeaponFirstPersonOn() && !TheCamera.Cams[0].Using3rdPersonMouseCam())
+ 		|| FindPlayerPed() != this || !CanStrafeOrMouseControl())
