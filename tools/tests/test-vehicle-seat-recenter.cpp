@@ -50,7 +50,8 @@ static CMatrix Invert(const CMatrix &m){
  r.position={-Dot(m.right,m.position),-Dot(m.forward,m.position),-Dot(m.up,m.position)};return r;
 }
 enum { TRAIN_POS_LEFT_ENTRY, TRAIN_POS_MID_ENTRY, TRAIN_POS_RIGHT_ENTRY };
-struct CVehicleModelInfo { CVector m_positions[3]={{2.5f,-2,0},{2.5f,0,0},{2.5f,2,0}}; } trainModel;
+// Synthetic interior markers deliberately use the negative boarding side.
+struct CVehicleModelInfo { CVector m_positions[3]={{-.8f,-2,1.5f},{-.8f,0,1.5f},{-.8f,2,1.5f}}; } trainModel;
 struct CModelInfo { static void *GetModelInfo(int){return &trainModel;} };
 struct CTimer {
  static unsigned frame; static bool GetIsPaused(){return false;}
@@ -266,7 +267,7 @@ static void TrainPassengerMotion() {
  rw::vulkan::setFirstPersonAnchor(boardingEye,1.5707963268f,1,1,true);
  const float latchedX=rw::vulkan::gvk.fpLatchedHeadPos[0];
  p.inVehicle=true;p.state=PED_DRIVING;train.pDriver=nullptr;train.pPassengers[0]=&p;
- p.position={20,-1,0};p.forward={1,0,0};
+ p.position={20,-1,0};p.forward={-1,0,0};
  auto publish=[&](bool post=true){
   EvaluateSeat(post);EvaluateTrain(post,head,forward);
   CVector right={forward.y,-forward.x,0};
@@ -276,7 +277,7 @@ static void TrainPassengerMotion() {
  };
  // A pre-physics sample must not commit the still-unsettled occupant pose.
  publish(false);p.position={3,-2,0};publish();
- Check(Near(head.x,1)&&Near(head.y,-2)&&Near(head.z,.88f),"authored interior slot wins over exterior entry pose");
+ Check(Near(head.x,-.8f)&&Near(head.y,-2)&&Near(head.z,2.38f),"interior marker is not shifted outside by the native root-animation offset");
  Check(recenters==0,"train entry bypasses automatic car-seat recenter");
  Check(OculusVR::ShouldUseTrackedHands(),"riding hands work in default driving mode");
  OculusVR::hands=false;Check(!OculusVR::ShouldUseTrackedHands(),"passenger respects disabled hands setting");OculusVR::hands=true;
@@ -322,21 +323,21 @@ static void TrainPassengerMotion() {
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
  Check(!OculusVR::IsQuestTrainPassenger(),"stale vehicle pointer after exit does not retain passenger mode");
  p.inVehicle=true;p.state=PED_DRIVING;p.position={10,20,1};publish();
- CVector expected=train.matrix*CVector(1,-2,.88f);
+ CVector expected=train.matrix*CVector(-.8f,-2,2.38f);
  Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"reboarding restores authored interior slot");
  // Start facing along the carriage and verify a slow one-time outward turn.
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
  train.matrix={};p.inVehicle=true;p.state=PED_DRIVING;p.forward={0,1,0};
  ++CTimer::frame;publish();float first=Atan2(forward.y,forward.x);
- Check(first>1.5f&&first<1.5708f,"boarding turn starts gradually");
+ Check(first>1.5708f&&first<1.6f,"boarding turn starts gradually toward negative-X windows");
  publish();Check(Near(Atan2(forward.y,forward.x),first),"multiple camera updates cannot double turn rate");
  for(int i=0;i<240;i++){++CTimer::frame;publish();}
- Check(Near(forward.x,1)&&Near(forward.y,0),"boarding turn settles facing outward");
+ Check(Near(forward.x,-1)&&Near(forward.y,0),"boarding turn faces out through the actual marker side");
  for(int slot=1;slot<=2;slot++){
   p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
   train.pPassengers[slot-1]=nullptr;train.pPassengers[slot]=&p;
   p.inVehicle=true;p.state=PED_DRIVING;++CTimer::frame;publish();
-  Check(Near(head.x,1)&&Near(head.y,trainModel.m_positions[slot].y)&&Near(head.z,.88f),"each door uses its actual interior passenger slot");
+  Check(Near(head.x,-.8f)&&Near(head.y,trainModel.m_positions[slot].y)&&Near(head.z,2.38f),"each door retains its interior marker coordinates");
  }
  rw::vulkan::setFirstPersonPositionLocked(false);
  CVector beforeFree=Eye();Head(.65f,1.8f,-.2f,.5f);

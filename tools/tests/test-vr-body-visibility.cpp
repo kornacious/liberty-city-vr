@@ -36,8 +36,8 @@ int main()
         for (int toggle = 0; toggle < 3; ++toggle) {
             bool expected = false;
             if (gVrCameraInsidePlayerHead && trainPassenger) {
-                expected = true;
-            } else if (gVrCameraInsidePlayerHead && !vehicleTransition) {
+                expected = false;
+            } else if (!trainPassenger && gVrCameraInsidePlayerHead && !vehicleTransition) {
                 if (!hands) expected = true;
                 else if (gVrInVehicle) expected = immersive && !vehicleIK;
                 else expected = !bodyIK && !knockdown;

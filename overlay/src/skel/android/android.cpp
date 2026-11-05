@@ -1485,17 +1485,17 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 #ifdef GTA_VR_WEAPONS
 	// Disabling VR hands also hides Claude during first-person gameplay,
 	// regardless of body IK or driving mode. Native vehicle transitions own the
-	// animated body, except for hands-only train passengers. Cutscenes, death
-	// and third-person views are outside the head. Other gameplay retains the
+	// animated body. Train passengers retain their body in both camera modes.
+	// Cutscenes, death and third-person views are outside the head. Other gameplay retains the
 	// on-foot and vehicle body IK policies when hands are enabled.
 	const bool vehicleBodyIK =
 		gVrInVehicle && androidgame::VrVehicleBodyIKEnabled();
-	gVrHidePlayerBody = gVrCameraInsidePlayerHead &&
-		(trainPassenger || (!vehicleTransition &&
+	gVrHidePlayerBody = !trainPassenger && gVrCameraInsidePlayerHead &&
+		!vehicleTransition &&
 		(!OculusVR::AreTrackedHandsEnabled() ||
 		 (!gVrInVehicle && !androidgame::VrBodyIKEnabled() &&
 		  !androidgame::VrKnockdownPresentationActive()) ||
-		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK))));
+		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK));
 #else
 	gVrHidePlayerBody = gVrCameraInsidePlayerHead;
 #endif
@@ -1731,14 +1731,14 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			CVehicle *train = player->m_pMyVehicle;
 			if(!trainAnchorLatched){
 				// The entry callback enables occupancy before the next native
-				// lineup. Resolve the authored interior slot instead of caching
-				// the ped's still-exterior doorway position on that first frame.
+				// lineup. The marker is already inside: the native -1.5m root
+				// offset is compensated by its train animation, not by the camera.
 				CVehicleModelInfo *model = (CVehicleModelInfo*)CModelInfo::GetModelInfo(train->GetModelIndex());
 				int slot = TRAIN_POS_LEFT_ENTRY;
 				for(int i = TRAIN_POS_LEFT_ENTRY; i <= TRAIN_POS_RIGHT_ENTRY; ++i)
 					if(train->pPassengers[i] == player) slot = i;
-				trainEyeLocal = model->m_positions[slot] - CVector(1.5f, 0.0f, -0.2f);
-				trainEyeLocal.z += 0.68f;
+				trainEyeLocal = model->m_positions[slot];
+				trainEyeLocal.z += 0.88f;
 				const CMatrix inverse = Invert(train->GetMatrix());
 				trainForwardLocal = Multiply3x3(inverse, player->GetForward());
 				// Commit after simulation has lined the ped up in the carriage.
@@ -1751,7 +1751,9 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				trainTurnFrameValid = true;
 				float yaw = VrKnockdownView::Wrap(Atan2(trainForwardLocal.y, trainForwardLocal.x));
 				const float step = CTimer::GetIsPaused() ? 0.0f : 0.34906585f*CTimer::GetTimeStep()/50.0f;
-				yaw -= clamp(yaw, -step, step);
+				const float outsideYaw = trainEyeLocal.x < 0.0f ? 3.14159265f : 0.0f;
+				const float remaining = VrKnockdownView::Wrap(yaw-outsideYaw);
+				yaw -= clamp(remaining, -step, step);
 				trainForwardLocal = CVector(Cos(yaw), Sin(yaw), 0.0f);
 			}
 			head = train->GetMatrix() * trainEyeLocal;
