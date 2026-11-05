@@ -8,7 +8,7 @@
 #define GTA_VR_WEAPONS 1
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define ALOG(...) ((void)0)
-namespace VrBodyIK {static void SetVehicleTransition(bool){} static void ResetVehicleTransition(){}}
+namespace VrBodyIK {static bool enabled=true; static bool Enabled(){return enabled;} static void SetVehicleTransition(bool){} static void ResetVehicleTransition(){}}
 using float32 = float;
 using bool32 = int;
 using int32 = int32_t;
@@ -39,6 +39,7 @@ struct CVector {
  void Normalise(){float n=std::sqrt(x*x+y*y+z*z);x/=n;y/=n;z/=n;}
 };
 static float Dot(CVector a,CVector b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+static CVector CrossProduct(CVector a,CVector b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 struct CMatrix {
  CVector position,right={1,0,0},forward={0,1,0},up={0,0,1};
  CVector &GetPosition(){return position;}
@@ -50,6 +51,7 @@ static CMatrix Invert(const CMatrix &m){
  r.position={-Dot(m.right,m.position),-Dot(m.forward,m.position),-Dot(m.up,m.position)};return r;
 }
 enum { TRAIN_POS_LEFT_ENTRY, TRAIN_POS_MID_ENTRY, TRAIN_POS_RIGHT_ENTRY };
+enum { WRIST_CONTEXT_DEFAULT, WRIST_CONTEXT_BIKE, WRIST_CONTEXT_CAR };
 // Synthetic interior markers deliberately use the negative boarding side.
 struct CVehicleModelInfo { CVector m_positions[3]={{-.8f,-2,1.5f},{-.8f,0,1.5f},{-.8f,2,1.5f}}; } trainModel;
 struct CModelInfo { static void *GetModelInfo(int){return &trainModel;} };
@@ -67,6 +69,7 @@ struct CVehicle {
  CPlayerPed *pDriver=nullptr,*pPassengers[8]={}; int model=175;
  bool train=false; CMatrix matrix;
  bool IsTrain(){return train;} CMatrix &GetMatrix(){return matrix;}
+ bool IsBike(){return false;}
  CVector GetUp(){return matrix.up;}
  int GetModelIndex(){return model;} CVector GetForward(){return matrix.forward;}
 };
@@ -78,6 +81,8 @@ struct CPlayerPed:CEntity {
  bool InVehicle(){return inVehicle;} int GetPedState(){return state;} bool DyingOrDead(){return dead;}
 };
 static CPlayerPed *currentPlayer;
+static bool trainNeckReady=false; static CVector trainNeck;
+static bool GetAnimatedPedHeadPose(CEntity*,CVector *head,CVector *forward){if(!trainNeckReady)return false;*head=trainNeck;*forward={0,1,0};return true;}
 static CPlayerPed *FindPlayerPed(){return currentPlayer;}
 static CVehicle *FindPlayerVehicle(){return currentPlayer?currentPlayer->m_pMyVehicle:nullptr;}
 struct PlayerInfo { bool remote=false; bool IsPlayerInRemoteMode(){return remote;} };
@@ -94,6 +99,10 @@ static CEntity *gCutsceneCameraActor,*gVrPlayerEntity;
 static bool gVrFirstPersonActive,gVrInVehicle;
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
 namespace androidgame {
+static bool vehicleBody=true;
+bool VrVehicleBodyIKEnabled(){return vehicleBody;}
+static bool vehiclePanels=false;
+bool VrWristPanelsInVehicle(){return vehiclePanels;}
 static bool menu=false; static int cutsceneMode=0;
 bool VrMenuConsumesInput(){return menu;} int VrCutsceneMode(){return cutsceneMode;}
 void VrRecenterView();
@@ -277,10 +286,16 @@ static void TrainPassengerMotion() {
  };
  // A pre-physics sample must not commit the still-unsettled occupant pose.
  publish(false);p.position={3,-2,0};publish();
- Check(Near(head.x,-.8f)&&Near(head.y,-2)&&Near(head.z,2.38f),"interior marker is not shifted outside by the native root-animation offset");
+ Check(Near(head.x,-.9f)&&Near(head.y,-1.95f)&&Near(head.z,2.42f),"fallback eye includes forward/right/up neck clearance");
+ Check(VrBodyIK::VehicleEnabled(),"interior train enables normal body IK with tracked hands");
+#ifdef TEST_TRAIN_HUD
+ Check(VrWristPanelsRideAlong(),"interior train permits immersive wrist panels without driving mode");
+ Check(ActiveWristContext()==WRIST_CONTEXT_DEFAULT,"interior train uses normal wrist calibration rather than dashboard calibration");
+#endif
+ VrBodyIK::enabled=false;Check(!VrBodyIK::VehicleEnabled(),"train respects normal body IK setting");VrBodyIK::enabled=true;
  Check(recenters==0,"train entry bypasses automatic car-seat recenter");
  Check(OculusVR::ShouldUseTrackedHands(),"riding hands work in default driving mode");
- OculusVR::hands=false;Check(!OculusVR::ShouldUseTrackedHands(),"passenger respects disabled hands setting");OculusVR::hands=true;
+ OculusVR::hands=false;Check(!OculusVR::ShouldUseTrackedHands()&&!VrBodyIK::VehicleEnabled(),"passenger respects disabled hands setting");OculusVR::hands=true;
  Check(!Near(rw::vulkan::gvk.fpLatchedHeadPos[0],latchedX),"interior position lock absorbs earlier physical displacement");
  CVector baseEye=Eye();
  auto palm=[](float x){
@@ -312,6 +327,10 @@ static void TrainPassengerMotion() {
  OculusVR::UpdateQuestTrainCamera(false,false);
  OculusVR::UpdateQuestTrainCamera(true,false);
  Check(OculusVR::IsQuestTrainCinematic(),"R3 selects cinematic view");
+ Check(!VrBodyIK::VehicleEnabled()&&!OculusVR::IsQuestTrainInterior(),"cinematic view restores native body and head ownership");
+#ifdef TEST_TRAIN_HUD
+ Check(!VrWristPanelsRideAlong(),"cinematic train retains normal flat HUD fallback");
+#endif
  OculusVR::UpdateQuestTrainCamera(true,false);
  Check(OculusVR::IsQuestTrainCinematic(),"holding R3 does not toggle repeatedly");
  OculusVR::UpdateQuestTrainCamera(false,false);OculusVR::UpdateQuestTrainCamera(true,false);
@@ -323,7 +342,7 @@ static void TrainPassengerMotion() {
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
  Check(!OculusVR::IsQuestTrainPassenger(),"stale vehicle pointer after exit does not retain passenger mode");
  p.inVehicle=true;p.state=PED_DRIVING;p.position={10,20,1};publish();
- CVector expected=train.matrix*CVector(-.8f,-2,2.38f);
+ CVector expected=train.matrix*CVector(-.8f,-2,2.38f)+train.matrix.up*.04f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
  Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"reboarding restores authored interior slot");
  // Start facing along the carriage and verify a slow one-time outward turn.
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
@@ -337,8 +356,13 @@ static void TrainPassengerMotion() {
   p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
   train.pPassengers[slot-1]=nullptr;train.pPassengers[slot]=&p;
   p.inVehicle=true;p.state=PED_DRIVING;++CTimer::frame;publish();
-  Check(Near(head.x,-.8f)&&Near(head.y,trainModel.m_positions[slot].y)&&Near(head.z,2.38f),"each door retains its interior marker coordinates");
+  CVector slotEye=train.matrix*trainModel.m_positions[slot]+train.matrix.up*.92f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
+  Check(Near(head.x,slotEye.x)&&Near(head.y,slotEye.y)&&Near(head.z,slotEye.z),"each door retains its interior fallback and eye clearance");
  }
+ trainNeckReady=true;trainNeck={-.4f,1.3f,2.1f};publish();
+ expected=trainNeck+train.matrix.up*.04f+forward*.10f+CrossProduct(forward,train.matrix.up)*.05f;
+ Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"posed neck replaces marker and gets forward/right/up eye clearance");
+ trainNeckReady=false;
  rw::vulkan::setFirstPersonPositionLocked(false);
  CVector beforeFree=Eye();Head(.65f,1.8f,-.2f,.5f);
  CVector freeDelta=Eye()-beforeFree;

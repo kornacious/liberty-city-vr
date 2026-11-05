@@ -12825,7 +12825,7 @@ $driving = [IO.File]::ReadAllText((Join-Path $src 'vr/QuestDrivingVR.cpp'))
 $backend = [IO.File]::ReadAllText($backendPath)
 $session = [IO.File]::ReadAllText($xr)
 function Method([string]$text, [string]$name) {
- $result = [regex]::Match($text, '(?ms)^(?:static )?(?:void|bool|bool32)\r?\n' + [regex]::Escape($name) + '\([^\n]*\).*?^\}').Value
+ $result = [regex]::Match($text, '(?ms)^(?:static )?(?:void|bool|bool32|int)\r?\n' + [regex]::Escape($name) + '\([^\n]*\).*?^\}').Value
  if (-not $result) { throw ('Production method not found: ' + $name) }
  return $result
 }
@@ -12851,6 +12851,14 @@ $code += 'namespace OculusVR {' + "`n" + (Method $driving 'IsQuestTrainPassenger
 $trainCamera = [regex]::Match($driving, '(?ms)^static CVehicle \*gTrainCameraVehicle;.*?(?=^void\r?\nToggleQuestVehicleThirdPerson)').Value
 if (-not $trainCamera) { throw 'Missing train camera toggle.' }
 $code += 'namespace OculusVR {' + "`n" + $trainCamera + "`n}`n"
+$ik = [IO.File]::ReadAllText((Join-Path $src 'peds/VrBodyIK.cpp'))
+$code += 'namespace VrBodyIK {' + "`n" + (Method $ik 'VehicleEnabled') + "`n}`n"
+$hudPath = Join-Path $src 'renderer/Hud.cpp'
+if (Test-Path -LiteralPath $hudPath) {
+ $hud = [IO.File]::ReadAllText($hudPath)
+ $code += "#define TEST_TRAIN_HUD 1`n" + (Method $hud 'VrWristPanelsRideAlong') + "`n"
+ $code += (Method $debug 'ActiveWristContext') + "`n"
+}
 $weapons = [IO.File]::ReadAllText((Join-Path $src 'vr/QuestWeaponVR.cpp'))
 $handPolicy = [regex]::Match($weapons, '(?ms)^bool ShouldUseTrackedHands\(\).*?^\}').Value
 if (-not $handPolicy) { throw 'Missing tracked hand policy.' }

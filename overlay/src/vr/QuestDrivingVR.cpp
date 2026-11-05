@@ -3361,6 +3361,11 @@ bool IsQuestTrainCinematic()
 		gTrainCinematic;
 }
 
+bool IsQuestTrainInterior()
+{
+	return IsQuestTrainPassenger() && !IsQuestTrainCinematic();
+}
+
 void UpdateQuestTrainCamera(bool r3Down, bool blocked)
 {
 	CVehicle *train = IsQuestTrainPassenger() ? FindPlayerPed()->m_pMyVehicle : nil;

@@ -989,7 +989,7 @@ static int
 ActiveWristContext(void)
 {
 	CVehicle *vehicle = FindPlayerVehicle();
-	if(vehicle == nil)
+	if(vehicle == nil || OculusVR::IsQuestTrainInterior())
 		return WRIST_CONTEXT_DEFAULT;
 	return vehicle->IsBike() ? WRIST_CONTEXT_BIKE : WRIST_CONTEXT_CAR;
 }

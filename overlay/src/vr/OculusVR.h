@@ -108,6 +108,7 @@ bool IsQuestFirstPersonOnFoot();
 // Includes boarding/alighting; independent of driving and camera preferences.
 bool IsQuestTrainPassenger();
 bool IsQuestTrainCinematic();
+bool IsQuestTrainInterior();
 void UpdateQuestTrainCamera(bool r3Down, bool blocked);
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);

@@ -5,7 +5,7 @@ diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
  		extern CEntity *gVrPlayerEntity;
  		// A cutscene camera parked on this ped is the same problem: the
  		// eye is inside the head, so the head has to go for the draw.
-+		const bool trainHead = IsPlayer() && OculusVR::IsQuestTrainPassenger();
++		const bool trainHead = IsPlayer() && OculusVR::IsQuestTrainInterior();
  		if ((gVrCameraInsidePlayerHead && !gVrHidePlayerBody &&
  		     (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
 -		    androidgame::VrCutsceneCameraActor() == (void*)this) {
@@ -27,7 +27,7 @@ diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
  	extern CEntity *gVrPlayerEntity;
  	hideVrPlayerBody = (IsPlayer() && OculusVR::IsTrackedScopeOverlayActive()) ||
 -		(IsPlayer() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
-+		(IsPlayer() && !OculusVR::IsQuestTrainPassenger() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
++		(IsPlayer() && !OculusVR::IsQuestTrainInterior() && gVrCameraInsidePlayerHead && OculusVR::ShouldUseTrackedHands() &&
  		((!bInVehicle && !VrBodyIK::Enabled() &&
  		  !androidgame::VrKnockdownPresentationActive()) ||
  		 (bInVehicle && OculusVR::IsImmersiveDrivingActive() &&
@@ -35,7 +35,7 @@ diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
  
  	const bool hideNonSkinnedHead = !IsClumpSkinned(GetClump()) &&
  		((gVrCameraInsidePlayerHead && !gVrHidePlayerBody && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
-+		 (IsPlayer() && OculusVR::IsQuestTrainPassenger()) ||
++		 (IsPlayer() && OculusVR::IsQuestTrainInterior()) ||
  		 androidgame::VrCutsceneCameraActor() == (void*)this);
  
  	const bool hideNonSkinnedHands = !IsClumpSkinned(GetClump()) &&
@@ -43,7 +43,7 @@ diff --git a/src/peds/Ped.cpp b/src/peds/Ped.cpp
  #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
  		const bool suppressHeadLimb =
  			(gVrCameraInsidePlayerHead && (IsPlayer() || (CEntity*)this == gVrPlayerEntity)) ||
-+			(IsPlayer() && OculusVR::IsQuestTrainPassenger()) ||
++			(IsPlayer() && OculusVR::IsQuestTrainInterior()) ||
  			androidgame::VrCutsceneCameraActor() == (void*)this;
  		if(!suppressHeadLimb)
  			renderLimb(PED_HEAD);

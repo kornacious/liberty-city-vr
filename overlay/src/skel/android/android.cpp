@@ -1744,6 +1744,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				// Commit after simulation has lined the ped up in the carriage.
 				trainAnchorLatched = postPhysics;
 			}
+			// Follow the posed neck, including the train animation's root offset.
+			// A carriage marker is only a fallback while the skeleton streams in.
+			CVector neck, neckForward;
+			if(GetAnimatedPedHeadPose(player, &neck, &neckForward))
+				trainEyeLocal = Invert(train->GetMatrix()) * neck;
 			// Turn toward the boarding-side windows once, at 20 degrees/sec.
 			// Headset rotation remains additive; sticks never steer this anchor.
 			if(postPhysics && (!trainTurnFrameValid || trainTurnFrame != CTimer::GetFrameCounter())){
@@ -1759,6 +1764,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			head = train->GetMatrix() * trainEyeLocal;
 			forward = Multiply3x3(train->GetMatrix(), trainForwardLocal);
 			forward.Normalise();
+			const CVector eyeRight = CrossProduct(forward, train->GetUp());
+			head += train->GetUp()*0.04f + forward*0.10f + eyeRight*0.05f;
 		}
 
 		// Visible hands/body opt into following the authored crouch head. Keep the
