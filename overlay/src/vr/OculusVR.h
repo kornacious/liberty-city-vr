@@ -105,6 +105,8 @@ bool IsPhysicalWeaponType(int weaponType);
 bool IsPhysicalWeaponInteractionActive();
 // True while the world is rendered around the player's own head on foot.
 bool IsQuestFirstPersonOnFoot();
+// Includes boarding/alighting; independent of driving and camera preferences.
+bool IsQuestTrainPassenger();
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);
 int GetHeldWeaponCopy(int hand);

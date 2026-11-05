@@ -2722,6 +2722,9 @@ ApplyTouchInput(CControllerState *state)
 	UpdatePoses(input);
 	const bool menu = androidgame::VrMenuConsumesInput();
 	const bool gameplay = IsGameplayAvailable();
+	// Passenger hands stay free even if a weapon was held when boarding.
+	if(IsQuestTrainPassenger())
+		ResetInteraction();
 	const bool knockedDown = androidgame::VrKnockdownPresentationActive();
 	if(knockedDown)
 		ResetKnockdownInteraction();
@@ -2748,12 +2751,12 @@ ApplyTouchInput(CControllerState *state)
 	const bool inVehicle = FindPlayerVehicle() != nil;
 	if(!inVehicle)
 		UpdateWeaponTriggerEdges(menu || !gameplay, vehicleCapturedHands, input);
-	UpdateTrackedDetonatorInput(menu || !gameplay || QuestRadio::Interacting());
+	UpdateTrackedDetonatorInput(menu || !gameplay || IsQuestTrainPassenger() || QuestRadio::Interacting());
 	// Quest has no in-vehicle magazine insertion path. Entering any vehicle
 	// makes ManualReloadAvailable false, which also clears an in-progress
 	// reload instead of leaving a magazine hand reserved behind the wheel.
 	UpdateManualReloadInput(menu || !gameplay || FindPlayerVehicle());
-	if(gameplay && !menu &&
+	if(gameplay && !menu && !IsQuestTrainPassenger() &&
 	   (!FindPlayerVehicle() || IsImmersiveDrivingActive()))
 		UpdateHolsterInput(vehicleCapturedHands);
 	else if(gWeaponCalibrationPreview && gameplay)
@@ -2831,7 +2834,7 @@ bool AreTrackedHandsEnabled() { LoadSettings(); return gHandsEnabled && gVrFirst
 bool ShouldUseTrackedHands()
 {
 	return AreTrackedHandsEnabled() &&
-		(!FindPlayerVehicle() || IsImmersiveDrivingActive());
+		(IsQuestTrainPassenger() || !FindPlayerVehicle() || IsImmersiveDrivingActive());
 }
 bool IsTrackedHandReady(int hand)
 {
@@ -2952,7 +2955,7 @@ GetTrackedScopeReticlePos(float *screenX, float *screenY)
 bool
 ShouldUseTrackedWeapon(int hand)
 {
-	return hand >= 0 && hand < VR_HAND_COUNT &&
+	return !IsQuestTrainPassenger() && hand >= 0 && hand < VR_HAND_COUNT &&
 		gHeldSlot[hand] >= 0 && gPoseValid[hand] &&
 		IsGameplayAvailable();
 }
@@ -3010,7 +3013,7 @@ bool IsTrackedWeaponTriggerJustReleased(int hand)
 		gTriggerJustReleased[hand] &&
 		(!FindPlayerVehicle() || IsImmersiveDrivingActive());
 }
-bool IsTrackedDetonatorActive(int hand) { return IsTrackedDetonatorHandReserved(hand) && gPoseValid[hand]; }
+bool IsTrackedDetonatorActive(int hand) { return !IsQuestTrainPassenger() && IsTrackedDetonatorHandReserved(hand) && gPoseValid[hand]; }
 bool IsTrackedDetonatorTriggerJustPressed(int hand)
 {
 	return hand >= 0 && hand < VR_HAND_COUNT &&
@@ -3142,7 +3145,7 @@ ConsumeWeaponHolsterSelection(int hand, int *slot)
 bool
 GetWeaponHolsterMatrix(int slot, CMatrix *matrix, int copy)
 {
-	if(!AreTrackedHandsEnabled() ||
+	if(IsQuestTrainPassenger() || !AreTrackedHandsEnabled() ||
 	   (FindPlayerVehicle() && !IsImmersiveDrivingActive()) ||
 	   (gWeaponHolsterMask & (1u << slot)) == 0)
 		return false;

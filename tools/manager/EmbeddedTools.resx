@@ -12830,7 +12830,7 @@ function Method([string]$text, [string]$name) {
  return $result
 }
 $backendCode = 'namespace rw { namespace vulkan {' + "`n"
-foreach ($name in @('getFirstPersonPlayBasis','setHeadPose','getFirstPersonViewFrame','setFirstPersonAnchor','setFirstPersonAnchorBasis')) {
+foreach ($name in @('getFirstPersonPlayBasis','setHeadPose','getFirstPersonViewFrame','setFirstPersonAnchor','setFirstPersonAnchorBasis','playPoseToFirstPersonWorld')) {
  # RenderWare declarations can wrap arguments across several lines.
  $method = [regex]::Match($backend, '(?ms)^(?:static )?(?:void|bool32)\r?\n' + $name + '\(.*?^\}').Value
  if (-not $method) { throw ('Backend method missing: ' + $name) }
@@ -12839,13 +12839,26 @@ foreach ($name in @('getFirstPersonPlayBasis','setHeadPose','getFirstPersonViewF
 $backendCode += "} }`n"
 $prologue = [regex]::Match($android, '(?ms)(?&lt;=void\r?\nVrUpdateFirstPersonAnchor\(bool postPhysics\)\r?\n\{\r?\n).*?\tUpdateQuestVehicleSeatRecenter\(player,.*?postPhysics\);').Value
 if (-not $prologue) { throw 'Missing actual seat observer call in the camera path.' }
+# Knockdown presentation owns separate tests; keep this fixture focused on the seat observer.
+$prologue = $prologue -replace '(?s)\tstatic CPlayerPed \*knockdownPlayer;.*?(?=\tgVrPlayerEntity =)', ''
 $tracking = [regex]::Match($session, '(?ms)\t\tconst XrViewStateFlags trackedHeadFlags =.*?== trackedHeadFlags;').Value
 if (-not $tracking) { throw 'Missing fresh tracking predicate.' }
 $code = 'namespace xrvk {' + "`n" + (Method $session 'hasTrackedGameplayHeadPose') + "`n"
 $code += 'void UpdateTracking(int located, unsigned viewCount, ViewState viewState) {' + "`n" + $tracking + "`n} }`n"
 $code += (Method $debug 'androidgame::VrRecenterView') + "`n"
 $code += (Method $android 'UpdateQuestVehicleSeatRecenter') + "`n"
+$code += 'namespace OculusVR {' + "`n" + (Method $driving 'IsQuestTrainPassenger') + "`n}`n"
+$weapons = [IO.File]::ReadAllText((Join-Path $src 'vr/QuestWeaponVR.cpp'))
+$handPolicy = [regex]::Match($weapons, '(?ms)^bool ShouldUseTrackedHands\(\).*?^\}').Value
+if (-not $handPolicy) { throw 'Missing tracked hand policy.' }
+$code += 'namespace OculusVR {' + "`n" + $handPolicy + "`n"
+$code += ((Method $driving 'IsQuestVehicleThirdPerson').Replace('IsQuestVehicleThirdPerson()', 'ProductionVehicleThirdPerson()')) + "`n}`n"
 $code += 'void EvaluateSeat(bool postPhysics) {' + "`n" + $prologue + "`n}`n"
+$trainState = [regex]::Match($android, '(?ms)^\tstatic CPlayerPed \*trainAnchorPlayer;.*?(?=^\t// Verbatim)').Value
+$trainAnchor = [regex]::Match($android, '(?ms)^\t\tif\(trainPassenger &amp;&amp; gVrInVehicle\).*?(?=^\t\t// Visible hands/body)').Value
+if (-not $trainState -or -not $trainAnchor) { throw 'Missing carriage-relative passenger anchor.' }
+$code += 'void EvaluateTrain(bool postPhysics, CVector &amp;head, CVector &amp;forward) { auto *player = FindPlayerPed(); const bool trainPassenger = OculusVR::IsQuestTrainPassenger(); const int playerVehicleState = player ? player-&gt;GetPedState() : PED_IDLE;' + "`n" + $trainState + $trainAnchor + "`n}`n"
+if ($android -notmatch 'vehicleForward.x\), 1, trainPassenger\);' -or $android -notmatch 'knockdownContext \|\| trainPassenger\);') { throw 'Train basis transitions must preserve physical tracking.' }
 $code += 'namespace OculusVR {' + "`n" + (Method $driving 'ApplyQuestVehicleViewOffset') + "`n}`n"
 # Verify actual pipeline placement and frame lifetime, not only an isolated latch.
 if ($android.IndexOf('UpdateQuestVehicleSeatRecenter(player,') -gt $android.IndexOf('OculusVR::ApplyQuestVehicleViewOffset(&amp;vehicleView)')) { throw 'Seat recenter occurs after calibrated anchor.' }

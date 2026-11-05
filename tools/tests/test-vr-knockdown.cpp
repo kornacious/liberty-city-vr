@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
+namespace OculusVR { bool IsQuestTrainPassenger() { return false; } }
 struct CVector {
 	float x,y,z;
 	CVector(float a=0,float b=0,float c=0):x(a),y(b),z(c){}

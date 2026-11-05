@@ -1358,6 +1358,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	// above on every exit.
 	const PedState playerVehicleState =
 		player != nil ? player->GetPedState() : PED_NONE;
+	const bool trainPassenger = OculusVR::IsQuestTrainPassenger();
 	const bool vehicleTransition = player != nil &&
 		(playerVehicleState == PED_OPEN_DOOR ||
 		 playerVehicleState == PED_CARJACK ||
@@ -1459,7 +1460,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		player->m_pMyVehicle != nil &&
 		!thirdPersonVehicle;
 	UpdateQuestVehicleSeatRecenter(player,
-		gVrInVehicle && !vehicleTransition && playerVehicleState == PED_DRIVING &&
+		gVrInVehicle && !trainPassenger && !vehicleTransition && playerVehicleState == PED_DRIVING &&
 		!FrontEndMenuManager.m_bGameNotLoaded && !FrontEndMenuManager.m_bWantToRestart &&
 		!FrontEndMenuManager.m_bWantToLoad && !androidgame::VrMenuConsumesInput() &&
 		player->m_rwObject != nil && !player->DyingOrDead() &&
@@ -1480,18 +1481,34 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 #ifdef GTA_VR_WEAPONS
 	// Disabling VR hands also hides Claude during first-person gameplay,
 	// regardless of body IK or driving mode. Native vehicle transitions own the
-	// animated body; cutscenes, death and third-person views are outside the head.
-	// With hands enabled, retain the on-foot and vehicle body IK policies.
+	// animated body, except for hands-only train passengers. Cutscenes, death
+	// and third-person views are outside the head. Other gameplay retains the
+	// on-foot and vehicle body IK policies when hands are enabled.
 	const bool vehicleBodyIK =
 		gVrInVehicle && androidgame::VrVehicleBodyIKEnabled();
-	gVrHidePlayerBody = gVrCameraInsidePlayerHead && !vehicleTransition &&
+	gVrHidePlayerBody = gVrCameraInsidePlayerHead &&
+		(trainPassenger || (!vehicleTransition &&
 		(!OculusVR::AreTrackedHandsEnabled() ||
 		 (!gVrInVehicle && !androidgame::VrBodyIKEnabled() &&
 		  !androidgame::VrKnockdownPresentationActive()) ||
-		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK));
+		 (gVrInVehicle && OculusVR::IsImmersiveDrivingActive() && !vehicleBodyIK))));
 #else
 	gVrHidePlayerBody = gVrCameraInsidePlayerHead;
 #endif
+
+	static CPlayerPed *trainAnchorPlayer;
+	static CVehicle *trainAnchorVehicle;
+	static bool trainAnchorLatched;
+	static CVector trainEyeLocal, trainForwardLocal;
+	CVehicle *passengerCarriage = trainPassenger ? player->m_pMyVehicle : nil;
+	if(trainAnchorPlayer != player || trainAnchorVehicle != passengerCarriage ||
+	   !trainPassenger || playerVehicleState == PED_EXIT_TRAIN ||
+	   FrontEndMenuManager.m_bWantToRestart || FrontEndMenuManager.m_bWantToLoad ||
+	   FrontEndMenuManager.m_bGameNotLoaded){
+		trainAnchorPlayer = player;
+		trainAnchorVehicle = passengerCarriage;
+		trainAnchorLatched = false;
+	}
 
 	// Verbatim port of the desktop VR base camera (RenderVrStereoFrame in
 	// main.cpp): the anchor is the player's HEAD BONE -- animated, seated in
@@ -1703,6 +1720,22 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		}
 #endif
 
+		if(trainPassenger && gVrInVehicle){
+			CVehicle *train = player->m_pMyVehicle;
+			if(!trainAnchorLatched){
+				const CVector eye = player->GetPosition() +
+					train->GetUp()*0.68f + player->GetForward()*0.12f;
+				const CMatrix inverse = Invert(train->GetMatrix());
+				trainEyeLocal = inverse * eye;
+				trainForwardLocal = Multiply3x3(inverse, player->GetForward());
+				// Commit after simulation has lined the ped up in the carriage.
+				trainAnchorLatched = postPhysics;
+			}
+			head = train->GetMatrix() * trainEyeLocal;
+			forward = Multiply3x3(train->GetMatrix(), trainForwardLocal);
+			forward.Normalise();
+		}
+
 		// Visible hands/body opt into following the authored crouch head. Keep the
 		// ordinary standing anchor underneath the easing so stand-up/jump/move
 		// recovery cannot introduce a second fixed-height camera jump.
@@ -1839,7 +1872,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		CVehicle *viewVehicle =
 			gVrInVehicle ? player->m_pMyVehicle : nil;
 		if(viewVehicle){
-			CVector vehicleForward = viewVehicle->GetForward();
+			CVector vehicleForward = trainPassenger ? forward : viewVehicle->GetForward();
 			// Unlocked vehicles inherit the complete authored vehicle basis.
 			// Bike horizon lock preserves the bike's forward vector (including
 			// pitch over hills/wheelies) and replaces only its rolled up vector
@@ -1879,7 +1912,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 						&head.x, &vehicleRight.x,
 						&vehicleUp.x, &vehicleForward.x,
 						Atan2(vehicleForward.y,
-						      vehicleForward.x), 1);
+						      vehicleForward.x), 1, trainPassenger);
 					fullVehicleBasis = true;
 				}
 			}
@@ -1893,7 +1926,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		}
 		if(!fullVehicleBasis){
 			rw::vulkan::setFirstPersonAnchor(&head.x,
-				Atan2(forward.y, forward.x), 1, 1, knockdownContext);
+				Atan2(forward.y, forward.x), 1, 1, knockdownContext || trainPassenger);
 		}
 
 #ifdef GTA_VR_WEAPONS

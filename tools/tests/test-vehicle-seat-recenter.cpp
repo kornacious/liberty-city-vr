@@ -24,24 +24,44 @@ struct State {
  float fpLatchedHeadPos[3]={}, fpHeadWorld[3]={}, fpPlayX[3]={},fpPlayY[3]={},fpPlayZ[3]={};
 } gvk;
 static void resetAtomicMotionHistory() {}
+void setFirstPersonAnchor(const float32[3], float32, bool32, bool32, bool32 = false);
+void setFirstPersonAnchorBasis(const float32[3], const float32[3], const float32[3], const float32[3], float32, bool32, bool32 = false);
 } }
 #include "vehicle-seat-recenter-backend.inc"
 struct CVector {
  float x=0,y=0,z=0;
  CVector()=default; CVector(float a,float b,float c):x(a),y(b),z(c){}
+ CVector operator+(CVector b)const{return {x+b.x,y+b.y,z+b.z};}
+ CVector operator-(CVector b)const{return {x-b.x,y-b.y,z-b.z};}
  CVector operator*(float f)const{return {x*f,y*f,z*f};}
  CVector &operator+=(CVector b){x+=b.x;y+=b.y;z+=b.z;return *this;}
+ void Normalise(){float n=std::sqrt(x*x+y*y+z*z);x/=n;y/=n;z/=n;}
 };
-struct CMatrix { CVector position; CVector &GetPosition(){return position;} };
+static float Dot(CVector a,CVector b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+struct CMatrix {
+ CVector position,right={1,0,0},forward={0,1,0},up={0,0,1};
+ CVector &GetPosition(){return position;}
+ CVector operator*(CVector v)const{return position+right*v.x+forward*v.y+up*v.z;}
+};
+static CVector Multiply3x3(const CMatrix &m,CVector v){return m.right*v.x+m.forward*v.y+m.up*v.z;}
+static CMatrix Invert(const CMatrix &m){
+ CMatrix r;r.right={m.right.x,m.forward.x,m.up.x};r.forward={m.right.y,m.forward.y,m.up.y};r.up={m.right.z,m.forward.z,m.up.z};
+ r.position={-Dot(m.right,m.position),-Dot(m.forward,m.position),-Dot(m.up,m.position)};return r;
+}
 struct CEntity {};
 struct CPlayerPed;
 struct CVehicle {
  CPlayerPed *pDriver=nullptr,*pPassengers[8]={}; int model=175;
- int GetModelIndex(){return model;} CVector GetForward(){return {0,1,0};}
+ bool train=false; CMatrix matrix;
+ bool IsTrain(){return train;} CMatrix &GetMatrix(){return matrix;}
+ CVector GetUp(){return matrix.up;}
+ int GetModelIndex(){return model;} CVector GetForward(){return matrix.forward;}
 };
 struct CPlayerPed:CEntity {
  bool inVehicle=false,dead=false; int state=0,m_objective=0;
  CVehicle *m_pMyVehicle=nullptr; void *m_rwObject=this,*m_pFrames[64]={};
+ CVector position,forward={0,1,0};
+ CVector GetPosition(){return position;} CVector GetForward(){return forward;}
  bool InVehicle(){return inVehicle;} int GetPedState(){return state;} bool DyingOrDead(){return dead;}
 };
 static CPlayerPed *currentPlayer;
@@ -66,6 +86,10 @@ bool VrMenuConsumesInput(){return menu;} int VrCutsceneMode(){return cutsceneMod
 void VrRecenterView();
 }
 namespace OculusVR {
+bool IsQuestTrainPassenger();
+static bool hands=true,immersive=false,gVehicleThirdPerson[1]={};
+bool AreTrackedHandsEnabled(){return hands;}
+bool IsImmersiveDrivingActive(){return immersive;}
 static bool thirdPerson=false;
 bool IsQuestVehicleThirdPerson(){return thirdPerson;}
 void ResetQuestDrivingInteraction(){++recenters;}
@@ -77,7 +101,9 @@ static VehicleViewCalibration modelCalibration;
 static VehicleCategoryCalibration categoryCalibration;
 static int defaultView=0;
 static void LoadDrivingSettings(){}
+static float PlacementValue(int, const char *, float fallback){return fallback;}
 static int GetVehicleCategory(CVehicle*){return 0;}
+static int VehicleKindFor(CVehicle*){return 0;}
 static int GetDefaultVehicleViewTypeForCurrentVehicle(){return defaultView;}
 static VehicleViewCalibration *GetViewCalibration(int){return &modelCalibration;}
 static VehicleCategoryCalibration *GetCategoryCalibration(CVehicle*){return &categoryCalibration;}
@@ -211,6 +237,73 @@ static void TrackingTruthTable() {
  }
 }
 
-int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();
- std::printf("PASS: %u production seat/XR/backend checks; old entry offset reproduced, centered seat and later lean verified.\n",checks);return 0;
+static void TrainPassengerMotion() {
+ CPlayerPed p;CVehicle train;Reset(p,train);train.train=true;
+ CVector head,forward;
+ p.inVehicle=false;p.state=PED_ENTER_TRAIN;
+ Check(OculusVR::IsQuestTrainPassenger(),"boarding is already a passenger context");
+ OculusVR::gVehicleThirdPerson[0]=true;
+ Check(!OculusVR::ProductionVehicleThirdPerson(),"train ignores third-person driving preference");
+ Check(OculusVR::ShouldUseTrackedHands(),"boarding hands work in default driving mode");
+ EvaluateSeat(true);EvaluateTrain(true,head,forward);
+ Head(.35f,1.7f,-.2f,.3f);
+ // Boarding uses the yaw anchor. Finishing boarding changes to a carriage
+ // basis without discarding real movement made during the animation.
+ const float boardingEye[3]={2,-1,1};
+ rw::vulkan::setFirstPersonAnchor(boardingEye,1.5707963268f,1,1,true);
+ const float latchedX=rw::vulkan::gvk.fpLatchedHeadPos[0];
+ p.inVehicle=true;p.state=PED_DRIVING;train.pDriver=nullptr;train.pPassengers[0]=&p;
+ p.position={2,-1,0};p.forward={0,1,0};
+ auto publish=[&](bool post=true){
+  EvaluateSeat(post);EvaluateTrain(post,head,forward);
+  CVector right={forward.y,-forward.x,0};
+  rw::vulkan::setFirstPersonAnchorBasis(&head.x,&right.x,&train.matrix.up.x,&forward.x,
+   std::atan2(forward.y,forward.x),1,true);
+ };
+ // A pre-physics sample must not commit the still-unsettled occupant pose.
+ publish(false);p.position={3,-2,0};publish();
+ Check(Near(head.x,3)&&Near(head.y,-1.88f)&&Near(head.z,.68f),"post-physics passenger position establishes anchor");
+ Check(recenters==0,"train entry bypasses automatic car-seat recenter");
+ Check(OculusVR::ShouldUseTrackedHands(),"riding hands work in default driving mode");
+ OculusVR::hands=false;Check(!OculusVR::ShouldUseTrackedHands(),"passenger respects disabled hands setting");OculusVR::hands=true;
+ Check(Near(rw::vulkan::gvk.fpLatchedHeadPos[0],latchedX),"boarding preserves physical displacement");
+ CVector baseEye=Eye();
+ auto palm=[](float x){
+  const float pos[3]={x,1.3f,-.4f},quat[4]={0,0,0,1};float r[3],u[3],f[3];CVector out;
+  Check(rw::vulkan::playPoseToFirstPersonWorld(pos,quat,r,u,f,&out.x)!=0,"controller world pose exists");return out;
+ };
+ CVector basePalm=palm(.6f);
+ const CVector localEye=baseEye,localPalm=basePalm;
+ for(int i=0;i<240;i++){
+  float angle=.003f*i;
+  train.matrix.right={std::cos(angle),std::sin(angle),0};
+  train.matrix.forward={-std::sin(angle),std::cos(angle),0};
+  train.matrix.position={.1f*i,-.03f*i,.005f*i};
+  // Neither native body placement nor train speed/camera changes may drag
+  // the cached VR passenger around inside the cabin.
+  p.position={50,40,30};p.forward={1,0,0};publish(false);publish();
+  CVector expectedEye=train.matrix*localEye,expectedPalm=train.matrix*localPalm;
+  CVector eye=Eye(),hand=palm(.6f);
+  Check(Near(eye.x,expectedEye.x)&&Near(eye.y,expectedEye.y)&&Near(eye.z,expectedEye.z),"eyes ride carriage translation and turns");
+  Check(Near(hand.x,expectedPalm.x)&&Near(hand.y,expectedPalm.y)&&Near(hand.z,expectedPalm.z),"hands share carriage frame with eyes");
+ }
+ CVector before=palm(.6f),after=palm(1.2f);
+ Check(Near(std::sqrt(Dot(after-before,after-before)),.6f),"controller motion remains one to one without arm reach limits");
+ CVector beforeLean=Eye();Head(.55f,1.8f,-.2f,.5f);publish();
+ CVector lean=Eye()-beforeLean;
+ Check(Near(std::sqrt(Dot(lean,lean)),std::sqrt(.05f)),"head movement remains one to one during ride");
+ p.state=PED_EXIT_TRAIN;EvaluateTrain(true,head,forward);
+ Check(OculusVR::IsQuestTrainPassenger(),"alighting retains passenger hands");
+ p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
+ Check(!OculusVR::IsQuestTrainPassenger(),"stale vehicle pointer after exit does not retain passenger mode");
+ p.inVehicle=true;p.state=PED_DRIVING;p.position={10,20,1};publish();
+ Check(Near(head.x,10.12f)&&Near(head.y,20)&&Near(head.z,1.68f),"reboarding same carriage creates a new anchor");
+ train.train=false;Check(!OculusVR::IsQuestTrainPassenger(),"ordinary cars retain existing policy");
+ Check(!OculusVR::ShouldUseTrackedHands(),"default driving hands policy unchanged for cars");
+ Check(OculusVR::ProductionVehicleThirdPerson(),"cars retain third-person preference");
+ currentPlayer=nullptr;Check(!OculusVR::IsQuestTrainPassenger(),"missing player is safe");
+}
+
+int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();
+ std::printf("PASS: %u production seat/train/XR/backend checks; carriage motion, free controllers and tracking continuity verified.\n",checks);return 0;
  }catch(const std::exception&e){std::fprintf(stderr,"FAIL after %u checks: %s\n",checks,e.what());return 1;}}

@@ -3332,9 +3332,21 @@ ToggleQuestBikeHorizonLock()
 }
 
 bool
+IsQuestTrainPassenger()
+{
+	CPlayerPed *player = FindPlayerPed();
+	return player != nil && player->m_pMyVehicle != nil &&
+		player->m_pMyVehicle->IsTrain() &&
+		(player->InVehicle() || player->GetPedState() == PED_ENTER_TRAIN ||
+		 player->GetPedState() == PED_EXIT_TRAIN);
+}
+
+bool
 IsQuestVehicleThirdPerson()
 {
 	LoadDrivingSettings();
+	if(IsQuestTrainPassenger())
+		return false;
 	// The kind being driven decides, so a player who wants the chase
 	// camera on a bike still gets the cockpit in a car.
 	return gVehicleThirdPerson[VehicleKindFor(FindPlayerVehicle())];

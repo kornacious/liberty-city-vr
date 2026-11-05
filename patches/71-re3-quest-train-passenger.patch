@@ -1,0 +1,44 @@
+diff --git a/src/core/Camera.cpp b/src/core/Camera.cpp
+--- a/src/core/Camera.cpp
++++ b/src/core/Camera.cpp
+@@ -32,6 +32,9 @@
+ #include "GenericGameStorage.h"
+ #include "MemoryCard.h"
+ #include "Camera.h"
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#include "OculusVR.h"
++#endif
+ 
+ enum
+ {
+@@ -3104,6 +3107,19 @@
+ void
+ CCamera::Process_Train_Camera_Control(void)
+ {
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++	if(OculusVR::IsQuestTrainPassenger() &&
++	   !CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing()){
++		// Native train shots enable widescreen, which suspends gameplay hands
++		// and switches VR to a cinematic anchor. Stay a passenger throughout
++		// stops and departures; the VR anchor owns the actual rendered view.
++		m_bTargetJustBeenOnTrain = true;
++		SetWideScreenOff();
++		TakeControl(FindPlayerPed(), CCam::MODE_FOLLOWPED,
++			JUMP_CUT, CAMCONTROL_SCRIPT);
++		return;
++	}
++#endif
+ 	bool found = false;
+ 	CTrain *target = (CTrain*)pTargetEntity;
+ 	m_bUseSpecialFovTrain = true;
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -2436,6 +2436,7 @@ RenderVrTrackedHands(void)
+ 	   CWorld::Players[CWorld::PlayerInFocus].m_bInRemoteMode ||
+ 	   (FindPlayerVehicle() &&
+ 	    !OculusVR::IsImmersiveDrivingActive() &&
++	    !OculusVR::IsQuestTrainPassenger() &&
+ 	    !VrBodyIK::WeaponOwnershipActive() &&
+ 	    !QuestRadio::TouchEnabled()))
+ 		return;

@@ -43,7 +43,8 @@ VehicleEnabled(void)
 	// Third-person vehicle views keep the native occupant/steering animation.
 	// gVrFirstPersonActive also covers their stereo rendering, so it cannot
 	// decide whether tracked hands should own the seated player's skeleton.
-	return androidgame::VrVehicleBodyIKEnabled() &&
+	return !OculusVR::IsQuestTrainPassenger() &&
+		androidgame::VrVehicleBodyIKEnabled() &&
 		!OculusVR::IsQuestVehicleThirdPerson();
 }
 
@@ -57,7 +58,8 @@ static bool
 BodyIKGameplayContext(void)
 {
 	CPed *player = FindPlayerPed();
-	if(player == nil || player->m_fHealth <= 0.0f ||
+	if(OculusVR::IsQuestTrainPassenger() ||
+	   player == nil || player->m_fHealth <= 0.0f ||
 	   CWorld::Players[CWorld::PlayerInFocus].m_WBState != WBSTATE_PLAYING ||
 	   VrRagdoll::Owns(player) || androidgame::VrKnockdownPresentationActive())
 		return false;
