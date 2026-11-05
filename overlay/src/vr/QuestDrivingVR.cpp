@@ -3352,6 +3352,28 @@ IsQuestVehicleThirdPerson()
 	return gVehicleThirdPerson[VehicleKindFor(FindPlayerVehicle())];
 }
 
+static CVehicle *gTrainCameraVehicle;
+static bool gTrainCinematic, gTrainCameraR3Down;
+
+bool IsQuestTrainCinematic()
+{
+	return IsQuestTrainPassenger() && gTrainCameraVehicle == FindPlayerPed()->m_pMyVehicle &&
+		gTrainCinematic;
+}
+
+void UpdateQuestTrainCamera(bool r3Down, bool blocked)
+{
+	CVehicle *train = IsQuestTrainPassenger() ? FindPlayerPed()->m_pMyVehicle : nil;
+	if(train != gTrainCameraVehicle){
+		gTrainCameraVehicle = train;
+		gTrainCinematic = false;
+		gTrainCameraR3Down = r3Down;
+	}
+	if(train && !blocked && r3Down && !gTrainCameraR3Down)
+		gTrainCinematic = !gTrainCinematic;
+	gTrainCameraR3Down = r3Down;
+}
+
 void
 ToggleQuestVehicleThirdPerson()
 {

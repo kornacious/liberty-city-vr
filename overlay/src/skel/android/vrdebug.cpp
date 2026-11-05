@@ -2623,6 +2623,9 @@ void
 VrDebugUpdate(const PadInput &in)
 {
 	LoadVrSettings();
+	OculusVR::UpdateQuestTrainCamera(in.rightStickClick,
+		gVrMenuVisible || FrontEndMenuManager.m_bMenuActive ||
+		CCutsceneMgr::IsRunning() || CCutsceneMgr::IsCutsceneProcessing());
 	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
 	if(SimulationReplayConsumeStartFailure()){
 		gVrMenuVisible = true;
@@ -2733,7 +2736,7 @@ VrDebugUpdate(const PadInput &in)
 	// During stereo cutscenes, R3 cycles camera source and L3 remembers it
 	// per scene. L3+R3 instead toggles model-specific anchor calibration, so
 	// there is no diagnostic INI switch or desktop file-editing step.
-	const bool cutsceneCameras = !gVrMenuVisible && gCutsceneMode != 0 &&
+	const bool cutsceneCameras = !OculusVR::IsQuestTrainPassenger() && !gVrMenuVisible && gCutsceneMode != 0 &&
 		(CCutsceneMgr::IsRunning() || TheCamera.m_WideScreenOn);
 	if(cutsceneCameras){
 		const char *scene = CCutsceneMgr::IsRunning() ?

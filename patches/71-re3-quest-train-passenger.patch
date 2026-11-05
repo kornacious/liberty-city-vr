@@ -11,12 +11,13 @@ diff --git a/src/core/Camera.cpp b/src/core/Camera.cpp
  
  enum
  {
-@@ -3104,6 +3107,19 @@
+@@ -3104,6 +3107,20 @@
  void
  CCamera::Process_Train_Camera_Control(void)
  {
 +#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
 +	if(OculusVR::IsQuestTrainPassenger() &&
++	   !OculusVR::IsQuestTrainCinematic() &&
 +	   !CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing()){
 +		// Native train shots enable widescreen, which suspends gameplay hands
 +		// and switches VR to a cinematic anchor. Stay a passenger throughout

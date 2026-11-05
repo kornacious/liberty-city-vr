@@ -3415,6 +3415,16 @@ setIm2DTransform(const float32 transform[16], float32 planeDistance,
 	scene->im2dParams[3] = eye[2];
 }
 
+static bool32 gFirstPersonPositionLocked;
+
+void
+setFirstPersonPositionLocked(bool32 locked)
+{
+	gFirstPersonPositionLocked = locked;
+	if(locked)
+		memcpy(gvk.fpLatchedHeadPos, gvk.headPosition, sizeof(gvk.fpLatchedHeadPos));
+}
+
 void
 setHeadPose(const float32 position[3], float32 yaw, const float32 quat[4])
 {
@@ -3422,7 +3432,7 @@ setHeadPose(const float32 position[3], float32 yaw, const float32 quat[4])
 	gvk.headYaw = yaw;
 	memcpy(gvk.headQuat, quat, sizeof(gvk.headQuat));
 
-	if(!gvk.firstPersonActive){
+	if(!gvk.firstPersonActive || gFirstPersonPositionLocked){
 		// Outside first person the latch simply follows the head, so first
 		// person always starts from a current neutral pose no matter how the
 		// anchor updates and the pose updates interleave.

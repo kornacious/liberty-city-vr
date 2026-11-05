@@ -46,6 +46,7 @@
 #include "ModelIndices.h"
 #include "ModelInfo.h"
 #include "Vehicle.h"
+#include "VehicleModelInfo.h"
 #include "World.h"
 #include "Draw.h"
 #include "Renderer.h"
@@ -1359,6 +1360,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	const PedState playerVehicleState =
 		player != nil ? player->GetPedState() : PED_NONE;
 	const bool trainPassenger = OculusVR::IsQuestTrainPassenger();
+	const bool trainCinematic = OculusVR::IsQuestTrainCinematic();
 	const bool vehicleTransition = player != nil &&
 		(playerVehicleState == PED_OPEN_DOOR ||
 		 playerVehicleState == PED_CARJACK ||
@@ -1411,13 +1413,15 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 #endif
 	const bool wantFirstPerson =
 		gGameState == GS_PLAYING_GAME &&
+		!trainCinematic &&
 		player != nil &&
 		!remoteMode &&
 		!FrontEndMenuManager.m_bMenuActive &&
 		!CGame::playingIntro &&
 		!CCutsceneMgr::IsCutsceneProcessing() &&
 		!CCutsceneMgr::IsRunning() &&
-		!TheCamera.m_WideScreenOn;
+		(!TheCamera.m_WideScreenOn || trainPassenger);
+	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson && trainPassenger && player->InVehicle());
 
 	// A cinematic cutscene is rendered in stereo from the director camera.
 	// It has to go through the same first-person machinery as gameplay:
@@ -1425,12 +1429,12 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	// camera, and with that camera left on the director's frame while the
 	// eyes moved with the head, they slid across the view in 2D.
 	const bool cinematicCutscene = !wantFirstPerson &&
-		androidgame::VrCutsceneMode() != 0 &&
+		(trainCinematic || androidgame::VrCutsceneMode() != 0) &&
 		gGameState == GS_PLAYING_GAME && player != nil &&
 		!FrontEndMenuManager.m_bMenuActive &&
 		!FrontEndMenuManager.m_bGameNotLoaded &&
 		!CGame::playingIntro &&
-		(CCutsceneMgr::IsRunning() ||
+		(trainCinematic || CCutsceneMgr::IsRunning() ||
 		 CCutsceneMgr::IsCutsceneProcessing() ||
 		 TheCamera.m_WideScreenOn);
 	gVrFirstPersonActive = wantFirstPerson || cinematicCutscene;
@@ -1500,6 +1504,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	static CVehicle *trainAnchorVehicle;
 	static bool trainAnchorLatched;
 	static CVector trainEyeLocal, trainForwardLocal;
+	static uint32 trainTurnFrame;
+	static bool trainTurnFrameValid;
 	CVehicle *passengerCarriage = trainPassenger ? player->m_pMyVehicle : nil;
 	if(trainAnchorPlayer != player || trainAnchorVehicle != passengerCarriage ||
 	   !trainPassenger || playerVehicleState == PED_EXIT_TRAIN ||
@@ -1508,6 +1514,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		trainAnchorPlayer = player;
 		trainAnchorVehicle = passengerCarriage;
 		trainAnchorLatched = false;
+		trainTurnFrameValid = false;
 	}
 
 	// Verbatim port of the desktop VR base camera (RenderVrStereoFrame in
@@ -1723,13 +1730,29 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(trainPassenger && gVrInVehicle){
 			CVehicle *train = player->m_pMyVehicle;
 			if(!trainAnchorLatched){
-				const CVector eye = player->GetPosition() +
-					train->GetUp()*0.68f + player->GetForward()*0.12f;
+				// The entry callback enables occupancy before the next native
+				// lineup. Resolve the authored interior slot instead of caching
+				// the ped's still-exterior doorway position on that first frame.
+				CVehicleModelInfo *model = (CVehicleModelInfo*)CModelInfo::GetModelInfo(train->GetModelIndex());
+				int slot = TRAIN_POS_LEFT_ENTRY;
+				for(int i = TRAIN_POS_LEFT_ENTRY; i <= TRAIN_POS_RIGHT_ENTRY; ++i)
+					if(train->pPassengers[i] == player) slot = i;
+				trainEyeLocal = model->m_positions[slot] - CVector(1.5f, 0.0f, -0.2f);
+				trainEyeLocal.z += 0.68f;
 				const CMatrix inverse = Invert(train->GetMatrix());
-				trainEyeLocal = inverse * eye;
 				trainForwardLocal = Multiply3x3(inverse, player->GetForward());
 				// Commit after simulation has lined the ped up in the carriage.
 				trainAnchorLatched = postPhysics;
+			}
+			// Turn toward the boarding-side windows once, at 20 degrees/sec.
+			// Headset rotation remains additive; sticks never steer this anchor.
+			if(postPhysics && (!trainTurnFrameValid || trainTurnFrame != CTimer::GetFrameCounter())){
+				trainTurnFrame = CTimer::GetFrameCounter();
+				trainTurnFrameValid = true;
+				float yaw = VrKnockdownView::Wrap(Atan2(trainForwardLocal.y, trainForwardLocal.x));
+				const float step = CTimer::GetIsPaused() ? 0.0f : 0.34906585f*CTimer::GetTimeStep()/50.0f;
+				yaw -= clamp(yaw, -step, step);
+				trainForwardLocal = CVector(Cos(yaw), Sin(yaw), 0.0f);
 			}
 			head = train->GetMatrix() * trainEyeLocal;
 			forward = Multiply3x3(train->GetMatrix(), trainForwardLocal);
@@ -1956,7 +1979,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		CVector head = TheCamera.GetPosition();
 		CVector actorHead(0.0f, 0.0f, 0.0f), actorForward;
 		// Honor the camera R3 selects and L3 remembers, including the director.
-		const bool usingSelectedActorHead = GetCutsceneActorHead(
+		const bool usingSelectedActorHead = !trainCinematic && GetCutsceneActorHead(
 			androidgame::VrCutsceneCamera(), &actorHead, &actorForward);
 		if(usingSelectedActorHead){
 			// Exact model profiles win. Unknown model names inherit the existing

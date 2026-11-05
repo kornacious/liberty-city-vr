@@ -107,6 +107,8 @@ bool IsPhysicalWeaponInteractionActive();
 bool IsQuestFirstPersonOnFoot();
 // Includes boarding/alighting; independent of driving and camera preferences.
 bool IsQuestTrainPassenger();
+bool IsQuestTrainCinematic();
+void UpdateQuestTrainCamera(bool r3Down, bool blocked);
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);
 int GetHeldWeaponCopy(int hand);

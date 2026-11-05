@@ -12,6 +12,7 @@ namespace VrBodyIK {static void SetVehicleTransition(bool){} static void ResetVe
 using float32 = float;
 using bool32 = int;
 using int32 = int32_t;
+using uint32 = uint32_t;
 using PedState = int;
 static unsigned checks, recenters;
 static void Check(bool ok, const char *message) { ++checks; if(!ok) throw std::runtime_error(message); }
@@ -48,6 +49,17 @@ static CMatrix Invert(const CMatrix &m){
  CMatrix r;r.right={m.right.x,m.forward.x,m.up.x};r.forward={m.right.y,m.forward.y,m.up.y};r.up={m.right.z,m.forward.z,m.up.z};
  r.position={-Dot(m.right,m.position),-Dot(m.forward,m.position),-Dot(m.up,m.position)};return r;
 }
+enum { TRAIN_POS_LEFT_ENTRY, TRAIN_POS_MID_ENTRY, TRAIN_POS_RIGHT_ENTRY };
+struct CVehicleModelInfo { CVector m_positions[3]={{2.5f,-2,0},{2.5f,0,0},{2.5f,2,0}}; } trainModel;
+struct CModelInfo { static void *GetModelInfo(int){return &trainModel;} };
+struct CTimer {
+ static unsigned frame; static bool GetIsPaused(){return false;}
+ static float GetTimeStep(){return 1;} static unsigned GetFrameCounter(){return frame;}
+}; unsigned CTimer::frame=0;
+struct VrKnockdownView {static float Wrap(float a){return std::remainder(a,6.283185307f);}};
+static float Atan2(float y,float x){return std::atan2(y,x);}
+static float Cos(float x){return std::cos(x);} static float Sin(float x){return std::sin(x);}
+template<typename T> static T clamp(T x,T a,T b){return x<a?a:(x>b?b:x);}
 struct CEntity {};
 struct CPlayerPed;
 struct CVehicle {
@@ -87,6 +99,7 @@ void VrRecenterView();
 }
 namespace OculusVR {
 bool IsQuestTrainPassenger();
+bool IsQuestTrainCinematic();
 static bool hands=true,immersive=false,gVehicleThirdPerson[1]={};
 bool AreTrackedHandsEnabled(){return hands;}
 bool IsImmersiveDrivingActive(){return immersive;}
@@ -253,20 +266,21 @@ static void TrainPassengerMotion() {
  rw::vulkan::setFirstPersonAnchor(boardingEye,1.5707963268f,1,1,true);
  const float latchedX=rw::vulkan::gvk.fpLatchedHeadPos[0];
  p.inVehicle=true;p.state=PED_DRIVING;train.pDriver=nullptr;train.pPassengers[0]=&p;
- p.position={2,-1,0};p.forward={0,1,0};
+ p.position={20,-1,0};p.forward={1,0,0};
  auto publish=[&](bool post=true){
   EvaluateSeat(post);EvaluateTrain(post,head,forward);
   CVector right={forward.y,-forward.x,0};
   rw::vulkan::setFirstPersonAnchorBasis(&head.x,&right.x,&train.matrix.up.x,&forward.x,
    std::atan2(forward.y,forward.x),1,true);
+  rw::vulkan::setFirstPersonPositionLocked(true);
  };
  // A pre-physics sample must not commit the still-unsettled occupant pose.
  publish(false);p.position={3,-2,0};publish();
- Check(Near(head.x,3)&&Near(head.y,-1.88f)&&Near(head.z,.68f),"post-physics passenger position establishes anchor");
+ Check(Near(head.x,1)&&Near(head.y,-2)&&Near(head.z,.88f),"authored interior slot wins over exterior entry pose");
  Check(recenters==0,"train entry bypasses automatic car-seat recenter");
  Check(OculusVR::ShouldUseTrackedHands(),"riding hands work in default driving mode");
  OculusVR::hands=false;Check(!OculusVR::ShouldUseTrackedHands(),"passenger respects disabled hands setting");OculusVR::hands=true;
- Check(Near(rw::vulkan::gvk.fpLatchedHeadPos[0],latchedX),"boarding preserves physical displacement");
+ Check(!Near(rw::vulkan::gvk.fpLatchedHeadPos[0],latchedX),"interior position lock absorbs earlier physical displacement");
  CVector baseEye=Eye();
  auto palm=[](float x){
   const float pos[3]={x,1.3f,-.4f},quat[4]={0,0,0,1};float r[3],u[3],f[3];CVector out;
@@ -275,6 +289,7 @@ static void TrainPassengerMotion() {
  CVector basePalm=palm(.6f);
  const CVector localEye=baseEye,localPalm=basePalm;
  for(int i=0;i<240;i++){
+  ++CTimer::frame;
   float angle=.003f*i;
   train.matrix.right={std::cos(angle),std::sin(angle),0};
   train.matrix.forward={-std::sin(angle),std::cos(angle),0};
@@ -291,13 +306,42 @@ static void TrainPassengerMotion() {
  Check(Near(std::sqrt(Dot(after-before,after-before)),.6f),"controller motion remains one to one without arm reach limits");
  CVector beforeLean=Eye();Head(.55f,1.8f,-.2f,.5f);publish();
  CVector lean=Eye()-beforeLean;
- Check(Near(std::sqrt(Dot(lean,lean)),std::sqrt(.05f)),"head movement remains one to one during ride");
+ Check(Near(Dot(lean,lean),0),"physical translation cannot move the interior eyes");
+ Check(Near(rw::vulkan::gvk.headYaw,.5f),"headset rotation remains live with position locked");
+ OculusVR::UpdateQuestTrainCamera(false,false);
+ OculusVR::UpdateQuestTrainCamera(true,false);
+ Check(OculusVR::IsQuestTrainCinematic(),"R3 selects cinematic view");
+ OculusVR::UpdateQuestTrainCamera(true,false);
+ Check(OculusVR::IsQuestTrainCinematic(),"holding R3 does not toggle repeatedly");
+ OculusVR::UpdateQuestTrainCamera(false,false);OculusVR::UpdateQuestTrainCamera(true,false);
+ Check(!OculusVR::IsQuestTrainCinematic(),"second R3 press returns to interior");
+ OculusVR::UpdateQuestTrainCamera(false,false);OculusVR::UpdateQuestTrainCamera(true,true);
+ Check(!OculusVR::IsQuestTrainCinematic(),"menu consumes R3 without toggling camera");
  p.state=PED_EXIT_TRAIN;EvaluateTrain(true,head,forward);
  Check(OculusVR::IsQuestTrainPassenger(),"alighting retains passenger hands");
  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
  Check(!OculusVR::IsQuestTrainPassenger(),"stale vehicle pointer after exit does not retain passenger mode");
  p.inVehicle=true;p.state=PED_DRIVING;p.position={10,20,1};publish();
- Check(Near(head.x,10.12f)&&Near(head.y,20)&&Near(head.z,1.68f),"reboarding same carriage creates a new anchor");
+ CVector expected=train.matrix*CVector(1,-2,.88f);
+ Check(Near(head.x,expected.x)&&Near(head.y,expected.y)&&Near(head.z,expected.z),"reboarding restores authored interior slot");
+ // Start facing along the carriage and verify a slow one-time outward turn.
+ p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
+ train.matrix={};p.inVehicle=true;p.state=PED_DRIVING;p.forward={0,1,0};
+ ++CTimer::frame;publish();float first=Atan2(forward.y,forward.x);
+ Check(first>1.5f&&first<1.5708f,"boarding turn starts gradually");
+ publish();Check(Near(Atan2(forward.y,forward.x),first),"multiple camera updates cannot double turn rate");
+ for(int i=0;i<240;i++){++CTimer::frame;publish();}
+ Check(Near(forward.x,1)&&Near(forward.y,0),"boarding turn settles facing outward");
+ for(int slot=1;slot<=2;slot++){
+  p.inVehicle=false;p.state=PED_IDLE;EvaluateTrain(true,head,forward);
+  train.pPassengers[slot-1]=nullptr;train.pPassengers[slot]=&p;
+  p.inVehicle=true;p.state=PED_DRIVING;++CTimer::frame;publish();
+  Check(Near(head.x,1)&&Near(head.y,trainModel.m_positions[slot].y)&&Near(head.z,.88f),"each door uses its actual interior passenger slot");
+ }
+ rw::vulkan::setFirstPersonPositionLocked(false);
+ CVector beforeFree=Eye();Head(.65f,1.8f,-.2f,.5f);
+ CVector freeDelta=Eye()-beforeFree;
+ Check(Dot(freeDelta,freeDelta)>.009f,"leaving position lock restores ordinary physical translation");
  train.train=false;Check(!OculusVR::IsQuestTrainPassenger(),"ordinary cars retain existing policy");
  Check(!OculusVR::ShouldUseTrackedHands(),"default driving hands policy unchanged for cars");
  Check(OculusVR::ProductionVehicleThirdPerson(),"cars retain third-person preference");

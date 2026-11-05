@@ -390,6 +390,8 @@ void setHeadPose(const float32 position[3], float32 yaw,
                  const float32 quat[4]);
 // Cockpit neutral tracking pose, independent of current physical head motion.
 bool32 getFirstPersonNeutralPose(float32 position[3], float32 *yaw);
+// Keep the mono eye at its anchor while retaining headset rotation and stereo IPD.
+void setFirstPersonPositionLocked(bool32 locked);
 
 // The current first person VIEW expressed in game world axes: where the
 // player is actually looking, head orientation composed onto the anchor.
