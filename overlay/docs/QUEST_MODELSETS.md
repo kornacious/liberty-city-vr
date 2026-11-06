@@ -89,6 +89,18 @@ anchor. Vehicle-transition fallbacks never read skinned animation keys as rigid
 frames. These runtime fixes need only an APK update; an already prepared Original
 Xbox profile does not need rebuilding.
 
+With on-foot Body IK enabled, Original Xbox Claude also uses a tracked posture
+layer. Physical crouching lowers the pelvis and bends the knees while retaining
+the animation's reachable foot contacts. Forward/sideways roomscale displacement
+is shared between pelvis and spine, with shoulders following before the tracked
+arm solve. Lean is limited to 28 cm; larger roomscale movement carries the body.
+Extra physical crouch is limited by leg length and does not add lowering already
+supplied by the game's crouch animation. Recenter while comfortably upright to
+establish the physical reference. This layer does not change the camera, collision
+capsule or game crouch rules. Vehicles, train passengers, jumps, transitions and
+knockdowns retain their existing handling. Classic retains its existing solver.
+Persistent terrain-aware foot planting is not part of this posture layer.
+
 Host checks and complete compilation do not establish visual headset acceptance.
 Verify all districts/LODs, shared textures, vegetation, wheels/windows, player and
 pedestrian skinning, cutscenes, weapon grips/scopes, seating/steering alignment,

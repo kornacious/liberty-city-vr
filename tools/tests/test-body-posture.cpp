@@ -1,0 +1,115 @@
+#include <cstdio>
+#include <cstdlib>
+#include <initializer_list>
+#include "ragdoll-test-vector.h"
+using std::isfinite;
+#define nil nullptr
+#include "QuestBodyPosture.h"
+static unsigned checks;
+static void Require(bool ok,const char *message){++checks;if(!ok){std::fprintf(stderr,"FAIL %s\n",message);std::exit(1);}}
+static void Near(CVector a,CVector b,const char *message,float tolerance=0.0003f){Require((a-b).Magnitude()<tolerance,message);}
+static QuestBodyPosture::Input Standing(){
+    QuestBodyPosture::Input in;
+    in.spine[0]={0,0,.85f};in.spine[1]={0,0,1.07f};in.spine[2]={0,0,1.32f};in.spine[3]={0,0,1.57f};
+    for(int i=0;i<2;++i){float x=i==0?-.12f:.12f;in.hip[i]={x,0,.82f};in.knee[i]={x,.08f,.42f};in.foot[i]={x,0,.02f};}
+    in.up={0,0,1};in.forward={0,1,0};in.authoredDrop=0;return in;
+}
+struct CMatrix {
+    CVector r{1,0,0},u{0,0,1},f{0,1,0},p;
+    const CVector &GetRight()const{return r;}const CVector &GetUp()const{return u;}
+    const CVector &GetForward()const{return f;}const CVector &GetPosition()const{return p;}
+};
+struct RwMatrix {CVector pos,right{0,0,1},up{0,1,0},at{-1,0,0};int flags=0;};
+struct RpHAnimHierarchy {int numNodes=14;int parents[14]={-1,0,1,2,0,4,5,0,7,8,2,10,11,12};};
+struct CPed {bool modern=true,vehicle=false;int m_nPedState=0;CVector position;bool InVehicle(){return vehicle;}CVector GetPosition(){return position;}};
+struct UpperBodyBones {int waist=0,mid=1,torso=2,head=3;};
+enum {PED_JUMP=1,MAX_BODY_IK_NODES=96,BONE_upperlegl=4,BONE_lowerlegl=5,BONE_footl=6,BONE_upperlegr=7,BONE_lowerlegr=8,BONE_footr=9};
+static bool gVehicleTransitionActive,tracking=true;
+static CVector eye,anchor;
+static bool UsesNativeCameraHead(CPed *ped){return ped->modern;}
+static int RpHAnimIDGetIndex(RpHAnimHierarchy*,int id){return id;}
+static void BuildParentTable(RpHAnimHierarchy *hier,int *parents){for(int i=0;i<hier->numNodes;++i)parents[i]=hier->parents[i];}
+static bool IsDescendantOf(int node,int ancestor,const int *parents){for(int p=parents[node];p>=0;p=parents[p])if(p==ancestor)return true;return false;}
+static CVector ToBasisLocal(CVector p,const CMatrix &m){return {DotProduct(p,m.r),DotProduct(p,m.u),DotProduct(p,m.f)};}
+static CVector FromBasisLocal(CVector p,const CMatrix &m){return m.r*p.x+m.u*p.y+m.f*p.z;}
+static float ClampF(float value,float lo,float hi){return QuestBodyPosture::Bounded(value,lo,hi);}
+static CMatrix MatrixFromRw(const RwMatrix &m){CMatrix b;b.p=m.pos;b.r=m.right;b.u=m.up;b.f=m.at;return b;}
+namespace androidgame {
+static bool VrGetViewBasis(float *p,float*,float*,float*){if(!tracking)return false;p[0]=eye.x;p[1]=eye.y;p[2]=eye.z;return true;}
+static bool VrGetOnFootBodyAnchor(float *p){p[0]=anchor.x;p[1]=anchor.y;p[2]=anchor.z;return true;}
+}
+#include "body-posture-runtime.inc"
+int main(){
+    using namespace QuestBodyPosture;
+    const Input standing=Standing();Output neutral;
+    Require(Solve(standing,neutral),"neutral anatomy supported");
+    for(int i=0;i<4;++i)Near(neutral.spine[i],standing.spine[i],"neutral keeps native spine");
+    for(int i=0;i<2;++i){Near(neutral.knee[i],standing.knee[i],"neutral keeps knees");Near(neutral.foot[i],standing.foot[i],"neutral keeps feet");}
+    for(int rate:{30,36,60,72,80,90,120,144})for(int frame=0;frame<240;++frame){
+        Input in=standing;float t=float(frame)/float(rate);
+        in.delta={std::sin(t)*.24f,std::cos(t)*.23f,-.6f*(.5f+.5f*std::sin(t))};
+        Output out;Require(Solve(in,out),"crouch and lean solve");
+        for(int i=0;i<3;++i)Require(std::fabs((out.spine[i+1]-out.spine[i]).Magnitude()-(in.spine[i+1]-in.spine[i]).Magnitude())<.0002f,"spine length preserved");
+        for(int i=0;i<2;++i){
+            Require(std::fabs((out.knee[i]-out.hip[i]).Magnitude()-(in.knee[i]-in.hip[i]).Magnitude())<.0002f,"thigh length preserved");
+            Require(std::fabs((out.foot[i]-out.knee[i]).Magnitude()-(in.foot[i]-in.knee[i]).Magnitude())<.0002f,"shin length preserved");
+            Near(out.foot[i],in.foot[i],"reachable feet remain at native contact");
+            Require(Finite(out.knee[i]),"finite knees at all rates");
+        }
+        // Frame duration must never change an identical physical pose.
+        Output repeat;Require(Solve(in,repeat),"repeat solve");Near(repeat.spine[3],out.spine[3],"stateless pose is frame rate independent");
+    }
+    Input crouch=standing;crouch.delta={0,0,-.4f};crouch.authoredDrop=.5f;
+    Output out;Require(Solve(crouch,out),"combined physical and button crouch supported");Near(out.spine[0],standing.spine[0],"authored lowering is not applied twice");
+    Input deep=standing;deep.delta={10,10,-10};Require(Solve(deep,out),"extreme tracked displacement bounded");Require((out.spine[0]-standing.spine[0]).Magnitude()<.7f,"pelvis remains bounded");
+    Input bad=standing;bad.delta.x=NAN;Require(!Solve(bad,out),"invalid tracking rejected");bad=standing;bad.spine[1]=bad.spine[0];Require(!Solve(bad,out),"collapsed spine rejected");
+    Near(Swing({0,0,1},{0,0,1},{0,0,-1}),{0,0,-1},"antiparallel swing maps the reversed direction");
+    CVector rotated=Swing({0,0,1},{0,0,1},{0,1,0});Near(rotated,{0,1,0},"swing maps segment direction");
+
+    // Real production branch adapter: exercise torso/shoulder propagation,
+    // planted foot orientation and ownership guards, rather than a model of it.
+    RpHAnimHierarchy hierarchy;CPed ped;UpperBodyBones body;CMatrix visual;
+    RwMatrix native[14];for(int i=0;i<4;++i)native[i].pos=standing.spine[i];
+    for(int i=0;i<2;++i){native[4+i*3].pos=standing.hip[i];native[5+i*3].pos=standing.knee[i];native[6+i*3].pos=standing.foot[i];}
+    native[10].pos={-.15f,0,1.32f};native[11].pos={-.25f,0,1.3f};native[12].pos={-.35f,.1f,1.1f};native[13].pos={-.35f,.2f,1};
+    anchor={0,0,1.57f};eye=anchor+CVector(.2f,.15f,-.4f);
+    for(int guard=0;guard<5;++guard){
+        RwMatrix mats[14];for(int i=0;i<14;++i)mats[i]=native[i];
+        ped.modern=guard!=0;ped.vehicle=guard==1;gVehicleTransitionActive=guard==2;ped.m_nPedState=guard==3?PED_JUMP:0;tracking=guard!=4;
+        ApplyTrackedPosture(&ped,&hierarchy,mats,body,visual,0);
+        for(int i=0;i<14;++i){Near(mats[i].pos,native[i].pos,"excluded owner leaves skeleton intact");Near(mats[i].right,native[i].right,"excluded owner leaves orientation intact");}
+    }
+    ped.modern=true;ped.vehicle=gVehicleTransitionActive=false;ped.m_nPedState=0;tracking=true;
+    RwMatrix mats[14];for(int i=0;i<14;++i)mats[i]=native[i];
+    const CVector originalEye=eye,originalAnchor=anchor;
+    ApplyTrackedPosture(&ped,&hierarchy,mats,body,visual,0);
+    Require(mats[0].pos.z<native[0].pos.z-.25f,"production adapter lowers pelvis");
+    Require(mats[3].pos.x>native[3].pos.x+.12f,"production adapter leans spine toward headset");
+    Require((mats[10].pos-native[10].pos).Magnitude()>.1f,"shoulders move before arm solve");
+    Near(mats[6].pos,native[6].pos,"left contact retained");Near(mats[9].pos,native[9].pos,"right contact retained");
+    Near(mats[6].right,native[6].right,"foot authored orientation retained");
+    Near(eye,originalEye,"posture never writes tracked view");Near(anchor,originalAnchor,"posture never feeds back to camera anchor");Near(ped.position,{},"posture never changes gameplay root");
+    for(int i=0;i<14;++i){Require(Finite(mats[i].pos),"finite transformed branches");Require(std::fabs(DotProduct(mats[i].right,mats[i].up))<.0002f,"bone frame stays orthogonal");}
+    // Large roomscale movement already carried the skeleton. Only its residual
+    // lean should reach the solver; translations and yaw must not change shape.
+    const CVector carry(1.2f,-.7f,0);
+    RwMatrix carried[14];for(int i=0;i<14;++i){carried[i]=native[i];carried[i].pos+=carry;}
+    visual.p=carry;eye=originalEye+carry;
+    ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+    for(int i=0;i<14;++i)Near(carried[i].pos,mats[i].pos+carry,"roomscale follow is not applied twice");
+    visual=CMatrix();ped.position={80,-50,4};visual.p=ped.position;
+    auto yaw=[](CVector p){return CVector(-p.y,p.x,p.z);};
+    for(int i=0;i<14;++i){carried[i]=native[i];carried[i].pos=ped.position+yaw(native[i].pos);carried[i].right=yaw(native[i].right);carried[i].up=yaw(native[i].up);carried[i].at=yaw(native[i].at);}
+    anchor=ped.position+yaw(originalAnchor);eye=ped.position+yaw(originalEye);visual.r={0,1,0};visual.f={-1,0,0};
+    ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+    for(int i=0;i<14;++i)Near(carried[i].pos,ped.position+yaw(mats[i].pos),"yaw and world translation preserve posture",.001f);
+    hierarchy.parents[body.head]=-1;
+    for(int i=0;i<14;++i)carried[i]=native[i];
+    ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+    for(int i=0;i<14;++i)Near(carried[i].pos,native[i].pos,"unsupported hierarchy remains native");
+    hierarchy.parents[body.head]=body.torso;visual=CMatrix();ped.position={};anchor=originalAnchor;eye=anchor+CVector(0,0,-.4f);
+    for(int i=0;i<14;++i)carried[i]=native[i];
+    ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,-1.0f);
+    Near(carried[0].pos,native[0].pos,"starting IK crouched does not invent a standing calibration");
+    std::printf("PASS %u body posture checks\n",checks);
+}

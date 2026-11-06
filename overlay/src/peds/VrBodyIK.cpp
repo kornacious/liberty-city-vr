@@ -23,6 +23,7 @@ extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 #include <android/log.h>
 #include <math.h>
 #include "QuestHeadAttachment.h"
+#include "QuestBodyPosture.h"
 
 // First stage of the body solver: controller-driven arms on the real player
 // skeleton. The weapon system remains authoritative and completely untouched.
@@ -574,7 +575,12 @@ static bool BuildGroundedVisualBody(CPed *ped,
 			if(horizontal > 0.0001f){
 				const float maxFollow = 2.0f;
 				const float scale = (horizontal > maxFollow) ? (maxFollow / horizontal) : 1.0f;
-				const CVector follow(delta.x * scale, delta.y * scale, 0.0f);
+				CVector follow(delta.x * scale, delta.y * scale, 0.0f);
+				if(UsesNativeCameraHead(ped) && ped->m_nPedState != PED_JUMP){
+					// Leave a bounded displacement for the spine to express as
+					// leaning. Larger roomscale steps still carry the whole body.
+					follow -= QuestBodyPosture::Lean(follow, CVector(0,0,1));
+				}
 
 				visualBody.GetPosition() = nativeRoot+follow;
 
@@ -1293,6 +1299,99 @@ GetRigidWeaponHandBasis(int hand, CVector *position, CVector *right,
 }
 
 #if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+// Transform complete branches so shoulders, skin attachments and fingers keep
+// their relationship to the torso before the existing controller arm solve.
+static void MovePostureJoint(RpHAnimHierarchy *hier, RwMatrix *mats,
+	const int *parents, int joint, const CVector &position,
+	const CVector &from, const CVector &to)
+{
+	const CVector origin=mats[joint].pos;
+	for(int i=0;i<hier->numNodes;++i){
+		if(i!=joint && !IsDescendantOf(i,joint,parents)) continue;
+		RwMatrix &bone=mats[i];
+		bone.pos=position+QuestBodyPosture::Swing(CVector(bone.pos)-origin,from,to);
+		bone.right=QuestBodyPosture::Swing(bone.right,from,to);
+		bone.up=QuestBodyPosture::Swing(bone.up,from,to);
+		bone.at=QuestBodyPosture::Swing(bone.at,from,to);
+		bone.flags=0;
+	}
+}
+
+static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
+	RwMatrix *mats, const UpperBodyBones &body, const CMatrix &visualBody,
+	float authoredDrop)
+{
+	// Vehicles (including standing train passengers), transitions, ragdoll
+	// and scripted poses retain their existing owners. Classic never enters.
+	if(!UsesNativeCameraHead(ped) || ped->InVehicle() ||
+	   gVehicleTransitionActive || ped->m_nPedState==PED_JUMP ||
+	   hier->numNodes<=0 || hier->numNodes>MAX_BODY_IK_NODES) return;
+	float eyeRaw[3],anchorRaw[3];
+	if(!androidgame::VrGetViewBasis(eyeRaw,nil,nil,nil) ||
+	   !androidgame::VrGetOnFootBodyAnchor(anchorRaw)) return;
+	const int joints[]={body.waist,body.mid,body.torso,body.head,
+		RpHAnimIDGetIndex(hier,BONE_upperlegl),RpHAnimIDGetIndex(hier,BONE_lowerlegl),
+		RpHAnimIDGetIndex(hier,BONE_footl),RpHAnimIDGetIndex(hier,BONE_upperlegr),
+		RpHAnimIDGetIndex(hier,BONE_lowerlegr),RpHAnimIDGetIndex(hier,BONE_footr)};
+	for(int i=0;i<10;++i){
+		if(joints[i]<0 || joints[i]>=hier->numNodes) return;
+		for(int j=0;j<i;++j) if(joints[i]==joints[j]) return;
+	}
+	int parents[MAX_BODY_IK_NODES]; BuildParentTable(hier,parents);
+	for(int i=0;i<3;++i) if(!IsDescendantOf(joints[i+1],joints[i],parents)) return;
+	for(int side=0;side<2;++side){
+		const int base=4+side*3;
+		if(!IsDescendantOf(joints[base],body.waist,parents) ||
+		   !IsDescendantOf(joints[base+1],joints[base],parents) ||
+		   !IsDescendantOf(joints[base+2],joints[base+1],parents)) return;
+	}
+	QuestBodyPosture::Input input;
+	for(int i=0;i<4;++i) input.spine[i]=mats[joints[i]].pos;
+	RwMatrix feet[2];
+	for(int side=0;side<2;++side){
+		const int base=4+side*3;
+		input.hip[side]=mats[joints[base]].pos;
+		input.knee[side]=mats[joints[base+1]].pos;
+		input.foot[side]=mats[joints[base+2]].pos;
+		feet[side]=mats[joints[base+2]];
+	}
+	input.delta=CVector(eyeRaw[0]-anchorRaw[0],eyeRaw[1]-anchorRaw[1],eyeRaw[2]-anchorRaw[2]);
+	// Horizontal roomscale following was already applied to the skeleton.
+	input.delta-=visualBody.GetPosition()-ped->GetPosition();
+	input.up=visualBody.GetUp(); input.forward=visualBody.GetForward();
+	// If IK first starts during a button crouch there is no standing sample
+	// yet. Keep native crouch height until standing establishes that reference.
+	input.authoredDrop=authoredDrop < 0.0f ?
+		ClampF(-DotProduct(input.delta,input.up),0.0f,10.0f) : authoredDrop;
+	QuestBodyPosture::Output solved;
+	if(!QuestBodyPosture::Solve(input,solved)) return;
+	for(int i=0;i<3;++i){
+		const CVector from=CVector(mats[joints[i+1]].pos)-CVector(mats[joints[i]].pos);
+		MovePostureJoint(hier,mats,parents,joints[i],solved.spine[i],from,
+			solved.spine[i+1]-solved.spine[i]);
+	}
+	for(int side=0;side<2;++side){
+		const int hip=joints[4+side*3], knee=joints[5+side*3], foot=joints[6+side*3];
+		MovePostureJoint(hier,mats,parents,hip,solved.hip[side],
+			CVector(mats[knee].pos)-CVector(mats[hip].pos),solved.knee[side]-solved.hip[side]);
+		MovePostureJoint(hier,mats,parents,knee,solved.knee[side],
+			CVector(mats[foot].pos)-CVector(mats[knee].pos),solved.foot[side]-solved.knee[side]);
+		// Preserve the animation's foot orientation, including gait. This is
+		// per-frame contact preservation, not persistent terrain foot planting.
+		const CMatrix current=MatrixFromRw(mats[foot]);
+		const CMatrix original=MatrixFromRw(feet[side]);
+		for(int i=0;i<hier->numNodes;++i){
+			if(i!=foot && !IsDescendantOf(i,foot,parents)) continue;
+			RwMatrix &bone=mats[i];
+			bone.pos=solved.foot[side]+FromBasisLocal(ToBasisLocal(CVector(bone.pos)-current.GetPosition(),current),original);
+			bone.right=FromBasisLocal(ToBasisLocal(bone.right,current),original);
+			bone.up=FromBasisLocal(ToBasisLocal(bone.up,current),original);
+			bone.at=FromBasisLocal(ToBasisLocal(bone.at,current),original);
+			bone.flags=0;
+		}
+	}
+}
+
 static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 {
 	(void)onFootIK;
@@ -1319,6 +1418,12 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 
 	CMatrix visualBody = ped->GetMatrix();
 	if(!vehicleIK){
+		float authoredDrop=ped->bIsDucking ? -1.0f : 0.0f;
+		if(gUpperBody.valid){
+			const CVector nativeTorso=ToBasisLocal(
+				CVector(mats[upperBody.torso].pos)-ped->GetPosition(),ped->GetMatrix());
+			authoredDrop=ClampF(gUpperBody.nativeTorsoPosLocal.y-nativeTorso.y,0.0f,0.8f);
+		}
 		if(!BuildGroundedVisualBody(ped, hier, mats, visualBody))
 			return;
 
@@ -1333,6 +1438,7 @@ static void ApplySkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 			StabilizeShoulderRoot(
 				ped, mats, arms[1], 1, visualBody, authoredVerticalOffset);
 		}
+		ApplyTrackedPosture(ped,hier,mats,upperBody,visualBody,authoredDrop);
 	}else if(ped->m_pMyVehicle != nil &&
 	         ped->m_pMyVehicle->IsBike()){
 		const CMatrix nativeBody = ped->GetMatrix();
