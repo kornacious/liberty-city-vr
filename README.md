@@ -7,7 +7,7 @@
 > `dotnet run --project tools/manager -c Release`.
 > Select **Build and install**, configure the action, then choose **Perform**.
 > The .NET 10 / Terminal.Gui 2.5.0 application also includes the vehicle editor
-> builder, music importer, Modern model installer, game-file repair, updater,
+> builder, music importer, Original Xbox importer, game-file repair, updater,
 > shared settings, file browsing, and auxiliary tools/tests.
 >
 > Downloads of portable build tools retain pinned SHA256 checks. SDK package
@@ -51,7 +51,7 @@ and weapon calibration improvements, physical scopes, custom music and the
 vehicle radio board, safer autosaves, and rendering, audio and gameplay fixes.
 **v0.8.0** adds the cross-platform manager, bidirectional save transfer,
 headset playlist management, tracked spatial audio, the vehicle placement editor
-and calibrated defaults, Classic/Modern Xbox HD models, dual wielding, immersive
+and calibrated defaults, Classic/Original Xbox models, dual wielding, immersive
 speedometers, train/camera/mission fixes, and expanded graphics/profiling tools.
 See the [gameplay guide](overlay/docs/QUEST_GAMEPLAY.md),
 [spatial audio notes](overlay/docs/SPATIAL_AUDIO.md),
@@ -63,7 +63,7 @@ Existing graphics and calibration preferences are preserved. See
 [performance notes](PERFORMANCE.md) for the inherited rendering optimizations.
 
 It intentionally contains **no APK, complete re3 source tree, original game
-files, saves, logs or third-party Modern model packs**. Every user builds their
+files, saves, logs or original Xbox assets**. Every user builds their
 own APK and supplies data from a legally owned PC copy of GTA III.
 
 ## Updating an existing installation
@@ -168,8 +168,8 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 - Physics Director V2 with an ORIGINAL/OFF fallback; separate pedestrian and
   vehicle density controls from OFF to 300%. OFF prevents new spawns rather
   than deleting existing traffic.
-- Classic or Modern (Xbox HD) asset profiles. Modern loads its complete world,
-  vegetation, vehicle, pedestrian and weapon pack together. Changes require a
+- Classic or Original Xbox asset profiles. Original Xbox loads its complete world,
+  vegetation, vehicle, pedestrian and weapon assets together. Changes require a
   full app restart.
 
 Defaults retain 100% render scale and sustained CPU/GPU performance hints.
@@ -183,10 +183,10 @@ Runtime/data layout is documented in
 [QUEST_RAGDOLL.md](overlay/docs/QUEST_RAGDOLL.md) for ragdoll behavior and limits,
 [QUEST_VEHICLE_DEFORMATION.md](overlay/docs/QUEST_VEHICLE_DEFORMATION.md) for
 body deformation, and [QUEST_MODELSETS.md](overlay/docs/QUEST_MODELSETS.md)
-for Classic/Modern asset selection.
+for Classic/Original Xbox asset selection.
 The [asset guide](overlay/docs/QUEST_MODELSETS.md) also describes the current
-Modern preparation from the pinned Xbox Version HD (re3) release,
-including world, pedestrian, weapon and vehicle effects.
+local preparation from a user-provided original Xbox US 1.0 ISO,
+including conversion requirements and renderer/cutscene compatibility limits.
 
 ## Troubleshooting and Game Data
 

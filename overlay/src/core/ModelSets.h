@@ -42,7 +42,7 @@ const char *GetName(eModelSet modelSet);
 const char *GetSourceName(eModelSet modelSet);
 
 eModelSet GetActiveForCategory(eModelCategory category);
-// Both aliases of Xbox HD use Xbox geometry calibration, not old Modern offsets.
+// Retail Xbox uses the existing Xbox geometry calibration; verify fit in VR.
 eModelSet GetCalibrationSetForCategory(eModelCategory category);
 eModelSet GetRequestedForCategory(eModelCategory category);
 void SetRequestedForCategory(eModelCategory category, eModelSet modelSet);

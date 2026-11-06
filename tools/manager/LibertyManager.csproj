@@ -13,6 +13,6 @@
   <ItemGroup>
     <PackageReference Include="Terminal.Gui" Version="2.5.0" />
     <Compile Remove="tests/**/*.cs" />
-    <EmbeddedResource Include="../modelsets/xbox-pack.json" Link="xbox-pack.json" />
+    <EmbeddedResource Include="../modelsets/xbox-disc.json" Link="xbox-disc.json" />
   </ItemGroup>
 </Project>

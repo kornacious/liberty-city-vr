@@ -130,12 +130,13 @@ transfer. Validation only needs no headset. Imports use provider staging and
 SHA256-verified commits, skip duplicates and preserve existing tracks. Optional
 radio-board export requires a new output filename.
 
-**Modern models** accepts the pinned Xbox HD re3 ZIP or extracted source, or an
-explicit optional ModDB download. It creates a generated folder named `modern`,
-verifies all source/output hashes, merges archives and converts textures. Build
-only skips the headset. Device installation verifies every staged file before
-activating the new folder and restores the old folder if activation fails.
-Model packs and generated products must stay local.
+**Original Xbox assets** accepts only your local GTA III US 1.0 original Xbox
+`.iso` or `.xiso.iso`. No game image or asset pack is downloaded. The Manager
+reads the disc filesystem, verifies retail file fingerprints, decompresses and
+converts native assets using the bundled converter source, and validates a
+complete `modern` overlay. CMake, Ninja and C++ build tools are required.
+Build only skips headset access. Installation verifies staged files and activates
+the profile with rollback. See [the asset guide](overlay/docs/QUEST_MODELSETS.md).
 
 **Repair game files** replaces the port's allowlisted GXT and frontend/shared
 TXD files when menu entries show missing labels. It requires existing game data

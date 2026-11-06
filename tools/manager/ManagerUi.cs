@@ -64,7 +64,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Modern models", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
+        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
@@ -147,11 +147,11 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 if (loadMusicOnOpen) app.Invoke(() => { if (!disposed && selected == 2 && running is not { IsCompleted: false }) { musicRefresh = true; Start(); } });
                 break;
             case 3:
-                Note("Build and verify the pinned Xbox HD re3 Modern overlay.");
-                Field("Source ZIP (blank: cached pack)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
-                Field("Or extracted pack folder", options.ModelSource, v => options.ModelSource = v, OpenMode.Directory);
+                options.DownloadModels = false; options.ModelSource = "";
+                Note("Import original Xbox GTA III US 1.0 assets from your local disc image. No game downloads.");
+                Note("Conversion requires CMake, Ninja and C++ build tools (Visual Studio C++ on Windows).");
+                Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
                 Field("Output folder named modern (blank: workplace)", options.ModelOutput, v => options.ModelOutput = v, OpenMode.Directory, false);
-                Toggle("Download the supported pack from ModDB (1.45 GiB)", options.DownloadModels, v => options.DownloadModels = v);
                 Toggle("Build only (skip model installation)", options.BuildOnly, v => options.BuildOnly = v); break;
             case 4:
                 Note("Repair replacement text and frontend assets on an existing installation.");

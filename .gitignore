@@ -76,3 +76,7 @@ __pycache__/
 # .NET manager output
 **/bin/
 **/obj/
+
+# Local-only Xbox disc images
+*.iso
+*.xiso

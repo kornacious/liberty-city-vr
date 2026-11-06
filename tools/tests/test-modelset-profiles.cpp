@@ -47,9 +47,9 @@ int main(){
  using namespace ModelSets;
  auto root=std::filesystem::temp_directory_path()/("lcvr-modelsets-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
  settings={{"ModelSet",1}};reset(root);require(GetActive()==MODEL_SET_CLASSIC,"missing profiles fall back");require(writes==0,"startup does not rewrite settings");
- const char *identity="SourceSHA256=879024BED6FB89C218F6C75A46119F95FC068A64849BC74DEDF0851D3FD210A6\n";
+ const char *identity="Source=ORIGINAL_XBOX_US_1_0\n";
  for(const char *set:{"xbox","modern"}){
-  for(const char *name:{"models/gta3.img","models/gta3.dir","models/generic/wheels.dff","models/generic/player.bmp","models/generic.txd","models/particle.txd","models/coll/vehicles.col","models/coll/generic.col","data/maps/generic.ide","data/maps/comse/comse.ipl","data/maps/comse/comse.col","txd/splash1.txd"})touch(root/"modelsets"/set/name);
+  for(const char *name:{"models/gta3.img","models/gta3.dir","models/generic/wheels.dff","models/generic/player.bmp","models/generic.txd","models/particle.txd","models/coll/vehicles.col","models/coll/generic.col","data/default.ide","data/maps/generic.ide","data/maps/comse/comse.ipl","data/maps/comse/comse.col","txd/splash1.txd"})touch(root/"modelsets"/set/name);
   touch(root/"modelsets"/set/"vegetation_models.txt","treepatch\n");touch(root/"modelsets"/set/"BUILD_INFO.txt",identity);
  }
  settings={{"ModelSet",2}};reset(root);require(IsModernActive()&&!IsXboxActive(),"legacy Xbox migrates to Modern");
@@ -62,7 +62,7 @@ int main(){
  require(!QuestOverlayEntrySelected(md.c_str(),"bogus.col"),"unsupported archive entry rejected");
  require(!GetXboxAssetPath("models/gta3.img",gGameRoot,0),"duplicate Xbox archive never registered");
  char out[1024];
- for(const char *name:{"data/maps/generic.ide","data/maps/comse/comse.ipl","data/maps/comse/comse.col","models/coll/generic.col","models/generic.txd","models/particle.txd","txd/splash1.txd","models/generic/wheels.dff","models/generic/player.bmp"})require(IsModernAssetPath(ResolveAssetPath(name,out,sizeof(out))),"complete Modern loose assets routed");
+ for(const char *name:{"data/default.ide","data/maps/generic.ide","data/maps/comse/comse.ipl","data/maps/comse/comse.col","models/coll/generic.col","models/generic.txd","models/particle.txd","txd/splash1.txd","models/generic/wheels.dff","models/generic/player.bmp"})require(IsModernAssetPath(ResolveAssetPath(name,out,sizeof(out))),"complete Modern loose assets routed");
  for(const char *name:{"models/gta3.img","models/gta3.dir","models/coll/vehicles.col","skins/custom.bmp","data/main.scm","userfiles/GTA3sf1.b","../data/maps/generic.ide","C:/models/particle.txd"})require(ResolveAssetPath(name,out,sizeof(out))==name,"retail/private paths preserved");
  require(GetCalibrationSetForCategory(MODEL_CATEGORY_VEHICLES)==MODEL_SET_XBOX,"Xbox calibration identity retained internally");
  CycleRequested(1);require(GetRequested()==MODEL_SET_CLASSIC&&IsRestartRequired(),"cycle only offers Classic and Modern");

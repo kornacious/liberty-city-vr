@@ -34,7 +34,7 @@ eModelSet gRequestedModelSet = MODEL_SET_CLASSIC;
 bool gInitialized;
 bool gModernArchivePairAvailable;
 bool gXboxAvailable;
-bool gXboxHDProfiles[MODEL_SET_COUNT];
+bool gOriginalXboxProfiles[MODEL_SET_COUNT];
 enum { MAX_VEGETATION_MODELS = 512, MAX_MANIFEST_MODEL_NAME = 24 };
 char gVegetationModels[MODEL_SET_COUNT][MAX_VEGETATION_MODELS][MAX_MANIFEST_MODEL_NAME] = {};
 int gNumVegetationModels[MODEL_SET_COUNT];
@@ -128,7 +128,9 @@ bool IsSafeModelsPath(const char *path)
 		return false;
 	if(strstr(path, "..") != nil)
 		return false;
-	return MODELSET_STRNICMP(path, "models\\", 7) == 0 ||
+	return MODELSET_STRICMP(path, "data\\default.ide") == 0 ||
+		MODELSET_STRICMP(path, "data/default.ide") == 0 ||
+		MODELSET_STRNICMP(path, "models\\", 7) == 0 ||
 		MODELSET_STRNICMP(path, "models/", 7) == 0 ||
 		MODELSET_STRNICMP(path, "txd\\", 4) == 0 ||
 		MODELSET_STRNICMP(path, "txd/", 4) == 0 ||
@@ -182,14 +184,16 @@ bool IsGta3ArchivePath(const char *relative)
 
 void LoadPackIdentity(eModelSet set)
 {
-	gXboxHDProfiles[set] = false;
+	gOriginalXboxProfiles[set] = false;
 	char path[1024], line[256];
 	BuildOverlayPath(set, "BUILD_INFO.txt", path, sizeof(path));
 	FILE *file = fopen(path, "rt");
 	if(!file) return;
-	while(fgets(line, sizeof(line), file))
-		if(strncmp(line, "SourceSHA256=879024BED6FB89C218F6C75A46119F95FC068A64849BC74DEDF0851D3FD210A6", 77) == 0)
-			gXboxHDProfiles[set] = true;
+	while(fgets(line, sizeof(line), file)){
+		line[strcspn(line, "\r\n")] = '\0';
+		if(strcmp(line, "Source=ORIGINAL_XBOX_US_1_0") == 0)
+			gOriginalXboxProfiles[set] = true;
+	}
 	fclose(file);
 }
 
@@ -243,10 +247,11 @@ void InitializeStartup(const char *gameRoot)
 	gModernArchivePairAvailable = FileExists(path);
 	BuildOverlayPath(MODEL_SET_MODERN, "models/gta3.dir", path, sizeof(path));
 	gModernArchivePairAvailable = gModernArchivePairAvailable && FileExists(path);
-	// One complete HD pack. Never register the duplicate legacy Xbox image
+	// One complete retail Xbox profile. Never register the duplicate legacy Xbox image
 	// or combine its geometry with independent category texture choices.
 	gXboxAvailable = false;
 	LoadPackIdentity(MODEL_SET_MODERN);
+	gModernArchivePairAvailable = gModernArchivePairAvailable && gOriginalXboxProfiles[MODEL_SET_MODERN];
 	LoadVegetationManifest(MODEL_SET_MODERN);
 	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
 		MODEL_SET_MODERN, gSettingsPath);
@@ -313,12 +318,12 @@ bool IsAvailable(eModelSet modelSet)
 
 const char *GetName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "MODERN";
+	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "ORIGINAL XBOX";
 }
 
 const char *GetSourceName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "MODERN (XBOX HD)";
+	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "ORIGINAL XBOX";
 }
 
 eModelSet GetActiveForCategory(eModelCategory category)
@@ -329,7 +334,7 @@ eModelSet GetActiveForCategory(eModelCategory category)
 eModelSet GetCalibrationSetForCategory(eModelCategory category)
 {
 	const eModelSet set = GetActiveForCategory(category);
-	return gXboxHDProfiles[set] ? MODEL_SET_XBOX : set;
+	return gOriginalXboxProfiles[set] ? MODEL_SET_XBOX : set;
 }
 
 eModelSet GetRequestedForCategory(eModelCategory category)

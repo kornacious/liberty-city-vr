@@ -1,0 +1,382 @@
+{
+  "BuilderVersion": "original-xbox-us-1",
+  "Disc": "GTA III Original Xbox US 1.0",
+  "Files": {
+    "data/default.dat": {
+      "Bytes": 615,
+      "Sha256": "670644499C119B6E999076F1584EC1E5BF8C0645BFD6425623DFF90327CAA495"
+    },
+    "data/default.ide": {
+      "Bytes": 11730,
+      "Sha256": "20EAB5CDA33B96919668226353DE705EC4BCAE15C36BECEC913138D30C2C299D"
+    },
+    "data/gta3.dat": {
+      "Bytes": 2010,
+      "Sha256": "226229F1F82F5E6BC98792D4E23756D7EA293540AA851462CA77490599C89764"
+    },
+    "data/maps/comnbtm/comnbtm.col": {
+      "Bytes": 318036,
+      "Sha256": "CE482DE7CE305380E61BC1DF234E9D73AE7EEB838685C935AA3FBF8635443541"
+    },
+    "data/maps/comnbtm/comnbtm.ide": {
+      "Bytes": 36198,
+      "Sha256": "9B62148195B35FD5B5CA8F23AE343E20EBAB3C3E928278902FB5343BEE7976ED"
+    },
+    "data/maps/comnbtm/comnbtm.ipl": {
+      "Bytes": 68733,
+      "Sha256": "5B40564F0E41E816DBFB78DFC6AB3D63206F2E0DD6BCA48BC16AD80D24B0FC0A"
+    },
+    "data/maps/comnbtm.ipl": {
+      "Bytes": 68659,
+      "Sha256": "D3EA586344F2C74ADA8BA9076C7C1FA74DE4B9BCD48F63BA90491C39E9FC6286"
+    },
+    "data/maps/comntop/comntop.col": {
+      "Bytes": 260108,
+      "Sha256": "643C0B6B9B71EE0394C0D547FECAB1C06D88BA3F5DC4F50F5EEF53C54364F9DD"
+    },
+    "data/maps/comntop/comntop.ide": {
+      "Bytes": 25540,
+      "Sha256": "FC137A90933B328275DD93F7E5A26FE803459C4FBE8DF4E70BACED7A3769FFF0"
+    },
+    "data/maps/comntop/comntop.ipl": {
+      "Bytes": 81664,
+      "Sha256": "DC4F41787D84508068F91C60EDF0585B2D3333401C84D4B2BF2AEA9C1E03D2C7"
+    },
+    "data/maps/comntop.ipl": {
+      "Bytes": 81430,
+      "Sha256": "F80D9995FB3304B0585EF43C16BDA5563AA3D2B9181DEC1CC0C6C966275F5DE1"
+    },
+    "data/maps/comroad/comroad.col": {
+      "Bytes": 156760,
+      "Sha256": "DDC37C5D78E144AB180D50C733ADC8F474F3F3E9837FE77216E3671BE4464C97"
+    },
+    "data/maps/comroad/comroad.ide": {
+      "Bytes": 86554,
+      "Sha256": "163415D834A1FB103F685EBD5A86F229F1C9A81603C7046C6F51AF205E4BEA7A"
+    },
+    "data/maps/comroad/comroad.ipl": {
+      "Bytes": 8577,
+      "Sha256": "70E6A1B00B409DDAFCBB82B35BCB179DEF16F1B348E9EC0A0F61DFCDA43A58D9"
+    },
+    "data/maps/comse/comse.col": {
+      "Bytes": 171324,
+      "Sha256": "C5862A9FEB1EF80DAE4195006B77EB2E77B9F84B03803F91F219BA6F30459752"
+    },
+    "data/maps/comse/comse.ide": {
+      "Bytes": 29106,
+      "Sha256": "7DDF18DD7C7A282605E5F0A65205278049425BC9E0F645EDFBCCC1F506BE3E0D"
+    },
+    "data/maps/comse/comse.ipl": {
+      "Bytes": 43035,
+      "Sha256": "89184F15EF8FCB78AFDC8EB0CB2FE211F75373C8BF13AE8B6953B483A43D5E61"
+    },
+    "data/maps/comse.ipl": {
+      "Bytes": 43025,
+      "Sha256": "B3D74956CDE01C1949609F38BA671ABA01B35B73EFEC28746AA6F3D938A01A67"
+    },
+    "data/maps/comsw/comsw.col": {
+      "Bytes": 217676,
+      "Sha256": "FAE933DE109E8C3875203C7F872941BF9C9320C521E3A12EEA55EA1ACF757467"
+    },
+    "data/maps/comsw/comsw.ide": {
+      "Bytes": 30878,
+      "Sha256": "EFB751D67ACC306FD758A7077ECE3DB011D8787F49D538C20BF92CC928A41429"
+    },
+    "data/maps/comsw/comsw.ipl": {
+      "Bytes": 60433,
+      "Sha256": "B170FFB8E2FC04D907F0C5FC6582C28754D634ECFB09CB6EB666787C8860C4A3"
+    },
+    "data/maps/comsw.ipl": {
+      "Bytes": 60424,
+      "Sha256": "E860A948C8F473A6C3B52F297CFA6E52037B88A29841E721844A37694225113A"
+    },
+    "data/maps/cull.ipl": {
+      "Bytes": 66906,
+      "Sha256": "9973FFA8577DE83A153F105743EE9DC1F8C1AF5703618C090829439D45F2C444"
+    },
+    "data/maps/generic.ide": {
+      "Bytes": 82787,
+      "Sha256": "2B8A88EB775A3ACAF41E41B8FD6C1318FBF682905D57AD5BE25673C08D109562"
+    },
+    "data/maps/gta3.ide": {
+      "Bytes": 613068,
+      "Sha256": "7685651084B62840910616A9240D885F3D4CA246730503068EADDFAEC29255B2"
+    },
+    "data/maps/indroads/indroads.col": {
+      "Bytes": 157068,
+      "Sha256": "D71FF04083166F97AEA1156026F65AF64918BCF19B6C8FC94C9C9646FE94070C"
+    },
+    "data/maps/indroads/indroads.ide": {
+      "Bytes": 86206,
+      "Sha256": "67B9554F627AE58E13331DE3607649E27A51AA585D6FB24F19764BD8BF02BB0D"
+    },
+    "data/maps/indroads/indroads.ipl": {
+      "Bytes": 8564,
+      "Sha256": "DF00697F88125509E0FF6EB11F82FCBAFE9721071106B23378483EA44A23A22B"
+    },
+    "data/maps/industne/industne.col": {
+      "Bytes": 248400,
+      "Sha256": "D75B5FD069052564F22ECA932766D0CA195A597E2438CDE900C1224FA1B9CCBF"
+    },
+    "data/maps/industne/industne.ide": {
+      "Bytes": 8711,
+      "Sha256": "595C6BCB25E4E66F311A4FD004A2C37DA820892BB2184349EABF5CEC8DBFE696"
+    },
+    "data/maps/industne/industne.ipl": {
+      "Bytes": 41297,
+      "Sha256": "EF41130BECC1B3FB600F2301F8D9619CE7D0C30658C8161FB3BF072C83B6A20A"
+    },
+    "data/maps/industne.ipl": {
+      "Bytes": 41469,
+      "Sha256": "F3FD9E32096FE6CC076F4113A17C947470F565141171B5FE0A445A600ACCB2AF"
+    },
+    "data/maps/industnw/industnw.col": {
+      "Bytes": 163704,
+      "Sha256": "928560EF3A936E26DC60AC93D2B2C1059256CD33AAECBB6265C31E1FBC0A2222"
+    },
+    "data/maps/industnw/industnw.ide": {
+      "Bytes": 13915,
+      "Sha256": "08DC6F88832B1AFBD6B10F34AD9D82023E247E309E7C1CA6B819958343569633"
+    },
+    "data/maps/industnw/industnw.ipl": {
+      "Bytes": 53575,
+      "Sha256": "CC5B7B38086513E65E17D8EF625A5E1A4977423B655E9ADB0DB7CB6B812F28FB"
+    },
+    "data/maps/industnw.ipl": {
+      "Bytes": 53496,
+      "Sha256": "BD2AD55CF035E567B3C792E0009B566BC64EF0D2AD15B26995704021FA912E39"
+    },
+    "data/maps/industse/industse.col": {
+      "Bytes": 240564,
+      "Sha256": "B9A37F064B21629105D5580C3B20ADFF95E532101ECEC77797F17AB6FBC432D6"
+    },
+    "data/maps/industse/industse.ide": {
+      "Bytes": 32733,
+      "Sha256": "9C3A47AACA22C7FAA51E7776C7230791ACCEBBC8F6C165B216164EB08B23AA78"
+    },
+    "data/maps/industse/industse.ipl": {
+      "Bytes": 55181,
+      "Sha256": "7C012C51317D7E1305FE8BB24C62075AF816EF3F6C9A9BEB58D46F6E855C2BA8"
+    },
+    "data/maps/industse.ipl": {
+      "Bytes": 54896,
+      "Sha256": "CFFC8F4F88D45D2CB8621F53091A4123BAFB4B255AA8E2E642CED8D8C3745C6A"
+    },
+    "data/maps/industsw/industsw.col": {
+      "Bytes": 165320,
+      "Sha256": "5BE9189682B49DE6DB4B489BA7871D5EF96D209D4675B6C3CF4E82EB448A6D87"
+    },
+    "data/maps/industsw/industsw.ide": {
+      "Bytes": 22684,
+      "Sha256": "7EC0141CEA9618D720BA992994AEFA9DDACDA086291E4A538F917EFF12D867C7"
+    },
+    "data/maps/industsw/industsw.ipl": {
+      "Bytes": 50430,
+      "Sha256": "CAC6C6117A6BB73654D42643B9E81AE89278CE82DCA52ACD626565229E8BBBD1"
+    },
+    "data/maps/industsw.ipl": {
+      "Bytes": 50418,
+      "Sha256": "905AE057D8CD95089A30E89A0117422FDB5F26EEE54A9501F097F99EB942D552"
+    },
+    "data/maps/landne/landne.col": {
+      "Bytes": 464528,
+      "Sha256": "63AD6B6C307825152CC987998AFDA2B90E81AD08761B1E2DAA119DCEC848CF66"
+    },
+    "data/maps/landne/landne.ide": {
+      "Bytes": 24817,
+      "Sha256": "E538B788F8C3B59C1479D042B7B7D35B7F0F793A80419B70A06836AC58AF496E"
+    },
+    "data/maps/landne/landne.ipl": {
+      "Bytes": 72223,
+      "Sha256": "8E5479895047D275869F47235BA217237A09DAB7CDC5C4DE949EC25238472767"
+    },
+    "data/maps/landsw/landsw.col": {
+      "Bytes": 448432,
+      "Sha256": "F4D6CA494BD2F28862B73E0094A84DAEE969AA6E838E9C611EC5F8A42C7F081A"
+    },
+    "data/maps/landsw/landsw.ide": {
+      "Bytes": 55631,
+      "Sha256": "D2BB4F7EF9F0DD8DCEF3B6E0B8977BA175BAE47670A07B96D5894F5911EB7DB2"
+    },
+    "data/maps/landsw/landsw.ipl": {
+      "Bytes": 95278,
+      "Sha256": "550348A4D6417B0C89D815DFDD582DCA2FD3B5A427CAD06ED22971943E2A3792"
+    },
+    "data/maps/making/making.col": {
+      "Bytes": 19600,
+      "Sha256": "3E2D7A3FB820678E34209981E64BFCD09F08F96E8F31EC77EDB513EB54F8D4D3"
+    },
+    "data/maps/making/making.ide": {
+      "Bytes": 2427,
+      "Sha256": "60FE17C3D1F081F4C05897495CDDD67F5C491580DCF0B014413034781201DC58"
+    },
+    "data/maps/making/making.ipl": {
+      "Bytes": 2812,
+      "Sha256": "7E60E558648B96C830F87CF4693D943E7697A4732411559F49836A70ED03C39D"
+    },
+    "data/maps/overview.ipl": {
+      "Bytes": 7142,
+      "Sha256": "E49B5ACD090258344DF0405ECCC0C51CA97CFBD5B622B53D1AD45A67D55D9EA4"
+    },
+    "data/maps/props.ipl": {
+      "Bytes": 37166,
+      "Sha256": "6D3896DF9243901A18C9D32CB2B489D94A542E7840E98484B1ACE1172A006098"
+    },
+    "data/maps/subroads/subroads.col": {
+      "Bytes": 169876,
+      "Sha256": "855FB708AD42B7C3BC1B8C4D99B05F2FB574B6E31E545D1CD9BCCFA987FE6DFB"
+    },
+    "data/maps/subroads/subroads.ide": {
+      "Bytes": 71008,
+      "Sha256": "AE8ECC9013951DFD85C3829CB76CAC54ACD4116FB40FDD5AB6E9DC63F49C7E43"
+    },
+    "data/maps/subroads/subroads.ipl": {
+      "Bytes": 8098,
+      "Sha256": "FE42EF06229748A0CA762DBCB83C010450B5D0C7BCE89FE6E6DDBDE68E8F0419"
+    },
+    "data/maps/suburbne.ipl": {
+      "Bytes": 72145,
+      "Sha256": "038219203382A1E301682457477D84D1C7080CC53DFC9BA082EFE681D83804E1"
+    },
+    "data/maps/suburbsw.ipl": {
+      "Bytes": 94839,
+      "Sha256": "0E3667CC057C30E57CFAE8C11982100F4AD055087C713A69C330E2ADE1E2C1BE"
+    },
+    "data/maps/temppart/temppart.col": {
+      "Bytes": 59960,
+      "Sha256": "E3198DAA91906344E1286E0750C0468453308508693E6010DB619AE454F82C75"
+    },
+    "data/maps/temppart/temppart.ide": {
+      "Bytes": 5943,
+      "Sha256": "C7C4B7895245BAD31BD197C147CF02C5CE6D264A7EE429491742268E41CE283A"
+    },
+    "data/maps/temppart/temppart.ipl": {
+      "Bytes": 8546,
+      "Sha256": "69BEDCBAFAF79D87E12F5AE3C460F1EB5838E7B55D8E158388284267182DDC43"
+    },
+    "default.xbe": {
+      "Bytes": 3072000,
+      "Sha256": "8BF66ECE15D4438BF9205E61EADE5BCEE2877B0194B4428F4C8CE2B4DE351AC3"
+    },
+    "models/coll/commer.col": {
+      "Bytes": 1123328,
+      "Sha256": "8FAC1060883321FB60B3555A3B4B34172CD77F3B0D3D33A991B5F01DC67852A3"
+    },
+    "models/coll/generic.col": {
+      "Bytes": 350988,
+      "Sha256": "9064DA8E0047277B646EDBC0E2AEBD1A74231C08F3FABA82EDF6FDB5C2D50393"
+    },
+    "models/coll/indust.col": {
+      "Bytes": 1053928,
+      "Sha256": "33C8F36B79D07B1BFA65593D6ACB7F1BFEC75209FF260DD5D80953DFFB7B4C4D"
+    },
+    "models/coll/peds.col": {
+      "Bytes": 21477,
+      "Sha256": "D6FAA88B9227E6F6FE286F69CFD8D7348229BDA267B21125B7DAEA4D3DD23D10"
+    },
+    "models/coll/suburb.col": {
+      "Bytes": 1082000,
+      "Sha256": "F87E97CB23E08454070398823E9D962B085839BB5A35F5B1D4D720DBD1118BCE"
+    },
+    "models/coll/vehicles.col": {
+      "Bytes": 56412,
+      "Sha256": "A26BD18EB3E1E0FC90462D97514C8AD14FC85A64882B73D19F6A50AC24A71599"
+    },
+    "models/coll/weapons.col": {
+      "Bytes": 1908,
+      "Sha256": "55BCC617EB60D44260027ED3DF1EF9D4D9972FFEFEF2325E499EC462F20D55E1"
+    },
+    "models/fonts.txd": {
+      "Bytes": 557480,
+      "Sha256": "4C9DC5DA7A882EA0C00F872E9B76C698FD58D14DBA2976D6D796E531D5C5B7DA"
+    },
+    "models/generic/air_vlo.dff": {
+      "Bytes": 7008,
+      "Sha256": "E4206F70D92B8B7F6352F17D4BC4A437F210312BB951E112B9BF3FE5345557DD"
+    },
+    "models/generic/arrow.dff": {
+      "Bytes": 4849,
+      "Sha256": "CFC1BD58828C675B5C428141B4E0EB18F9590C6B2D4B09446830401D253C7768"
+    },
+    "models/generic/loplyguy.dff": {
+      "Bytes": 18728,
+      "Sha256": "955D88D64053A100026F47859E076AB5B11B1E7ED2E3041897A9BE8434D381CD"
+    },
+    "models/generic/peds.dff": {
+      "Bytes": 1106273,
+      "Sha256": "53B9D52CC402B4DF35DACAF8573EEAD22CC64C3069F923D10EDB76437990091D"
+    },
+    "models/generic/qsphere.dff": {
+      "Bytes": 5171,
+      "Sha256": "37D1E5FD966FC4B265A87CFB2E9BE84972BFF9C9AB55CE164760562BF69B0700"
+    },
+    "models/generic/sphere.dff": {
+      "Bytes": 21582,
+      "Sha256": "39765595CBB8D5C96FCEA4D690EA82D8E73D72025A35F4E7735F08AA514CE204"
+    },
+    "models/generic/weapons.dff": {
+      "Bytes": 164899,
+      "Sha256": "BA6AB3D335450A5C86729940B0CF0682A885BA998656FEC5B0BCB820D391DC12"
+    },
+    "models/generic/wheels.dff": {
+      "Bytes": 239478,
+      "Sha256": "F4C42AB191963F1417CA9D601978CF3A2B15C9D0BE90EAEE907AEB2084C3B278"
+    },
+    "models/generic/zonecyla.dff": {
+      "Bytes": 1540,
+      "Sha256": "58B1C5FCEDDF54FC17FBB75EEE71FF3E8DAFAE15946A76E940EC2C94BA43D024"
+    },
+    "models/generic/zonecylb.dff": {
+      "Bytes": 2260,
+      "Sha256": "84FBAA94B224107554B26BF672FF8C5BF110D0B7A06C422411C98BA9383161E4"
+    },
+    "models/generic/zonesphr.dff": {
+      "Bytes": 4336,
+      "Sha256": "4871774F945DB5E7402B6B0A3717FE9294F3F54A2AFE48C5DB0A57EAB817753D"
+    },
+    "models/generic.txd": {
+      "Bytes": 698560,
+      "Sha256": "5028C38E1994F389D23BCA6D943AC1BF2DBC58FE62DFB87A9CDB746DFC733FA0"
+    },
+    "models/gta3.dir": {
+      "Bytes": 129664,
+      "Sha256": "DCBA61A9787B50CE09772D2327E78B1B1E7989EEEA503B59D4F27052686428E8"
+    },
+    "models/gta3.img": {
+      "Bytes": 129429504,
+      "Sha256": "D76415A9E53EA354B9FAB4DCF25968D16086CA121D15C34CB2486B7A46D7D3F1"
+    },
+    "models/hud.txd": {
+      "Bytes": 95912,
+      "Sha256": "016828E13211186B32627DCFEAD0FEC8FAF6CEB7899EDC19B2C6A4B4BD1CFD7F"
+    },
+    "models/misc.txd": {
+      "Bytes": 32720,
+      "Sha256": "EEFB4D044AE68EC7B34A51CF759931C48E9F15416B4FC049F67C831CFCBFFBFB"
+    },
+    "models/particle.txd": {
+      "Bytes": 659816,
+      "Sha256": "5BA7246B955E277563F2954329BF6EA4D6D5E0143436B3228127D3529A626105"
+    },
+    "txd/loadsc0.txd": {
+      "Bytes": 131240,
+      "Sha256": "1755F4416154E02D44A540C43FC69FA45A8D9F193A848A329D307F29F1A37B99"
+    },
+    "txd/news.txd": {
+      "Bytes": 131240,
+      "Sha256": "EB7212E36A690DCF3247F4C8839417B56898D63641FDED417A9367E95D4931D3"
+    },
+    "txd/splash1.txd": {
+      "Bytes": 65704,
+      "Sha256": "D4A3D29E7EB4E0B0E16D2D102922FE4E98CB4502994D54DD0A4FD8BC3DD7EF24"
+    },
+    "txd/splash2.txd": {
+      "Bytes": 65704,
+      "Sha256": "8E74D9FC5530313242A03E9E34C16D318A591D6C7A2014CEAF17E254B08896E8"
+    },
+    "txd/splash3.txd": {
+      "Bytes": 65704,
+      "Sha256": "A9039486475CA35A176C90FC85E0E7C36FCCDDC3150CEBAB095109D0168A9D75"
+    }
+  }
+}
