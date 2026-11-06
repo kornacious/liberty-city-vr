@@ -24,7 +24,7 @@ struct RwMatrix {CVector right{1,0,0},up{0,1,0},at{0,0,1},pos; int flags=0;};
 struct CMatrix : RwMatrix { CVector operator*(const CVector &v)const{return pos+right*v.x+up*v.y+at*v.z;} };
 static void Invert(const CMatrix &a,CMatrix &b){b=a;b.pos=-a.pos;}
 namespace rw {struct HAnimHierarchy {enum {PUSH=1,POP=2};};}
-struct RpHAnimHierarchy {int numNodes=19, missing=-1; RwMatrix matrices[40]; struct Info{int flags=0;}nodeInfo[40];};
+struct RpHAnimHierarchy {int numNodes=16, missing=-1; RwMatrix matrices[40]; struct Info{int flags=0;}nodeInfo[40];};
 struct RpClump {RpHAnimHierarchy hierarchy;};
 static int hierarchyReads=0,groundReads=0,poolReads=0,androidLogCalls=0;
 #define __ANDROID__
@@ -32,7 +32,6 @@ static int hierarchyReads=0,groundReads=0,poolReads=0,androidLogCalls=0;
 [[maybe_unused]] static int __android_log_print(int,const char*,const char*,...){++androidLogCalls;return 0;}
 static RpHAnimHierarchy *GetAnimHierarchyFromSkinClump(RpClump *c){++hierarchyReads;return c ? &c->hierarchy:nil;}
 static RwMatrix *RpHAnimHierarchyGetMatrixArray(RpHAnimHierarchy*h){return h->matrices;}
-static int RpHAnimIDGetIndex(RpHAnimHierarchy*h,int tag);
 struct CEntity{};
 struct CPed : CEntity {
     int index=0,generation=1,CharCreatedBy=RANDOM_CHAR,m_nPedState=PED_DIE;
@@ -75,11 +74,31 @@ struct CWorld {
     static void TriggerExplosion(const CVector&,float,float,CEntity*,bool);
     static void TriggerExplosionSectorList(CPtrList&,const CVector&,float,float,CEntity*,bool);
 };
+// Render binding is mocked here; the separate GTA III rig fixture executes
+// the real rigid/skinned Read/Write paths. Capture and takeover stay production.
+#define VR_RAGDOLL_RIG_NO_ENGINE
+#include "VrRagdollRig.h"
+static const int jointForBone[16]={0,16,17,18,13,14,15,1,2,4,10,11,12,6,7,8};
+namespace VrRagdollRig {
+struct Binding { Pose pose; RpHAnimHierarchy *hier; };
+static bool Read(CPed *ped,Binding &out) {
+ out.hier=GetAnimHierarchyFromSkinClump(ped->GetClump());
+ if(!out.hier || out.hier->numNodes>MAX_NODES) return false;
+ out.pose.count=out.hier->numNodes;
+ for(int i=0;i<out.pose.count;i++) {
+  out.pose.world[i]=RpHAnimHierarchyGetMatrixArray(out.hier)[i];out.pose.parent[i]=-1;
+  out.pose.tag[i]=(i<16 && out.hier->missing==jointForBone[i]) ? -1 : i;
+ }
+ return true;
+}
+static void Write(CPed*,const Binding &binding,const RwMatrix *matrices) {
+ for(int i=0;i<binding.pose.count;i++) RpHAnimHierarchyGetMatrixArray(binding.hier)[i]=matrices[i];
+}
+}
 #pragma warning(push)
 #pragma warning(disable:4244) // Native hierarchy indices are int16, admitted only below 40 nodes.
 #include "ragdoll-explosion-production.inc"
 #pragma warning(pop)
-static int RpHAnimIDGetIndex(RpHAnimHierarchy*h,int tag){for(int i=0;i<19;++i)if(VrRagdoll::simBoneTags[i]==tag)return h->missing==i?-1:i;return -1;}
 #include "ragdoll-explosion-world.inc"
 // The native per-ped force expression and SetDie takeover gate are extracted
 // separately; object/vehicle destruction and event reporting are engine adapters.
@@ -102,7 +121,7 @@ static void Fill(CPed&p,int i,CVector root={0,0,0}){
         {-.12f,0,1.43f},{-.26f,0,1.45f},{-.43f,-.035f,1.20f},{-.53f,.03f,.98f},
         {.12f,0,1.43f},{.26f,0,1.45f},{.43f,-.035f,1.20f},{.53f,.03f,.98f},
         {-.13f,0,.89f},{-.14f,.035f,.48f},{-.14f,-.04f,.1f},{.13f,0,.89f},{.14f,.035f,.48f},{.14f,-.04f,.1f}};
-    for(int n=0;n<19;++n)p.clump.hierarchy.matrices[n].pos=root+points[n];
+    for(int n=0;n<16;++n)p.clump.hierarchy.matrices[n].pos=root+points[jointForBone[n]];
 }
 static void Reset(){
     VrRagdoll::SetEnabled(true);

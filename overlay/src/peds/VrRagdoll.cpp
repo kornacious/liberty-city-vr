@@ -28,6 +28,10 @@
 #include "Timer.h"
 #include "World.h"
 #include "WeaponType.h"
+#include "NodeName.h"
+#include "RpAnimBlend.h"
+#include "AnimBlendClumpData.h"
+#include "VrRagdollRig.h"
 
 // Capture the interrupted skin pose into articulated particles, then rebuild
 // world-space bone matrices after animation. Unsimulated nodes follow their
@@ -44,14 +48,6 @@ enum {
 };
 
 using namespace VrRagdollPhysics;
-
-static const int simBoneTags[SIM_BONES] = {
-	BONE_waist, BONE_mid, BONE_torso, BONE_torso, BONE_head,
-	BONE_upperarml, BONE_upperarml, BONE_lowerarml, BONE_Lhand,
-	BONE_upperarmr, BONE_upperarmr, BONE_lowerarmr, BONE_Rhand,
-	BONE_upperlegl, BONE_lowerlegl, BONE_footl,
-	BONE_upperlegr, BONE_lowerlegr, BONE_footr
-};
 
 // The segment whose direction carries each bone's orientation. End bones
 // reuse the segment that arrives at them, so their twist follows the limb.
@@ -114,7 +110,6 @@ struct AnimatedPose {
 	RpClump *clump;
 	uint32 time;
 	int nodeCount;
-	int16 matrix[SIM_BONES];
 	CVector positions[SIM_BONES], relativeVelocity[SIM_BONES];
 	bool hasVelocity;
 };
@@ -349,26 +344,20 @@ StartRagdoll(CPed *ped, bool live)
 		return DenyAdmission(DENY_SLOTS,ped);
 	}
 
-	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(ped->GetClump());
-	if(hier == nil || hier->numNodes > MAX_NODES){
+	VrRagdollRig::Binding rig;
+	RwMatrix joints[SIM_BONES];
+	int nodes[SIM_BONES];
+	if(!VrRagdollRig::Read(ped,rig) || !VrRagdollRig::Capture(rig.pose,nodes,joints))
 		return DenyAdmission(DENY_BONES,ped);
-	}
-	RwMatrix *mats = RpHAnimHierarchyGetMatrixArray(hier);
-
 	int simOfNode[MAX_NODES];
-	for(int i = 0; i < hier->numNodes; i++)
-		simOfNode[i] = -1;
-	for(int i = 0; i < SIM_BONES; i++){
-		int idx = RpHAnimIDGetIndex(hier, simBoneTags[i]);
-		if(idx < 0 || idx >= hier->numNodes){
-			return DenyAdmission(DENY_BONES,ped);
-		}
-		slot->simMatrix[i] = idx;
-		simOfNode[idx] = i;
-		slot->pos[i] = mats[idx].pos;
-		slot->deathRight[i] = mats[idx].right;
-		slot->deathUp[i] = mats[idx].up;
-		slot->deathAt[i] = mats[idx].at;
+	for(int i=0;i<rig.pose.count;i++) simOfNode[i]=-1;
+	for(int i=0;i<SIM_BONES;i++) {
+		slot->simMatrix[i]=nodes[i];
+		if(nodes[i]>=0) simOfNode[nodes[i]]=i;
+		slot->pos[i]=joints[i].pos;
+		slot->deathRight[i]=joints[i].right;
+		slot->deathUp[i]=joints[i].up;
+		slot->deathAt[i]=joints[i].at;
 	}
 
 	Initialize(slot, slot->deathRight[RD_PELVIS], slot->deathAt[RD_PELVIS]);
@@ -390,36 +379,23 @@ StartRagdoll(CPed *ped, bool live)
 	// Reconstruct each node's parent the way updateMatrices walks the
 	// tree, then park every unsimulated node on its nearest simulated
 	// ancestor, expressed in that driver's death basis.
-	int parentOf[MAX_NODES];
-	int stack[MAX_NODES + 1];
-	int sp = 0, parent = -1;
-	stack[sp++] = parent;
-	for(int i = 0; i < hier->numNodes; i++){
-		parentOf[i] = parent;
-		int flags = hier->nodeInfo[i].flags;
-		if(flags & rw::HAnimHierarchy::PUSH && sp <= MAX_NODES)
-			stack[sp++] = parent;
-		parent = i;
-		if(flags & rw::HAnimHierarchy::POP && sp > 0)
-			parent = stack[--sp];
-	}
-	for(int i = 0; i < hier->numNodes; i++){
+	for(int i = 0; i < rig.pose.count; i++){
 		slot->passDriver[i] = -1;
 		if(simOfNode[i] >= 0)
 			continue;
-		int up = parentOf[i];
+		int up = rig.pose.parent[i];
 		while(up >= 0 && simOfNode[up] < 0)
-			up = parentOf[up];
+			up = rig.pose.parent[up];
 		int driver = up >= 0 ? simOfNode[up] : RD_PELVIS;
 		slot->passDriver[i] = driver;
 		const CVector dr = slot->deathRight[driver];
 		const CVector du = slot->deathUp[driver];
 		const CVector da = slot->deathAt[driver];
-		const CVector rel = CVector(mats[i].pos) - slot->pos[driver];
+		const CVector rel = CVector(rig.pose.world[i].pos) - slot->pos[driver];
 		slot->passPos[i] = CVector(DotProduct(rel, dr),
 			DotProduct(rel, du), DotProduct(rel, da));
-		const CVector nr = mats[i].right, nu = mats[i].up,
-			na = mats[i].at;
+		const CVector nr = rig.pose.world[i].right, nu = rig.pose.world[i].up,
+			na = rig.pose.world[i].at;
 		slot->passRight[i] = CVector(DotProduct(nr, dr),
 			DotProduct(nr, du), DotProduct(nr, da));
 		slot->passUp[i] = CVector(DotProduct(nu, dr),
@@ -443,7 +419,7 @@ StartRagdoll(CPed *ped, bool live)
 	slot->sleepTime = 0.0f;
 	slot->stepDebt = 0.0f;
 	slot->bulletCredit = VrRagdollImpact::BURST_IMPULSE;
-	slot->nodeCount = hier->numNodes;
+	slot->nodeCount = rig.pose.count;
 	slot->poseCached = false;
 	RefreshBounds(slot);
 	slot->boundsLinked = false;
@@ -473,27 +449,19 @@ static void ObserveAnimatedPose(CPed *ped)
 	// Keep this frame's samples when more peds are visible than the cache holds.
 	// Otherwise stable render order can evict every previous-frame pose.
 	if(sample == nil && oldest->ped != nil && oldest->time == now) return;
-	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(ped->GetClump());
-	if(hier == nil) return;
-	const bool fresh = sample == nil || sample->clump != ped->GetClump() || sample->nodeCount != hier->numNodes;
+	VrRagdollRig::Binding rig;
+	RwMatrix joints[SIM_BONES]; int nodes[SIM_BONES];
+	if(!VrRagdollRig::Read(ped,rig) || !VrRagdollRig::Capture(rig.pose,nodes,joints)) return;
+	const bool fresh = sample == nil || sample->clump != ped->GetClump() || sample->nodeCount != rig.pose.count;
 	if(sample == nil) sample = oldest;
 	if(fresh){
-		sample->ped = nil;
-		for(int i = 0; i < SIM_BONES; i++){
-			const int idx = RpHAnimIDGetIndex(hier,simBoneTags[i]);
-			if(idx < 0 || idx >= hier->numNodes) return;
-			sample->matrix[i] = idx;
-		}
-		sample->ped = ped;
-		sample->clump = ped->GetClump();
-		sample->nodeCount = hier->numNodes;
-		sample->hasVelocity = false;
+		sample->ped=ped; sample->clump=ped->GetClump();
+		sample->nodeCount=rig.pose.count; sample->hasVelocity=false;
 	}else if(now == sample->time) return;
-	RwMatrix *mats = RpHAnimHierarchyGetMatrixArray(hier);
 	CVector current[SIM_BONES];
 	CMatrix inverse;
 	Invert(ped->GetMatrix(),inverse);
-	for(int i = 0; i < SIM_BONES; i++) current[i] = inverse*CVector(mats[sample->matrix[i]].pos);
+	for(int i=0;i<SIM_BONES;i++) current[i]=inverse*CVector(joints[i].pos);
 	if(!fresh){
 		sample->hasVelocity = VrRagdollMotion::RelativeVelocity(current,sample->positions,
 			invMass,SIM_BONES,(now-sample->time)*0.001f,sample->relativeVelocity);
@@ -978,15 +946,15 @@ Apply(CPed *ped)
 		return;
 	}
 	VrRagdollMetrics::Scope poseTime(VrRagdollMetrics::POSE);
-	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(ped->GetClump());
-	if(hier == nil || hier->numNodes != slot->nodeCount)
-		return;
-	RwMatrix *mats = RpHAnimHierarchyGetMatrixArray(hier);
+	VrRagdollRig::Binding rig;
+	if(!VrRagdollRig::Read(ped,rig) || rig.pose.count != slot->nodeCount) return;
+	RwMatrix *mats=rig.pose.world;
 	const VrRagdollSupport::Transform presentation=Presentation(slot);
 	if(slot->asleep && slot->poseCached){
-		for(int i = 0; i < hier->numNodes; i++)
+		for(int i = 0; i < rig.pose.count; i++)
 			mats[i] = slot->cachedPose[i];
-		ApplyPresentation(mats,hier->numNodes,presentation);
+		ApplyPresentation(mats,rig.pose.count,presentation);
+		VrRagdollRig::Write(ped,rig,mats);
 		return;
 	}
 
@@ -1033,6 +1001,7 @@ Apply(CPed *ped)
 				simAt[i] = Swing(original, direction, at, right);
 			}
 		}
+		if(slot->simMatrix[i]<0) continue; // virtual joint owns no model matrix
 		RwMatrix *m = &mats[slot->simMatrix[i]];
 		m->right = simRight[i];
 		m->up = simUp[i];
@@ -1040,7 +1009,7 @@ Apply(CPed *ped)
 		m->pos = slot->pos[i];
 		m->flags = 0;
 	}
-	for(int i = 0; i < hier->numNodes; i++){
+	for(int i = 0; i < rig.pose.count; i++){
 		int driver = slot->passDriver[i];
 		if(driver < 0)
 			continue;
@@ -1058,11 +1027,12 @@ Apply(CPed *ped)
 		m->flags = 0;
 	}
 	if(slot->asleep){
-		for(int i = 0; i < hier->numNodes; i++)
+		for(int i = 0; i < rig.pose.count; i++)
 			slot->cachedPose[i] = mats[i];
 		slot->poseCached = true;
 	}
-	ApplyPresentation(mats,hier->numNodes,presentation);
+	ApplyPresentation(mats,rig.pose.count,presentation);
+	VrRagdollRig::Write(ped,rig,mats);
 }
 
 static float

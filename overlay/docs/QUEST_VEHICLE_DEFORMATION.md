@@ -11,6 +11,10 @@ existing dents or move an already damaged panel back toward its original shape.
 The native collision point, inward normal and impulse are recorded in the
 receiver's collision pose, so both cars receive the correct local hit even if a
 temporary collision transform is later restored. Recording adds no world query.
+GTA III's simple, movable and immovable collision paths all feed accepted
+contacts. A stationary receiving car uses the accepted contact impulse, and
+pedestrian contacts remain excluded. The game update advances queued work even
+when the car is not visible.
 
 The material filter includes opaque exterior surfaces in eligible body frames,
 including unpainted bumpers and grilles. Transparent surfaces and identifiable

@@ -344,6 +344,21 @@ The header-only ragdoll suite works directly against the kit:
 .\tools\tests\test-ragdoll.ps1 -KitRoot .
 ```
 
+`test-gta3-ragdoll-rig.ps1 -StageRoot <assembled-tree>` compiles the production
+GTA III rigid/skinned adapter and checks unique model-matrix ownership, virtual
+neck/clavicle/missing-spine joints, invalid-pose rejection and world/local
+conversion under a rotated entity root. It also checks the engine presentation,
+bullet exclusion, bounds, deformation update and geometry-release hooks.
+Optional `-GameDataRoot <local-GTA-III-folder>` reads `male01`, `cop` and `b_man1`
+from the user's local IMG/DIR into memory and exercises their actual frame
+hierarchies. No game assets are embedded, uploaded or exported by the test.
+Invoke this runner through the manager's `--tool` interface above.
+
+`test-ragdoll-vehicle-hook.ps1` and `test-vehicle-deformation-collision.ps1`
+are active GTA III regressions. They execute the native movable-pair contact
+loop in both processing orders and all ten accepted collision-response sites,
+including manifold-pose rollback, opposite inward normals and stationary cars.
+
 Tests that extract patched engine functions require a freshly assembled re3
 tree via `-StageRoot`, `-KitRoot` or `-EngineRoot`, as declared by that runner.
 Optional `-UseBaseline` modes require a private historical snapshot and are
@@ -359,15 +374,13 @@ evidence for this port:
 | `test-devtools-culling.ps1` | `render/VrCullViz` module absent from this port |
 | `test-heli-bullets.ps1` | Private `baseline-qbuild`, reVC revision `026cd10`, sniper and M60 paths |
 | `test-modelset-wheels.ps1` | Wheel texture-transfer behavior differs from Liberty City's MODELFILE loader |
-| `test-ragdoll-vehicle-hook.ps1` | Movable-pair hook and `KillPedWithCar` signature differ |
 | `test-ragdoll-visibility.ps1` | Expects two population-cleanup integration sites absent in current sources |
-| `test-vehicle-deformation-collision.ps1` | Snapshot-context/manifold hooks differ from current Physical.cpp |
 | `test-vehicle-driveby.ps1` | Requires `Bike.cpp`, `CBike`, and bike driving paths |
 
 These integration gaps need separate porting/audit work before those fixtures
 can be promoted into the current-source suite. The suite does not claim
 coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the 41 synthetic
+and actual-mesh diagnostics below are also separate from the synthetic
 host suites; they are not silently treated as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:

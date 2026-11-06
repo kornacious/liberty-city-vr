@@ -23,6 +23,11 @@
 #include "Bones.h"
 #include "Debug.h"
 #include "SaveBuf.h"
+#include "Ped.h"
+#include "VrRagdoll.h"
+#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#include "VehicleDeformation.h"
+#endif
 
 int gBuildings;
 
@@ -165,6 +170,9 @@ AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 void
 CEntity::DeleteRwObject(void)
 {
+#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+	if(IsVehicle() && VehicleDeformation::IsVehicleDeformationEnabled()) VehicleDeformation::Release(this);
+#endif
 	RwFrame *f;
 
 	GetMatrix().Detach();
@@ -274,6 +282,8 @@ CEntity::GetBoundRect(void)
 CVector
 CEntity::GetBoundCentre(void)
 {
+	CVector centre; float radius;
+	if(IsPed() && VrRagdoll::GetBounds((CPed*)this,centre,radius)) return centre;
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
 		CVector fallbackCenter;
@@ -306,6 +316,8 @@ CEntity::GetBoundCentre(CVuVector &out)
 void
 CEntity::GetBoundCentre(CVector &out)
 {
+	float radius;
+	if(IsPed() && VrRagdoll::GetBounds((CPed*)this,out,radius)) return;
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
 		CVector fallbackCenter;
@@ -324,6 +336,8 @@ CEntity::GetBoundCentre(CVector &out)
 float
 CEntity::GetBoundRadius(void)
 {
+	CVector centre; float radius;
+	if(IsPed() && VrRagdoll::GetBounds((CPed*)this,centre,radius)) return radius;
 	CColModel *col = CModelInfo::GetColModel(m_modelIndex);
 	if (!col) {
 		CVector fallbackCenter;

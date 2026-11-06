@@ -9,6 +9,13 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Connect ragdolls and visual vehicle deformation to GTA III's native physics.
+  Support original rigid NPC frames and skinned replacements with separate
+  virtual neck/clavicle joints, pass pre-impact motion and contact positions,
+  exclude animated bullet proxies, and use solved body bounds. Feed deformation
+  from all accepted collision paths and advance it independently of visibility.
+  Add GTA III integration regressions and local NPC/vehicle model diagnostics.
+
 - Keep the normal Quest player camera inside both Ammu-Nation shops so their
   fixed overview cannot lock VR turning, and remove their entry/exit fades.
   Remove staged player teleports, heading changes, control freezes, camera

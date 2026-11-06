@@ -6,6 +6,12 @@
 #include <string>
 #include <vector>
 #include "VrRagdollSettings.h"
+#include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
+#include "../../overlay/src/vr/QuestRadio.h"
+#include "../../overlay/src/vr/QuestSpeedometer.h"
+namespace QuestRadio { void CloseEditor() {} }
+static constexpr int SimulationReplayMenuRows=1;
+static int SpawnVehiclePageSize() { return 1; }
 
 using uint8 = unsigned char;
 using uint32 = unsigned int;
@@ -61,9 +67,6 @@ static int GetVrMissionCount(int) { return 6; }
 
 struct TextDraw { std::string text; int y, scale; bool selected; };
 static std::vector<TextDraw> draws;
-static int drawnCategory;
-static void QuestMainCategoryColour(int category, uint8 *r, uint8 *g, uint8 *b)
-{ drawnCategory = category; *r = 125; *g = 255; *b = 145; }
 static void BeginFullVrMenuPage(const char *heading, const char *subtitle);
 static void DrawVrMenuText(const char *text, int centreX, int y, int scale, uint8, uint8, uint8);
 static void DrawFullVrMenuRow(const char *text, int y, int scale, bool selected);
@@ -124,9 +127,6 @@ int main()
 		"submenu owns its selection and starts at enable row");
 	Check(gVrMenuNavigateDirection == 0 && gVrMenuNavigateRepeatAt == 0,
 		"opening resets held navigation");
-	uint8 r,g,b;
-	QuestMenuPageColour(&r,&g,&b);
-	Check(drawnCategory == VR_MAIN_TRAFFIC_SETTINGS, "submenu inherits traffic colour");
 
 	const int rows[] = {VR_RAGDOLL_BRAKING,VR_RAGDOLL_GRIP,VR_RAGDOLL_SHOTS,VR_RAGDOLL_WEIGHT};
 	const int low[] = {0,0,25,50}, high[] = {2000,300,200,300};

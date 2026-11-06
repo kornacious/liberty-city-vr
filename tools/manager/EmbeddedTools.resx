@@ -8045,7 +8045,7 @@ $engineTests = @(
     'cd-directory','traffic-visibility','plane-visibility','mission-selector','mission-counter-layout','radio-station',
     'autosave','frame-timers','angular-drag-boat-lift','wheel-suspension-fps','vehicle-coupled-fps','vehicle-capture','boat-input-timing','physics-sleep-timing','heli-control-timing','gameplay-timing','cheat-menu','graphics-menu-layout','never-wanted','player-debug-gates',
     'quest-melee','quest-sprint','held-weapon-frame','holster-inventory','throwable-preview','wheel-hand-basis','weapon-grip','weapon-cadence','ragdoll-brake-hook','ragdoll-explosion',
-    'ragdoll-lifecycle','ragdoll-menu','ragdoll-off-cost','ragdoll-platform',
+    'gta3-ragdoll-rig','ragdoll-vehicle-hook','vehicle-deformation-collision','ragdoll-lifecycle','ragdoll-menu','ragdoll-off-cost','ragdoll-platform',
     'ragdoll-presentation','ragdoll-ray-resolver','ragdoll-schedule','ragdoll-weight',
     'vehicle-deformation-hitframe','vehicle-deformation-menu','vehicle-deformation-mesh',
     'vehicle-deformation-runtime','vehicle-deformation-slots','vehicle-seat-recenter',
@@ -8055,7 +8055,7 @@ $engineTests = @(
 # reference-only fixtures and diagnostics requiring local assets/toolchains.
 $reference = @(
     'devtools-culling','heli-bullets','modelset-wheels',
-    'ragdoll-vehicle-hook','ragdoll-visibility','vehicle-deformation-collision','vehicle-driveby'
+    'ragdoll-visibility','vehicle-driveby'
 )
 $results = @()
 $pwsh = (Get-Process -Id $PID).Path
@@ -11089,7 +11089,7 @@ foreach ($name in @(
     'OpenRagdollMenu', 'ReturnFromRagdollMenu', 'AdjustRagdollMenuValue',
     'ReturnFromCheatMenu', 'ReturnFromDeformationMenu',
     'CurrentMenuSelection', 'CurrentMenuItemCount', 'CurrentMenuValueRepeats',
-    'ReturnFromCurrentMenuPage', 'QuestMenuPageColour', 'DrawQuestRagdollPage'
+    'ReturnFromCurrentMenuPage', 'DrawQuestRagdollPage'
 )) {
     $match = [regex]::Match($source, '(?ms)^static [^\r\n]+\r?\n' + $name + '\(.*?^\}')
     if (-not $match.Success) { throw "Cannot extract production menu function: $name" }
@@ -11098,7 +11098,7 @@ foreach ($name in @(
 $functionText = $functions -join "`r`n`r`n"
 $variables = @([regex]::Matches($functionText, '\bg(?:Vr|Ragdolls)\w*') | ForEach-Object { $_.Value } | Sort-Object -Unique)
 foreach ($variable in $variables) {
-    $match = [regex]::Match($source, '(?m)^static (?:int|bool|double) ' + $variable + '(?:\s*=[^;]+)?;')
+    $match = [regex]::Match($source, '(?m)^static (?:int|bool|double|char) ' + $variable + '(?:\[\d+\])?(?:\s*=[^;]+)?;')
     if (-not $match.Success) { throw "Cannot extract production menu variable: $variable" }
     $pieces.Add($match.Value)
 }
@@ -11188,20 +11188,20 @@ foreach($name in @('ProjectContacts','Update','FindSlot','Presentation','ApplyPr
  if(-not$match.Success){throw "Missing production $name"}
  $end=$match.Index+$match.Length;$depth=1
  while($depth-gt0-and$end-lt$source.Length){if($source[$end]-eq'{'){$depth++}elseif($source[$end]-eq'}'){$depth--};$end++}
- $parts.Add($source.Substring($match.Index,$end-$match.Index))
+ $parts.Add(($source.Substring($match.Index,$end-$match.Index).Replace('rig.pose.count','hier-&gt;numNodes').Replace('VrRagdollRig::Write(ped,rig,mats);','')))
 }
 foreach($mode in @('Replay','Write')){
- $pattern=if($mode-eq'Replay'){'if\(slot-&gt;asleep &amp;&amp; slot-&gt;poseCached\)\s*\{'}else{'if\(slot-&gt;asleep\)\s*\{\s*for\(int i = 0; i &lt; hier-&gt;numNodes; i\+\+\)\s*slot-&gt;cachedPose'}
+ $pattern=if($mode-eq'Replay'){'if\(slot-&gt;asleep &amp;&amp; slot-&gt;poseCached\)\s*\{'}else{'if\(slot-&gt;asleep\)\s*\{\s*for\(int i = 0; i &lt; rig.pose.count; i\+\+\)\s*slot-&gt;cachedPose'}
  $match=[regex]::Match($source,$pattern)
  if(-not$match.Success){throw "Missing production pose cache $mode"}
  $start=$source.IndexOf('{',$match.Index);$end=$start+1;$depth=1
  while($depth-gt0-and$end-lt$source.Length){if($source[$end]-eq'{'){$depth++}elseif($source[$end]-eq'}'){$depth--};$end++}
  if($mode-eq'Write'){
-  $tail=[regex]::Match($source.Substring($end),'^\s*ApplyPresentation\(mats,hier-&gt;numNodes,presentation\);')
+  $tail=[regex]::Match($source.Substring($end),'^\s*ApplyPresentation\(mats,rig.pose.count,presentation\);')
   if(-not$tail.Success){throw 'Raw pose cache must be written before presentation'}
   $end+=$tail.Length
  }
- $parts.Add('static void ProductionCache'+$mode+'(Slot*slot,RwMatrix*mats,int count) {'+"`n"+'struct {int numNodes;} hierarchy={count}; const auto*hier=&amp;hierarchy; const auto presentation=Presentation(slot);'+"`n"+$source.Substring($match.Index,$end-$match.Index)+"`n}")
+ $parts.Add('static void ProductionCache'+$mode+'(Slot*slot,RwMatrix*mats,int count) {'+"`n"+'struct {int numNodes;} hierarchy={count}; const auto*hier=&amp;hierarchy; const auto presentation=Presentation(slot);'+"`n"+($source.Substring($match.Index,$end-$match.Index).Replace('rig.pose.count','hier-&gt;numNodes').Replace('VrRagdollRig::Write(ped,rig,mats);',''))+"`n}")
 }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-presentation-production.inc'),($parts-join"`n"),[Text.UTF8Encoding]::new($false))
 $fixture=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'test-ragdoll-schedule.cpp'))
@@ -11283,7 +11283,8 @@ $start=$physical.IndexOf('float maxImpulseA = 0.0f;', $start)
 $end=$physical.IndexOf('else if(B-&gt;IsObject() &amp;&amp; B-&gt;bUsesCollision &amp;&amp; A-&gt;IsVehicle())', $start)
 if($start -lt 0 -or $end -le $start){throw 'Cannot extract production movable-pair impulse loop.'}
 $loop=$physical.Substring($start,$end-$start)
-if($loop.IndexOf('preCollisionMoveB = B-&gt;m_vecMoveSpeed') -gt $loop.IndexOf('A-&gt;ApplyCollision(')){
+$capture=[regex]::Match($loop,'preCollisionMoveB\s*=\s*B-&gt;m_vecMoveSpeed')
+if(-not $capture.Success -or $capture.Index -gt $loop.IndexOf('A-&gt;ApplyCollision(')){
     throw 'Velocity capture moved after collision response.'
 }
 $definitions=$gate.Value+"`nstatic void RunPair(CPhysical *A,CPhysical *B) {`nCPed *Aped=(CPed*)A,*Bped=(CPed*)B;`nint i;float impulseA=0,impulseB=0;`n"+$loop+"`n}`n"
@@ -14719,6 +14720,31 @@ if ($car -notmatch '(?s)#ifdef __ANDROID__\s*\}else if\(GetModelIndex\(\) == MI_
 }
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-dodo-flight.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Dodo flight regression failed.' }
+</value>
+  </data>
+  <data name="tools/tests/test-gta3-ragdoll-rig.ps1" xml:space="preserve">
+    <value>param(
+ [Parameter(Mandatory=$true)][string]$StageRoot,
+ [string]$GameDataRoot='',
+ [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('gta3-ragdoll-rig-'+[guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference='Stop'
+$ped=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/peds/Ped.cpp')).Replace("`r`n","`n")
+$world=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/core/World.cpp'))
+$game=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/core/Game.cpp'))
+$entity=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/entities/Entity.cpp'))
+if(-not $ped.Contains("#endif`n`n`t// Override both rigid PC frames and skinned Xbox/Mobile matrices.`n`tVrRagdoll::Apply(this);")){throw 'Rigid NPC presentation hook missing or skin-only.'}
+$preRender=$ped.Substring($ped.IndexOf('CPed::PreRender(void)'))
+if($preRender.IndexOf('VrRagdoll::Apply(this);') -gt $preRender.IndexOf('if(bBodyPartJustCameOff')){throw 'Ragdoll pose must precede native detached-head hiding.'}
+if(-not $world.Contains('if(VrRagdoll::SkipBulletCollision((CPed*)e)) continue;')){throw 'Native bullet proxy exclusion missing.'}
+if(-not $game.Contains('VehicleDeformation::Update();')){throw 'Offscreen deformation update missing.'}
+if([regex]::Matches($entity,'VrRagdoll::GetBounds').Count -lt 3){throw 'Ragdoll entity centre/radius hooks missing.'}
+if(-not $entity.Contains('VehicleDeformation::Release(this);')){throw 'Base entity must release private geometry before clump destruction.'}
+$previous=$env:GTA3_TEST_GAME_DATA
+try {
+ if($GameDataRoot) { $env:GTA3_TEST_GAME_DATA=[IO.Path]::GetFullPath($GameDataRoot) }
+ &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-gta3-ragdoll-rig.cpp')
+} finally { $env:GTA3_TEST_GAME_DATA=$previous }
 </value>
   </data>
 </root>

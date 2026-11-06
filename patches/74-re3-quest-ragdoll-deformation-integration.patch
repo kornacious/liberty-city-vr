@@ -1,0 +1,295 @@
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -8,6 +8,10 @@
+ #include "Treadable.h"
+ #include "Vehicle.h"
+ #include "Ped.h"
++#include "VrRagdoll.h"
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#include "VehicleDeformation.h"
++#endif
+ #include "Object.h"
+ #include "Glass.h"
+ #include "ParticleObject.h"
+@@ -18,6 +22,53 @@
+ #include "DMAudio.h"
+ #include "Automobile.h"
+ #include "Physical.h"
++
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++// Every point in a manifold was generated from the same two poses. Native
++// response may roll B back after the first point, so retain those poses before
++// applying any response. This POD copies no matrices or vectors while OFF.
++struct VehicleDeformationCollisionContext {
++	bool active;
++	VehicleDeformation::CollisionPose poseA, poseB;
++	static void Capture(CEntity *entity, VehicleDeformation::CollisionPose &out) {
++		const CVector &right=entity->GetRight(), &forward=entity->GetForward();
++		const CVector &up=entity->GetUp(), &position=entity->GetPosition();
++		out.right[0]=right.x;out.right[1]=right.y;out.right[2]=right.z;
++		out.forward[0]=forward.x;out.forward[1]=forward.y;out.forward[2]=forward.z;
++		out.up[0]=up.x;out.up[1]=up.y;out.up[2]=up.z;
++		out.position[0]=position.x;out.position[1]=position.y;out.position[2]=position.z;
++	}
++	VehicleDeformationCollisionContext(CEntity *A, CEntity *B)
++		: active(VehicleDeformation::IsVehicleDeformationEnabled() &&
++			!A->IsPed() && !B->IsPed() && (A->IsVehicle() || B->IsVehicle())) {
++		if(active) { Capture(A,poseA);Capture(B,poseB); }
++	}
++};
++
++// Normal points inward for A, and outward for B. These optional events are
++// independent of the native strongest damage record; the deformation module
++// already keeps one strongest pending impact per receiver.
++static inline void
++RecordVehicleDeformationCollision(CPhysical *receiver, CEntity *other,
++	const CColPoint &point, float impulse, bool reverseNormal,
++	const VehicleDeformation::CollisionPose &pose)
++{
++	if(VehicleDeformation::IsVehicleDeformationEnabled() && receiver->IsVehicle() &&
++	   ((CVehicle*)receiver)->IsCar() && !other->IsPed())
++		VehicleDeformation::RecordCollision((CVehicle*)receiver, point.point,
++			reverseNormal ? -point.normal : point.normal, impulse, other, &pose);
++}
++
++static inline void
++RecordVehicleDeformationPair(const VehicleDeformationCollisionContext &context,
++	CPhysical *A, CPhysical *B, const CColPoint &point, float impulseA, float impulseB)
++{
++	if(!context.active) return;
++	RecordVehicleDeformationCollision(A,B,point,impulseA,false,context.poseA);
++	RecordVehicleDeformationCollision(B,A,point,impulseB,true,context.poseB);
++}
++
++#endif
+ #include "QuestPhysicsSleep.h"
+ #include "Bike.h"
+ 
+@@ -1320,11 +1371,17 @@
+ 	return false;
+ 
+ collision:
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++	VehicleDeformationCollisionContext deformationContext(A,B);
++#endif
+ 
+ 	if(A->bHasContacted && B->bHasContacted){
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
+ 
+ 			if(impulseA > A->m_fDamageImpulse)
+ 				A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1347,6 +1404,9 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
+ 
+ 			if(impulseA > A->m_fDamageImpulse)
+ 				A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1380,6 +1440,9 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
+ 
+ 			if(impulseA > A->m_fDamageImpulse)
+ 				A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1407,6 +1470,9 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
+ 
+ 			if(impulseA > A->m_fDamageImpulse)
+ 				A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1572,6 +1638,9 @@
+ 				numCollisions = A->ProcessEntityCollision(B, aColPoints);
+ 				if(numCollisions <= 0)
+ 					continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++				VehicleDeformationCollisionContext deformationContext(A,B);
++#endif
+ 
+ 				CVector moveSpeed = CVector(0.0f, 0.0f, 0.0f);
+ 				CVector turnSpeed = CVector(0.0f, 0.0f, 0.0f);
+@@ -1580,6 +1649,9 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollisionAlt(B, aColPoints[i], impulseA, moveSpeed, turnSpeed))
+ 							continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseA);
++#endif
+ 
+ 						numResponses++;
+ 
+@@ -1601,6 +1673,9 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollisionAlt(B, aColPoints[i], impulseA, moveSpeed, turnSpeed))
+ 							continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseA);
++#endif
+ 
+ 						numResponses++;
+ 
+@@ -1663,16 +1738,25 @@
+ 				numCollisions = A->ProcessEntityCollision(B, aColPoints);
+ 				if(numCollisions <= 0)
+ 					continue;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++				VehicleDeformationCollisionContext deformationContext(A,B);
++#endif
+ 
+ 				float maxImpulseA = 0.0f;
+ 				float maxImpulseB = 0.0f;
++				int strongestPointA=0, strongestPointB=0;
++				const CVector preCollisionMoveA=A->m_vecMoveSpeed, preCollisionMoveB=B->m_vecMoveSpeed;
++				const CVector preCollisionTurnA=A->m_vecTurnSpeed, preCollisionTurnB=B->m_vecTurnSpeed;
+ 				if(A->bHasContacted && B->bHasContacted){
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-
+-						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+-						if(impulseB > maxImpulseB) maxImpulseB = impulseB;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
++
++						if(impulseA > maxImpulseA) { maxImpulseA = impulseA; strongestPointA=i; }
++						if(impulseB > maxImpulseB) { maxImpulseB = impulseB; strongestPointB=i; }
+ 
+ 						if(impulseA > A->m_fDamageImpulse)
+ 							A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1695,9 +1779,12 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-
+-						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+-						if(impulseB > maxImpulseB) maxImpulseB = impulseB;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
++
++						if(impulseA > maxImpulseA) { maxImpulseA = impulseA; strongestPointA=i; }
++						if(impulseB > maxImpulseB) { maxImpulseB = impulseB; strongestPointB=i; }
+ 
+ 						if(impulseA > A->m_fDamageImpulse)
+ 							A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1731,9 +1818,12 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-
+-						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+-						if(impulseB > maxImpulseB) maxImpulseB = impulseB;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
++
++						if(impulseA > maxImpulseA) { maxImpulseA = impulseA; strongestPointA=i; }
++						if(impulseB > maxImpulseB) { maxImpulseB = impulseB; strongestPointB=i; }
+ 
+ 						if(impulseA > A->m_fDamageImpulse)
+ 							A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1761,9 +1851,12 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-
+-						if(impulseA > maxImpulseA) maxImpulseA = impulseA;
+-						if(impulseB > maxImpulseB) maxImpulseB = impulseB;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
++#endif
++
++						if(impulseA > maxImpulseA) { maxImpulseA = impulseA; strongestPointA=i; }
++						if(impulseB > maxImpulseB) { maxImpulseB = impulseB; strongestPointB=i; }
+ 
+ 						if(impulseA > A->m_fDamageImpulse)
+ 							A->SetDamagedPieceRecord(aColPoints[i].pieceA, impulseA, B, aColPoints[i].normal);
+@@ -1785,10 +1878,17 @@
+ 
+ 				if(B->IsPed() && A->IsVehicle() &&
+ 				   (!Bped->IsPlayer() || B->bHasHitWall && A->m_vecMoveSpeed.MagnitudeSqr() > SQR(0.05f)))
+-					Bped->KillPedWithCar((CVehicle*)A, maxImpulseB);
++					Bped->KillPedWithCar((CVehicle*)A, maxImpulseB,
++						&preCollisionMoveB, &aColPoints[strongestPointB].point, &preCollisionTurnB);
+ 				else if(B->GetModelIndex() == MI_TRAIN && A->IsPed() &&
+ 				  (!Aped->IsPlayer() || A->bHasHitWall))
+-					Aped->KillPedWithCar((CVehicle*)B, maxImpulseA*2.0f);
++					Aped->KillPedWithCar((CVehicle*)B, maxImpulseA*2.0f,
++						&preCollisionMoveA, &aColPoints[strongestPointA].point, &preCollisionTurnA);
++				else if(A->IsPed() && B->IsVehicle() && !Aped->IsPlayer() &&
++					Aped->CharCreatedBy == RANDOM_CHAR && VrRagdoll::IsEnabled() && maxImpulseA>0.0f &&
++					((CVehicle*)B)->IsCar() && !((CVehicle*)B)->IsRealHeli() && !((CVehicle*)B)->IsRealPlane())
++					Aped->KillPedWithCar((CVehicle*)B, maxImpulseA,
++						&preCollisionMoveA, &aColPoints[strongestPointA].point, &preCollisionTurnA);
+ 				else if(B->IsObject() && B->bUsesCollision && A->IsVehicle()){
+ 					// BUG? not impulseA?
+ 					if(Bobj->m_nCollisionDamageEffect && maxImpulseB > 20.0f)
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -4945,11 +4945,14 @@
+ 		CTimeCycle::m_fShadowSideX[CTimeCycle::m_CurrentStoredValue], CTimeCycle::m_fShadowSideY[CTimeCycle::m_CurrentStoredValue]);
+ 
+ #ifdef PED_SKIN
++	if(IsClumpSkinned(GetClump())) UpdateRpHAnim();
++#endif
++
++	// Override both rigid PC frames and skinned Xbox/Mobile matrices.
++	VrRagdoll::Apply(this);
++
++#ifdef PED_SKIN
+ 	if(IsClumpSkinned(GetClump())){
+-		UpdateRpHAnim();
+-		// A ragdolled corpse rewrites its world-space bone matrices whole;
+-		// the overrides below still compose on top.
+-		VrRagdoll::Apply(this);
+ 
+ 		if(bBodyPartJustCameOff && m_bodyPartBleeding == PED_HEAD){
+ 			// scale head to 0 if shot off
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -343,6 +343,7 @@
+ 			e->m_scanCode = GetCurrentScanCode();
+ 
+ 			if(e->IsPed()) {
++				if(VrRagdoll::SkipBulletCollision((CPed*)e)) continue;
+ 				if(e->bUsesCollision || deadPeds && ((CPed *)e)->m_nPedState == PED_DEAD) {
+ #ifdef PED_SKIN
+ 					if(IsClumpSkinned(e->GetClump()))
+--- a/src/core/Game.cpp
++++ b/src/core/Game.cpp
+@@ -5,6 +5,9 @@
+ #include "platform.h"
+ 
+ #include "Game.h"
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#include "VehicleDeformation.h"
++#endif
+ #include "main.h"
+ #include "RwHelper.h"
+ #include "Accident.h"
+@@ -1131,6 +1134,9 @@
+ 		CTimeCycle::Update();
+ 		if (CReplay::ShouldStandardCameraBeProcessed())
+ 			TheCamera.Process();
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++		if(VehicleDeformation::IsVehicleDeformationEnabled()) VehicleDeformation::Update();
++#endif
+ 		CCullZones::Update();
+ 		if (!CReplay::IsPlayingBack())
+ 			CGameLogic::Update();

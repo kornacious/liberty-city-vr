@@ -74,9 +74,11 @@ struct RealCar {
 };
 static void Scenario(const char*name,const Model&m,const std::vector<Bound>&bounds,const std::vector<std::vector<MaterialDetails>>&metadata,const Contact&hit,const char*label,bool front){
  RealCar car(m,bounds,metadata);car.Hit(hit);auto*state=D::Find(&car.car);Check(state!=nullptr,"actual native contact admits real car");D::BeginBatch(*state,&car.car);
- bool bumper=false,chassis=false;std::printf("%s %s candidates:",name,label);
+ bool bumper=false,chassis=false,separateBumper=false;
+ for(const auto&a:m.atomics)separateBumper|=m.frames[size_t(NativeSelectionFrame(m,a.frame))].name.find("bump_front")!=std::string::npos;
+ std::printf("%s %s candidates:",name,label);
  for(unsigned i=0;i<D::batch.count;++i){auto*a=D::batch.candidates[i].atomic;std::printf(" %s",a->frame.name.c_str());bumper|=a->frame.name.find("bump_front")!=std::string::npos;chassis|=a->frame.name.find("chassis")!=std::string::npos;}
- std::printf("\n");Check(D::batch.count<=4,"real native selector retains bounded candidate budget");if(front)Check(bumper&&chassis,"front collision selects actual unpainted bumper and structural chassis, not only bonnet or wings");
+ std::printf("\n");Check(D::batch.count<=4,"real native selector retains bounded candidate budget");if(front)Check(chassis&&(!separateBumper||bumper),"front collision selects structural chassis and a separate bumper when the GTA III model has one");
  car.Finish();const float envelope=car.Envelope(hit,true)-car.Envelope(hit,false),nose=car.UpperNose(hit);
  std::printf("%s %s one-hit exteriorEnvelope=%.5fm upperNonpaintNose=%.5fm rawIncludingEngine=%.5fm\n",name,label,envelope,nose,car.Envelope(hit,true,false)-car.Envelope(hit,false,false));
  Check(envelope>.05f,"actual contacted exterior envelope compresses by over5cm after one strong impact");
@@ -87,7 +89,7 @@ static void Scenario(const char*name,const Model&m,const std::vector<Bound>&boun
 }
 int main(){try{
  const char*data=std::getenv("VC_DEFORMATION_TEST_GAMEDATA");Check(data&&*data,"test reads user-owned local game archive at runtime");
- for(const char*name:{"admiral","sentinel","stinger","oceanic"}){Reader r=ArchiveModel(data,std::string(name)+".dff");Model m=ReadModel(r);ReadRenderedTriangles(r,m);auto bounds=ReadBounds(r);auto materials=MaterialMetadata(r);auto col=ReadCarCollision(std::string(data)+"/models/coll/vehicles.col",name);
+ for(const char*name:{"sentinel","stinger","taxi","landstal"}){Reader r=ArchiveModel(data,std::string(name)+".dff");Model m=ReadModel(r);ReadRenderedTriangles(r,m);auto bounds=ReadBounds(r);auto materials=MaterialMetadata(r);auto col=ReadCarCollision(std::string(data)+"/models/coll/vehicles.col",name);
   Scenario(name,m,bounds,materials,WallContact(col,1,1),"front-wall",true);Scenario(name,m,bounds,materials,PoleContact(col,1,1,.7f),"front-corner",true);Scenario(name,m,bounds,materials,WallContact(col,0,1),"right-side",false);
   for(int radius:{50,200})for(int limit:{10,60}){
    RealCar car(m,bounds,materials);D::SetStrengthPercent(400);D::SetRadiusPercent(radius);D::SetMaxDentCentimeters(limit);

@@ -5,6 +5,14 @@ car grip and bullet reaction. Changes apply immediately and retain their saved
 preferences. Braking supports 0–2000%; zero disables the added braking response.
 Grip acts through contact friction and does not attach a body to the vehicle.
 
+GTA III's original rigid NPC frame trees and compatible skinned replacements
+are both supported. The adapter captures world poses and writes rigid frames
+back relative to their solved parents, without moving the native entity root.
+Neck and clavicle particles are virtual joints with separate positions; they
+never compete with the torso or upper arms for a model matrix. Skins without
+the optional middle-spine bone receive a virtual spine particle as well.
+Player, mission, vehicle-occupant and underwater actors retain native handling.
+
 New settings start with ragdolls OFF, vehicle braking 200%, grip 150%, bullet
 reaction 100% and body weight 200%. Existing saved preferences take precedence.
 
@@ -41,5 +49,8 @@ rigid-body engine or inter-corpse contact simulation.
 
 Host tests cover illegal takeover poses, falls, settling, high-speed car/wall
 contacts, moving support, reaction impulses, scheduling, leg orientation and
-visibility. See [the test guide](../../tools/tests/README.md). Desktop timings
+visibility helpers. GTA III integration checks exercise both vehicle processing
+orders, native bullet-proxy exclusion, rigid/skinned pose capture and rendering.
+Optional local-model checks read original NPC hierarchies without exporting
+their data. See [the test guide](../../tools/tests/README.md). Desktop timings
 and compiled assertions do not establish Quest frame times or visual feel.
