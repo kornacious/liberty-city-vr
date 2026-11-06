@@ -14751,13 +14751,15 @@ function RecoveryDefinition([string]$name) {
 }
 $definitions=@('SetFall','ClearFall','Fall','PedEvadeCB','PedGetupCB') | ForEach-Object { RecoveryDefinition $_ }
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-recovery-production.inc'),($definitions -join "`n"),[Text.UTF8Encoding]::new($false))
+$getupDefinitions=@('SetGetUp','PedGetupCB') | ForEach-Object { RecoveryDefinition $_ }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-getup-production.inc'),($getupDefinitions -join "`n"),[Text.UTF8Encoding]::new($false))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'gta3-recovery-animations.inc'),[IO.File]::ReadAllText((Join-Path $StageRoot 'src/animation/AnimationId.h')),[Text.UTF8Encoding]::new($false))
 $fight=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/peds/PedFight.cpp'))
 if($fight.Contains('VrRagdoll::BeginFall(this);')){throw 'Vehicle callback bypasses centralized evasion/recovery admission.'}
 $previous=$env:GTA3_TEST_GAME_DATA
 try {
  if($GameDataRoot) { $env:GTA3_TEST_GAME_DATA=[IO.Path]::GetFullPath($GameDataRoot) }
- &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-gta3-ragdoll-rig.cpp','test-ragdoll-recovery.cpp')
+ &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-gta3-ragdoll-rig.cpp','test-ragdoll-recovery.cpp','test-ragdoll-getup.cpp')
 } finally { $env:GTA3_TEST_GAME_DATA=$previous }
 </value>
   </data>

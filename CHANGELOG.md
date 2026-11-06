@@ -9,6 +9,10 @@ Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
 
+- Let ambient NPCs recover beside cars when their standing body has clearance.
+  Replace stale vehicle-contact blocking with a bounded check against current
+  collision geometry while retaining genuine under-car and overhead obstruction.
+
 - Preserve NPC evasion, cover and recovery animations when ragdolls are enabled.
   Initialize the native recovery deadline before live ragdoll admission, remove
   the duplicate vehicle admission path, and stop overriding the first getup pose.

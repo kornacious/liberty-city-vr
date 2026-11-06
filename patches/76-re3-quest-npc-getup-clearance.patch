@@ -1,0 +1,40 @@
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -37,6 +37,9 @@
+ #include "SaveBuf.h"
+ #include "VrBodyIK.h"
+ #include "VrRagdoll.h"
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#include "QuestPedGetup.h"
++#endif
+ #if defined(__ANDROID__) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
+ #include "VrVehicleEntry.h"
+ #endif
+@@ -5643,13 +5646,23 @@
+ 			SetPedState(PED_GETUP);
+ 		}
+ 
+-		CVehicle *collidingVeh = (CVehicle*)m_pCollidingEntity;
+-		CVehicle *veh = (CVehicle*)CPedPlacement::IsPositionClearOfCars(&GetPosition());
+-		if (veh && veh->m_vehType != VEHICLE_TYPE_BIKE ||
++		bool blockedByVehicle;
++#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++		if(VrRagdoll::IsEnabled() && !IsPlayer() && CharCreatedBy==RANDOM_CHAR && !bInVehicle){
++			CEntity *obstacle=CPedPlacement::IsPositionClearOfCars(&GetPosition());
++			blockedByVehicle=(obstacle && !obstacle->IsVehicle()) || QuestPedGetup::Blocked(this);
++		}else
++#endif
++		{
++			CVehicle *collidingVeh = (CVehicle*)m_pCollidingEntity;
++			CVehicle *veh = (CVehicle*)CPedPlacement::IsPositionClearOfCars(&GetPosition());
++			blockedByVehicle = (veh && veh->m_vehType != VEHICLE_TYPE_BIKE ||
+ 			collidingVeh && collidingVeh->IsVehicle() && collidingVeh->m_vehType != VEHICLE_TYPE_BIKE
+ 			&& ((uint8)(CTimer::GetFrameCounter() + m_randomSeed + 5) % 8 ||
+ 		         CCollision::ProcessColModels(GetMatrix(), *GetColModel(), collidingVeh->GetMatrix(), *collidingVeh->GetColModel(),
+-					aTempPedColPts, nil, nil) > 0)) {
++					aTempPedColPts, nil, nil) > 0));
++		}
++		if(blockedByVehicle) {
+ 
+ 			bGetUpAnimStarted = false;
+ 			if (IsPlayer())

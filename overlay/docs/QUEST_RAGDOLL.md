@@ -17,6 +17,11 @@ native animations and callbacks. A live ragdoll is admitted only for a finite
 native knockdown after its recovery timer is initialized. Its pose override
 stops as soon as the native state leaves the fall, including the first getup
 frame; deaths still convert an existing live ragdoll in place.
+Ambient NPC getup checks use a bounded upright body volume against current
+nearby vehicle collision geometry. An old contact pointer or a fallen limb
+touching the car does not by itself prevent recovery. A vehicle actually
+obstructing the legs, torso or head still blocks getup. Player, mission,
+vehicle-occupant and ragdoll-disabled recovery paths retain their native gate.
 
 New settings start with ragdolls OFF, vehicle braking 200%, grip 150%, bullet
 reaction 100% and body weight 200%. Existing saved preferences take precedence.

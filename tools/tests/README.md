@@ -355,6 +355,11 @@ that evasion/cover/getup animations are not taken over, their finite deadlines
 reach native getup and restored AI, genuine later impacts still qualify, and
 script-controlled indefinite falls retain native behavior. The explosion
 fixture separately exercises live admission and first-getup-frame pose handoff.
+`test-ragdoll-getup.cpp` in the same runner executes the full production
+`SetGetUp` and finish callback with the production standing-clearance query.
+It covers stale/side contact through all native modulo phases, rotated and
+moving cars, low chassis and head-height obstruction, immediate retries,
+bounded candidate overflow, unsupported geometry and the unchanged legacy gates.
 Optional `-GameDataRoot <local-GTA-III-folder>` reads `male01`, `cop` and `b_man1`
 from the user's local IMG/DIR into memory and exercises their actual frame
 hierarchies. No game assets are embedded, uploaded or exported by the test.
