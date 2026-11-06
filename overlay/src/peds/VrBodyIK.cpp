@@ -194,11 +194,13 @@ struct UpperBodyBones
 	int mid;
 	int torso;
 	int head;
+	int leftFoot=-1,rightFoot=-1;
 };
 
 struct UpperBodyAnchor
 {
 	bool valid;
+	QuestBodyPosture::Balance balance;
 	CVector midPosLocal, torsoPosLocal;
 	CVector nativeTorsoPosLocal;
 
@@ -607,6 +609,8 @@ static bool ResolveUpperBody(RpHAnimHierarchy *hier, UpperBodyBones &out)
 	out.mid = RpHAnimIDGetIndex(hier, BONE_mid);
 	out.torso = RpHAnimIDGetIndex(hier, BONE_torso);
 	out.head = RpHAnimIDGetIndex(hier, BONE_head);
+	out.leftFoot=RpHAnimIDGetIndex(hier,BONE_footl);
+	out.rightFoot=RpHAnimIDGetIndex(hier,BONE_footr);
 	if(out.waist < 0)
 		out.waist = 0;
 	if(out.mid < 0 && out.torso >= 0)
@@ -640,6 +644,17 @@ static bool StabilizeUpperBody(CPed *ped, RwMatrix *mats,
 	const CMatrix &referenceBody=UsesNativeCameraHead(ped) ? nativeBody : visualBody;
 
 	if(!gUpperBody.valid){
+		if(UsesNativeCameraHead(ped) && b.leftFoot>=0 && b.rightFoot>=0){
+			const CVector waistLocal=ToBasisLocal(CVector(mats[b.waist].pos)-visualRoot,visualBody);
+			gUpperBody.balance.headFromWaist=ToBasisLocal(CVector(head.pos)-visualRoot,nativeBody)-waistLocal;
+			gUpperBody.balance.spineFromWaist[0]=CVector(0,0,0);
+			gUpperBody.balance.spineFromWaist[1]=ToBasisLocal(CVector(mid.pos)-visualRoot,nativeBody)-waistLocal;
+			gUpperBody.balance.spineFromWaist[2]=ToBasisLocal(CVector(torso.pos)-visualRoot,nativeBody)-waistLocal;
+			gUpperBody.balance.spineFromWaist[3]=gUpperBody.balance.headFromWaist;
+			gUpperBody.balance.feetFromWaist=ToBasisLocal(
+				(CVector(mats[b.leftFoot].pos)+CVector(mats[b.rightFoot].pos))*.5f-visualRoot,visualBody)-waistLocal;
+			gUpperBody.balance.valid=gUpperBody.balance.feetFromWaist.y<-.15f;
+		}
 		gUpperBody.midPosLocal =
 			ToBasisLocal(CVector(mid.pos)-visualRoot, referenceBody);
 		gUpperBody.torsoPosLocal =
@@ -1388,19 +1403,33 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 			(facing*eyeForward+input.up*eyeHeight+right*eyeSide);
 		input.hasHeadTarget=true;
 	}
+	if(gUpperBody.balance.valid){
+		input.balance=gUpperBody.balance;
+		input.balance.headFromWaist=FromBasisLocal(input.balance.headFromWaist,visualBody);
+		input.balance.feetFromWaist=FromBasisLocal(input.balance.feetFromWaist,visualBody);
+		for(int i=0;i<4;++i) input.balance.spineFromWaist[i]=FromBasisLocal(input.balance.spineFromWaist[i],visualBody);
+	}
+	CVector contactFeet[2]={input.foot[0],input.foot[1]};
+	if(ped->bIsDucking && input.hasHeadTarget && input.balance.valid){
+		const CVector waist=input.headTarget-input.balance.headFromWaist-
+			QuestBodyPosture::Lean(input.delta,input.up)*.82f;
+		CVector shift=waist+input.balance.feetFromWaist-(contactFeet[0]+contactFeet[1])*.5f;
+		shift-=input.up*DotProduct(shift,input.up);
+		contactFeet[0]+=shift;contactFeet[1]+=shift;
+	}
 	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
 	gTrackedStance.Begin(ped,ped->GetClump(),CTimer::GetFrameCounter(),
 		ped->GetPosition(),visualBody.GetForward(),planting,true);
-	gTrackedStance.Advance(input.foot,CTimer::GetTimeStep()/50.0f);
+	gTrackedStance.Advance(contactFeet,CTimer::GetTimeStep()/50.0f);
 	if(planting){
 		for(int side=0;side<2;++side){
-			const CVector candidate=gTrackedStance.Candidate(side,input.foot[side]);
+			const CVector candidate=gTrackedStance.Candidate(side,contactFeet[side]);
 			CColPoint hit; CEntity *ground=nil;
 			// Static terrain only: never retain a dangling platform reference
 			// or attach a foot to a passing vehicle/pedestrian.
 			const bool found=CWorld::ProcessVerticalLine(candidate+CVector(0,0,0.4f),
 				candidate.z-0.5f,hit,ground,true,false,false,false,false,false,nil);
-			input.footTarget[side]=gTrackedStance.Contact(side,input.foot[side],
+			input.footTarget[side]=gTrackedStance.Contact(side,contactFeet[side],
 				found ? hit.point : candidate,found ? hit.normal : CVector(0,0,1),found);
 			const CVector normal=gTrackedStance.Normal(side);
 			feet[side].right=QuestBodyPosture::Swing(feet[side].right,CVector(0,0,1),normal);
@@ -1411,6 +1440,9 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 			feet[side].right=footRight;feet[side].up=footUp;feet[side].at=footAt;
 		}
 		input.hasFootTargets=true;
+	}
+	else if(ped->bIsDucking && input.balance.valid){
+		input.footTarget[0]=contactFeet[0];input.footTarget[1]=contactFeet[1];input.hasFootTargets=true;
 	}
 	QuestBodyPosture::Output solved;
 	if(!QuestBodyPosture::Solve(input,solved)) return;

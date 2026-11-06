@@ -45,9 +45,10 @@ static void Native(CPed &ped,RwMatrix *mats){
  for(int i=0;i<16;++i){mats[i].pos=World(ped.root,{0,0,.8f});mats[i].right=ped.root.u;mats[i].up=ped.root.f;mats[i].at=-ped.root.r;}
  mats[7].pos=World(ped.root,{.01f,.02f,1.05f});mats[8].pos=World(ped.root,{.015f,.03f,1.3f});mats[9].pos=World(ped.root,{.015f,.04f,1.58f});
  mats[13].pos=World(ped.root,{-.2f,.03f,1.3f});
+ mats[6].pos=World(ped.root,{-.12f,0,.08f});mats[3].pos=World(ped.root,{.12f,0,.08f});
 }
 int main(){
- CPed ped;RpHAnimHierarchy hier;RwMatrix mats[16];UpperBodyBones body{0,7,8,9};ArmBones arm{13,14,15};
+ CPed ped;RpHAnimHierarchy hier;RwMatrix mats[16];UpperBodyBones body{0,7,8,9,6,3};ArmBones arm{13,14,15};
  for(float nativeYaw:{0.0f,.7f,2.2f})for(float firstView:{0.0f,1.5707963f,3.14159265f,4.712389f})
  for(bool down:{false,true})for(float follow:{0.0f,.6f}){
   ped.root=Yaw(nativeYaw);ped.root.p={50,-20,2};gUpperBody={};gShoulder[0]={};view=Yaw(firstView);lookingDown=down;
@@ -60,6 +61,9 @@ int main(){
    Require(BuildGroundedVisualBody(&ped,&hier,mats,visual),"grounded basis available");
    Near(visual.f,view.f,"steep downwards gaze retains physical body heading");
    float vertical=0;Require(StabilizeUpperBody(&ped,mats,body,visual,&vertical),"upper body stabilized");
+   Require(gUpperBody.balance.valid,"standing anatomy captures a balance reference");
+   Near(gUpperBody.balance.headFromWaist,{.015f,.78f,.04f},"head/pelvis reference is independent of capture heading");
+   Near(gUpperBody.balance.feetFromWaist,{0,-.72f,0},"stance midpoint reference is independent of capture heading");
    Near(mats[8].up,visual.f,"torso faces physical view independently of capture/reset heading");
    Near(mats[7].up,visual.f,"mid spine faces physical view independently of capture/reset heading");
    Near(mats[8].pos,World(visual,{.015f,.03f,1.3f})-visual.u*.025f,"cached torso position remains anatomical");

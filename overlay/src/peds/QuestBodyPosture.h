@@ -46,6 +46,14 @@ inline CVector Swing(const CVector &v, CVector from, CVector to)
 	return v + CrossProduct(axis,v) + CrossProduct(axis,CrossProduct(axis,v))*(1.0f/(1.0f+c));
 }
 
+struct Balance
+{
+	// World vectors in the solve; anatomy cache stores them in body space.
+	CVector headFromWaist,feetFromWaist;
+	CVector spineFromWaist[4];
+	bool valid=false;
+};
+
 struct Input
 {
 	CVector spine[4]; // waist, mid, torso, head
@@ -54,6 +62,7 @@ struct Input
 	float authoredDrop;
 	CVector headTarget, footTarget[2];
 	bool hasHeadTarget=false, hasFootTargets=false;
+	Balance balance;
 };
 struct Output
 {
@@ -70,8 +79,10 @@ inline bool Solve(const Input &in, Output &out)
 	for(int i=0; i<4; ++i) if(!Finite(in.spine[i])) return false;
 	if(in.hasHeadTarget && (in.headTarget-in.spine[3]).MagnitudeSqr()>2.25f) return false;
 	for(int i=0; i<3; ++i){
-		lengths[i] = (in.spine[i+1]-in.spine[i]).Magnitude();
-		if(lengths[i] < 0.005f) return false;
+		lengths[i] = in.hasHeadTarget && in.balance.valid ?
+			(in.balance.spineFromWaist[i+1]-in.balance.spineFromWaist[i]).Magnitude() :
+			(in.spine[i+1]-in.spine[i]).Magnitude();
+		if(!isfinite(lengths[i]) || lengths[i] < 0.005f) return false;
 		total += lengths[i];
 	}
 	for(int i=0; i<2; ++i){
@@ -97,13 +108,29 @@ inline bool Solve(const Input &in, Output &out)
 	CVector pelvis=lean*0.18f-up*(drop*0.85f)-forward*(drop*0.15f);
 	CVector root=in.spine[0]+pelvis;
 	const CVector target=in.hasHeadTarget ? in.headTarget : in.spine[3]+lean-up*drop;
+	if(in.hasHeadTarget && in.balance.valid){
+		if(!Finite(in.balance.headFromWaist) || !Finite(in.balance.feetFromWaist)) return false;
+		// Preserve standing anatomy beneath the eye at every facing. The
+		// physical lean share remains in the spine; authored crouch offsets
+		// must not choose a different lateral pelvis position.
+		root=target-in.balance.headFromWaist-lean*.82f;
+		const CVector feet=in.hasFootTargets ? (in.footTarget[0]+in.footTarget[1])*.5f : (in.foot[0]+in.foot[1])*.5f;
+		const float minHeight=DotProduct(feet-in.balance.feetFromWaist,up)-Bounded(legLength*.65f,0,.65f);
+		if(DotProduct(root,up)<minHeight) root+=up*(minHeight-DotProduct(root,up));
+		pelvis=root-in.spine[0];
+	}
 	// The headset is authoritative. Move the pelvis to make room for the
 	// neck instead of shortening its target and leaving the chest in the eye.
 	if((target-root).Magnitude() > total*0.9999f){
 		root=target-Unit(target-root,up)*(total*0.9999f);
 		pelvis=root-in.spine[0];
 	}
-	for(int i=0; i<4; ++i) out.spine[i]=in.spine[i]+pelvis;
+	for(int i=0; i<4; ++i){
+		if(in.hasHeadTarget && in.balance.valid){
+			if(!Finite(in.balance.spineFromWaist[i])) return false;
+			out.spine[i]=root+in.balance.spineFromWaist[i];
+		}else out.spine[i]=in.spine[i]+pelvis;
+	}
 	// Seed a forward bend when compressing an otherwise straight spine.
 	if((target-root).Magnitude() < total-0.001f){
 		out.spine[1]+=forward*0.025f; out.spine[2]+=forward*0.025f;

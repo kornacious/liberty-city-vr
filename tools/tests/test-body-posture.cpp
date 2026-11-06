@@ -21,7 +21,7 @@ struct CMatrix {
 };
 struct RwMatrix {CVector pos,right{0,0,1},up{0,1,0},at{-1,0,0};int flags=0;};
 struct RpHAnimHierarchy {int numNodes=14;int parents[14]={-1,0,1,2,0,4,5,0,7,8,2,10,11,12};};
-struct CPed {bool modern=true,vehicle=false,bIsStanding=false,bIsInTheAir=false;int m_nPedState=0,m_nMoveState=0;CVector position;bool InVehicle(){return vehicle;}CVector GetPosition(){return position;}void *GetClump(){return this;}};
+struct CPed {bool modern=true,vehicle=false,bIsStanding=false,bIsInTheAir=false,bIsDucking=false;int m_nPedState=0,m_nMoveState=0;CVector position;bool InVehicle(){return vehicle;}CVector GetPosition(){return position;}void *GetClump(){return this;}};
 struct UpperBodyBones {int waist=0,mid=1,torso=2,head=3;};
 enum {PED_JUMP=1,MAX_BODY_IK_NODES=96,BONE_upperlegl=4,BONE_lowerlegl=5,BONE_footl=6,BONE_upperlegr=7,BONE_lowerlegr=8,BONE_footr=9};
 enum {PEDMOVE_STILL,PEDMOVE_WALK};
@@ -38,6 +38,7 @@ static bool ProcessVerticalLine(CVector from,float,CColPoint &hit,CEntity*&,bool
 }
 struct CTimer {static unsigned frame;static unsigned GetFrameCounter(){return frame;}static float GetTimeStep(){return 1.0f;}};unsigned CTimer::frame=0;
 static QuestBodyPosture::Stance gTrackedStance;
+static struct {QuestBodyPosture::Balance balance;}gUpperBody;
 static bool gVehicleTransitionActive,tracking=true;
 static CVector eye,anchor;
 static bool UsesNativeCameraHead(CPed *ped){return ped->modern;}
@@ -245,6 +246,47 @@ int main(){
         Require(std::fabs(DotProduct(socket,right)-.02f)<.0002f,"side eye fit turns with the body");
         Require(std::fabs(socket.z-.08f)<.0002f,"physical turns preserve vertical eye fit");
         Near(eye,eyeBefore,"turning fit correction never moves the camera");
+    }
+    // Standing anatomy anchors the entire pelvis/stance, not only the head.
+    // Recreate a native crouch with a translated, forward-bent upper body and
+    // folded knees: those animation offsets must not choose the VR body origin.
+    gUpperBody.balance.valid=true;
+    gUpperBody.balance.headFromWaist={0,.72f,0};gUpperBody.balance.feetFromWaist={0,-.83f,0};
+    for(int i=0;i<4;++i)gUpperBody.balance.spineFromWaist[i]={0,standing.spine[i].z-standing.spine[0].z,0};
+    for(bool duck:{false,true})for(int angle=0;angle<24;++angle){
+        const float facing=float(angle)*.2617993878f;
+        viewRight={std::cos(facing),std::sin(facing),0};viewForward={-std::sin(facing),std::cos(facing),0};
+        visual=CMatrix();visual.r=viewRight;visual.f=viewForward;ped={};ped.bIsDucking=duck;ped.bIsStanding=true;
+        gTrackedStance.Reset();groundFound=headTargetAvailable=fixedEyeFit=true;
+        anchor={.02f,.06f,1.65f-(duck?.45f:0)};eye=anchor;skeletonHead={0,0,1.57f-(duck?.45f:0)};
+        for(int i=0;i<14;++i){
+            carried[i]=native[i];CVector local=native[i].pos;
+            if(duck){
+                if(i<4){CVector offset=local-standing.spine[0];local=CVector(.24f,.30f,.4f)+CVector(offset.x,offset.z*.5f,offset.z*.8660254f);}
+                else if(i>=4&&i<=9){
+                    local.x+=.24f;local.y+=.30f;
+                    if(i==4||i==7)local.z=.37f;
+                    if(i==5||i==8){local.y=.30f+std::sqrt(.1664f-.175f*.175f);local.z=.195f;}
+                }else {local.y+=.30f;local.x+=.24f;local.z-=.45f;}
+            }
+            carried[i].pos=viewRight*local.x+viewForward*local.y+CVector(0,0,local.z);
+            carried[i].right=viewRight*native[i].right.x+viewForward*native[i].right.y+CVector(0,0,native[i].right.z);
+            carried[i].up=viewRight*native[i].up.x+viewForward*native[i].up.y+CVector(0,0,native[i].up.z);
+            carried[i].at=viewRight*native[i].at.x+viewForward*native[i].at.y+CVector(0,0,native[i].at.z);
+        }
+        ++CTimer::frame;ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+        const CVector target=eye-viewForward*.06f-viewRight*.02f-CVector(0,0,.08f);
+        Near(carried[3].pos,target,"balanced stance retains exact head attachment");
+        CVector pelvisError=carried[0].pos-target;pelvisError.z=0;
+        Require(pelvisError.Magnitude()<.003f,"pelvis stays beneath head through turns and button crouch");
+        const CVector hips=(carried[4].pos+carried[7].pos)*.5f;
+        CVector hipError=hips-target;hipError.z=0;
+        Require(hipError.Magnitude()<.003f,"hips do not inherit authored forward/right crouch translation");
+        if(duck){
+            CVector footError=(carried[6].pos+carried[9].pos)*.5f-target;footError.z=0;
+            Require(footError.Magnitude()<.003f,"crouched stance midpoint remains under the body");
+        }
+        Require(std::fabs((carried[1].pos-carried[0].pos).Magnitude()-.22f)<.001f,"spine dimensions use standing anatomy rather than pose displacement");
     }
     std::printf("PASS %u body posture checks\n",checks);
 }
