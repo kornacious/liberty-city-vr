@@ -12830,8 +12830,8 @@ function Method([string]$text, [string]$name) {
  if (-not $result) { throw ('Production method not found: ' + $name) }
  return $result
 }
-$backendCode = 'namespace rw { namespace vulkan { static bool32 gFirstPersonPositionLocked;' + "`n"
-foreach ($name in @('getFirstPersonPlayBasis','setFirstPersonPositionLocked','setHeadPose','getFirstPersonViewFrame','setFirstPersonAnchor','setFirstPersonAnchorBasis','playPoseToFirstPersonWorld')) {
+$backendCode = 'namespace rw { namespace vulkan { static bool32 gFirstPersonPositionLocked; static bool32 gFirstPersonHeightLocked;' + "`n"
+foreach ($name in @('getFirstPersonPlayBasis','setFirstPersonPositionLocked','setFirstPersonHeightLocked','setHeadPose','getFirstPersonViewFrame','setFirstPersonAnchor','setFirstPersonAnchorBasis','playPoseToFirstPersonWorld','firstPersonWorldVectorToPlay','consumeFirstPersonRoomscale')) {
  # RenderWare declarations can wrap arguments across several lines.
  $method = [regex]::Match($backend, '(?ms)^(?:static )?(?:void|bool32)\r?\n' + $name + '\(.*?^\}').Value
  if (-not $method) { throw ('Backend method missing: ' + $name) }

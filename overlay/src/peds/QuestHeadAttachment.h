@@ -17,16 +17,26 @@ class ComfortAnchor
 {
 	const void *owner = nil, *clump = nil, *carrier = nil;
 	bool valid = false;
+	bool previousBobbing=false;
 	CVector local;
 public:
 	CVector Position(const void *ped, const void *model, const void *vehicle,
 		const CMatrix &root, const CVector &nativeHead, bool bobbing,
-		bool routineMotion, bool postPhysics)
+		bool routineMotion, bool postPhysics, bool buttonCrouch=false)
 	{
 		if(owner != ped || clump != model || carrier != vehicle){
 			owner = ped; clump = model; carrier = vehicle; valid = false;
 		}
-		if(bobbing){ valid = false; return nativeHead; }
+		if(bobbing!=previousBobbing && !buttonCrouch) valid=false;
+		previousBobbing=bobbing;
+		if(buttonCrouch){
+			if(!valid){local=Invert(root)*nativeHead;local.z+=0.45f;valid=true;}
+			return root*local-CVector(0,0,0.45f);
+		}
+		if(bobbing){
+			if(routineMotion && postPhysics){local=Invert(root)*nativeHead;valid=true;}
+			return nativeHead;
+		}
 		if(!routineMotion) return nativeHead;
 		if(!valid){
 			// Occupancy can change before the native boarding lineup. Commit

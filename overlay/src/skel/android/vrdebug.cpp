@@ -6283,6 +6283,7 @@ void VrGetXboxHeadOffset(float *forward,float *height,float *side)
 float VrXboxBodyYawDegrees(){LoadXboxHeadFit();return float(gXboxHeadFit.value[QuestHeadCalibration::BODY_YAW]);}
 bool VrXboxKnockdownLockEnabled(){LoadXboxHeadFit();return gXboxHeadFit.value[QuestHeadCalibration::LOCK]!=0;}
 bool VrXboxKnockdownBoneViewEnabled(){LoadXboxHeadFit();return gXboxHeadFit.value[QuestHeadCalibration::BONE_VIEW]!=0;}
+bool VrUsesFixedButtonCrouch(){return ModelSets::IsModernActive();}
 
 bool
 VrUsesHeadRelativeMovement(void)

@@ -34,7 +34,7 @@ static bool ProcessVerticalLine(CVector from,float,CColPoint &hit,CEntity*&,bool
     hit.point={from.x,from.y,0};hit.normal={0,0,1};return groundFound;
 }
 }
-struct CTimer {static unsigned frame;static unsigned GetFrameCounter(){return frame;}};unsigned CTimer::frame=0;
+struct CTimer {static unsigned frame;static unsigned GetFrameCounter(){return frame;}static float GetTimeStep(){return 1.0f;}};unsigned CTimer::frame=0;
 static QuestBodyPosture::Stance gTrackedStance;
 static bool gVehicleTransitionActive,tracking=true;
 static CVector eye,anchor;
@@ -181,5 +181,41 @@ int main(){
     carried[6].pos.y+=.08f;
     ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
     Require(carried[6].pos.y>.07f,"native walking foot releases the standing contact");
+    // Physical root travel produces one swing at a time, alternating sides;
+    // it must not translate both planted feet with the visual body.
+    for(int rate:{30,72,90,120}){
+        Stance gait;int lastSwing=-1,started=-1,steps=0;CVector prior[2];
+        for(unsigned frame=1;frame<=unsigned(rate*4);++frame){
+            const CVector rootTravel(0,.35f*float(frame)/float(rate),0);
+            CVector feet[2]={{-.12f,rootTravel.y,.06f},{.12f,rootTravel.y,.06f}};
+            gait.Begin(&ped,&body,frame,rootTravel,{0,1,0},true,true);
+            gait.Advance(feet,1.0f/float(rate));
+            const CVector once=gait.Candidate(0,feet[0]);gait.Advance(feet,1.0f/float(rate));
+            Near(gait.Candidate(0,feet[0]),once,"repeat update cannot advance the physical step twice");
+            Require(!(gait.IsSwinging(0)&&gait.IsSwinging(1)),"only one foot can swing");
+            int swing=gait.IsSwinging(0)?0:(gait.IsSwinging(1)?1:-1);
+            if(swing>=0&&swing!=lastSwing){Require(started<0||swing!=started,"physical steps alternate feet");started=swing;++steps;}
+            for(int side=0;side<2;++side){
+                const CVector target=gait.Contact(side,feet[side],{feet[side].x,feet[side].y,0},{0,0,1},true);
+                if(frame>1&&swing>=0&&side!=swing&&lastSwing==swing) Near(target,prior[side],"support foot stays planted during opposite swing");
+                Require(target.z>=.059f&&target.z<.13f,"physical step has bounded ground clearance");prior[side]=target;
+            }
+            lastSwing=swing;
+        }
+        Require(steps>=4,"sustained physical travel generates repeated footsteps");
+    }
+    ped={};ped.bIsStanding=true;visual=CMatrix();gTrackedStance.Reset();
+    groundFound=headTargetAvailable=true;int visibleSwings[2]={};
+    for(unsigned frame=1;frame<=240;++frame){
+        ++CTimer::frame;ped.position={0,float(frame)*.005f,0};visual.p=ped.position;
+        for(int i=0;i<14;++i){carried[i]=native[i];carried[i].pos+=ped.position;}
+        skeletonHead=native[3].pos+ped.position;anchor=skeletonHead;eye=anchor;
+        ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+        Near(carried[3].pos,skeletonHead,"physical root stepping preserves exact head attachment");
+        for(int side=0;side<2;++side)
+            if(gTrackedStance.IsSwinging(side)&&carried[6+side*3].pos.z>.045f) ++visibleSwings[side];
+        Require(carried[6].pos.z<.08f||carried[9].pos.z<.08f,"production roomscale stepping retains a low support foot");
+    }
+    Require(visibleSwings[0]>5&&visibleSwings[1]>5,"both production leg chains express alternating physical step lift");
     std::printf("PASS %u body posture checks\n",checks);
 }

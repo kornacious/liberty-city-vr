@@ -289,6 +289,7 @@ bool VrGetViewBasis(float position[3], float right[3], float up[3],
 // Body IK uses this to measure room-scale without reconstructing offsets.
 bool VrGetOnFootBodyAnchor(float position[3]);
 bool VrGetOnFootSkeletonHead(float position[3]);
+bool VrUsesFixedButtonCrouch();
 void VrGetXboxHeadOffset(float *forward, float *height, float *side);
 float VrXboxBodyYawDegrees();
 bool VrXboxKnockdownLockEnabled();

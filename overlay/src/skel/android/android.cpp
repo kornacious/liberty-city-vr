@@ -115,6 +115,9 @@ static bool
 PlayerKnockedDown(CPlayerPed *player)
 {
 	if(!player || player->InVehicle() || player->DyingOrDead()) return false;
+	if(ModelSets::IsModernActive() &&
+	   (player->GetPedState()==PED_ARRESTED || player->GetPedState()==PED_HANDS_UP ||
+	    CWorld::Players[CWorld::PlayerInFocus].m_WBState==WBSTATE_BUSTED)) return true;
 	switch(player->GetPedState()){
 	case PED_FALL: case PED_GETUP: case PED_STAGGER: case PED_DIVE_AWAY:
 		return true;
@@ -129,7 +132,7 @@ androidgame::VrKnockdownPresentationActive(void)
 	return gVrFirstPersonActive && player && !player->InVehicle() &&
 		!player->DyingOrDead() && !FrontEndMenuManager.m_bMenuActive &&
 		!CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing() &&
-		!TheCamera.m_WideScreenOn &&
+		(!TheCamera.m_WideScreenOn || (ModelSets::IsModernActive() && PlayerKnockedDown(player))) &&
 		(PlayerKnockedDown(player) || gKnockdownView.OwnsBody());
 }
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
@@ -711,10 +714,11 @@ androidgame::VrShouldUseTheaterMode(void)
 	// flag rides along with the cutscene and was forcing the flat screen
 	// by itself, so both belong to the same choice.
 	const bool cinematic = androidgame::VrCutsceneMode() != 0;
+	const bool attachedIncapacitated=ModelSets::IsModernActive() && PlayerKnockedDown(FindPlayerPed());
 	const bool cutsceneOnScreen = !cinematic &&
 		(CCutsceneMgr::IsCutsceneProcessing() ||
 		 CCutsceneMgr::IsRunning() ||
-		 TheCamera.m_WideScreenOn);
+		 (TheCamera.m_WideScreenOn && !attachedIncapacitated));
 	return gGameState != GS_PLAYING_GAME ||
 		FrontEndMenuManager.m_bGameNotLoaded ||
 		FrontEndMenuManager.m_bMenuActive ||
@@ -1434,13 +1438,16 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		!CGame::playingIntro &&
 		!CCutsceneMgr::IsCutsceneProcessing() &&
 		!CCutsceneMgr::IsRunning() &&
-		(!TheCamera.m_WideScreenOn || trainPassenger);
+		(!TheCamera.m_WideScreenOn || trainPassenger ||
+		 (ModelSets::IsModernActive() && PlayerKnockedDown(player)));
 	const bool xboxKnockdown = wantFirstPerson && !thirdPersonVehicle &&
 		ModelSets::IsModernActive() && player->GetClump() != nil &&
 		IsClumpSkinned(player->GetClump()) && PlayerKnockedDown(player);
 	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson &&
 		((trainPassenger && player->InVehicle()) ||
 		 (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
+	rw::vulkan::setFirstPersonHeightLocked(wantFirstPerson && !thirdPersonVehicle &&
+		ModelSets::IsModernActive() && !player->InVehicle() && player->bIsDucking && !xboxKnockdown);
 
 	// A cinematic cutscene is rendered in stereo from the director camera.
 	// It has to go through the same first-person machinery as gameplay:
@@ -1933,7 +1940,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			head = comfortableHead.Position(player, player->GetClump(),
 				player->InVehicle() ? player->m_pMyVehicle : nil,
 				player->GetMatrix(), boneHead, androidgame::VrHeadBobbingEnabled(),
-				routineHeadMotion, postPhysics);
+				routineHeadMotion, postPhysics,
+				player->bIsDucking && !gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player));
 			// Animation head roll/nods/look-arounds never steer the HMD.
 			// Use the locomotion/carrier frame; the headset owns head rotation.
 			CVector heading = player->GetForward(), vertical(0,0,1);
@@ -2197,6 +2205,65 @@ ApplyQuestSnapTurn(float stickX)
 	}
 }
 
+// Runs once before the game simulation, so collision sectors and AI targeting
+// agree with roomscale movement. Small head leans stay within the body capsule.
+static bool UpdateQuestRoomscale()
+{
+	CPlayerPed *player=FindPlayerPed();
+	if(!gVrFirstPersonActive || !ModelSets::IsModernActive() || !player ||
+	   player->InVehicle() || !player->IsPedInControl() || PlayerKnockedDown(player) ||
+	   player->bIsInTheAir || !player->bIsStanding || !player->bUsesCollision ||
+	   CTimer::GetIsPaused() || androidgame::VrMenuConsumesInput() ||
+	   CPad::GetPad(0)->ArePlayerControlsDisabled()) return false;
+	static CPlayerPed *lastPlayer;
+	static unsigned lastFrame;
+	static bool sampled;
+	const unsigned frame=CTimer::GetFrameCounter();
+	if(sampled && lastPlayer==player && lastFrame==frame) return false;
+	sampled=true;lastPlayer=player;lastFrame=frame;
+	float eye[3],anchor[3];
+	if(!androidgame::VrGetViewBasis(eye,nil,nil,nil) ||
+	   !androidgame::VrGetOnFootBodyAnchor(anchor)) return false;
+	CVector delta(eye[0]-anchor[0],eye[1]-anchor[1],0);
+	const float distance=delta.Magnitude();
+	if(!isfinite(distance) || distance<=0.10f || distance>2.0f) return false;
+	delta*=Min(distance-0.10f,0.25f)/distance;
+	const CVector original=player->GetPosition();
+	CVector position=original;
+	CColPoint floor;CEntity *ground=nil;
+	if(!CWorld::ProcessVerticalLine(position+CVector(0,0,.3f),position.z-1.6f,
+	   floor,ground,true,false,false,false,false,false,nil)) return false;
+	const float clearance=position.z-floor.point.z;
+	if(clearance<.4f || clearance>1.5f) return false;
+	const int steps=Max(1,(int)ceilf(delta.Magnitude()/0.04f));
+	const CVector increment=delta/float(steps);
+	for(int step=0;step<steps;++step){
+		CVector next=position+increment;
+		if(!CWorld::ProcessVerticalLine(next+CVector(0,0,.3f),next.z-1.6f,
+		   floor,ground,true,false,false,false,false,false,nil)) break;
+		const float height=floor.point.z+clearance;
+		if(height-position.z>.25f || height-position.z<-.4f || floor.normal.z<.65f) break;
+		next.z=height;
+		bool blocked=false;
+		for(int sphere=0;sphere<3;++sphere)
+			if(CWorld::TestSphereAgainstWorld(next+CVector(0,0,-.5f+sphere*.4f),
+			   .3f,player,true,true,true,true,true,false)){blocked=true;break;}
+		if(blocked) break;
+		position=next;
+	}
+	if((position-original).MagnitudeSqr()<1.0e-8f) return false;
+	CWorld::Remove(player);
+	player->SetPosition(position);
+	player->GetMatrix().UpdateRW();player->UpdateRwFrame();player->UpdateRpHAnim();
+	player->m_collPoly.valid=false;
+	CWorld::Add(player);
+	// Consume only horizontal displacement. Terrain steps should still raise
+	// the view, and native velocity/animations remain owned by game physics.
+	const CVector consumed(position.x-original.x,position.y-original.y,0);
+	rw::vulkan::consumeFirstPersonRoomscale(&consumed.x);
+	return true;
+}
+
 void
 CapturePad(RwInt32 padID)
 {
@@ -2204,6 +2271,7 @@ CapturePad(RwInt32 padID)
 		return;
 
 	VrUpdateFirstPersonAnchor(false);
+	if(UpdateQuestRoomscale()) VrUpdateFirstPersonAnchor(false);
 
 	CControllerState &state = CPad::GetPad(0)->PCTempJoyState;
 	state.Clear();

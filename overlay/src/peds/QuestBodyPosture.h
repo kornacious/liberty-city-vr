@@ -136,24 +136,49 @@ class Stance
 	bool active=false,valid[2]={false,false},orientationValid[2]={false,false};
 	CVector position[2],normal[2];
 	CVector right[2],up[2],at[2];
+	bool stepping=false,advanced=false;
+	unsigned advancedFrame=0;
+	int swing=-1,nextFoot=0;
+	float elapsed=0;
+	CVector stepStart,stepEnd;
 public:
-	void Reset(){active=false;valid[0]=valid[1]=false;owner=model=nullptr;}
+	void Reset(){active=false;valid[0]=valid[1]=false;owner=model=nullptr;swing=-1;advanced=false;}
 	void Begin(const void *ped,const void *clump,unsigned tick,
-		const CVector &pedRoot,const CVector &forward,bool eligible)
+		const CVector &pedRoot,const CVector &forward,bool eligible,bool proceduralSteps=false)
 	{
+		stepping=proceduralSteps;
 		if(!eligible || !Finite(pedRoot) || !Finite(forward)){Reset();return;}
 		if(!active || owner!=ped || model!=clump || tick-frame>2 ||
-		   (pedRoot-root).MagnitudeSqr()>0.0025f || DotProduct(heading,forward)<0.82f){
-			valid[0]=valid[1]=false;heading=forward;
+		   (pedRoot-root).MagnitudeSqr()>(stepping ? .36f : .0025f) || DotProduct(heading,forward)<0.82f){
+			valid[0]=valid[1]=false;heading=forward;swing=-1;advanced=false;
 		}
 		active=true;owner=ped;model=clump;frame=tick;root=pedRoot;
 	}
+	void Advance(const CVector native[2],float seconds)
+	{
+		if(!active || !stepping || !valid[0] || !valid[1]){swing=-1;return;}
+		if(advanced && advancedFrame==frame) return;
+		advanced=true;advancedFrame=frame;
+		if(swing<0){
+			CVector error[2]={native[0]-position[0],native[1]-position[1]};
+			error[0].z=error[1].z=0;
+			if(error[0].MagnitudeSqr()<.0144f && error[1].MagnitudeSqr()<.0144f) return;
+			swing=nextFoot;elapsed=0;stepStart=position[swing];
+			stepEnd=native[swing]+Unit(error[swing],CVector(0,0,0))*.04f;
+			orientationValid[swing]=false;
+		}
+		elapsed+=Bounded(seconds,0,.05f);
+		const float t=Bounded(elapsed/.22f,0,1),smooth=t*t*(3-2*t);
+		position[swing]=stepStart+(stepEnd-stepStart)*smooth+CVector(0,0,sinf(t*3.14159265f)*.065f);
+		if(t>=1){nextFoot=1-swing;swing=-1;}
+	}
+	bool IsSwinging(int side) const {return swing==side;}
 	CVector Candidate(int side,const CVector &native) const {return active && valid[side] ? position[side] : native;}
 	CVector Contact(int side,const CVector &native,const CVector &ground,const CVector &groundNormal,bool hit)
 	{
 		if(!active || !hit || !Finite(ground) || !Finite(groundNormal) || groundNormal.z<0.65f ||
 		   fabsf(native.z-ground.z)>0.3f){valid[side]=false;return native;}
-		if(valid[side] && ((native-position[side]).MagnitudeSqr()>0.09f ||
+		if(valid[side] && ((!stepping && (native-position[side]).MagnitudeSqr()>0.09f) ||
 		   fabsf(ground.z-position[side].z)>0.3f)) valid[side]=false;
 		if(!valid[side]){
 			position[side]=CVector(native.x,native.y,ground.z+Bounded(native.z-ground.z,0.02f,0.16f));

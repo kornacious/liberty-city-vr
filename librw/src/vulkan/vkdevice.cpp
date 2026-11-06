@@ -3416,6 +3416,14 @@ setIm2DTransform(const float32 transform[16], float32 planeDistance,
 }
 
 static bool32 gFirstPersonPositionLocked;
+static bool32 gFirstPersonHeightLocked;
+
+void
+setFirstPersonHeightLocked(bool32 locked)
+{
+	if(locked || gFirstPersonHeightLocked) gvk.fpLatchedHeadPos[1]=gvk.headPosition[1];
+	gFirstPersonHeightLocked=locked;
+}
 
 void
 setFirstPersonPositionLocked(bool32 locked)
@@ -3433,6 +3441,7 @@ setHeadPose(const float32 position[3], float32 yaw, const float32 quat[4])
 	memcpy(gvk.headPosition, position, sizeof(gvk.headPosition));
 	gvk.headYaw = yaw;
 	memcpy(gvk.headQuat, quat, sizeof(gvk.headQuat));
+	if(gFirstPersonHeightLocked) gvk.fpLatchedHeadPos[1]=gvk.headPosition[1];
 
 	if(!gvk.firstPersonActive || gFirstPersonPositionLocked){
 		// Outside first person the latch simply follows the head, so first
@@ -3593,6 +3602,15 @@ firstPersonWorldVectorToPlay(const float32 worldVector[3],
 	playVector[0] = worldVector[0]*px[0]+worldVector[1]*px[1]+worldVector[2]*px[2];
 	playVector[1] = worldVector[0]*py[0]+worldVector[1]*py[1]+worldVector[2]*py[2];
 	playVector[2] = worldVector[0]*pz[0]+worldVector[1]*pz[1]+worldVector[2]*pz[2];
+	return 1;
+}
+
+bool32
+consumeFirstPersonRoomscale(const float32 worldDelta[3])
+{
+	float32 play[3];
+	if(!firstPersonWorldVectorToPlay(worldDelta,play)) return 0;
+	for(int i=0;i<3;++i) gvk.fpLatchedHeadPos[i]+=play[i];
 	return 1;
 }
 

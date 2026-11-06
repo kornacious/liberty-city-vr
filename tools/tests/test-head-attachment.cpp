@@ -165,7 +165,9 @@ int main(){
     for(int posture=0;posture<4;posture++){
         ++CTimer::frame;vehicleTransition=posture==0;knockedDown=posture==1;player.bIsDucking=posture==2;playerVehicleState=posture==3?PED_JUMP:PED_IDLE;
         nativeHead.pos=player.root*CVector(-.3f,.3f,.4f);
-        Final(&player,false,p,f);Near(submittedHead,nativeHead.pos,"boarding/falls/crouch/jump retain live head position");
+        Final(&player,false,p,f);
+        Near(submittedHead,posture==2 ? player.root*CVector(.1f,.2f,1.6f)-CVector(0,0,.45f) : nativeHead.pos,
+            "button crouch lowers in place; boarding/falls/jump retain live head position");
     }
     vehicleTransition=knockedDown=player.bIsDucking=false;playerVehicleState=PED_IDLE;
     ++CTimer::frame;nativeHead.pos=player.root*CVector(.3f,.3f,1.1f);
@@ -199,5 +201,14 @@ int main(){
     knockedDown=false;++CTimer::frame;Final(&player,false,p,f);
     Near(submittedUp,{0,0,1},"standing recovers level horizon independent of bone view option");
     Require(resets==anchorWrites*2,"legacy smoothing cleared on every exact submission");
+    QuestHeadAttachment::ComfortAnchor button;
+    CMatrix root;const CVector standingHead(.1f,.2f,1.6f);
+    button.Position(&player,&clump,nullptr,root,standingHead,false,true,true);
+    for(int frame=0;frame<100;++frame){
+        const CVector animated(-.4f+.01f*frame,.5f,.7f);
+        Near(button.Position(&player,&clump,nullptr,root,animated,false,false,true,true),
+            standingHead-CVector(0,0,.45f),"button crouch lowers vertically without native horizontal drift");
+    }
+    Near(button.Position(&player,&clump,nullptr,root,standingHead,false,true,true),standingHead,"button stand restores original position");
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }

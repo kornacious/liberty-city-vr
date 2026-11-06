@@ -392,6 +392,8 @@ void setHeadPose(const float32 position[3], float32 yaw,
 bool32 getFirstPersonNeutralPose(float32 position[3], float32 *yaw);
 // Keep the mono eye at its anchor while retaining headset rotation and stereo IPD.
 void setFirstPersonPositionLocked(bool32 locked);
+void setFirstPersonHeightLocked(bool32 locked);
+bool32 consumeFirstPersonRoomscale(const float32 worldDelta[3]);
 
 // The current first person VIEW expressed in game world axes: where the
 // player is actually looking, head orientation composed onto the anchor.

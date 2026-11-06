@@ -5,6 +5,8 @@
 #define RW_VULKAN 1
 #define __ANDROID__ 1
 #define nil nullptr
+namespace androidgame {static bool fixed=false;static bool VrUsesFixedButtonCrouch(){return fixed;}}
+struct CTimer {static unsigned GetTimeInMilliseconds(){return 1000;}};
 enum { PED_IDLE, PED_JUMP, PEDMOVE_STILL, PEDMOVE_SPRINT,
        ANIM_STD_DUCK_DOWN, ANIM_STD_DUCK_LOW, ASSOC_DELETEFADEDOUT=16 };
 struct CAnimBlendAssociation { float blendDelta=4; int flags=0; };
@@ -67,6 +69,11 @@ int main(){
     pad={};pad.press=true;pad.jump=true;ProcessQuestCrouch(&player,&pad);Check(!player.bIsDucking,"jump wins simultaneous crouch press");
     pad={};pad.press=true;pad.x=1;ProcessQuestCrouch(&player,&pad);Check(!player.bIsDucking,"movement wins simultaneous crouch press");
     pad={};pad.press=true;player.vehicle=true;ProcessQuestCrouch(&player,&pad);Check(!player.bIsDucking,"no vehicle crouch");player.vehicle=false;
+    androidgame::fixed=true;pad={};pad.press=true;pad.x=1;
+    ProcessQuestCrouch(&player,&pad);Check(player.bIsDucking,"Xbox button crouch can enter while moving");
+    pad.jump=true;ProcessQuestCrouch(&player,&pad);
+    Check(player.bIsDucking&&player.m_duckTimer==61000,"Xbox crouch remains toggled and refreshes native timer despite other input");
+    pad.press=true;ProcessQuestCrouch(&player,&pad);standing();androidgame::fixed=false;
     CMatrix visual;visual.r={0,1,0};visual.f={-1,0,0};visual.p={3,4,5};
     RwMatrix bones[2]={{visual.p+CVector(-0.1f,0,-0.6f),{1,0,0},{0,1,0},{0,0,1}},
                        {visual.p+CVector(0.1f,0,-0.6f),{1,0,0},{0,0,1},{0,-1,0}}};

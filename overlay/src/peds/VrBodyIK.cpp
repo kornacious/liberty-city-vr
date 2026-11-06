@@ -1375,7 +1375,8 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 	}
 	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
 	gTrackedStance.Begin(ped,ped->GetClump(),CTimer::GetFrameCounter(),
-		ped->GetPosition(),visualBody.GetForward(),planting);
+		ped->GetPosition(),visualBody.GetForward(),planting,true);
+	gTrackedStance.Advance(input.foot,CTimer::GetTimeStep()/50.0f);
 	if(planting){
 		for(int side=0;side<2;++side){
 			const CVector candidate=gTrackedStance.Candidate(side,input.foot[side]);
@@ -1399,7 +1400,8 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 	QuestBodyPosture::Output solved;
 	if(!QuestBodyPosture::Solve(input,solved)) return;
 	for(int side=0;side<2;++side)
-		if(planting && (solved.foot[side]-input.footTarget[side]).MagnitudeSqr()>0.0004f)
+		if(planting && !gTrackedStance.IsSwinging(side) &&
+		   (solved.foot[side]-input.footTarget[side]).MagnitudeSqr()>0.0025f)
 			gTrackedStance.Release(side); // Reach limit requires a new contact, not a stretched leg.
 	for(int i=0;i<3;++i){
 		const CVector from=CVector(mats[joints[i+1]].pos)-CVector(mats[joints[i]].pos);

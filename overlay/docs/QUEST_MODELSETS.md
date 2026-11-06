@@ -106,12 +106,28 @@ pulling the head short of that target. This also keeps backwards leaning from
 leaving the torso ahead of the eyes; camera fit remains independent of body IK.
 
 While standing, foot contacts retain world positions and orientations on static
-ground, with foot orientation following the ground normal. Walking/running,
-airborne states, large turns, steps, teleports, lost ground and ownership gaps
-release those contacts. Unreachable contacts release rather than stretching a
-leg or moving the camera. The native gait continues during locomotion; this is
-standing foot planting, not a replacement walking/stepping system. Moving-platform
-planting is not implemented. The layer follows the existing Body IK toggle.
+ground, with foot orientation following the ground normal. Physical roomscale
+travel triggers alternating inferred steps: one foot swings over roughly 220 ms
+with up to 6.5 cm lift while the other supports the body. Joystick walking/running
+continues using native gait. Airborne states, large turns, teleports, lost ground
+and ownership gaps release contacts. Unreachable contacts release rather than
+stretching a leg or moving the camera. Moving-platform planting is not implemented.
+The body/step layer follows the existing Body IK toggle.
+
+Original Xbox on-foot roomscale also moves the actual player entity before game
+simulation, so AI targeting and collision sectors follow the physical movement.
+A 10 cm head-lean allowance remains within the body capsule. Transfers use short
+collision-checked substeps over static ground, preserve native velocity and update
+animated bones. The tracking origin consumes accepted horizontal movement to
+prevent double camera motion. Paused/disabled controls, vehicles, airborne and
+incapacitated states do not transfer roomscale into gameplay movement. This root
+synchronization also works with Body IK disabled; Classic behavior is unchanged.
+
+Button crouch is a separate fixed Xbox stance: toggle to lower the camera 45 cm
+vertically from its standing reference, keeping its horizontal position. Physical
+height changes are ignored until crouch is toggled off, with a fresh height
+reference on release. Other input does not cancel the toggle. Physical crouching
+outside this fixed stance continues using the existing tracked posture behavior.
 
 VR Overlay > Locomotion > XBOX HEAD / BODY FIT provides live camera forward,
 height and right offsets in 1 cm steps, body yaw in 1 degree steps, knockdown
@@ -123,13 +139,15 @@ separate personal baseline; RESTORE MY DEFAULT recalls it, and RESET FACTORY FIT
 preserves that baseline. Report the displayed values after fitting them in VR
 if they should become future factory defaults. Recenter does not erase the fit.
 
-Xbox knockdown movement is head-locked by default through getting up: physical
+Xbox knockdown and on-foot arrest/busted movement is head-locked by default through recovery: physical
 translation cannot move the view away from the animated head. The lock releases
 with a fresh physical reference, so movement made while down does not carry into
 the standing view. Head rotation remains tracked. HEAD BONE view follows native
 head orientation only while down/getting up; routine walking retains the level
 comfort orientation. The existing Locomotion KNOCKDOWN VIEW row controls the same
-Xbox option. Classic retains its prior knockdown settings and movement policy.
+Xbox option. Busted letterboxing alone does not select the director/theater camera;
+formal cutscenes retain their existing ownership. Classic retains its prior
+knockdown settings and movement policy.
 
 Host checks and complete compilation do not establish visual headset acceptance.
 Verify all districts/LODs, shared textures, vegetation, wheels/windows, player and

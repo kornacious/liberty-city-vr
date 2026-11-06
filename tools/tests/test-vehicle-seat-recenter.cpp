@@ -74,7 +74,7 @@ struct CVehicle {
  int GetModelIndex(){return model;} CVector GetForward(){return matrix.forward;}
 };
 struct CPlayerPed:CEntity {
- bool inVehicle=false,dead=false; int state=0,m_objective=0;
+ bool inVehicle=false,dead=false,bIsDucking=false; int state=0,m_objective=0;
  CVehicle *m_pMyVehicle=nullptr; void *m_rwObject=this,*m_pFrames[64]={};
  CVector position,forward={0,1,0};
  CVector GetPosition(){return position;} CVector GetForward(){return forward;}
