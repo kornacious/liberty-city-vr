@@ -22,8 +22,15 @@ struct RpHAnimHierarchy {int numNodes=16;RwMatrix matrices[16];};
 struct RpClump {RpHAnimHierarchy *hier;};
 static RwMatrix nativeHead;
 static unsigned rwUpdates,animUpdates,checks;
+struct CVehicle {
+    CMatrix matrix;
+    CVector GetForward(){return matrix.f;} CVector GetUp(){return matrix.u;}
+    bool IsBike(){return false;}
+};
 struct CPed {
     CMatrix root;RpClump *clump;bool player=true,skinned=true;
+    bool vehicle=false,bIsDucking=false;CVehicle *m_pMyVehicle=nullptr;
+    bool InVehicle(){return vehicle;}CVector GetForward(){return root.f;}
     bool IsPlayer(){return player;} RpClump *GetClump(){return clump;}
     CMatrix &GetMatrix(){return root;}
     void UpdateRwFrame(){++rwUpdates;}
@@ -47,6 +54,13 @@ static unsigned resets,anchorWrites;
 static struct {void Reset(){++resets;}} gCrouchView,gKnockdownView;
 static CVector submittedHead,submittedRight,submittedUp,submittedForward;
 static float Atan2(float y,float x){return std::atan2(y,x);}
+enum {PED_IDLE,PED_DRIVING,PED_JUMP};
+static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
+static int playerVehicleState=PED_IDLE;
+static bool PlayerKnockedDown(CPed*){return knockedDown;}
+namespace androidgame {static bool bobbing=true;static bool VrHeadBobbingEnabled(){return bobbing;}}
+namespace OculusVR {static bool IsQuestBikeHorizonLocked(){return false;}}
+static struct {struct {CVector Front{0,1,0};} Cams[1];int ActiveCam=0;} TheCamera;
 namespace rw {namespace vulkan {
 static void setFirstPersonAnchorBasis(const float*h,const float*r,const float*u,const float*f,float,int,bool preserve){
     if(!preserve)std::exit(2);++anchorWrites;
@@ -55,9 +69,8 @@ static void setFirstPersonAnchorBasis(const float*h,const float*r,const float*u,
 }}
 static void Require(bool v,const char*m){++checks;if(!v){std::fprintf(stderr,"FAIL %s\n",m);std::exit(1);}}
 static void Near(CVector a,CVector b,const char*m){Require((a-b).Magnitude()<0.0001f,m);}
-static bool Final(CPed *player,bool thirdPersonVehicle,CVector &head,CVector &forward){
+static bool Final(CPed *player,bool thirdPersonVehicle,CVector &head,CVector &forward,bool postPhysics=true){
     bool fullVehicleBasis=false;
-    bool postPhysics=true;
 #include "head-attachment-final.inc"
     return fullVehicleBasis;
 }
@@ -102,8 +115,8 @@ int main(){
         Near(p,nativeHead.pos+CVector(.07f,-.03f,.01f),"same-frame carrier motion has no delay");
         CVector legacyHead(50,-40,-3),legacyForward(1,0,0);
         Require(Final(&player,false,legacyHead,legacyForward),"native pose owns final camera submission");
-        Near(submittedHead,p,"final submission erases legacy crouch/train/knockdown offsets");Near(submittedForward,f,"head orientation submitted");
-        Near(submittedRight,r,"head roll submitted");Near(submittedUp,u,"head pitch submitted");
+        Near(submittedHead,p,"bobbing on follows exact head position");Near(submittedForward,player.root.f,"animation head turns do not steer the camera");
+        Near(submittedRight,player.root.r,"animation roll does not steer the camera");Near(submittedUp,{0,0,1},"level locomotion up ignores head pitch and rest tilt");
     }
     CVector p(1,2,3),f(0,1,0);unsigned writes=anchorWrites;
     Require(!Final(&player,true,p,f)&&anchorWrites==writes,"third person keeps its own camera");
@@ -129,6 +142,46 @@ int main(){
     bad=nativeHead;bad.pos.x=NAN;
     invalid.Capture(&player,&clump,CTimer::frame,player.root,bad);
     Require(!invalid.Read(player.root,out),"non-finite native position rejected");
+    // Execute the real final-camera block against the live toggle, not only
+    // the latch helper. Root motion remains immediate while bone gait is removed.
+    androidgame::bobbing=false;player.root=CMatrix();
+    ++CTimer::frame;nativeHead=RwMatrix();nativeHead.pos={.1f,.2f,1.6f};
+    Require(Final(&player,false,p,f),"bobbing off captures standing anatomy");
+    for(int i=0;i<200;i++){
+        ++CTimer::frame;float yaw=i*.02f;
+        player.root.r={std::cos(yaw),std::sin(yaw),0};player.root.f={-std::sin(yaw),std::cos(yaw),0};player.root.p={i*.2f,i*.1f,1};
+        nativeHead.pos=player.root*CVector(.1f+std::sin(float(i))*.1f,.2f+std::cos(float(i))*.1f,1.6f+std::sin(float(i))*.2f);
+        Require(Final(&player,false,p,f),"idle/walk/run pose available with bobbing off");
+        Near(submittedHead,player.root*CVector(.1f,.2f,1.6f),"off removes gait in all axes but follows root without delay");
+        Near(submittedUp,{0,0,1},"off retains level horizon");
+    }
+    for(int posture=0;posture<4;posture++){
+        ++CTimer::frame;vehicleTransition=posture==0;knockedDown=posture==1;player.bIsDucking=posture==2;playerVehicleState=posture==3?PED_JUMP:PED_IDLE;
+        nativeHead.pos=player.root*CVector(-.3f,.3f,.4f);
+        Final(&player,false,p,f);Near(submittedHead,nativeHead.pos,"boarding/falls/crouch/jump retain live head position");
+    }
+    vehicleTransition=knockedDown=player.bIsDucking=false;playerVehicleState=PED_IDLE;
+    ++CTimer::frame;nativeHead.pos=player.root*CVector(.3f,.3f,1.1f);
+    Final(&player,false,p,f);Near(submittedHead,player.root*CVector(.1f,.2f,1.6f),"get-up cannot relatch a low recovery sample");
+    androidgame::bobbing=true;++CTimer::frame;Final(&player,false,p,f);Near(submittedHead,nativeHead.pos,"on restores live positional bob immediately");
+    androidgame::bobbing=false;
+    CVehicle train;train.matrix.p={20,30,2};player.root=train.matrix;
+    player.vehicle=gVrInVehicle=trainPassenger=true;player.m_pMyVehicle=&train;playerVehicleState=PED_DRIVING;
+    ++CTimer::frame;nativeHead.pos=player.root*CVector(-.25f,.1f,1.0f);
+    Final(&player,false,p,f,false);Near(submittedHead,nativeHead.pos,"early train occupancy does not commit standing reference");
+    nativeHead.pos=player.root*CVector(-.25f,.1f,2.1f);
+    Final(&player,false,p,f,true);Near(submittedHead,nativeHead.pos,"train commits actual post-lineup head position");
+    ++CTimer::frame;player.root.p+=CVector(5,2,0);nativeHead.pos=player.root*CVector(-.2f,.15f,1.9f);
+    Final(&player,false,p,f);Near(submittedHead,player.root*CVector(-.25f,.1f,2.1f),"standing train removes idle bob while following carriage immediately");
+    trainPassenger=false;train.matrix.f={1,0,0};train.matrix.r={0,-.8f,.6f};train.matrix.u={0,.6f,.8f};
+    ++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedForward,train.matrix.f,"driving follows carrier heading rather than head animation");
+    Near(submittedUp,train.matrix.u,"driving retains carrier tilt");
+    player.vehicle=gVrInVehicle=false;player.m_pMyVehicle=nullptr;headModeOnFoot=true;
+    TheCamera.Cams[0].Front={3,0,4};
+    ++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedForward,{1,0,0},"head-relative locomotion keeps gameplay heading without animation pitch");
+    Near(submittedUp,{0,0,1},"returning on foot levels the horizon");
     Require(resets==anchorWrites*2,"legacy smoothing cleared on every exact submission");
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }

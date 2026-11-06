@@ -43,6 +43,7 @@
 #include "AnimBlendClumpData.h"
 #include "Bones.h"
 #include "QuestPlayerRig.h"
+#include "QuestHeadAttachment.h"
 #include "AnimBlendAssociation.h"
 #include "ModelIndices.h"
 #include "ModelInfo.h"
@@ -1908,10 +1909,28 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			VrBodyIK::GetCameraHeadPose(player, &boneHead, &boneRight,
 				&boneUp, &boneForward, postPhysics);
 		if(exactBoneCamera){
-			// Final authority for Original Xbox: native head pose, with no
-			// standing height, eye nudge, train marker offset, seat calibration
-			// or crouch/knockdown interpolation surviving into the view.
-			head = boneHead;
+			static QuestHeadAttachment::ComfortAnchor comfortableHead;
+			const bool routineHeadMotion = !vehicleTransition &&
+				!PlayerKnockedDown(player) && !player->bIsDucking &&
+				playerVehicleState != PED_JUMP && (!gVrInVehicle || trainPassenger);
+			head = comfortableHead.Position(player, player->GetClump(),
+				player->InVehicle() ? player->m_pMyVehicle : nil,
+				player->GetMatrix(), boneHead, androidgame::VrHeadBobbingEnabled(),
+				routineHeadMotion, postPhysics);
+			// Animation head roll/nods/look-arounds never steer the HMD.
+			// Use the locomotion/carrier frame; the headset owns head rotation.
+			CVector heading = player->GetForward(), vertical(0,0,1);
+			if(gVrInVehicle && player->m_pMyVehicle != nil){
+				CVehicle *carrier = player->m_pMyVehicle;
+				if(!trainPassenger) heading = carrier->GetForward();
+				vertical = carrier->GetUp();
+				if(carrier->IsBike() && OculusVR::IsQuestBikeHorizonLocked())
+					vertical = CVector(0,0,1);
+			}else if(headModeOnFoot){
+				heading = TheCamera.Cams[TheCamera.ActiveCam].Front;
+			}
+			QuestHeadAttachment::ViewBasis(heading, vertical,
+				boneRight, boneUp, boneForward);
 			forward = boneForward;
 			gCrouchView.Reset();
 			gKnockdownView.Reset();

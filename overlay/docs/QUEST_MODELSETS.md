@@ -70,11 +70,16 @@ verification against the retail models in VR.
 
 The first-person camera recognizes Xbox Claude through his posed skin hierarchy,
 including its head and torso bones. Classic retains its rigid-frame eligibility
-rules. Original Xbox first-person gameplay attaches the camera anchor directly
-to the native head bone's position and orientation, including train boarding,
-standing passengers, vehicle transitions, crouching and knockdowns. The pose is
-captured before VR IK/head hiding and carried with the current entity transform.
-It has no additional eye/seat/train offsets or crouch/knockdown easing. Existing
+rules. Original Xbox first-person gameplay derives camera position from the
+native head bone, including train boarding, standing passengers, vehicle
+transitions, crouching and knockdowns. The pose is captured before VR IK/head
+hiding and carried with the current entity transform. Animated head rotations
+never steer the view: the locomotion/carrier frame and tracked headset determine
+orientation, keeping the on-foot horizon level. WALKING HEAD BOB enables live
+positional animation; when disabled, routine idle/walk/run and standing train
+poses retain a stable bone-derived local position. Posture changes and vehicle
+transitions still follow the live head immediately. It has no additional
+eye/seat/train offsets or crouch/knockdown easing. Existing
 seat calibration is bypassed in this mode; tracked headset movement and stereo
 eyes remain relative to the bone anchor. Classic and third-person retain their
 existing camera paths.

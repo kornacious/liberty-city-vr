@@ -10,6 +10,55 @@ struct Pose
 	CVector position, right, up, forward;
 };
 
+// Walking bob is optional; scripted/posture changes still use the live bone.
+// Keep the standing reference across crouch/get-up so recovery cannot latch a
+// half-height animation frame. Relatch only for a new model/carrier or toggle.
+class ComfortAnchor
+{
+	const void *owner = nil, *clump = nil, *carrier = nil;
+	bool valid = false;
+	CVector local;
+public:
+	CVector Position(const void *ped, const void *model, const void *vehicle,
+		const CMatrix &root, const CVector &nativeHead, bool bobbing,
+		bool routineMotion, bool postPhysics)
+	{
+		if(owner != ped || clump != model || carrier != vehicle){
+			owner = ped; clump = model; carrier = vehicle; valid = false;
+		}
+		if(bobbing){ valid = false; return nativeHead; }
+		if(!routineMotion) return nativeHead;
+		if(!valid){
+			// Occupancy can change before the native boarding lineup. Commit
+			// only after simulation; never retain that early lower pose.
+			if(!postPhysics) return nativeHead;
+			local = Invert(root) * nativeHead;
+			valid = true;
+		}
+		return root * local;
+	}
+};
+
+inline void ViewBasis(CVector heading, CVector vertical,
+	CVector &right, CVector &up, CVector &forward)
+{
+	if(vertical.MagnitudeSqr() <= 1.0e-8f) vertical = CVector(0,0,1);
+	vertical.Normalise();
+	heading -= vertical * DotProduct(heading, vertical);
+	if(heading.MagnitudeSqr() <= 1.0e-8f){
+		heading = CVector(0,1,0);
+		heading -= vertical * DotProduct(heading, vertical);
+		if(heading.MagnitudeSqr() <= 1.0e-8f){
+			heading = CVector(1,0,0);
+			heading -= vertical * DotProduct(heading, vertical);
+		}
+	}
+	heading.Normalise();
+	right = CrossProduct(heading, vertical); right.Normalise();
+	up = CrossProduct(right, heading); up.Normalise();
+	forward = heading;
+}
+
 class Snapshot
 {
 	const void *owner = nil;
