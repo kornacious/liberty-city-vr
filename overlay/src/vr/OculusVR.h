@@ -10,8 +10,8 @@ class CVehicle;
 
 // Single source of truth for the build name shown to players: the flat main
 // menu, the VR About page and the APK version must never disagree again.
-#define MIAMIVR_VERSION_TEXT "0.7.0"
-#define LIBERTYVR_VERSION_TEXT "0.7.0"
+#define MIAMIVR_VERSION_TEXT "0.8.0"
+#define LIBERTYVR_VERSION_TEXT "0.8.0"
 
 namespace OculusVR
 {

@@ -37,13 +37,27 @@ population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version: **v0.7.0**.
+Current source-kit version: **v0.8.0 — release candidate**.
+
+**Ready for public testing and playing, with finishable main missions.** Please
+report mission progression issues, VR comfort problems and compatibility bugs
+in the Flat2VR community. See [the changelog](CHANGELOG.md#080--release-candidate)
+for changes since the 0.7.0 version commit.
 
 The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
 foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
 added to Liberty City VR after the 0.6.0 port baseline, including full-body IK
 and weapon calibration improvements, physical scopes, custom music and the
 vehicle radio board, safer autosaves, and rendering, audio and gameplay fixes.
+**v0.8.0** adds the cross-platform manager, bidirectional save transfer,
+headset playlist management, tracked spatial audio, the vehicle placement editor
+and calibrated defaults, Classic/Modern Xbox HD models, dual wielding, immersive
+speedometers, train/camera/mission fixes, and expanded graphics/profiling tools.
+See the [gameplay guide](overlay/docs/QUEST_GAMEPLAY.md),
+[spatial audio notes](overlay/docs/SPATIAL_AUDIO.md),
+[model guide](overlay/docs/QUEST_MODELSETS.md),
+[vehicle editor guide](tools/vehicle-editor/README.md) and
+[capture guide](overlay/docs/PERFORMANCE_CAPTURE.md) for details.
 Existing graphics and calibration preferences are preserved. See
 [the changelog](CHANGELOG.md) for the release history and
 [performance notes](PERFORMANCE.md) for the inherited rendering optimizations.

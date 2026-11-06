@@ -1,5 +1,11 @@
 # Liberty City VR Manager
 
+Included with **Liberty City VR 0.8.0 — release candidate**, ready for public
+testing and playing with finishable main missions. Build/install and update
+read the Android version code (**800**) from the source kit. See the
+[release changelog](../../CHANGELOG.md#080--release-candidate) for manager, music,
+save-transfer and game changes since 0.7.0.
+
 Build and install includes an optional **Convert and compress radio stations**
 checkbox. Configure FFmpeg and ffprobe in Settings. It converts locally to
 AAC-LC/M4A for direct Quest playback, either from your PC game folder alongside

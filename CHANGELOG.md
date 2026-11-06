@@ -1,66 +1,104 @@
 # Changelog
 
 The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
-port from GTA Vice City to GTA III; 0.7.0 covers subsequent additions and fixes.
+port from GTA Vice City to GTA III. Later entries describe Liberty City VR releases.
+
+## 0.8.0 — Release candidate
+
+Ready for public testing and playing, with finishable main missions. This is a
+release candidate; feedback on mission progression, VR comfort and compatibility
+is welcome. Distribution remains a source build requiring legally owned local
+GTA III PC data.
+
+Changes since the 0.7.0 version commit
+`171c58921b5ddb9b442cc595edda703e08122bd4` through `2aa5753`
+(the last gameplay change before this version bump).
+
+### Missions, controls and VR gameplay
+
+- Fixed garage camera overrides and mission delivery exit clearance, including
+  room-scale eye position and reopening when the player returns during closure.
+- Made Ammu-Nation entry and exit seamless: retain normal VR turning and bypass
+  fades, staged teleports and control freezes while preserving purchases.
+  Bypass ambient Belleville Park bathroom cameras and fixed stair camera zones.
+- Fixed original-model cutscene actor camera selection and restored R3 cinematic
+  switching. Refined train passenger eyes, neck clearance and boarding turns;
+  retain the passenger body without its head, passenger IK and immersive HUD.
+- Corrected crouch body/head alignment and recovery, directional locomotion
+  animations, recenter heading and forward braking slides. Fixed ungripped hand
+  flicker in moving vehicles and hide the body when tracked hands are disabled.
+- Added optional pistol/SMG dual wielding with independent magazines. Restored
+  rocket launch speed and require both hands to fire the launcher. Fixed weapon
+  laser disabling, throwable overlays and NPC reactions to silent VR aiming.
+- Scale physical melee strength by stroke speed and distance; allow blunt strikes
+  with held guns. Added adjustable holster grab distance and independent front
+  holster adjustment while keeping shoulder reach fixed.
+- Enabled full fixed-wing flight physics for the Dodo. Added digital and analog
+  immersive car speedometers with shared placement, immersive car-window
+  visibility and separate Vehicles settings pages. Fixed emergency siren double
+  taps, third-person steering animation, radar road masks and pedestrian step-down.
+- Added Flight and Noclip cheats, Town Hall recovery, weather/time and mission
+  countdown controls, paginated vehicle spawning and driver-seat selection.
+  Improved cheat labels and toggle states; traversal boost uses the right
+  thumbstick with a higher boosted speed and trigger boost control.
+- Adapted ragdolls and visual vehicle deformation to GTA III native contacts,
+  original and skinned NPC rigs and pre-impact motion. Preserve evasion/getup
+  animations and allow NPC recovery beside cars when current geometry is clear.
+  Pedestrian body contacts no longer damage vehicles.
+- Centered startup branding and mapped Quest B to menu Back.
+
+### Audio, models and placement tools
+
+- Added tracked-listener spatial audio with measured HRTFs for world localization.
+- Consolidated Classic and Modern (Xbox HD) model selection around a pinned GTA III
+  Xbox Version HD re3 pack. Load matching world data and Claude skin, restore
+  shared texture fallback, repair HD wheel textures and retain opaque vehicle
+  body depth while blending glass. Improved installer SDK discovery, native
+  warning handling, preparation prompts and progress reporting.
+- Added a standalone vehicle placement editor with Classic/Modern profiles,
+  cameras, render/radio previews, saved preferences, placement transfer and
+  acknowledged live synchronization. Bundle calibrated per-model placements
+  in the APK, separate from personal overrides.
+- Added optional local radio conversion to Quest-native AAC-LC/M4A in the manager;
+  validate replacements before removing headset WAVs. Keep FFprobe diagnostics
+  out of radio metadata JSON.
+
+### Manager, music and saves
+
+- Consolidated build/install, update, model installation, repair, editor building
+  and auxiliary tools/tests in the Windows/Linux .NET 10 manager. Use MANAGE.bat
+  or MANAGE.sh; the old per-action root launchers are removed.
+- Added native bidirectional PC/Quest save transfer with multiple slots, dedicated
+  Autosave, backups and read-back verification.
+- Added headset music management with metadata captions, ordered playlists,
+  range/multi-file selection, group reordering and deletion. Imported tracks
+  append after the current playlist order.
+- Sanitize device diagnostics and keep private device identifiers out of menus,
+  settings and shared logs. Migrated repository privacy hooks and checks to the
+  native manager.
+
+### Rendering, performance and diagnostics
+
+- Added 75% and 90% render scales, world LOD quality modes and a graphics
+  optimization submenu. LOD fade transitions, stereo world occlusion,
+  backface culling, opaque ordering, mesh batching and static instancing include
+  guarded benchmark/experimental controls. Existing graphics preferences remain.
+- Reduced redundant Vulkan frame/pipeline and static-world state work. Added
+  proven-opaque shader selection, empty alpha-pass rejection, road culling
+  outside both tracked views and guarded native-resolution postprocessing.
+- Fixed boat-window depth hiding water and distant-building sun/flare occlusion;
+  restore smooth sun glow and flare visibility transitions.
+- Added automobile simulation recording/replay, ghost mode, route assistance,
+  forward-view benchmarks and automatic captures. Expanded raw Quest performance
+  capture, player/vehicle context, sampled geometry/material ownership, draw counts
+  and whole-render-pass GPU timing. Added replay-timed RenderDoc captures and
+  scoped read-only local capture export; minimal profiling shows replay time.
 
 ## 0.7.0
 
 Features and fixes added after the 0.6.0 GTA III port baseline.
 
 ### GTA III integration, controls and reliability
-
-- Let ambient NPCs recover beside cars when their standing body has clearance.
-  Replace stale vehicle-contact blocking with a bounded check against current
-  collision geometry while retaining genuine under-car and overhead obstruction.
-
-- Preserve NPC evasion, cover and recovery animations when ragdolls are enabled.
-  Initialize the native recovery deadline before live ragdoll admission, remove
-  the duplicate vehicle admission path, and stop overriding the first getup pose.
-
-- Connect ragdolls and visual vehicle deformation to GTA III's native physics.
-  Support original rigid NPC frames and skinned replacements with separate
-  virtual neck/clavicle joints, pass pre-impact motion and contact positions,
-  exclude animated bullet proxies, and use solved body bounds. Feed deformation
-  from all accepted collision paths and advance it independently of visibility.
-  Add GTA III integration regressions and local NPC/vehicle model diagnostics.
-
-- Keep the normal Quest player camera inside both Ammu-Nation shops so their
-  fixed overview cannot lock VR turning, and remove their entry/exit fades.
-  Remove staged player teleports, heading changes, control freezes, camera
-  resets and doorway clearing so players can walk in and out naturally.
-  Keep shopkeeper, purchase and shop-state logic running.
-
-- Bypass the ambient Belleville Park bathroom camera script on Quest, removing
-  its fixed hallway views, fades, control freezes and staged repositioning so
-  the player can walk through and turn normally in VR. Include retail saved
-  threads marked as mission-launched; this launch bit does not mean the
-  ambient camera belongs to an active story mission.
-
-- Keep Quest's normal player camera in stair camera zones, including safehouse
-  stairs, so their desktop fixed camera cannot lock the player's turning
-  direction.
-
-- Consolidate model assets into Classic and Modern (Xbox HD), migrate old Xbox
-  selections, and load the HD pack as a whole. Restore desktop re3's shared
-  generic texture fallback on Quest and preserve opaque vehicle body depth
-  while blending glass in mixed alpha materials.
-
-- Find the Liberty City build wizard's cached Android SDK during optional model
-  installation on Windows/Linux. Treat native SDK/Gradle stderr warnings as
-  diagnostics in Windows PowerShell 5.1 while enforcing process failure codes.
-
-- Make model preparation prompts visible through PowerShell's output pipeline,
-  run Python unbuffered, bound interpreter probes, and show file/byte progress
-  through validation, extraction, conversion and archive creation.
-
-- Replace Xbox/Modern preparation with the pinned GTA III Xbox Version HD (re3)
-  pack on Windows/Linux. Merge the complete visual archives, validate every
-  source/output file, filter streaming by category, route matching world map
-  data and share Xbox VR calibration across the new profile aliases.
-
-- Sanitized device identifiers in build/install, model-install and game-file
-  repair diagnostics. Device menus show numbered model names; Windows logs
-  no longer include transcript headers containing launch arguments.
 
 - Added full-body IK and articulated GTA III-style hands, including support for
   non-skinned PC models, room-scale tracking, vehicle entry and cutscene cameras.

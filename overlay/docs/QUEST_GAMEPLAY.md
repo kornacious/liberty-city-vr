@@ -1,5 +1,31 @@
 # Quest gameplay
 
+## 0.8.0 release candidate
+
+Ready for public testing and playing, with finishable main missions. Report
+mission progression, comfort and compatibility issues with the mission name,
+Classic/Modern model choice and steps to reproduce. Keep saves and game data
+local and omit personal device identifiers from reports.
+
+Quest garages retain the player camera and require both the player body and
+tracked eyes to clear the delivery doorway. Ammu-Nation shops preserve normal
+VR turning and seamless entry/exit while their purchase logic keeps running.
+Ambient bathroom and stair cameras no longer take over the player view. Train
+passenger views retain the body, tracked hands and immersive HUD, with adjusted
+eye/neck clearance. R3 switches cinematic views.
+
+Vehicles settings include immersive car windows and digital/analog speedometers
+with shared placement. The Dodo uses full fixed-wing flight physics. Optional
+pistol/SMG dual wielding uses separate magazines; the rocket launcher requires
+both hands. Holster grab distance is adjustable independently of front holster
+placement. See the [weapon guide](QUEST_WEAPON_CALIBRATION.md) for calibration.
+
+Flight/Noclip, weather/time, mission countdown and paginated vehicle spawn
+controls are in the cheat menus. See the
+[changelog](../../CHANGELOG.md#080--release-candidate) for the release changes.
+
+## Controls and behavior
+
 The in-headset menus group cheats by purpose. Back returns to the parent
 category. Never Wanted is under WANTED / POLICE; it clears current pursuit and
 blocks new wanted levels while enabled. The override is separate from native

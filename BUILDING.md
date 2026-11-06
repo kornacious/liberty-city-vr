@@ -1,5 +1,10 @@
 # Build and manage Liberty City VR
 
+This guide builds **0.8.0**, the release candidate ready for public testing and
+playing with finishable main missions. Android uses version code **800**; the
+APK and native About/menu version strings are **0.8.0**. See the
+[changelog](CHANGELOG.md#080--release-candidate) for the release changes.
+
 The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 
 ```text

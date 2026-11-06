@@ -2,8 +2,14 @@
 
 This is the historical Vice City VR 0.5.5.1 maintenance record. Its optimizations
 were inherited through Vice City VR 0.5.6 into the Liberty City VR 0.6.0 port
-baseline and are retained in 0.7.0; current player defaults are documented in
+baseline and are retained in 0.8.0; current player defaults are documented in
 [QUEST_PORT.md](overlay/docs/QUEST_PORT.md).
+
+For 0.8.0 graphics changes and experimental benchmark controls, see the
+[changelog](CHANGELOG.md#080--release-candidate). Recording/replay, sampled GPU
+timings and local RenderDoc export are documented in the
+[capture guide](overlay/docs/PERFORMANCE_CAPTURE.md). Results depend on scene
+and settings; this historical record does not validate those experiments.
 
 This release addresses costs introduced after 0.5.2 that could remain even with
 new visual effects disabled. It does not include the separate ragdoll or culling
