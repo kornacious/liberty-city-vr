@@ -19,6 +19,19 @@ inline CVector Lean(CVector delta, const CVector &up)
 	return n > 0.28f ? delta*(0.28f/n) : delta;
 }
 
+inline CVector Heading(CVector forward,CVector right,const CVector &up,const CVector &fallback)
+{
+	forward-=up*DotProduct(forward,up);
+	// Forward becomes ambiguous when looking straight down/up. Headset right
+	// still carries the physical facing; falling back to entity yaw can flip
+	// the torso by 180 degrees exactly when the player looks down at it.
+	if(forward.MagnitudeSqr()<0.04f){
+		right-=up*DotProduct(right,up);
+		if(right.MagnitudeSqr()>1.0e-8f) forward=CrossProduct(up,right);
+	}
+	return Unit(forward,fallback);
+}
+
 // Minimal swing preserves each bone's authored twist/axis convention.
 inline CVector Swing(const CVector &v, CVector from, CVector to)
 {

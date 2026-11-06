@@ -29,6 +29,8 @@ struct CEntity {};
 struct CColPoint {CVector point,normal;};
 static bool groundFound=false,headTargetAvailable=false;
 static CVector skeletonHead;
+static CVector viewRight(1,0,0),viewForward(0,1,0);
+static bool fixedEyeFit=false;
 namespace CWorld {
 static bool ProcessVerticalLine(CVector from,float,CColPoint &hit,CEntity*&,bool,bool,bool,bool,bool,bool,void*){
     hit.point={from.x,from.y,0};hit.normal={0,0,1};return groundFound;
@@ -47,9 +49,10 @@ static CVector FromBasisLocal(CVector p,const CMatrix &m){return m.r*p.x+m.u*p.y
 static float ClampF(float value,float lo,float hi){return QuestBodyPosture::Bounded(value,lo,hi);}
 static CMatrix MatrixFromRw(const RwMatrix &m){CMatrix b;b.p=m.pos;b.r=m.right;b.u=m.up;b.f=m.at;return b;}
 namespace androidgame {
-static bool VrGetViewBasis(float *p,float*,float*,float*){if(!tracking)return false;p[0]=eye.x;p[1]=eye.y;p[2]=eye.z;return true;}
+static bool VrGetViewBasis(float *p,float *r,float*,float *f){if(!tracking)return false;p[0]=eye.x;p[1]=eye.y;p[2]=eye.z;if(r){r[0]=viewRight.x;r[1]=viewRight.y;r[2]=viewRight.z;}if(f){f[0]=viewForward.x;f[1]=viewForward.y;f[2]=viewForward.z;}return true;}
 static bool VrGetOnFootBodyAnchor(float *p){p[0]=anchor.x;p[1]=anchor.y;p[2]=anchor.z;return true;}
 static bool VrGetOnFootSkeletonHead(float *p){p[0]=skeletonHead.x;p[1]=skeletonHead.y;p[2]=skeletonHead.z;return headTargetAvailable;}
+static void VrGetXboxHeadOffset(float *f,float *u,float *r){const CVector fit=fixedEyeFit?CVector(.02f,.06f,.08f):anchor-skeletonHead;*f=fit.y;*u=fit.z;*r=fit.x;}
 }
 #include "body-posture-runtime.inc"
 int main(){
@@ -217,5 +220,31 @@ int main(){
         Require(carried[6].pos.z<.08f||carried[9].pos.z<.08f,"production roomscale stepping retains a low support foot");
     }
     Require(visibleSwings[0]>5&&visibleSwings[1]>5,"both production leg chains express alternating physical step lift");
+    // Eye-socket fit is relative to physical facing, not the initial game yaw.
+    // The torso may reset at any angle without moving the eye or putting the
+    // neck in front of it. Include straight-down and past-vertical head poses.
+    fixedEyeFit=true;headTargetAvailable=true;ped={};
+    anchor={.02f,.06f,1.65f};eye=anchor;skeletonHead={0,0,1.57f};
+    for(bool resetEachPose:{false,true})for(float pitch:{0.0f,-1.4f,-1.5707963f,-1.7f})
+    for(int angle=0;angle<=72;++angle){
+        const float physicalYaw=float(angle)*.0872664626f;
+        const CVector forward(-std::sin(physicalYaw),std::cos(physicalYaw),0),right(std::cos(physicalYaw),std::sin(physicalYaw),0);
+        viewRight=right;viewForward=forward*std::cos(pitch)+CVector(0,0,std::sin(pitch));
+        visual=CMatrix();visual.r=right;visual.f=forward;
+        for(int i=0;i<14;++i){
+            carried[i]=native[i];carried[i].pos=right*native[i].pos.x+forward*native[i].pos.y+CVector(0,0,native[i].pos.z);
+            carried[i].right=right*native[i].right.x+forward*native[i].right.y+CVector(0,0,native[i].right.z);
+            carried[i].up=right*native[i].up.x+forward*native[i].up.y+CVector(0,0,native[i].up.z);
+            carried[i].at=right*native[i].at.x+forward*native[i].at.y+CVector(0,0,native[i].at.z);
+        }
+        if(resetEachPose)gTrackedStance.Reset();
+        ++CTimer::frame;const CVector eyeBefore=eye;
+        ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+        const CVector socket=eye-carried[3].pos;
+        Require(std::fabs(DotProduct(socket,forward)-.06f)<.0002f,"eye remains ahead of neck at every physical yaw");
+        Require(std::fabs(DotProduct(socket,right)-.02f)<.0002f,"side eye fit turns with the body");
+        Require(std::fabs(socket.z-.08f)<.0002f,"physical turns preserve vertical eye fit");
+        Near(eye,eyeBefore,"turning fit correction never moves the camera");
+    }
     std::printf("PASS %u body posture checks\n",checks);
 }

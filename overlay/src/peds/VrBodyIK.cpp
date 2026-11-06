@@ -528,6 +528,8 @@ static bool BuildGroundedVisualBody(CPed *ped,
 		up = Unit(up, CVector(0.0f, 0.0f, 1.0f));
 
 		CVector forward(forwardRaw[0], forwardRaw[1], forwardRaw[2]);
+		if(UsesNativeCameraHead(ped))
+			forward=QuestBodyPosture::Heading(forward,CVector(rightRaw[0],rightRaw[1],rightRaw[2]),up,visualBody.GetForward());
 		forward -= up*DotProduct(forward, up);
 		if(forward.MagnitudeSqr() > 1.0e-8f){
 			forward.Normalise();
@@ -632,22 +634,26 @@ static bool StabilizeUpperBody(CPed *ped, RwMatrix *mats,
 	RwMatrix &mid = mats[b.mid];
 	RwMatrix &torso = mats[b.torso];
 	RwMatrix &head = mats[b.head];
+	// Native animation matrices have not been yawed into visualBody yet.
+	// Cache anatomy in entity space, independently of the HMD facing at
+	// first enable/recenter; reconstruct it in visualBody only when applying.
+	const CMatrix &referenceBody=UsesNativeCameraHead(ped) ? nativeBody : visualBody;
 
 	if(!gUpperBody.valid){
 		gUpperBody.midPosLocal =
-			ToBasisLocal(CVector(mid.pos)-visualRoot, visualBody);
+			ToBasisLocal(CVector(mid.pos)-visualRoot, referenceBody);
 		gUpperBody.torsoPosLocal =
-			ToBasisLocal(CVector(torso.pos)-visualRoot, visualBody);
+			ToBasisLocal(CVector(torso.pos)-visualRoot, referenceBody);
 		gUpperBody.nativeTorsoPosLocal =
 			ToBasisLocal(CVector(torso.pos)-nativeRoot, nativeBody);
 
-		gUpperBody.midRightLocal = ToBasisLocal(mid.right, visualBody);
-		gUpperBody.midUpLocal = ToBasisLocal(mid.up, visualBody);
-		gUpperBody.midAtLocal = ToBasisLocal(mid.at, visualBody);
+		gUpperBody.midRightLocal = ToBasisLocal(mid.right, referenceBody);
+		gUpperBody.midUpLocal = ToBasisLocal(mid.up, referenceBody);
+		gUpperBody.midAtLocal = ToBasisLocal(mid.at, referenceBody);
 
-		gUpperBody.torsoRightLocal = ToBasisLocal(torso.right, visualBody);
-		gUpperBody.torsoUpLocal = ToBasisLocal(torso.up, visualBody);
-		gUpperBody.torsoAtLocal = ToBasisLocal(torso.at, visualBody);
+		gUpperBody.torsoRightLocal = ToBasisLocal(torso.right, referenceBody);
+		gUpperBody.torsoUpLocal = ToBasisLocal(torso.up, referenceBody);
+		gUpperBody.torsoAtLocal = ToBasisLocal(torso.at, referenceBody);
 
 		gUpperBody.headFromTorsoLocal =
 			ToBasisLocal(CVector(head.pos)-CVector(torso.pos), nativeBody);
@@ -727,7 +733,7 @@ static void StabilizeShoulderRoot(CPed *ped, RwMatrix *mats,
 
 	if(!anchor.valid){
 		anchor.upperPosLocal =
-			ToBasisLocal(CVector(upper.pos)-nativeRoot, nativeBody);
+			ToBasisLocal(CVector(upper.pos)-(UsesNativeCameraHead(ped) ? visualBody.GetPosition() : nativeRoot), nativeBody);
 		anchor.valid = true;
 	}
 
@@ -1330,8 +1336,8 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 	if(!UsesNativeCameraHead(ped) || ped->InVehicle() ||
 	   gVehicleTransitionActive || ped->m_nPedState==PED_JUMP ||
 	   hier->numNodes<=0 || hier->numNodes>MAX_BODY_IK_NODES){gTrackedStance.Reset();return;}
-	float eyeRaw[3],anchorRaw[3];
-	if(!androidgame::VrGetViewBasis(eyeRaw,nil,nil,nil) ||
+	float eyeRaw[3],anchorRaw[3],headRightRaw[3],headForwardRaw[3];
+	if(!androidgame::VrGetViewBasis(eyeRaw,headRightRaw,nil,headForwardRaw) ||
 	   !androidgame::VrGetOnFootBodyAnchor(anchorRaw)){gTrackedStance.Reset();return;}
 	const int joints[]={body.waist,body.mid,body.torso,body.head,
 		RpHAnimIDGetIndex(hier,BONE_upperlegl),RpHAnimIDGetIndex(hier,BONE_lowerlegl),
@@ -1369,8 +1375,17 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 		ClampF(-DotProduct(input.delta,input.up),0.0f,10.0f) : authoredDrop;
 	float headRaw[3];
 	if(androidgame::VrGetOnFootSkeletonHead(headRaw)){
-		input.headTarget=CVector(headRaw[0]+eyeRaw[0]-anchorRaw[0],
-			headRaw[1]+eyeRaw[1]-anchorRaw[1],headRaw[2]+eyeRaw[2]-anchorRaw[2]);
+		float eyeForward,eyeHeight,eyeSide;
+		androidgame::VrGetXboxHeadOffset(&eyeForward,&eyeHeight,&eyeSide);
+		const CVector facing=QuestBodyPosture::Heading(
+			CVector(headForwardRaw[0],headForwardRaw[1],headForwardRaw[2]),
+			CVector(headRightRaw[0],headRightRaw[1],headRightRaw[2]),input.up,visualBody.GetForward());
+		const CVector right=CrossProduct(facing,input.up);
+		// The calibrated eye socket turns with the HMD. Keep the actual eye
+		// fixed and move the anatomical neck behind it, rather than rotating
+		// the torso around the original, unturned eye offset.
+		input.headTarget=CVector(eyeRaw[0],eyeRaw[1],eyeRaw[2])-
+			(facing*eyeForward+input.up*eyeHeight+right*eyeSide);
 		input.hasHeadTarget=true;
 	}
 	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
