@@ -38,6 +38,7 @@
 #include "Timecycle.h"
 #include "VrRagdoll.h"
 #include "VrBodyIK.h"
+#include "QuestHeadCalibration.h"
 #include "VrCheatMenu.h"
 #include "VrWeaponCalibrationMenu.h"
 #include "VrCullViz.h"
@@ -519,6 +520,10 @@ static int gVrRadioSelection;
 static int gVrVehicleCalibrationSelection;
 static int gVrVehicleCalibrationHand;
 static int gVrLocomotionSelection;
+static int gVrHeadCalibrationSelection;
+static QuestHeadCalibration::Settings gXboxHeadFit;
+static bool gXboxHeadFitLoaded;
+static char gXboxHeadFitNotice[96];
 static int gVrControlsSelection;
 static int gVrCalibrationSelection;
 static int gVrCalibrationHand = 1;
@@ -565,6 +570,7 @@ enum {
 	VR_MENU_PAGE_RADIO,
 	VR_MENU_PAGE_SPEEDOMETER,
 	VR_MENU_PAGE_LOCOMOTION,
+	VR_MENU_PAGE_HEAD_CALIBRATION,
 	VR_MENU_PAGE_CONTROLS,
 	VR_MENU_PAGE_CALIBRATION,
 	VR_MENU_PAGE_HOLSTERS,
@@ -825,6 +831,7 @@ enum eVrLocomotionMenuItem {
 	VR_LOCOMOTION_KNOCKDOWN_TILT,
 	VR_LOCOMOTION_CUTSCENES,
 	VR_LOCOMOTION_BODY_IK,
+	VR_LOCOMOTION_HEAD_CALIBRATION,
 	VR_LOCOMOTION_REFRESH_RATE,
 	VR_LOCOMOTION_RECENTER,
 	VR_LOCOMOTION_BACK,
@@ -1827,6 +1834,34 @@ SaveVrInteger(const char *key, int value)
 	WritePrivateProfileStringA("VR", key, text, ".\\vr_settings.ini");
 }
 
+static void
+LoadXboxHeadFit()
+{
+	if(gXboxHeadFitLoaded) return;
+	gXboxHeadFitLoaded=true;
+	for(int i=0;i<QuestHeadCalibration::VALUE_COUNT;++i){
+		const char *key=QuestHeadCalibration::Key(i);
+		gXboxHeadFit.value[i]=QuestHeadCalibration::Limit(i,(int)(int32)
+			GetPrivateProfileIntA("VR",key,QuestHeadCalibration::Factory(i),".\\vr_settings.ini"));
+		char savedKey[80]; snprintf(savedKey,sizeof(savedKey),"%sDefault",key);
+		gXboxHeadFit.saved[i]=QuestHeadCalibration::Limit(i,(int)(int32)
+			GetPrivateProfileIntA("VR",savedKey,QuestHeadCalibration::Factory(i),".\\vr_settings.ini"));
+	}
+}
+
+static void
+SaveXboxHeadFit(bool saveDefault=false)
+{
+	for(int i=0;i<QuestHeadCalibration::VALUE_COUNT;++i){
+		const char *key=QuestHeadCalibration::Key(i);
+		SaveVrInteger(key,gXboxHeadFit.value[i]);
+		if(saveDefault){
+			char savedKey[80]; snprintf(savedKey,sizeof(savedKey),"%sDefault",key);
+			SaveVrInteger(savedKey,gXboxHeadFit.saved[i]);
+		}
+	}
+}
+
 static int
 VrControlsRowSource(int item)
 {
@@ -2312,6 +2347,7 @@ CurrentMenuSelection(void)
 	case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 		return &gVrVehicleCalibrationSelection;
 	case VR_MENU_PAGE_LOCOMOTION: return &gVrLocomotionSelection;
+	case VR_MENU_PAGE_HEAD_CALIBRATION: return &gVrHeadCalibrationSelection;
 	case VR_MENU_PAGE_CONTROLS: return &gVrControlsSelection;
 	case VR_MENU_PAGE_CALIBRATION: return &gVrCalibrationSelection;
 	case VR_MENU_PAGE_HOLSTERS: return &gVrHolsterSelection;
@@ -2349,6 +2385,7 @@ CurrentMenuItemCount(void)
 		return Max(1,
 			OculusVR::GetQuestVehicleCalibrationItemCount()+1);
 	case VR_MENU_PAGE_LOCOMOTION: return VR_LOCOMOTION_ITEM_COUNT;
+	case VR_MENU_PAGE_HEAD_CALIBRATION: return QuestHeadCalibration::COUNT;
 	case VR_MENU_PAGE_CONTROLS: return VR_CONTROLS_ITEM_COUNT;
 	case VR_MENU_PAGE_CALIBRATION: return VrWeaponCalibrationMenu::Count(gVrCalibrationGroup);
 	case VR_MENU_PAGE_HOLSTERS:
@@ -2514,12 +2551,17 @@ CurrentMenuValueRepeats(void)
 	if(gVrMenuPage == VR_MENU_PAGE_LOCOMOTION)
 		return gVrLocomotionSelection ==
 			VR_LOCOMOTION_TURN_SENSITIVITY;
+	if(gVrMenuPage == VR_MENU_PAGE_HEAD_CALIBRATION)
+		return gVrHeadCalibrationSelection < QuestHeadCalibration::LOCK;
 	return false;
 }
 
 static void
 ReturnFromCurrentMenuPage(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_HEAD_CALIBRATION){
+		gVrMenuPage=VR_MENU_PAGE_LOCOMOTION; return;
+	}
 	if(gVrMenuPage == VR_MENU_PAGE_SPEEDOMETER) { gVrMenuPage = gVrSpeedometerReturnPage; return; }
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION){
 		if(gVrCalibrationGroup >= 0){
@@ -3783,7 +3825,11 @@ VrDebugUpdate(const PadInput &in)
 				SaveVrInteger("HeadBobbing", gQuestHeadBobbing);
 				break;
 			case VR_LOCOMOTION_KNOCKDOWN_TILT:
-				androidgame::VrToggleKnockdownTilt();
+				if(ModelSets::IsModernActive()){
+					LoadXboxHeadFit();
+					gXboxHeadFit.Adjust(QuestHeadCalibration::BONE_VIEW,1);
+					SaveXboxHeadFit();
+				}else androidgame::VrToggleKnockdownTilt();
 				break;
 			case VR_LOCOMOTION_BODY_IK:
 				LoadPersistentBodyIKSettings();
@@ -3791,6 +3837,12 @@ VrDebugUpdate(const PadInput &in)
 				SavePersistentBodyIKSettings();
 				// Never reuse body/arm caches across an ownership switch.
 				VrBodyIK::Reset();
+				break;
+			case VR_LOCOMOTION_HEAD_CALIBRATION:
+				LoadXboxHeadFit();
+				gVrHeadCalibrationSelection=0;
+				gXboxHeadFitNotice[0]='\0';
+				gVrMenuPage=VR_MENU_PAGE_HEAD_CALIBRATION;
 				break;
 			case VR_LOCOMOTION_REFRESH_RATE: {
 				int rates[16];
@@ -3832,6 +3884,29 @@ VrDebugUpdate(const PadInput &in)
 			case VR_LOCOMOTION_BACK:
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 				break;
+			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_HEAD_CALIBRATION &&
+		         (positivePulse || decreasePulse)){
+			using namespace QuestHeadCalibration;
+			LoadXboxHeadFit();
+			const int row=gVrHeadCalibrationSelection;
+			gXboxHeadFitNotice[0]='\0';
+			if(row<VALUE_COUNT){
+				gXboxHeadFit.Adjust(row,decreasePulse ? -1 : 1);
+				SaveXboxHeadFit();
+			}else if(positivePulse){
+				if(row==SAVE){
+					gXboxHeadFit.Save(); SaveXboxHeadFit(true);
+					strcpy(gXboxHeadFitNotice,"PERSONAL DEFAULT SAVED - VALUES ALSO SURVIVE RESTART");
+				}else if(row==RESTORE){
+					gXboxHeadFit.Restore(); SaveXboxHeadFit();
+					strcpy(gXboxHeadFitNotice,"PERSONAL DEFAULT RESTORED");
+				}else if(row==FACTORY){
+					gXboxHeadFit.Reset(); SaveXboxHeadFit();
+					strcpy(gXboxHeadFitNotice,"FACTORY FIT RESTORED - PERSONAL DEFAULT KEPT");
+				}else if(row==RECENTER){
+					androidgame::VrRecenterView(); gVrMenuVisible=false;
+				}else if(row==BACK) ReturnFromCurrentMenuPage();
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_CONTROLS &&
 		         (positivePulse || decreasePulse)){
@@ -4908,6 +4983,7 @@ static void
 DrawQuestLocomotionPage(void)
 {
 	LoadPersistentBodyIKSettings();
+	LoadXboxHeadFit();
 	BeginFullVrMenuPage("LOCOMOTION",
 		"MOVEMENT AND COMFORT TURNING");
 	char rows[VR_LOCOMOTION_ITEM_COUNT][112];
@@ -4936,18 +5012,21 @@ DrawQuestLocomotionPage(void)
 		"WALKING HEAD BOB  < %s >", gQuestHeadBobbing ? "ON" : "OFF");
 	snprintf(rows[VR_LOCOMOTION_KNOCKDOWN_TILT], sizeof(rows[0]),
 		"KNOCKDOWN VIEW  < %s >",
-		androidgame::VrKnockdownTiltEnabled() ? "IMMERSIVE TILT" : "LEVEL HORIZON");
+		ModelSets::IsModernActive() ?
+			(gXboxHeadFit.value[QuestHeadCalibration::BONE_VIEW] ? "HEAD BONE" : "LEVEL HORIZON") :
+			(androidgame::VrKnockdownTiltEnabled() ? "IMMERSIVE TILT" : "LEVEL HORIZON"));
 	snprintf(rows[VR_LOCOMOTION_CUTSCENES], sizeof(rows[0]),
 		"CUTSCENES  < %s >",
 		gCutsceneMode ? "STEREO  R3 CAMERA  L3 KEEP" : "CINEMA SCREEN");
 	snprintf(rows[VR_LOCOMOTION_BODY_IK], sizeof(rows[0]),
 		"BODY IK  < %s >", gBodyIKEnabled ? "ON" : "OFF");
+	strcpy(rows[VR_LOCOMOTION_HEAD_CALIBRATION],"XBOX HEAD / BODY FIT  < OPEN >");
 	snprintf(rows[VR_LOCOMOTION_REFRESH_RATE], sizeof(rows[0]),
 		"REFRESH RATE  < %d HZ >", gQuestRefreshRateHz);
 	strcpy(rows[VR_LOCOMOTION_RECENTER], "RECENTER VIEW");
 	strcpy(rows[VR_LOCOMOTION_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++)
-		DrawFullVrMenuRow(rows[item], 160+item*46, 3,
+		DrawFullVrMenuRow(rows[item], 150+item*42, 3,
 			item == gVrLocomotionSelection);
 	// The one setting a standing player can be hurt by without knowing why.
 	if(gVrLocomotionSelection == VR_LOCOMOTION_MOVEMENT_ORIENTATION)
@@ -4957,6 +5036,31 @@ DrawQuestLocomotionPage(void)
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+}
+
+static void
+DrawQuestHeadCalibrationPage(void)
+{
+	using namespace QuestHeadCalibration;
+	LoadXboxHeadFit();
+	BeginFullVrMenuPage("XBOX HEAD / BODY FIT","LIVE ADJUSTMENTS - CENTIMETRES AND DEGREES");
+	char rows[COUNT][112];
+	snprintf(rows[FORWARD],sizeof(rows[0]),"CAMERA FORWARD  < %+d CM >",gXboxHeadFit.value[FORWARD]);
+	snprintf(rows[HEIGHT],sizeof(rows[0]),"CAMERA HEIGHT  < %+d CM >",gXboxHeadFit.value[HEIGHT]);
+	snprintf(rows[SIDE],sizeof(rows[0]),"CAMERA RIGHT  < %+d CM >",gXboxHeadFit.value[SIDE]);
+	snprintf(rows[BODY_YAW],sizeof(rows[0]),"BODY YAW  < %+d DEG >",gXboxHeadFit.value[BODY_YAW]);
+	snprintf(rows[LOCK],sizeof(rows[0]),"KNOCKDOWN MOVEMENT  < %s >",gXboxHeadFit.value[LOCK] ? "HEAD LOCKED" : "ROOMSCALE");
+	snprintf(rows[BONE_VIEW],sizeof(rows[0]),"KNOCKDOWN VIEW  < %s >",gXboxHeadFit.value[BONE_VIEW] ? "HEAD BONE" : "LEVEL");
+	strcpy(rows[SAVE],"SAVE AS MY DEFAULT"); strcpy(rows[RESTORE],"RESTORE MY DEFAULT");
+	strcpy(rows[FACTORY],"RESET FACTORY FIT"); strcpy(rows[RECENTER],"RECENTER VIEW");
+	strcpy(rows[BACK],"BACK TO LOCOMOTION");
+	for(int row=0;row<COUNT;++row)
+		DrawFullVrMenuRow(rows[row],150+row*42,3,row==gVrHeadCalibrationSelection);
+	DrawVrMenuText(gXboxHeadFitNotice[0] ? gXboxHeadFitNotice :
+		(ModelSets::IsModernActive() ? "XBOX FIT ACTIVE - ADJUSTMENTS ARE SAVED AUTOMATICALLY" : "SELECT ORIGINAL XBOX ASSETS TO PREVIEW THIS FIT"),
+		VR_MENU_WIDTH/2,668,2,255,205,90);
+	DrawVrMenuText("LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
+		VR_MENU_WIDTH/2,718,2,210,190,145);
 }
 
 static void
@@ -5415,6 +5519,9 @@ VrDebugPixels(int *width, int *height)
 			break;
 		case VR_MENU_PAGE_LOCOMOTION:
 			DrawQuestLocomotionPage();
+			break;
+		case VR_MENU_PAGE_HEAD_CALIBRATION:
+			DrawQuestHeadCalibrationPage();
 			break;
 		case VR_MENU_PAGE_CONTROLS:
 			DrawQuestControlsPage();
@@ -6165,6 +6272,17 @@ VrHeadBobbingEnabled(void)
 	LoadVrSettings();
 	return gQuestHeadBobbing != 0;
 }
+
+void VrGetXboxHeadOffset(float *forward,float *height,float *side)
+{
+	LoadXboxHeadFit();
+	if(forward) *forward=gXboxHeadFit.value[QuestHeadCalibration::FORWARD]*0.01f;
+	if(height) *height=gXboxHeadFit.value[QuestHeadCalibration::HEIGHT]*0.01f;
+	if(side) *side=gXboxHeadFit.value[QuestHeadCalibration::SIDE]*0.01f;
+}
+float VrXboxBodyYawDegrees(){LoadXboxHeadFit();return float(gXboxHeadFit.value[QuestHeadCalibration::BODY_YAW]);}
+bool VrXboxKnockdownLockEnabled(){LoadXboxHeadFit();return gXboxHeadFit.value[QuestHeadCalibration::LOCK]!=0;}
+bool VrXboxKnockdownBoneViewEnabled(){LoadXboxHeadFit();return gXboxHeadFit.value[QuestHeadCalibration::BONE_VIEW]!=0;}
 
 bool
 VrUsesHeadRelativeMovement(void)

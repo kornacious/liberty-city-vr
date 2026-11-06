@@ -534,7 +534,8 @@ static bool BuildGroundedVisualBody(CPed *ped,
 			if(right.MagnitudeSqr() > 1.0e-8f){
 				right.Normalise();
 
-				const float yawCorrection = DEGTORAD(-6.0f);
+				const float yawCorrection = DEGTORAD(UsesNativeCameraHead(ped) ?
+					androidgame::VrXboxBodyYawDegrees() : -6.0f);
 				const float cy = cosf(yawCorrection);
 				const float sy = sinf(yawCorrection);
 

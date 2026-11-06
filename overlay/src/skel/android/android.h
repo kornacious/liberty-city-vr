@@ -288,6 +288,10 @@ bool VrGetViewBasis(float position[3], float right[3], float up[3],
 // Exact on-foot world anchor submitted to librw::setFirstPersonAnchor.
 // Body IK uses this to measure room-scale without reconstructing offsets.
 bool VrGetOnFootBodyAnchor(float position[3]);
+void VrGetXboxHeadOffset(float *forward, float *height, float *side);
+float VrXboxBodyYawDegrees();
+bool VrXboxKnockdownLockEnabled();
+bool VrXboxKnockdownBoneViewEnabled();
 // Fall/get-up presentation, including head-height/tilt recovery. The remaining
 // yaw comfort correction never blocks tracked hands, holsters or body IK.
 bool VrKnockdownPresentationActive(void);

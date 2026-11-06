@@ -79,7 +79,12 @@ struct CPlayerPed:CEntity {
  CVector position,forward={0,1,0};
  CVector GetPosition(){return position;} CVector GetForward(){return forward;}
  bool InVehicle(){return inVehicle;} int GetPedState(){return state;} bool DyingOrDead(){return dead;}
+ void *GetClump(){return m_rwObject;}
 };
+namespace ModelSets {static bool modern=false;static bool IsModernActive(){return modern;}}
+static bool IsClumpSkinned(void*){return true;}
+static bool testKnockdown;
+static bool PlayerKnockedDown(CPlayerPed*){return testKnockdown;}
 static CPlayerPed *currentPlayer;
 static bool trainNeckReady=false; static CVector trainNeck;
 static bool GetAnimatedPedHeadPose(CEntity*,CVector *head,CVector *forward){if(!trainNeckReady)return false;*head=trainNeck;*forward={0,1,0};return true;}
@@ -99,6 +104,8 @@ static CEntity *gCutsceneCameraActor,*gVrPlayerEntity;
 static bool gVrFirstPersonActive,gVrInVehicle;
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
 namespace androidgame {
+static bool knockdownLock=true;
+static bool VrXboxKnockdownLockEnabled(){return knockdownLock;}
 static bool vehicleBody=true;
 bool VrVehicleBodyIKEnabled(){return vehicleBody;}
 static bool vehiclePanels=false;
@@ -375,6 +382,28 @@ static void TrainPassengerMotion() {
  currentPlayer=nullptr;Check(!OculusVR::IsQuestTrainPassenger(),"missing player is safe");
 }
 
-int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();
+static void KnockdownAttachment() {
+ CPlayerPed p;CVehicle car;Reset(p,car);p.inVehicle=false;p.state=1001; // Synthetic fall state; ownership predicate is supplied by the adapter.
+ ModelSets::modern=true;testKnockdown=true;
+ for(int i=0;i<180;++i){
+  // Includes physical crouching, turning and sideways roomscale motion.
+  Head(.4f*std::sin(float(i)*.1f),1.2f+.2f*std::cos(float(i)*.1f),i*.003f,i*.01f);
+  EvaluateSeat(true);const float head[3]={1,2,.3f},right[3]={1,0,0},up[3]={0,1,0},forward[3]={0,0,-1};
+  rw::vulkan::setFirstPersonAnchorBasis(head,right,up,forward,0,1,true);
+  CVector actual=Eye();Check(Near(actual.x,1)&&Near(actual.y,2)&&Near(actual.z,.3f),"knockdown and get-up stay at head despite physical movement");
+  if(i==90)p.state=1002; // Synthetic get-up state.
+ }
+ testKnockdown=false;p.state=PED_IDLE;EvaluateSeat(true);
+ CVector neutral=Eye();Head(.7f,1.3f,.4f);CVector after=Eye()-neutral;
+ Check(Dot(after,after)>.01f,"getting up restores roomscale tracking");
+ // Classic must continue tracking normally even during the same state.
+ ModelSets::modern=false;testKnockdown=true;EvaluateSeat(true);neutral=Eye();Head(.9f,1.5f,.6f);
+ after=Eye()-neutral;Check(Dot(after,after)>.01f,"Classic knockdown tracking policy is unchanged");
+ ModelSets::modern=true;androidgame::knockdownLock=false;EvaluateSeat(true);neutral=Eye();Head(1,1.7f,.8f);
+ after=Eye()-neutral;Check(Dot(after,after)>.01f,"calibration can opt out of knockdown translation lock");
+ ModelSets::modern=false;testKnockdown=false;androidgame::knockdownLock=true;
+}
+
+int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();
  std::printf("PASS: %u production seat/train/XR/backend checks; carriage motion, free controllers and tracking continuity verified.\n",checks);return 0;
  }catch(const std::exception&e){std::fprintf(stderr,"FAIL after %u checks: %s\n",checks,e.what());return 1;}}

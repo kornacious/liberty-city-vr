@@ -3420,9 +3420,11 @@ static bool32 gFirstPersonPositionLocked;
 void
 setFirstPersonPositionLocked(bool32 locked)
 {
-	gFirstPersonPositionLocked = locked;
-	if(locked)
+	// Capture the final downed/train sample when releasing the lock too, so
+	// movement during the lock cannot reappear as a roomscale jump on recovery.
+	if(locked || gFirstPersonPositionLocked)
 		memcpy(gvk.fpLatchedHeadPos, gvk.headPosition, sizeof(gvk.fpLatchedHeadPos));
+	gFirstPersonPositionLocked = locked;
 }
 
 void

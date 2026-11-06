@@ -1423,7 +1423,12 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		!CCutsceneMgr::IsCutsceneProcessing() &&
 		!CCutsceneMgr::IsRunning() &&
 		(!TheCamera.m_WideScreenOn || trainPassenger);
-	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson && trainPassenger && player->InVehicle());
+	const bool xboxKnockdown = wantFirstPerson && !thirdPersonVehicle &&
+		ModelSets::IsModernActive() && player->GetClump() != nil &&
+		IsClumpSkinned(player->GetClump()) && PlayerKnockedDown(player);
+	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson &&
+		((trainPassenger && player->InVehicle()) ||
+		 (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
 
 	// A cinematic cutscene is rendered in stereo from the director camera.
 	// It has to go through the same first-person machinery as gameplay:
@@ -1929,8 +1934,14 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}else if(headModeOnFoot){
 				heading = TheCamera.Cams[TheCamera.ActiveCam].Front;
 			}
-			QuestHeadAttachment::ViewBasis(heading, vertical,
-				boneRight, boneUp, boneForward);
+			// Routine gait never steers the HMD. A downed/get-up pose may
+			// explicitly follow the native head, independently of walking bob.
+			if(!PlayerKnockedDown(player) || !androidgame::VrXboxKnockdownBoneViewEnabled())
+				QuestHeadAttachment::ViewBasis(heading, vertical,
+					boneRight, boneUp, boneForward);
+			float eyeForward, eyeHeight, eyeSide;
+			androidgame::VrGetXboxHeadOffset(&eyeForward,&eyeHeight,&eyeSide);
+			head += boneForward*eyeForward + boneUp*eyeHeight + boneRight*eyeSide;
 			forward = boneForward;
 			gCrouchView.Reset();
 			gKnockdownView.Reset();

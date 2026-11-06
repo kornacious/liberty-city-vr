@@ -73,13 +73,14 @@ including its head and torso bones. Classic retains its rigid-frame eligibility
 rules. Original Xbox first-person gameplay derives camera position from the
 native head bone, including train boarding, standing passengers, vehicle
 transitions, crouching and knockdowns. The pose is captured before VR IK/head
-hiding and carried with the current entity transform. Animated head rotations
-never steer the view: the locomotion/carrier frame and tracked headset determine
-orientation, keeping the on-foot horizon level. WALKING HEAD BOB enables live
+hiding and carried with the current entity transform. Routine animated head
+rotations never steer the view: the locomotion/carrier frame and tracked headset
+determine orientation, keeping the on-foot horizon level. WALKING HEAD BOB enables live
 positional animation; when disabled, routine idle/walk/run and standing train
 poses retain a stable bone-derived local position. Posture changes and vehicle
-transitions still follow the live head immediately. It has no additional
-eye/seat/train offsets or crouch/knockdown easing. Existing
+transitions still follow the live head immediately. Eye placement uses the Xbox
+head/body fit settings described below, without legacy seat/train offsets or
+crouch/knockdown easing. Existing
 seat calibration is bypassed in this mode; tracked headset movement and stereo
 eyes remain relative to the bone anchor. Classic and third-person retain their
 existing camera paths.
@@ -100,6 +101,24 @@ establish the physical reference. This layer does not change the camera, collisi
 capsule or game crouch rules. Vehicles, train passengers, jumps, transitions and
 knockdowns retain their existing handling. Classic retains its existing solver.
 Persistent terrain-aware foot planting is not part of this posture layer.
+
+VR Overlay > Locomotion > XBOX HEAD / BODY FIT provides live camera forward,
+height and right offsets in 1 cm steps, body yaw in 1 degree steps, knockdown
+movement lock and head-bone/level view. Initial eye fit is 6 cm forward, 8 cm up,
+0 cm right from the camera anchor; these are tunable starting values for the
+retail mesh. Positive body yaw follows the solver's existing yaw convention.
+Changes automatically persist in `vr_settings.ini`. SAVE AS MY DEFAULT stores a
+separate personal baseline; RESTORE MY DEFAULT recalls it, and RESET FACTORY FIT
+preserves that baseline. Report the displayed values after fitting them in VR
+if they should become future factory defaults. Recenter does not erase the fit.
+
+Xbox knockdown movement is head-locked by default through getting up: physical
+translation cannot move the view away from the animated head. The lock releases
+with a fresh physical reference, so movement made while down does not carry into
+the standing view. Head rotation remains tracked. HEAD BONE view follows native
+head orientation only while down/getting up; routine walking retains the level
+comfort orientation. The existing Locomotion KNOCKDOWN VIEW row controls the same
+Xbox option. Classic retains its prior knockdown settings and movement policy.
 
 Host checks and complete compilation do not establish visual headset acceptance.
 Verify all districts/LODs, shared textures, vegetation, wheels/windows, player and

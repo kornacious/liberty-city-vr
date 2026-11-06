@@ -58,7 +58,13 @@ enum {PED_IDLE,PED_DRIVING,PED_JUMP};
 static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
 static int playerVehicleState=PED_IDLE;
 static bool PlayerKnockedDown(CPed*){return knockedDown;}
-namespace androidgame {static bool bobbing=true;static bool VrHeadBobbingEnabled(){return bobbing;}}
+namespace androidgame {
+static bool bobbing=true,boneView=false;
+static CVector eyeOffset;
+static bool VrHeadBobbingEnabled(){return bobbing;}
+static bool VrXboxKnockdownBoneViewEnabled(){return boneView;}
+static void VrGetXboxHeadOffset(float *forward,float *height,float *side){*forward=eyeOffset.y;*height=eyeOffset.z;*side=eyeOffset.x;}
+}
 namespace OculusVR {static bool IsQuestBikeHorizonLocked(){return false;}}
 static struct {struct {CVector Front{0,1,0};} Cams[1];int ActiveCam=0;} TheCamera;
 namespace rw {namespace vulkan {
@@ -182,6 +188,15 @@ int main(){
     ++CTimer::frame;Final(&player,false,p,f);
     Near(submittedForward,{1,0,0},"head-relative locomotion keeps gameplay heading without animation pitch");
     Near(submittedUp,{0,0,1},"returning on foot levels the horizon");
+    headModeOnFoot=false;player.root=CMatrix();knockedDown=true;androidgame::boneView=true;
+    androidgame::eyeOffset={.02f,.06f,.08f};
+    ++CTimer::frame;nativeHead=RwMatrix();nativeHead.pos={1,2,.3f};
+    nativeHead.right={0,1,0};nativeHead.up={0,0,-1};nativeHead.at={-1,0,0};
+    Final(&player,false,p,f);
+    Near(submittedUp,{0,1,0},"knockdown may follow native head orientation through get-up");
+    Near(submittedHead,CVector(1,2,.3f)+CVector(.02f,.08f,-.06f),"eye fit follows the downed bone axes");
+    knockedDown=false;++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedUp,{0,0,1},"standing recovers level horizon independent of bone view option");
     Require(resets==anchorWrites*2,"legacy smoothing cleared on every exact submission");
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }
