@@ -1410,14 +1410,17 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 		for(int i=0;i<4;++i) input.balance.spineFromWaist[i]=FromBasisLocal(input.balance.spineFromWaist[i],visualBody);
 	}
 	CVector contactFeet[2]={input.foot[0],input.foot[1]};
-	if(ped->bIsDucking && input.hasHeadTarget && input.balance.valid){
+	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
+	// Standing contacts need the same anatomical origin as the corrected
+	// pelvis. Otherwise a half-turn leaves feet at the old entity-frame
+	// offset. Native locomotion keeps its animated contact candidates.
+	if((ped->bIsDucking || planting) && input.hasHeadTarget && input.balance.valid){
 		const CVector waist=input.headTarget-input.balance.headFromWaist-
 			QuestBodyPosture::Lean(input.delta,input.up)*.82f;
 		CVector shift=waist+input.balance.feetFromWaist-(contactFeet[0]+contactFeet[1])*.5f;
 		shift-=input.up*DotProduct(shift,input.up);
 		contactFeet[0]+=shift;contactFeet[1]+=shift;
 	}
-	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
 	gTrackedStance.Begin(ped,ped->GetClump(),CTimer::GetFrameCounter(),
 		ped->GetPosition(),visualBody.GetForward(),planting,true);
 	gTrackedStance.Advance(contactFeet,CTimer::GetTimeStep()/50.0f);

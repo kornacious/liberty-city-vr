@@ -282,9 +282,9 @@ int main(){
         const CVector hips=(carried[4].pos+carried[7].pos)*.5f;
         CVector hipError=hips-target;hipError.z=0;
         Require(hipError.Magnitude()<.003f,"hips do not inherit authored forward/right crouch translation");
-        if(duck){
+        {
             CVector footError=(carried[6].pos+carried[9].pos)*.5f-target;footError.z=0;
-            Require(footError.Magnitude()<.003f,"crouched stance midpoint remains under the body");
+            Require(footError.Magnitude()<.003f,"standing and crouched stance midpoint remains under the body");
         }
         Require(std::fabs((carried[1].pos-carried[0].pos).Magnitude()-.22f)<.001f,"spine dimensions use standing anatomy rather than pose displacement");
     }
@@ -314,6 +314,26 @@ int main(){
             Near(solved.foot[side],in.footTarget[side],"knee plane correction retains reachable contacts");
         }
         Near(solved.spine[3],in.headTarget,"knee correction preserves head/pelvis solve");
+    }
+    // Continuous physical half-turn, retaining contacts between frames. At
+    // each replant they must use the eye/pelvis frame rather than entity yaw.
+    ped={};ped.bIsStanding=true;gTrackedStance.Reset();anchor={.02f,.06f,1.65f};eye=anchor;skeletonHead={0,0,1.57f};
+    groundFound=headTargetAvailable=fixedEyeFit=true;
+    for(int angle=0;angle<=30;++angle){
+        const float facing=float(angle)*.1047197551f;
+        viewRight={std::cos(facing),std::sin(facing),0};viewForward={-std::sin(facing),std::cos(facing),0};
+        visual=CMatrix();visual.r=viewRight;visual.f=viewForward;
+        for(int i=0;i<14;++i){
+            carried[i]=native[i];carried[i].pos=viewRight*native[i].pos.x+viewForward*native[i].pos.y+CVector(0,0,native[i].pos.z);
+            carried[i].right=viewRight*native[i].right.x+viewForward*native[i].right.y+CVector(0,0,native[i].right.z);
+            carried[i].up=viewRight*native[i].up.x+viewForward*native[i].up.y+CVector(0,0,native[i].up.z);
+            carried[i].at=viewRight*native[i].at.x+viewForward*native[i].at.y+CVector(0,0,native[i].at.z);
+        }
+        ++CTimer::frame;ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+        const CVector target=eye-viewForward*.06f-viewRight*.02f-CVector(0,0,.08f);
+        CVector centerError=(carried[6].pos+carried[9].pos)*.5f-target;centerError.z=0;
+        Require(centerError.Magnitude()<.04f,"retained turn contacts remain close to the anatomical stance origin");
+        Near(carried[3].pos,target,"stance recentering preserves tracked head attachment");
     }
     std::printf("PASS %u body posture checks\n",checks);
 }
