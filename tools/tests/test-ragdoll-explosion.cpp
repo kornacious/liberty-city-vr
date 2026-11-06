@@ -19,7 +19,8 @@
 #include "VrRagdollExplosion.h"
 #include "ragdoll-explosion-bones.inc"
 using uint8=uint8_t; using int8=int8_t; using uint32=uint32_t; using int32=int32_t; using int16=int16_t;
-enum {NUMPEDS=220,RANDOM_CHAR=0,PED_IDLE=1,PED_FALL=2,PED_DIE=3,PED_DEAD=4,ANIM_STD_NUM=999};
+enum {NUMPEDS=220,RANDOM_CHAR=0,PED_IDLE=1,PED_FALL=2,PED_DIE=3,PED_DEAD=4,
+	PED_GETUP=5,PED_DIVE_AWAY=6,PED_STEP_AWAY=7,ANIM_STD_NUM=999};
 struct RwMatrix {CVector right{1,0,0},up{0,1,0},at{0,0,1},pos; int flags=0;};
 struct CMatrix : RwMatrix { CVector operator*(const CVector &v)const{return pos+right*v.x+up*v.y+at*v.z;} };
 static void Invert(const CMatrix &a,CMatrix &b){b=a;b.pos=-a.pos;}
@@ -193,7 +194,15 @@ int main(){
         Check(active==NUMPEDS,"all 220 owners survive");
         for(int shot=0;shot<5;++shot){CWorld::TriggerExplosion({-1,0,0},20,300,nil,false);for(int i=0;i<NUMPEDS;++i){Check(FindSlot(&peds[i])!=nil,"repeated RPG retains owner");Apply(&peds[i]);}}
         for(int i=0;i<NUMPEDS;++i){Release(&peds[i]);++peds[i].generation;Check(Begin(&peds[i]),"destructor recycle remains admissible");}Check(active==NUMPEDS,"recycling has no leaked owners");}
-    Reset();Fill(peds[0],0);Check(BeginFall(&p),"surviving knockdown admission");s=FindSlot(&p);before=s->prev[0];Check(BeginFall(&p)&&Near(before,s->prev[0]),"repeated fall callback preserves articulated motion");Check(Begin(&p)&&!s->live,"death converts existing fall in place");
+    Reset();Fill(peds[0],0);
+    for(int state:{PED_IDLE,PED_DIVE_AWAY,PED_STEP_AWAY,PED_GETUP}){
+        p.m_nPedState=state;Check(!BeginFall(&p)&&FindSlot(&p)==nil,"non-fall evasion/recovery cannot acquire a living ragdoll");
+    }
+    p.m_nPedState=PED_FALL;Check(BeginFall(&p),"surviving knockdown admission");
+    p.m_nPedState=PED_GETUP;hierarchyReads=0;Apply(&p);
+    Check(hierarchyReads==0,"native getup pose is not overwritten before next-frame ownership cleanup");
+    Release(&p);p.m_nPedState=PED_FALL;
+    Check(BeginFall(&p),"later genuine knockdown remains admissible");s=FindSlot(&p);before=s->prev[0];Check(BeginFall(&p)&&Near(before,s->prev[0]),"repeated fall callback preserves articulated motion");Check(Begin(&p)&&!s->live,"death converts existing fall in place");
     // Pure helper: radial falloff, per-weight response, invalid/outside input.
     const CVector points[3]={{2,0,1},{9.99f,0,1},{11,0,1}},up{0,0,1};CVector a[3],b[3];
     for(int i=0;i<3;++i)a[i]=b[i]=points[i];

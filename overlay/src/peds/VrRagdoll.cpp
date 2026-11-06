@@ -510,6 +510,9 @@ Begin(CPed *ped)
 bool
 BeginFall(CPed *ped)
 {
+	// Evasion and recovery have their own animation callbacks. Only a native
+	// knockdown state may lend the body to a living ragdoll.
+	if(enabled && (ped == nil || ped->m_nPedState != PED_FALL)) return false;
 	return StartRagdoll(ped, true);
 }
 
@@ -940,6 +943,9 @@ Apply(CPed *ped)
 {
 	if(!enabled && active == 0) return;
 	Slot *slot = FindSlot(ped);
+	// Native control can enter GETUP after this frame's solver update. Do not
+	// overwrite its first recovery pose while waiting for next-frame cleanup.
+	if(slot && slot->live && !ped->DyingOrDead() && ped->m_nPedState != PED_FALL) return;
 	if(slot == nil) slot = TryLateAdmission(ped);
 	if(slot == nil){
 		ObserveAnimatedPose(ped);

@@ -14740,10 +14740,24 @@ if(-not $world.Contains('if(VrRagdoll::SkipBulletCollision((CPed*)e)) continue;'
 if(-not $game.Contains('VehicleDeformation::Update();')){throw 'Offscreen deformation update missing.'}
 if([regex]::Matches($entity,'VrRagdoll::GetBounds').Count -lt 3){throw 'Ragdoll entity centre/radius hooks missing.'}
 if(-not $entity.Contains('VehicleDeformation::Release(this);')){throw 'Base entity must release private geometry before clump destruction.'}
+# Exercise the actual native fall/evasion/getup callback chain as well.
+function RecoveryDefinition([string]$name) {
+ $match=[regex]::Match($ped,'(?m)^void\s+CPed::'+$name+'\([^)]*\)\s*\{')
+ if(-not $match.Success){throw "Missing native recovery function: $name"}
+ $end=$match.Index+$match.Length;$depth=1
+ while($depth -gt 0 -and $end -lt $ped.Length){if($ped[$end]-eq'{'){$depth++}elseif($ped[$end]-eq'}'){$depth--};$end++}
+ if($depth-ne0){throw 'Unterminated native recovery function.'}
+ return $ped.Substring($match.Index,$end-$match.Index)
+}
+$definitions=@('SetFall','ClearFall','Fall','PedEvadeCB','PedGetupCB') | ForEach-Object { RecoveryDefinition $_ }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-recovery-production.inc'),($definitions -join "`n"),[Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'gta3-recovery-animations.inc'),[IO.File]::ReadAllText((Join-Path $StageRoot 'src/animation/AnimationId.h')),[Text.UTF8Encoding]::new($false))
+$fight=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/peds/PedFight.cpp'))
+if($fight.Contains('VrRagdoll::BeginFall(this);')){throw 'Vehicle callback bypasses centralized evasion/recovery admission.'}
 $previous=$env:GTA3_TEST_GAME_DATA
 try {
  if($GameDataRoot) { $env:GTA3_TEST_GAME_DATA=[IO.Path]::GetFullPath($GameDataRoot) }
- &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-gta3-ragdoll-rig.cpp')
+ &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-gta3-ragdoll-rig.cpp','test-ragdoll-recovery.cpp')
 } finally { $env:GTA3_TEST_GAME_DATA=$previous }
 </value>
   </data>

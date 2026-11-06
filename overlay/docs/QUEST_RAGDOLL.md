@@ -12,6 +12,11 @@ Neck and clavicle particles are virtual joints with separate positions; they
 never compete with the torso or upper arms for a model matrix. Skins without
 the optional middle-spine bone receive a virtual spine particle as well.
 Player, mission, vehicle-occupant and underwater actors retain native handling.
+Deliberate NPC dives, evasive steps, cover and ongoing getups also retain their
+native animations and callbacks. A live ragdoll is admitted only for a finite
+native knockdown after its recovery timer is initialized. Its pose override
+stops as soon as the native state leaves the fall, including the first getup
+frame; deaths still convert an existing live ragdoll in place.
 
 New settings start with ragdolls OFF, vehicle braking 200%, grip 150%, bullet
 reaction 100% and body weight 200%. Existing saved preferences take precedence.

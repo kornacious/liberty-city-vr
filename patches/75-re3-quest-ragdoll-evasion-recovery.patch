@@ -1,0 +1,55 @@
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -5456,15 +5456,21 @@
+ 	if (!IsPedInControl() && (!evenIfNotInControl || DyingOrDead()))
+ 		return;
+ 
++	// Keep deliberate dives, rolls, cover and an in-progress getup under the
++	// native animation/callback chain, even if collision code requests SetFall.
++	bool preserveAnimation = m_nPedState == PED_DIVE_AWAY ||
++		m_nPedState == PED_STEP_AWAY || m_nPedState == PED_GETUP || bIsDucking;
++	const AnimationId evasions[] = { ANIM_STD_EVADE_DIVE, ANIM_STD_HANDSUP,
++		ANIM_STD_DUCK_DOWN, ANIM_STD_DUCK_LOW };
++	for(AnimationId id : evasions){
++		CAnimBlendAssociation *assoc = RpAnimBlendClumpGetAssociation(GetClump(), id);
++		preserveAnimation |= assoc && assoc->blendDelta >= 0.0f &&
++			(assoc->IsRunning() || assoc->blendAmount > 0.0f);
++	}
+ 	ClearLookFlag();
+ 	ClearAimFlag();
+ 	SetStoredState();
+ 	SetPedState(PED_FALL);
+-	// Violent knockdowns -- knockouts, high impacts, car spins --
+-	// ragdoll from this very frame; the canned flight below
+-	// then plays only for the peds the ragdoll refuses.
+-	if (animId >= ANIM_STD_KO_FRONT && animId <= ANIM_STD_HIGHIMPACT_RIGHT)
+-		VrRagdoll::BeginFall(this);
+ 	CAnimBlendAssociation *fallAssoc = RpAnimBlendClumpGetAssociation(GetClump(), animId);
+ 	
+ 	if (fallAssoc) {
+@@ -5496,6 +5502,11 @@
+ 			+ ((m_randomSeed + CTimer::GetFrameCounter()) % 1000);
+ 	}
+ 	bFallenDown = true;
++	// Admit only after the native fall animation and recovery deadline exist.
++	// Infinite/script-controlled falls retain their native handling.
++	if(!preserveAnimation && extraTime != -1 &&
++	   animId >= ANIM_STD_KO_FRONT && animId <= ANIM_STD_HIGHIMPACT_RIGHT)
++		VrRagdoll::BeginFall(this);
+ }
+ 
+ void
+--- a/src/peds/PedFight.cpp
++++ b/src/peds/PedFight.cpp
+@@ -3293,9 +3293,8 @@
+ 			m_vecMoveSpeed = car->m_vecMoveSpeed * 0.75f;
+ 		}
+ 		m_vecMoveSpeed.z = 0.0f;
+-		// VehicleImpact replaces the legacy launch with the pre-response motion
+-		// after this native damage/fall transition admits the visual ragdoll.
+-		VrRagdoll::BeginFall(this);
++		// SetFall owns live admission, including its evasion/recovery exclusions.
++		// VehicleImpact supplies pre-response motion only to an admitted body.
+ 		distVec.Normalise();
+ #ifdef VC_PED_PORTS
+ 		distVec *= Min(car->m_fMass / 1400.0f, 1.0f);

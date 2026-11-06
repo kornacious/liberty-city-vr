@@ -349,6 +349,12 @@ GTA III rigid/skinned adapter and checks unique model-matrix ownership, virtual
 neck/clavicle/missing-spine joints, invalid-pose rejection and world/local
 conversion under a rotated entity root. It also checks the engine presentation,
 bullet exclusion, bounds, deformation update and geometry-release hooks.
+The same runner compiles `test-ragdoll-recovery.cpp` using the production
+`SetFall`, `Fall`, evade-completion and getup-completion callbacks. It checks
+that evasion/cover/getup animations are not taken over, their finite deadlines
+reach native getup and restored AI, genuine later impacts still qualify, and
+script-controlled indefinite falls retain native behavior. The explosion
+fixture separately exercises live admission and first-getup-frame pose handoff.
 Optional `-GameDataRoot <local-GTA-III-folder>` reads `male01`, `cop` and `b_man1`
 from the user's local IMG/DIR into memory and exercises their actual frame
 hierarchies. No game assets are embedded, uploaded or exported by the test.
