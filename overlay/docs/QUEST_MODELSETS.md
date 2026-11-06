@@ -68,6 +68,13 @@ this importer. PC vehicle collision remains active, including train/boat records
 Existing Xbox calibration offsets are selected as a starting point and need visual
 verification against the retail models in VR.
 
+The first-person camera recognizes Xbox Claude through his posed skin hierarchy,
+including its head and torso bones. Classic retains its rigid-frame eligibility
+rules. This also lets the existing head hiding, body IK, tracked weapons and
+holsters share the first-person view anchor. Vehicle-transition fallbacks never
+read skinned animation keys as rigid frames. These runtime fixes need only an APK
+update; an already prepared Original Xbox profile does not need rebuilding.
+
 Host checks and complete compilation do not establish visual headset acceptance.
 Verify all districts/LODs, shared textures, vegetation, wheels/windows, player and
 pedestrian skinning, cutscenes, weapon grips/scopes, seating/steering alignment,

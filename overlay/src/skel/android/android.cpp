@@ -42,6 +42,7 @@
 #include "RpAnimBlend.h"
 #include "AnimBlendClumpData.h"
 #include "Bones.h"
+#include "QuestPlayerRig.h"
 #include "AnimBlendAssociation.h"
 #include "ModelIndices.h"
 #include "ModelInfo.h"
@@ -1480,8 +1481,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	gVrCameraInsidePlayerHead =
 		wantFirstPerson && !thirdPersonVehicle &&
 		player != nil && player->m_rwObject != nil &&
-		!player->DyingOrDead() && player->m_pFrames[PED_HEAD] != nil &&
-		(player->InVehicle() || player->m_pFrames[PED_TORSO] != nil);
+		!player->DyingOrDead() && QuestPlayerRig::HasCameraPose(player);
 #ifdef GTA_VR_WEAPONS
 	// Disabling VR hands also hides Claude during first-person gameplay,
 	// regardless of body IK or driving mode. Native vehicle transitions own the
@@ -1525,8 +1525,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	// nothing reinvented. During death/respawn, or when the clump is gone,
 	// the regular game camera takes over, exactly as the desktop does.
 	if(wantFirstPerson && player->m_rwObject != nil &&
-	   !player->DyingOrDead() && player->m_pFrames[PED_HEAD] != nil &&
-	   (player->InVehicle() || player->m_pFrames[PED_TORSO] != nil)){
+	   !player->DyingOrDead() && QuestPlayerRig::HasCameraPose(player)){
 		CVector animatedTransitionHead;
 		CVector animatedTransitionForward;
 		const bool animatedTransitionPose = !gVrInVehicle &&
@@ -1583,10 +1582,9 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				CVector up = player->GetUp();
 				up.Normalise();
 				CVector baseRoot = player->GetPosition();
-				if(vehicleTransition && player->m_pFrames[PED_MID] != nil &&
-				   player->m_pFrames[PED_MID]->frame != nil && player->GetClump() != nil){
-					RwFrame *waistFrame = RwFrameGetParent(player->m_pFrames[PED_MID]->frame);
-					if(waistFrame != nil && waistFrame != RpClumpGetFrame(player->GetClump())){
+				if(vehicleTransition){
+					RwFrame *waistFrame = QuestPlayerRig::RigidTransitionWaist(player);
+					if(waistFrame != nil){
 						const RwV3d &waistLocal = RwFrameGetMatrix(waistFrame)->pos;
 						baseRoot = player->GetMatrix() * CVector(waistLocal.x, waistLocal.y, waistLocal.z);
 					}

@@ -51,6 +51,8 @@ void VrUpdateFirstPersonAnchor(bool postPhysics){
 }
 namespace VrRagdoll {static bool Owns(CPed *){return ragdoll;}}
 namespace OculusVR {
+static bool trainCinematic;
+static bool IsQuestTrainCinematic(){return trainCinematic;}
 static bool IsQuestFirstPersonOnFoot(){return testPlayer && !testPlayer->vehicle;}
 static CVector local[2]={{-0.2f,0.6f,-0.2f},{0.2f,0.3f,-0.2f}};
 static bool GetQuestRawTrackedHandMatrix(int hand,CMatrix *out){
@@ -203,5 +205,11 @@ int main(){
     ikEnabled=false;VrBodyIK::Apply(&player);ikEnabled=true;
     VrBodyIK::Apply(nullptr);
     Require(anchorUpdates==before,"inactive IK, cutscenes and ragdolls cannot change the anchor");
+    OculusVR::trainCinematic=true;
+    Require(!VrBodyIK::WeaponOwnershipActive(),"train cinematic retains native skeleton ownership");
+    const int cinematicAnchors=anchorUpdates;
+    VrBodyIK::Apply(&player);
+    Require(anchorUpdates==cinematicAnchors,"train cinematic cannot update the gameplay anchor");
+    OculusVR::trainCinematic=false;
     std::printf("Held weapon frame: %d checks passed across 9 rates, on foot and at vehicle speed, both skeleton paths.\n",checks);
 }
