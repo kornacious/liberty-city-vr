@@ -208,8 +208,9 @@ await Test("Argument parsing preserves paths and avoids shell evaluation", () =>
 });
 await Test("All auxiliary source modules are embedded and discoverable", () =>
 {
-    Assert(AuxiliaryTools.Sources.Count == 175); Assert(AuxiliaryTools.Catalog.Any(t => t.Path.EndsWith("test_device_bridge.py")));
+    Assert(AuxiliaryTools.Sources.Count == 176); Assert(AuxiliaryTools.Catalog.Any(t => t.Path.EndsWith("test_device_bridge.py")));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-player-rig.ps1"));
+    Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-head-attachment.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-gta3-ragdoll-rig.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-ped-vehicle-damage.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-dodo-flight.ps1"));

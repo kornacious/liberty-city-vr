@@ -1903,10 +1903,27 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}
 		}
 		bool fullVehicleBasis = knockdownBasis;
+		CVector boneHead, boneRight, boneUp, boneForward;
+		const bool exactBoneCamera = !thirdPersonVehicle &&
+			VrBodyIK::GetCameraHeadPose(player, &boneHead, &boneRight,
+				&boneUp, &boneForward, postPhysics);
+		if(exactBoneCamera){
+			// Final authority for Original Xbox: native head pose, with no
+			// standing height, eye nudge, train marker offset, seat calibration
+			// or crouch/knockdown interpolation surviving into the view.
+			head = boneHead;
+			forward = boneForward;
+			gCrouchView.Reset();
+			gKnockdownView.Reset();
+			rw::vulkan::setFirstPersonAnchorBasis(&head.x, &boneRight.x,
+				&boneUp.x, &boneForward.x,
+				Atan2(boneForward.y, boneForward.x), 1, true);
+			fullVehicleBasis = true;
+		}
 #ifdef GTA_VR_WEAPONS
 		CVehicle *viewVehicle =
 			gVrInVehicle ? player->m_pMyVehicle : nil;
-		if(viewVehicle){
+		if(viewVehicle && !exactBoneCamera){
 			CVector vehicleForward = trainPassenger ? forward : viewVehicle->GetForward();
 			// Unlocked vehicles inherit the complete authored vehicle basis.
 			// Bike horizon lock preserves the bike's forward vector (including

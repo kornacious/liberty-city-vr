@@ -15,12 +15,14 @@
 #include "Timer.h"
 #include "Camera.h"
 #include "CutsceneMgr.h"
+#include "ModelSets.h"
 
 extern bool gVrFirstPersonActive;
 extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 
 #include <android/log.h>
 #include <math.h>
+#include "QuestHeadAttachment.h"
 
 // First stage of the body solver: controller-driven arms on the real player
 // skeleton. The weapon system remains authoritative and completely untouched.
@@ -28,6 +30,50 @@ extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 // tracked hands that are already being rendered.
 namespace VrBodyIK
 {
+
+static QuestHeadAttachment::Snapshot gNativeCameraHead;
+static bool gNativeCameraHeadFromPreRender;
+
+static bool UsesNativeCameraHead(CPed *ped)
+{
+	return ModelSets::IsModernActive() && ped != nil && ped->IsPlayer() &&
+		ped->GetClump() != nil && IsClumpSkinned(ped->GetClump());
+}
+
+static void CaptureNativeCameraHead(CPed *ped, bool beforePresentation = true)
+{
+	if(!UsesNativeCameraHead(ped)) return;
+	RpHAnimHierarchy *hier = GetAnimHierarchyFromSkinClump(ped->GetClump());
+	if(hier == nil) return;
+	const int head = RpHAnimIDGetIndex(hier, BONE_head);
+	RwMatrix *matrices = RpHAnimHierarchyGetMatrixArray(hier);
+	if(head < 0 || head >= hier->numNodes || matrices == nil) return;
+	gNativeCameraHead.Capture(ped, ped->GetClump(), CTimer::GetFrameCounter(),
+		ped->GetMatrix(), matrices[head]);
+	gNativeCameraHeadFromPreRender = beforePresentation;
+}
+
+bool GetCameraHeadPose(CPed *ped, CVector *position, CVector *right,
+	CVector *up, CVector *forward, bool postPhysics)
+{
+	if(!UsesNativeCameraHead(ped) || position == nil || right == nil ||
+	   up == nil || forward == nil) return false;
+	if(!gNativeCameraHead.Matches(ped, ped->GetClump(), CTimer::GetFrameCounter()) ||
+	   (postPhysics && !gNativeCameraHeadFromPreRender)){
+		// CapturePad can precede PreRender, especially on the boarding frame.
+		// Rebuild native matrices once, never sample last frame's hidden head.
+		ped->UpdateRwFrame();
+		ped->UpdateRpHAnim();
+		if(VrRagdoll::Owns(ped)) VrRagdoll::Apply(ped);
+		CaptureNativeCameraHead(ped, false);
+	}
+	QuestHeadAttachment::Pose pose;
+	if(!gNativeCameraHead.Matches(ped, ped->GetClump(), CTimer::GetFrameCounter()) ||
+	   !gNativeCameraHead.Read(ped->GetMatrix(), pose)) return false;
+	*position = pose.position; *right = pose.right;
+	*up = pose.up; *forward = pose.forward;
+	return true;
+}
 
 static bool gVehicleTransitionActive;
 
@@ -1824,6 +1870,11 @@ void Apply(CPed *ped)
 #else
 	if(ped == nil || !ped->IsPlayer())
 		return;
+
+	// CPed::PreRender has just rebuilt native/ragdoll matrices. Refresh even
+	// when body IK is disabled, a vehicle transition owns the body, or the
+	// player is knocked down. Resetting IK must not discard this camera pose.
+	CaptureNativeCameraHead(ped);
 
 	if(VrRagdoll::Owns(ped)){
 		Reset();

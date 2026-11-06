@@ -70,10 +70,19 @@ verification against the retail models in VR.
 
 The first-person camera recognizes Xbox Claude through his posed skin hierarchy,
 including its head and torso bones. Classic retains its rigid-frame eligibility
-rules. This also lets the existing head hiding, body IK, tracked weapons and
-holsters share the first-person view anchor. Vehicle-transition fallbacks never
-read skinned animation keys as rigid frames. These runtime fixes need only an APK
-update; an already prepared Original Xbox profile does not need rebuilding.
+rules. Original Xbox first-person gameplay attaches the camera anchor directly
+to the native head bone's position and orientation, including train boarding,
+standing passengers, vehicle transitions, crouching and knockdowns. The pose is
+captured before VR IK/head hiding and carried with the current entity transform.
+It has no additional eye/seat/train offsets or crouch/knockdown easing. Existing
+seat calibration is bypassed in this mode; tracked headset movement and stereo
+eyes remain relative to the bone anchor. Classic and third-person retain their
+existing camera paths.
+
+Head hiding, body IK, tracked weapons and holsters share the resulting view
+anchor. Vehicle-transition fallbacks never read skinned animation keys as rigid
+frames. These runtime fixes need only an APK update; an already prepared Original
+Xbox profile does not need rebuilding.
 
 Host checks and complete compilation do not establish visual headset acceptance.
 Verify all districts/LODs, shared textures, vegetation, wheels/windows, player and

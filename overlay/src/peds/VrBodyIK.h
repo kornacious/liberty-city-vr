@@ -22,4 +22,7 @@ bool GetRigidWeaponHandBasis(int hand, CVector *position, CVector *right,
 bool GetSolvedHandWorldBasis(int hand, CVector *position, CVector *right,
 	CVector *up, CVector *forward);
 bool GetVehicleNeckWorld(CPed *ped, CVector *position);
+// Original Xbox native pose, sampled before presentation IK/head hiding.
+bool GetCameraHeadPose(CPed *ped, CVector *position, CVector *right,
+	CVector *up, CVector *forward, bool postPhysics);
 }

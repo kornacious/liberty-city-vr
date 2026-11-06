@@ -87,6 +87,7 @@ static bool gVehicleTransitionActive=false;
 static CPed *gLastPlayer=nullptr;
 static bool Enabled(){return ikEnabled;}
 static bool VehicleEnabled(){return true;}
+static void CaptureNativeCameraHead(CPed*){}
 #include "held-weapon-context.inc"
 static void OrthonormaliseBasis(CMatrix &m){m.r.Normalise();m.u.Normalise();m.f.Normalise();}
 #include "held-weapon-frame-helpers.inc"

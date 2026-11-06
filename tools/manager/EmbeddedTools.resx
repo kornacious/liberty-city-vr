@@ -14773,4 +14773,25 @@ $ErrorActionPreference='Stop'
 if($LASTEXITCODE -ne 0){throw 'Player rig compatibility regression failed.'}
 </value>
   </data>
+  <data name="tools/tests/test-head-attachment.ps1" xml:space="preserve">
+    <value>param(
+ [string]$KitRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+ [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-head-attachment-'+[Guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference='Stop'
+$src=Join-Path $KitRoot 'overlay/src'
+if(-not(Test-Path $src)){$src=Join-Path $KitRoot 'src'}
+$ik=[IO.File]::ReadAllText((Join-Path $src 'peds/VrBodyIK.cpp'))
+$native=[regex]::Match($ik,'(?ms)^static QuestHeadAttachment::Snapshot.*?(?=^static bool gVehicleTransitionActive;)').Value
+$android=[IO.File]::ReadAllText((Join-Path $src 'skel/android/android.cpp'))
+$final=[regex]::Match($android,'(?ms)^		CVector boneHead, boneRight, boneUp, boneForward;.*?(?=^#ifdef GTA_VR_WEAPONS)').Value
+if(-not $native -or -not $final){throw 'Missing native head attachment production code.'}
+if($android -notmatch 'if\(viewVehicle &amp;&amp; !exactBoneCamera\)'){throw 'Vehicle calibration can override exact bone attachment.'}
+if($ik -notmatch '(?s)void Apply\(CPed \*ped\).*?CaptureNativeCameraHead\(ped\);.*?if\(VrRagdoll::Owns'){throw 'Native head must be captured before IK or ownership guards.'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'head-attachment-native.inc'),$native)
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'head-attachment-final.inc'),$final)
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-head-attachment.cpp')
+if($LASTEXITCODE -ne 0){throw 'Native head attachment regression failed.'}
+</value>
+  </data>
 </root>
