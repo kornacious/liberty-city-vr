@@ -176,12 +176,27 @@ int main(){
     androidgame::bobbing=false;
     CVehicle train;train.matrix.p={20,30,2};player.root=train.matrix;
     player.vehicle=gVrInVehicle=trainPassenger=true;player.m_pMyVehicle=&train;playerVehicleState=PED_DRIVING;
+    f={-1,0,0};
     ++CTimer::frame;nativeHead.pos=player.root*CVector(-.25f,.1f,1.0f);
     Final(&player,false,p,f,false);Near(submittedHead,nativeHead.pos,"early train occupancy does not commit standing reference");
     nativeHead.pos=player.root*CVector(-.25f,.1f,2.1f);
     Final(&player,false,p,f,true);Near(submittedHead,nativeHead.pos,"train commits actual post-lineup head position");
     ++CTimer::frame;player.root.p+=CVector(5,2,0);nativeHead.pos=player.root*CVector(-.2f,.15f,1.9f);
-    Final(&player,false,p,f);Near(submittedHead,player.root*CVector(-.25f,.1f,2.1f),"standing train removes idle bob while following carriage immediately");
+    Final(&player,false,p,f);Near(submittedHead,nativeHead.pos,"standing train follows live native head rather than retaining the first passenger pose");
+    Near(submittedForward,{-1,0,0},"Xbox override preserves the boarding-side window heading instead of entity forward");
+    androidgame::eyeOffset={.02f,.06f,.08f};
+    for(int step=0;step<90;++step){
+        const float angle=float(step)*.01f;train.matrix.r={std::cos(angle),std::sin(angle),0};
+        train.matrix.f={-std::sin(angle),std::cos(angle),0};train.matrix.p+=CVector(.2f,.04f,0);
+        player.root=train.matrix;f=-train.matrix.r;
+        ++CTimer::frame;nativeHead.pos=player.root*CVector(-.25f,.1f,2.1f+std::sin(float(step))*.02f);
+        Final(&player,false,p,f);
+        const CVector right=CrossProduct(-train.matrix.r,train.matrix.u);
+        Near(submittedHead,nativeHead.pos-train.matrix.r*.06f+train.matrix.u*.08f+right*.02f,
+            "moving train keeps calibrated eye ahead of live body along the outward heading");
+        Near(submittedForward,-train.matrix.r,"passenger view follows carriage-relative windows while moving");
+    }
+    androidgame::eyeOffset={};
     trainPassenger=false;train.matrix.f={1,0,0};train.matrix.r={0,-.8f,.6f};train.matrix.u={0,.6f,.8f};
     ++CTimer::frame;Final(&player,false,p,f);
     Near(submittedForward,train.matrix.f,"driving follows carrier heading rather than head animation");

@@ -423,6 +423,40 @@ static void XboxEntryAttachment(){
  ModelSets::modern=false;
 }
 
-int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();XboxEntryAttachment();
+static void XboxTrainWindowFacing(){
+ CPlayerPed p;CVehicle train;Reset(p,train);ModelSets::modern=true;train.train=true;
+ p.inVehicle=false;p.state=PED_ENTER_TRAIN;train.pDriver=nullptr;train.pPassengers[0]=&p;
+ Head(.3f,1.6f,-.2f,1.1f);CVector head,forward;
+ EvaluateSeat(false);EvaluateTrain(false,head,forward);
+ const float beforeBoard=rw::vulkan::gvk.fpLatchedHeadYaw;
+ p.inVehicle=true;p.state=PED_DRIVING;p.position={3,-2,0};p.forward={0,1,0};
+ trainNeckReady=true;trainNeck={-.4f,1.3f,2.1f};
+ auto publish=[&](bool post){
+  EvaluateSeat(post);EvaluateTrain(post,head,forward);
+  CVector right=CrossProduct(forward,train.matrix.up);
+  rw::vulkan::setFirstPersonAnchorBasis(&head.x,&right.x,&train.matrix.up.x,&forward.x,Atan2(forward.y,forward.x),1,true);
+ };
+ publish(false);Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,beforeBoard),"Xbox train does not capture heading before boarding lineup finishes");
+ publish(true);Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"Xbox train completion captures current physical facing once");
+ for(int i=0;i<16;++i){++CTimer::frame;publish(true);}
+ float r[3],u[3],f[3],eye[3];rw::vulkan::getFirstPersonViewFrame(r,u,f,eye);
+ Check(Near(f[0],-1)&&Near(f[1],0),"completed window turn faces outside without a physical headset turn");
+ for(int i=0;i<60;++i){
+  ++CTimer::frame;const float angle=.01f*i;
+  train.matrix.right={std::cos(angle),std::sin(angle),0};train.matrix.forward={-std::sin(angle),std::cos(angle),0};train.matrix.position={float(i)*.3f,2,1};
+  p.position=train.matrix*CVector(0,0,-1.5f);p.forward=train.matrix.forward;trainNeck=train.matrix*CVector(-.4f,.1f,2.1f);
+  Head(.5f+.001f*i,1.5f,-.3f,1.1f);publish(true);
+  rw::vulkan::getFirstPersonViewFrame(r,u,f,eye);
+  Check(Near(f[0],-train.matrix.right.x)&&Near(f[1],-train.matrix.right.y),"outside view remains carriage-relative while riding");
+  Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"riding does not repeatedly reset physical looking");
+ }
+ Head(.7f,1.4f,-.2f,1.5f);++CTimer::frame;publish(true);
+ Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"passenger can look away from window without forced recenter every frame");
+ p.inVehicle=false;p.state=PED_IDLE;EvaluateSeat(true);EvaluateTrain(true,head,forward);
+ Check(!rw::vulkan::gFirstPersonPositionLocked,"leaving passenger context restores ordinary tracking policy");
+ trainNeckReady=false;ModelSets::modern=false;
+}
+
+int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();XboxEntryAttachment();XboxTrainWindowFacing();
  std::printf("PASS: %u production seat/train/XR/backend checks; carriage motion, free controllers and tracking continuity verified.\n",checks);return 0;
  }catch(const std::exception&e){std::fprintf(stderr,"FAIL after %u checks: %s\n",checks,e.what());return 1;}}

@@ -1766,6 +1766,12 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(trainPassenger && gVrInVehicle){
 			CVehicle *train = player->m_pMyVehicle;
 			if(!trainAnchorLatched){
+				if(postPhysics && ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump())){
+					// Boarding completion establishes a fresh physical forward.
+					// The subsequent window-facing turn must not retain the yaw
+					// used while the player was looking toward the train outside.
+					rw::vulkan::setFirstPersonAnchor(nil,0.0f,0,0);
+				}
 				// The entry callback enables occupancy before the next native
 				// lineup. The marker is already inside: the native -1.5m root
 				// offset is compensated by its train animation, not by the camera.
@@ -1949,14 +1955,16 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			const bool routineHeadMotion = !vehicleTransition &&
 				!PlayerKnockedDown(player) && !player->bIsDucking &&
 				playerVehicleState != PED_JUMP && (!gVrInVehicle || trainPassenger);
-			head = comfortableHead.Position(player, player->GetClump(),
+			head = trainPassenger && gVrInVehicle ? boneHead : comfortableHead.Position(player, player->GetClump(),
 				player->InVehicle() ? player->m_pMyVehicle : nil,
 				player->GetMatrix(), boneHead, androidgame::VrHeadBobbingEnabled(),
 				routineHeadMotion, postPhysics,
 				player->bIsDucking && !gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player));
 			// Animation head roll/nods/look-arounds never steer the HMD.
 			// Use the locomotion/carrier frame; the headset owns head rotation.
-			CVector heading = player->GetForward(), vertical(0,0,1);
+			// Preserve the train's carriage-relative boarding-side window turn.
+			// Passenger entity forward need not match the skinned standing pose.
+			CVector heading = trainPassenger && gVrInVehicle ? forward : player->GetForward(), vertical(0,0,1);
 			if(gVrInVehicle && player->m_pMyVehicle != nil){
 				CVehicle *carrier = player->m_pMyVehicle;
 				if(!trainPassenger) heading = carrier->GetForward();

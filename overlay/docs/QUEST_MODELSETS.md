@@ -76,14 +76,25 @@ transitions, crouching and knockdowns. The pose is captured before VR IK/head
 hiding and carried with the current entity transform. Routine animated head
 rotations never steer the view: the locomotion/carrier frame and tracked headset
 determine orientation, keeping the on-foot horizon level. WALKING HEAD BOB enables live
-positional animation; when disabled, routine idle/walk/run and standing train
-poses retain a stable bone-derived local position. Posture changes and vehicle
+positional animation; when disabled, routine idle/walk/run
+poses retain a stable bone-derived local position. Standing train passengers use
+the live native head position, since their body retains its native passenger
+animation rather than the on-foot posture solver. Posture changes and vehicle
 transitions still follow the live head immediately. Eye placement uses the Xbox
 head/body fit settings described below, without legacy seat/train offsets or
 crouch/knockdown easing. Existing
 seat calibration is bypassed in this mode; tracked headset movement and stereo
 eyes remain relative to the bone anchor. Classic and third-person retain their
 existing camera paths.
+
+For Original Xbox train passengers, boarding completion captures the current
+physical facing once and preserves the existing carriage-relative turn toward
+the boarding-side windows over 300 ms. The Xbox camera override uses that window
+heading instead of the passenger entity's forward axis. Eye fit is applied along
+the outward basis at the live head; a frozen first-boarded pose cannot leave the
+camera behind the standing body. Physical looking remains additive while riding,
+and the existing passenger position lock remains active. Classic train behavior
+is unchanged.
 
 Head hiding, body IK, tracked weapons and holsters share the resulting view
 anchor. Vehicle-transition fallbacks never read skinned animation keys as rigid
