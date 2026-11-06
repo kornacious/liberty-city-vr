@@ -14,7 +14,8 @@ static CMatrix Invert(const CMatrix &m){
     CMatrix out;out.r={m.r.x,m.f.x,m.u.x};out.f={m.r.y,m.f.y,m.u.y};out.u={m.r.z,m.f.z,m.u.z};
     out.p={-DotProduct(m.r,m.p),-DotProduct(m.f,m.p),-DotProduct(m.u,m.p)};return out;
 }
-struct RwMatrix {CVector pos,right{1,0,0},up{0,1,0},at{0,0,1};};
+// Actual Xbox bone axes: +X vertical, +Y facing, +Z left.
+struct RwMatrix {CVector pos,right{0,0,1},up{0,1,0},at{-1,0,0};};
 #include "../../overlay/src/peds/QuestHeadAttachment.h"
 enum {BONE_head=9};
 struct RpHAnimHierarchy {int numNodes=16;RwMatrix matrices[16];};
@@ -62,6 +63,17 @@ static bool Final(CPed *player,bool thirdPersonVehicle,CVector &head,CVector &fo
 }
 int main(){
     RpHAnimHierarchy hierarchy;RpClump clump{&hierarchy};CPed player{{},&clump};
+    {
+        QuestHeadAttachment::Snapshot upright;
+        RwMatrix xboxHead;xboxHead.pos={.25f,-.15f,1.6f};
+        upright.Capture(&player,&clump,0,player.root,xboxHead);
+        QuestHeadAttachment::Pose pose;
+        Require(upright.Read(player.root,pose),"upright authored Xbox pose accepted");
+        Near(pose.up,{0,0,1},"upright Xbox bone produces level camera up");
+        Near(pose.right,{1,0,0},"upright Xbox bone produces camera right");
+        Near(pose.forward,{0,1,0},"upright Xbox bone preserves forward heading");
+        Near(pose.position,xboxHead.pos,"axis correction does not move the head anchor");
+    }
     for(int rate:{30,36,60,72,80,90,120,144})for(unsigned step=0;step<180;step++){
         ++CTimer::frame;
         float t=float(step)/rate,yaw=t*.7f;
@@ -71,12 +83,16 @@ int main(){
         float pitch=std::sin(t)*.6f,roll=std::cos(t)*.5f;
         nativeHead.up=player.root.f*std::cos(pitch)+player.root.u*std::sin(pitch);
         CVector vertical=player.root.u*std::cos(pitch)-player.root.f*std::sin(pitch);
-        nativeHead.right=player.root.r*std::cos(roll)+vertical*std::sin(roll);
-        nativeHead.at=vertical*std::cos(roll)-player.root.r*std::sin(roll);
+        const CVector expectedRight=player.root.r*std::cos(roll)+vertical*std::sin(roll);
+        const CVector expectedUp=vertical*std::cos(roll)-player.root.r*std::sin(roll);
+        nativeHead.right=expectedUp;
+        nativeHead.at=-expectedRight;
         CVector p,r,u,f;
         unsigned before=animUpdates;
         Require(VrBodyIK::GetCameraHeadPose(&player,&p,&r,&u,&f,false),"first call refreshes native head immediately");
         Require(animUpdates==before+1,"one native refresh before PreRender");Near(p,nativeHead.pos,"exact native position without eye/seat offsets");
+        Near(r,expectedRight,"authored bone axes decode to expected camera right");
+        Near(u,expectedUp,"authored bone axes decode to expected camera up");
         hierarchy.matrices[9]=nativeHead;VrBodyIK::CaptureNativeCameraHead(&player);
         hierarchy.matrices[9].pos={900,-900,-900};hierarchy.matrices[9].right={};hierarchy.matrices[9].up={};hierarchy.matrices[9].at={};
         Require(VrBodyIK::GetCameraHeadPose(&player,&p,&r,&u,&f,true),"hidden/IK head cannot replace native snapshot");

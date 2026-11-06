@@ -33,10 +33,13 @@ public:
 		owner = ped; clump = model; frame = tick;
 		const CMatrix inverse = Invert(root);
 		local.position = inverse * CVector(head.pos);
-		local.right = Multiply3x3(inverse, CVector(head.right));
-		// Authored GTA head matrices use up as facing and at as vertical.
+		// Xbox head +X runs up the neck (also the yaw axis used by
+		// CPedIK::RotateHead). +Y faces forward and +Z points left.
+		// Convert that bone convention to camera right/up/forward; treating
+		// bone +Z as camera-up rolls the entire view sideways by 90 degrees.
+		local.right = Multiply3x3(inverse, -CVector(head.at));
 		local.forward = Multiply3x3(inverse, CVector(head.up));
-		local.up = Multiply3x3(inverse, CVector(head.at));
+		local.up = Multiply3x3(inverse, CVector(head.right));
 		valid = ped != nil && model != nil &&
 			Finite(local.position) && Finite(local.right) &&
 			Finite(local.up) && Finite(local.forward) &&
