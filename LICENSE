@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 the MiamiVR Quest port contributors
+Copyright (c) 2026 the LibertyVR Quest port contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -15,7 +15,7 @@ copies or substantial portions of the Software.
 This license covers this project's original contributions in `overlay/`,
 `patches/`, the build tools and the Vulkan backend additions inside `librw/`.
 Third-party files retain the licenses identified in `NOTICE.md` and alongside
-those files. This license does not cover the reVC source tree supplied by the
+those files. This license does not cover the re3 source tree supplied by the
 user, upstream context shown in patch files, or any original game content.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
