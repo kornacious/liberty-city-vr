@@ -92,7 +92,7 @@ Xbox profile does not need rebuilding.
 
 With on-foot Body IK enabled, Original Xbox Claude also uses a tracked posture
 layer. Physical crouching lowers the pelvis and bends the knees while retaining
-the animation's reachable foot contacts. Forward/sideways roomscale displacement
+reachable foot contacts. Forward/sideways roomscale displacement
 is shared between pelvis and spine, with shoulders following before the tracked
 arm solve. Lean is limited to 28 cm; larger roomscale movement carries the body.
 Extra physical crouch is limited by leg length and does not add lowering already
@@ -100,7 +100,18 @@ supplied by the game's crouch animation. Recenter while comfortably upright to
 establish the physical reference. This layer does not change the camera, collision
 capsule or game crouch rules. Vehicles, train passengers, jumps, transitions and
 knockdowns retain their existing handling. Classic retains its existing solver.
-Persistent terrain-aware foot planting is not part of this posture layer.
+The body uses the camera's pre-eye-offset anatomical head target, then adds live
+tracked displacement. Spine reach is resolved by moving the pelvis rather than
+pulling the head short of that target. This also keeps backwards leaning from
+leaving the torso ahead of the eyes; camera fit remains independent of body IK.
+
+While standing, foot contacts retain world positions and orientations on static
+ground, with foot orientation following the ground normal. Walking/running,
+airborne states, large turns, steps, teleports, lost ground and ownership gaps
+release those contacts. Unreachable contacts release rather than stretching a
+leg or moving the camera. The native gait continues during locomotion; this is
+standing foot planting, not a replacement walking/stepping system. Moving-platform
+planting is not implemented. The layer follows the existing Body IK toggle.
 
 VR Overlay > Locomotion > XBOX HEAD / BODY FIT provides live camera forward,
 height and right offsets in 1 cm steps, body yaw in 1 degree steps, knockdown

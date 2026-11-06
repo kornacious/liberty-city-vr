@@ -7,6 +7,7 @@
 #include "Ped.h"
 #include "PlayerInfo.h"
 #include "World.h"
+#include "ColPoint.h"
 #include "PlayerPed.h"
 #include "Vehicle.h"
 #include "RwHelper.h"
@@ -252,6 +253,7 @@ static float gBikeBodyLateralAccum;
 static int gBikeBodyLateralStableFrames;
 
 enum { MAX_BODY_IK_NODES = 96 };
+static QuestBodyPosture::Stance gTrackedStance;
 
 struct HandDescendantPose
 {
@@ -1161,6 +1163,7 @@ static bool SolveArm(RpHAnimHierarchy *hier, RwMatrix *mats,
 
 void Reset(void)
 {
+	gTrackedStance.Reset();
 	gWrist[0] = WristCalibration();
 	gWrist[1] = WristCalibration();
 	gShoulder[0] = ShoulderAnchor();
@@ -1326,10 +1329,10 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 	// and scripted poses retain their existing owners. Classic never enters.
 	if(!UsesNativeCameraHead(ped) || ped->InVehicle() ||
 	   gVehicleTransitionActive || ped->m_nPedState==PED_JUMP ||
-	   hier->numNodes<=0 || hier->numNodes>MAX_BODY_IK_NODES) return;
+	   hier->numNodes<=0 || hier->numNodes>MAX_BODY_IK_NODES){gTrackedStance.Reset();return;}
 	float eyeRaw[3],anchorRaw[3];
 	if(!androidgame::VrGetViewBasis(eyeRaw,nil,nil,nil) ||
-	   !androidgame::VrGetOnFootBodyAnchor(anchorRaw)) return;
+	   !androidgame::VrGetOnFootBodyAnchor(anchorRaw)){gTrackedStance.Reset();return;}
 	const int joints[]={body.waist,body.mid,body.torso,body.head,
 		RpHAnimIDGetIndex(hier,BONE_upperlegl),RpHAnimIDGetIndex(hier,BONE_lowerlegl),
 		RpHAnimIDGetIndex(hier,BONE_footl),RpHAnimIDGetIndex(hier,BONE_upperlegr),
@@ -1364,8 +1367,40 @@ static void ApplyTrackedPosture(CPed *ped, RpHAnimHierarchy *hier,
 	// yet. Keep native crouch height until standing establishes that reference.
 	input.authoredDrop=authoredDrop < 0.0f ?
 		ClampF(-DotProduct(input.delta,input.up),0.0f,10.0f) : authoredDrop;
+	float headRaw[3];
+	if(androidgame::VrGetOnFootSkeletonHead(headRaw)){
+		input.headTarget=CVector(headRaw[0]+eyeRaw[0]-anchorRaw[0],
+			headRaw[1]+eyeRaw[1]-anchorRaw[1],headRaw[2]+eyeRaw[2]-anchorRaw[2]);
+		input.hasHeadTarget=true;
+	}
+	const bool planting=ped->bIsStanding && !ped->bIsInTheAir && ped->m_nMoveState<=PEDMOVE_STILL;
+	gTrackedStance.Begin(ped,ped->GetClump(),CTimer::GetFrameCounter(),
+		ped->GetPosition(),visualBody.GetForward(),planting);
+	if(planting){
+		for(int side=0;side<2;++side){
+			const CVector candidate=gTrackedStance.Candidate(side,input.foot[side]);
+			CColPoint hit; CEntity *ground=nil;
+			// Static terrain only: never retain a dangling platform reference
+			// or attach a foot to a passing vehicle/pedestrian.
+			const bool found=CWorld::ProcessVerticalLine(candidate+CVector(0,0,0.4f),
+				candidate.z-0.5f,hit,ground,true,false,false,false,false,false,nil);
+			input.footTarget[side]=gTrackedStance.Contact(side,input.foot[side],
+				found ? hit.point : candidate,found ? hit.normal : CVector(0,0,1),found);
+			const CVector normal=gTrackedStance.Normal(side);
+			feet[side].right=QuestBodyPosture::Swing(feet[side].right,CVector(0,0,1),normal);
+			feet[side].up=QuestBodyPosture::Swing(feet[side].up,CVector(0,0,1),normal);
+			feet[side].at=QuestBodyPosture::Swing(feet[side].at,CVector(0,0,1),normal);
+			CVector footRight=feet[side].right,footUp=feet[side].up,footAt=feet[side].at;
+			gTrackedStance.Orient(side,footRight,footUp,footAt);
+			feet[side].right=footRight;feet[side].up=footUp;feet[side].at=footAt;
+		}
+		input.hasFootTargets=true;
+	}
 	QuestBodyPosture::Output solved;
 	if(!QuestBodyPosture::Solve(input,solved)) return;
+	for(int side=0;side<2;++side)
+		if(planting && (solved.foot[side]-input.footTarget[side]).MagnitudeSqr()>0.0004f)
+			gTrackedStance.Release(side); // Reach limit requires a new contact, not a stretched leg.
 	for(int i=0;i<3;++i){
 		const CVector from=CVector(mats[joints[i+1]].pos)-CVector(mats[joints[i]].pos);
 		MovePostureJoint(hier,mats,parents,joints[i],solved.spine[i],from,

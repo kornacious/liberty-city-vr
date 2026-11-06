@@ -39,6 +39,8 @@ struct Input
 	CVector hip[2], knee[2], foot[2];
 	CVector delta, up, forward;
 	float authoredDrop;
+	CVector headTarget, footTarget[2];
+	bool hasHeadTarget=false, hasFootTargets=false;
 };
 struct Output
 {
@@ -48,10 +50,12 @@ struct Output
 inline bool Solve(const Input &in, Output &out)
 {
 	if(!Finite(in.delta) || !Finite(in.up) || !Finite(in.forward) ||
+	   (in.hasHeadTarget && !Finite(in.headTarget)) ||
 	   !isfinite(in.authoredDrop)) return false;
 	float lengths[3], upper[2], lower[2];
 	float total = 0.0f;
 	for(int i=0; i<4; ++i) if(!Finite(in.spine[i])) return false;
+	if(in.hasHeadTarget && (in.headTarget-in.spine[3]).MagnitudeSqr()>2.25f) return false;
 	for(int i=0; i<3; ++i){
 		lengths[i] = (in.spine[i+1]-in.spine[i]).Magnitude();
 		if(lengths[i] < 0.005f) return false;
@@ -59,6 +63,7 @@ inline bool Solve(const Input &in, Output &out)
 	}
 	for(int i=0; i<2; ++i){
 		if(!Finite(in.hip[i]) || !Finite(in.knee[i]) || !Finite(in.foot[i])) return false;
+		if(in.hasFootTargets && !Finite(in.footTarget[i])) return false;
 		upper[i]=(in.knee[i]-in.hip[i]).Magnitude();
 		lower[i]=(in.foot[i]-in.knee[i]).Magnitude();
 		if(upper[i]<0.02f || lower[i]<0.02f) return false;
@@ -71,16 +76,20 @@ inline bool Solve(const Input &in, Output &out)
 	const float legLength = upper[0]+lower[0] < upper[1]+lower[1] ? upper[0]+lower[0] : upper[1]+lower[1];
 	const float drop=Bounded(-DotProduct(in.delta,up)-Bounded(in.authoredDrop,0,0.8f),0,
 		Bounded(legLength*0.65f,0,0.65f));
-	if(lean.MagnitudeSqr()<1.0e-10f && drop<1.0e-5f){
+	if(!in.hasHeadTarget && !in.hasFootTargets && lean.MagnitudeSqr()<1.0e-10f && drop<1.0e-5f){
 		for(int i=0;i<4;++i) out.spine[i]=in.spine[i];
 		for(int i=0;i<2;++i){out.hip[i]=in.hip[i];out.knee[i]=in.knee[i];out.foot[i]=in.foot[i];}
 		return true;
 	}
-	const CVector pelvis=lean*0.18f-up*(drop*0.85f)-forward*(drop*0.15f);
-	const CVector root=in.spine[0]+pelvis;
-	CVector target=in.spine[3]+lean-up*drop;
-	if((target-root).Magnitude() > total*0.9999f)
-		target=root+Unit(target-root,up)*(total*0.9999f);
+	CVector pelvis=lean*0.18f-up*(drop*0.85f)-forward*(drop*0.15f);
+	CVector root=in.spine[0]+pelvis;
+	const CVector target=in.hasHeadTarget ? in.headTarget : in.spine[3]+lean-up*drop;
+	// The headset is authoritative. Move the pelvis to make room for the
+	// neck instead of shortening its target and leaving the chest in the eye.
+	if((target-root).Magnitude() > total*0.9999f){
+		root=target-Unit(target-root,up)*(total*0.9999f);
+		pelvis=root-in.spine[0];
+	}
 	for(int i=0; i<4; ++i) out.spine[i]=in.spine[i]+pelvis;
 	// Seed a forward bend when compressing an otherwise straight spine.
 	if((target-root).Magnitude() < total-0.001f){
@@ -94,10 +103,16 @@ inline bool Solve(const Input &in, Output &out)
 		for(int i=0;i<3;++i)
 			out.spine[i+1]=out.spine[i]+Unit(out.spine[i+1]-out.spine[i],up)*lengths[i];
 	}
+	// Close the finite-iteration residual at the pelvis, retaining every
+	// segment length and exact head placement even when leaning backwards.
+	const CVector residual=target-out.spine[3];
+	for(int i=0;i<4;++i) out.spine[i]+=residual;
+	pelvis=out.spine[0]-in.spine[0];
 	for(int i=0;i<2;++i){
 		out.hip[i]=in.hip[i]+pelvis;
-		const CVector direction=Unit(in.foot[i]-out.hip[i],-up);
-		const float distance=Bounded((in.foot[i]-out.hip[i]).Magnitude(),
+		const CVector contact=in.hasFootTargets ? in.footTarget[i] : in.foot[i];
+		const CVector direction=Unit(contact-out.hip[i],-up);
+		const float distance=Bounded((contact-out.hip[i]).Magnitude(),
 			fabsf(upper[i]-lower[i])+0.001f,upper[i]+lower[i]-0.001f);
 		out.foot[i]=out.hip[i]+direction*distance;
 		CVector pole=in.knee[i]-in.hip[i];
@@ -109,4 +124,49 @@ inline bool Solve(const Input &in, Output &out)
 	}
 	return true;
 }
+
+// Stationary contacts are stored in world space, never in the HMD-yawed body
+// frame. Walking, loss of ground, a turn/step, teleport or ownership gap releases
+// them. The native gait remains the contact source during locomotion.
+class Stance
+{
+	const void *owner=nullptr,*model=nullptr;
+	unsigned frame=0;
+	CVector root,heading;
+	bool active=false,valid[2]={false,false},orientationValid[2]={false,false};
+	CVector position[2],normal[2];
+	CVector right[2],up[2],at[2];
+public:
+	void Reset(){active=false;valid[0]=valid[1]=false;owner=model=nullptr;}
+	void Begin(const void *ped,const void *clump,unsigned tick,
+		const CVector &pedRoot,const CVector &forward,bool eligible)
+	{
+		if(!eligible || !Finite(pedRoot) || !Finite(forward)){Reset();return;}
+		if(!active || owner!=ped || model!=clump || tick-frame>2 ||
+		   (pedRoot-root).MagnitudeSqr()>0.0025f || DotProduct(heading,forward)<0.82f){
+			valid[0]=valid[1]=false;heading=forward;
+		}
+		active=true;owner=ped;model=clump;frame=tick;root=pedRoot;
+	}
+	CVector Candidate(int side,const CVector &native) const {return active && valid[side] ? position[side] : native;}
+	CVector Contact(int side,const CVector &native,const CVector &ground,const CVector &groundNormal,bool hit)
+	{
+		if(!active || !hit || !Finite(ground) || !Finite(groundNormal) || groundNormal.z<0.65f ||
+		   fabsf(native.z-ground.z)>0.3f){valid[side]=false;return native;}
+		if(valid[side] && ((native-position[side]).MagnitudeSqr()>0.09f ||
+		   fabsf(ground.z-position[side].z)>0.3f)) valid[side]=false;
+		if(!valid[side]){
+			position[side]=CVector(native.x,native.y,ground.z+Bounded(native.z-ground.z,0.02f,0.16f));
+			normal[side]=Unit(groundNormal,CVector(0,0,1));valid[side]=true;orientationValid[side]=false;
+		}
+		return position[side];
+	}
+	CVector Normal(int side) const {return active && valid[side] ? normal[side] : CVector(0,0,1);}
+	void Orient(int side,CVector &r,CVector &u,CVector &a){
+		if(!active || !valid[side]) return;
+		if(!orientationValid[side]){right[side]=r;up[side]=u;at[side]=a;orientationValid[side]=true;}
+		r=right[side];u=up[side];a=at[side];
+	}
+	void Release(int side){valid[side]=false;}
+};
 }

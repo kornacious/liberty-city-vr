@@ -53,6 +53,7 @@ namespace VrBodyIK {
 static unsigned resets,anchorWrites;
 static struct {void Reset(){++resets;}} gCrouchView,gKnockdownView;
 static CVector submittedHead,submittedRight,submittedUp,submittedForward;
+static CVector gVrOnFootSkeletonHead;
 static float Atan2(float y,float x){return std::atan2(y,x);}
 enum {PED_IDLE,PED_DRIVING,PED_JUMP};
 static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;

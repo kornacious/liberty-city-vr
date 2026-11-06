@@ -21,9 +21,21 @@ struct CMatrix {
 };
 struct RwMatrix {CVector pos,right{0,0,1},up{0,1,0},at{-1,0,0};int flags=0;};
 struct RpHAnimHierarchy {int numNodes=14;int parents[14]={-1,0,1,2,0,4,5,0,7,8,2,10,11,12};};
-struct CPed {bool modern=true,vehicle=false;int m_nPedState=0;CVector position;bool InVehicle(){return vehicle;}CVector GetPosition(){return position;}};
+struct CPed {bool modern=true,vehicle=false,bIsStanding=false,bIsInTheAir=false;int m_nPedState=0,m_nMoveState=0;CVector position;bool InVehicle(){return vehicle;}CVector GetPosition(){return position;}void *GetClump(){return this;}};
 struct UpperBodyBones {int waist=0,mid=1,torso=2,head=3;};
 enum {PED_JUMP=1,MAX_BODY_IK_NODES=96,BONE_upperlegl=4,BONE_lowerlegl=5,BONE_footl=6,BONE_upperlegr=7,BONE_lowerlegr=8,BONE_footr=9};
+enum {PEDMOVE_STILL,PEDMOVE_WALK};
+struct CEntity {};
+struct CColPoint {CVector point,normal;};
+static bool groundFound=false,headTargetAvailable=false;
+static CVector skeletonHead;
+namespace CWorld {
+static bool ProcessVerticalLine(CVector from,float,CColPoint &hit,CEntity*&,bool,bool,bool,bool,bool,bool,void*){
+    hit.point={from.x,from.y,0};hit.normal={0,0,1};return groundFound;
+}
+}
+struct CTimer {static unsigned frame;static unsigned GetFrameCounter(){return frame;}};unsigned CTimer::frame=0;
+static QuestBodyPosture::Stance gTrackedStance;
 static bool gVehicleTransitionActive,tracking=true;
 static CVector eye,anchor;
 static bool UsesNativeCameraHead(CPed *ped){return ped->modern;}
@@ -37,6 +49,7 @@ static CMatrix MatrixFromRw(const RwMatrix &m){CMatrix b;b.p=m.pos;b.r=m.right;b
 namespace androidgame {
 static bool VrGetViewBasis(float *p,float*,float*,float*){if(!tracking)return false;p[0]=eye.x;p[1]=eye.y;p[2]=eye.z;return true;}
 static bool VrGetOnFootBodyAnchor(float *p){p[0]=anchor.x;p[1]=anchor.y;p[2]=anchor.z;return true;}
+static bool VrGetOnFootSkeletonHead(float *p){p[0]=skeletonHead.x;p[1]=skeletonHead.y;p[2]=skeletonHead.z;return headTargetAvailable;}
 }
 #include "body-posture-runtime.inc"
 int main(){
@@ -53,7 +66,8 @@ int main(){
         for(int i=0;i<2;++i){
             Require(std::fabs((out.knee[i]-out.hip[i]).Magnitude()-(in.knee[i]-in.hip[i]).Magnitude())<.0002f,"thigh length preserved");
             Require(std::fabs((out.foot[i]-out.knee[i]).Magnitude()-(in.foot[i]-in.knee[i]).Magnitude())<.0002f,"shin length preserved");
-            Near(out.foot[i],in.foot[i],"reachable feet remain at native contact");
+            const float reach=(in.knee[i]-in.hip[i]).Magnitude()+(in.foot[i]-in.knee[i]).Magnitude();
+            if((in.foot[i]-out.hip[i]).Magnitude()<reach-.001f) Near(out.foot[i],in.foot[i],"reachable feet remain at native contact");
             Require(Finite(out.knee[i]),"finite knees at all rates");
         }
         // Frame duration must never change an identical physical pose.
@@ -111,5 +125,61 @@ int main(){
     for(int i=0;i<14;++i)carried[i]=native[i];
     ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,-1.0f);
     Near(carried[0].pos,native[0].pos,"starting IK crouched does not invent a standing calibration");
+    // The former reach clamp shortened backwards head displacement. A tracked
+    // endpoint must instead move the pelvis and retain the exact neck target.
+    for(int rate:{30,72,90,120})for(int frame=0;frame<180;++frame){
+        Input in=standing;const float t=float(frame)/float(rate);
+        in.delta={.23f*std::sin(t),-.28f*std::cos(t),-.12f};
+        in.hasHeadTarget=true;in.headTarget=in.spine[3]+in.delta+CVector(.025f,0,.025f);
+        Output result;Require(Solve(in,result),"tracked backwards/sideways target solved");
+        Near(result.spine[3],in.headTarget,"head endpoint remains at camera anatomical target");
+        for(int i=0;i<3;++i)Require(std::fabs((result.spine[i+1]-result.spine[i]).Magnitude()-(in.spine[i+1]-in.spine[i]).Magnitude())<.0002f,"head authority does not stretch spine");
+    }
+    Input stale=standing;stale.hasHeadTarget=true;stale.headTarget={100,0,1};
+    Require(!Solve(stale,out),"stale/teleported head target cannot tear the skeleton");
+    Stance contacts;
+    CVector firstContact;
+    const CVector foot={-.12f,0,.06f},ground={-.12f,0,0},normal={0,0,1};
+    for(unsigned frame=1;frame<100;++frame){
+        contacts.Begin(&ped,&body,frame,{},CVector(0,1,0),true);
+        const CVector jitter=foot+CVector(.02f*std::sin(float(frame)),0,.01f*std::cos(float(frame)));
+        CVector planted=contacts.Contact(0,jitter,ground,normal,true);
+        if(frame==1)firstContact=planted;
+        Near(planted,firstContact,"standing contact does not follow native idle sway");
+    }
+    CVector fr={1,0,0},fu={0,0,1},fa={0,1,0};contacts.Orient(0,fr,fu,fa);
+    fr={0,1,0};fa={-1,0,0};contacts.Orient(0,fr,fu,fa);Near(fr,{1,0,0},"planted orientation does not yaw with the torso");
+    contacts.Begin(&ped,&body,100,{},CVector(0,1,0),false);
+    Near(contacts.Contact(0,foot,ground,normal,true),foot,"locomotion releases contact");
+    contacts.Begin(&ped,&body,101,{},CVector(0,1,0),true);
+    Near(contacts.Contact(0,foot,ground,normal,false),foot,"missing ground does not retain stale contact");
+    contacts.Contact(0,foot,ground,normal,true);contacts.Begin(&ped,&body,104,{},CVector(0,1,0),true);
+    Near(contacts.Candidate(0,foot+CVector(.1f,0,0)),foot+CVector(.1f,0,0),"ownership gap releases planted stance");
+    contacts.Contact(0,foot,ground,normal,true);contacts.Begin(&ped,&body,105,{5,0,0},CVector(0,1,0),true);
+    Near(contacts.Candidate(0,{5,0,.06f}),{5,0,.06f},"teleport releases planted stance");
+
+    // Real production adapter with the camera's independent target and ground
+    // probes. Rebuild the native pose each frame, as PreRender does in game.
+    ped.bIsStanding=true;groundFound=headTargetAvailable=true;gTrackedStance.Reset();
+    skeletonHead=native[3].pos+CVector(.025f,0,.025f);anchor={0,0,1.65f};
+    CVector leftPlant,rightPlant;
+    for(unsigned frame=0;frame<180;++frame){
+        ++CTimer::frame;eye=anchor+CVector(.1f*std::sin(float(frame)*.02f),-.15f*std::cos(float(frame)*.02f),-.12f);
+        for(int i=0;i<14;++i)carried[i]=native[i];
+        // Native ankle sway must not be confused with physical foot movement.
+        carried[6].pos.x+=.01f*std::sin(float(frame));carried[9].pos.x+=.01f*std::cos(float(frame));
+        const CVector trackedEye=eye;
+        ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+        Near(carried[3].pos,skeletonHead+eye-anchor,"production head matches current camera target during backward lean");
+        if(frame==0){leftPlant=carried[6].pos;rightPlant=carried[9].pos;}
+        Near(carried[6].pos,leftPlant,"production left foot retains ground contact");
+        Near(carried[9].pos,rightPlant,"production right foot retains ground contact");
+        Near(eye,trackedEye,"foot planting does not move the camera");
+    }
+    ped.m_nMoveState=PEDMOVE_WALK;++CTimer::frame;
+    for(int i=0;i<14;++i)carried[i]=native[i];
+    carried[6].pos.y+=.08f;
+    ApplyTrackedPosture(&ped,&hierarchy,carried,body,visual,0);
+    Require(carried[6].pos.y>.07f,"native walking foot releases the standing contact");
     std::printf("PASS %u body posture checks\n",checks);
 }

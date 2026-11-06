@@ -626,6 +626,8 @@ bool gVrInVehicle;
 bool gVrHidePlayerBody = true;
 
 static CVector gVrOnFootBodyAnchor;
+static CVector gVrOnFootSkeletonHead;
+static bool gVrOnFootSkeletonHeadValid;
 static bool gVrOnFootBodyAnchorValid;
 
 // The shape of the cinema screen theater mode draws on. The game lays its
@@ -679,6 +681,16 @@ androidgame::VrGetOnFootBodyAnchor(float position[3])
 	position[0] = gVrOnFootBodyAnchor.x;
 	position[1] = gVrOnFootBodyAnchor.y;
 	position[2] = gVrOnFootBodyAnchor.z;
+	return true;
+}
+
+bool
+androidgame::VrGetOnFootSkeletonHead(float position[3])
+{
+	if(!gVrOnFootBodyAnchorValid || !gVrOnFootSkeletonHeadValid || position==nil) return false;
+	position[0]=gVrOnFootSkeletonHead.x;
+	position[1]=gVrOnFootSkeletonHead.y;
+	position[2]=gVrOnFootSkeletonHead.z;
 	return true;
 }
 
@@ -1940,6 +1952,9 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				QuestHeadAttachment::ViewBasis(heading, vertical,
 					boneRight, boneUp, boneForward);
 			float eyeForward, eyeHeight, eyeSide;
+			// Publish the camera's pre-eye-fit anatomical target for the body
+			// solver. Its solved/rendered head must never feed this value back.
+			gVrOnFootSkeletonHead=head;
 			androidgame::VrGetXboxHeadOffset(&eyeForward,&eyeHeight,&eyeSide);
 			head += boneForward*eyeForward + boneUp*eyeHeight + boneRight*eyeSide;
 			forward = boneForward;
@@ -2003,8 +2018,10 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(!gVrInVehicle){
 			gVrOnFootBodyAnchor = head;
 			gVrOnFootBodyAnchorValid = true;
+			gVrOnFootSkeletonHeadValid=exactBoneCamera;
 		}else{
 			gVrOnFootBodyAnchorValid = false;
+			gVrOnFootSkeletonHeadValid=false;
 		}
 		if(!fullVehicleBasis){
 			rw::vulkan::setFirstPersonAnchor(&head.x,
