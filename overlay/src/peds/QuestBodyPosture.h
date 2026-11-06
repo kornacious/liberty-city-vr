@@ -157,6 +157,13 @@ inline bool Solve(const Input &in, Output &out)
 		out.foot[i]=out.hip[i]+direction*distance;
 		CVector pole=in.knee[i]-in.hip[i];
 		pole-=direction*DotProduct(pole,direction);
+		if(in.hasHeadTarget){
+			// The native knee belongs to the pre-retargeted pelvis. Projecting
+			// it after moving the hip can reverse the bend on a physical turn.
+			// Anatomical forward defines the knee plane for tracked posture.
+			pole=forward-direction*DotProduct(forward,direction);
+			if(pole.MagnitudeSqr()<1.0e-8f) pole=up-direction*DotProduct(up,direction);
+		}
 		pole=Unit(pole,Unit(forward-direction*DotProduct(forward,direction),forward));
 		const float along=(upper[i]*upper[i]-lower[i]*lower[i]+distance*distance)/(2.0f*distance);
 		const float height=sqrtf(Bounded(upper[i]*upper[i]-along*along,0,upper[i]*upper[i]));

@@ -1443,9 +1443,21 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	const bool xboxKnockdown = wantFirstPerson && !thirdPersonVehicle &&
 		ModelSets::IsModernActive() && player->GetClump() != nil &&
 		IsClumpSkinned(player->GetClump()) && PlayerKnockedDown(player);
+	const bool xboxCarEntry=wantFirstPerson && !thirdPersonVehicle &&
+		ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump()) &&
+		(playerVehicleState==PED_OPEN_DOOR || playerVehicleState==PED_CARJACK ||
+		 playerVehicleState==PED_ENTER_CAR || playerVehicleState==PED_STEAL_CAR);
+	static CPlayerPed *entryCameraPlayer;
+	static bool entryCameraActive;
+	if(xboxCarEntry && (!entryCameraActive || entryCameraPlayer!=player)){
+		// Relatch current physical facing once. The next native bone anchor
+		// starts looking along the animation even if entry began turned around.
+		rw::vulkan::setFirstPersonAnchor(nil,0.0f,0,0);
+	}
+	entryCameraPlayer=player;entryCameraActive=xboxCarEntry;
 	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson &&
 		((trainPassenger && player->InVehicle()) ||
-		 (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
+		 xboxCarEntry || (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
 	rw::vulkan::setFirstPersonHeightLocked(wantFirstPerson && !thirdPersonVehicle &&
 		ModelSets::IsModernActive() && !player->InVehicle() && player->bIsDucking && !xboxKnockdown);
 
@@ -1954,9 +1966,12 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			}else if(headModeOnFoot){
 				heading = TheCamera.Cams[TheCamera.ActiveCam].Front;
 			}
-			// Routine gait never steers the HMD. A downed/get-up pose may
-			// explicitly follow the native head, independently of walking bob.
-			if(!PlayerKnockedDown(player) || !androidgame::VrXboxKnockdownBoneViewEnabled())
+			const bool animatedCarEntry=vehicleTransition && !trainPassenger &&
+				(playerVehicleState==PED_OPEN_DOOR || playerVehicleState==PED_CARJACK ||
+				 playerVehicleState==PED_ENTER_CAR || playerVehicleState==PED_STEAL_CAR);
+			// Entry follows the authored head until driving owns the camera.
+			// Routine gait still cannot steer the HMD.
+			if(!animatedCarEntry && (!PlayerKnockedDown(player) || !androidgame::VrXboxKnockdownBoneViewEnabled()))
 				QuestHeadAttachment::ViewBasis(heading, vertical,
 					boneRight, boneUp, boneForward);
 			float eyeForward, eyeHeight, eyeSide;

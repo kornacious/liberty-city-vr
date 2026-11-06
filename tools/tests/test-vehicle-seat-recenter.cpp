@@ -404,6 +404,25 @@ static void KnockdownAttachment() {
  ModelSets::modern=false;testKnockdown=false;androidgame::knockdownLock=true;
 }
 
-int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();
+static void XboxEntryAttachment(){
+ CPlayerPed p;CVehicle car;Reset(p,car);ModelSets::modern=true;p.inVehicle=false;p.state=PED_OPEN_DOOR;
+ Head(.3f,1.5f,-.2f,3.14159265f);Tick();
+ Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,3.14159265f),"entry latches current physical facing even when turned 180 degrees");
+ for(int state:{PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR}){
+  p.state=state;const float entryYaw=rw::vulkan::gvk.fpLatchedHeadYaw;
+  Head(.8f,1.1f,.4f,2.7f);Tick(false);Tick();const CVector before=Eye();
+  Head(1,1.8f,.8f,2.3f);Tick();
+  const CVector after=Eye();Check(Near(before.x,after.x)&&Near(before.y,after.y)&&Near(before.z,after.z),"entry remains head-position locked through every native phase");
+  Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,entryYaw),"entry does not recenter heading repeatedly while physically looking around");
+ }
+ p.inVehicle=true;p.state=PED_DRIVING;Tick();
+ Check(!rw::vulkan::gFirstPersonPositionLocked,"driving resumes ordinary physical translation");
+ p.inVehicle=false;p.state=PED_IDLE;Tick();p.state=PED_ENTER_CAR;
+ Head(.2f,1.6f,0,.6f);Tick();Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,.6f),"a later entry captures a fresh heading once");
+ p.state=PED_IDLE;Tick();Check(!rw::vulkan::gFirstPersonPositionLocked,"cancelled entry releases the positional lock");
+ ModelSets::modern=false;
+}
+
+int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();XboxEntryAttachment();
  std::printf("PASS: %u production seat/train/XR/backend checks; carriage motion, free controllers and tracking continuity verified.\n",checks);return 0;
  }catch(const std::exception&e){std::fprintf(stderr,"FAIL after %u checks: %s\n",checks,e.what());return 1;}}

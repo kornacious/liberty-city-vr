@@ -288,5 +288,32 @@ int main(){
         }
         Require(std::fabs((carried[1].pos-carried[0].pos).Magnitude()-.22f)<.001f,"spine dimensions use standing anatomy rather than pose displacement");
     }
+    // A relocated pelvis must not reuse a knee plane from the original pose.
+    // Include near-straight and backwards native knees, full body yaw, and
+    // contacts ahead/behind the hip (the former hock/chicken-leg cases).
+    for(int angle=0;angle<72;++angle)for(float nativeBend:{-.08f,.00001f,.08f})
+    for(float contactOffset:{-.12f,0.0f,.12f}){
+        const float facing=float(angle)*.0872664626f;
+        const CVector fore(-std::sin(facing),std::cos(facing),0),right(std::cos(facing),std::sin(facing),0);
+        Input in=standing;
+        auto turn=[&](CVector v){return right*v.x+fore*v.y+CVector(0,0,v.z);};
+        for(int i=0;i<4;++i)in.spine[i]=turn(in.spine[i]);
+        for(int side=0;side<2;++side){
+            in.hip[side]=turn(in.hip[side]);in.knee[side].y=nativeBend;in.knee[side]=turn(in.knee[side]);
+            in.foot[side]=turn(in.foot[side]);in.footTarget[side]=in.foot[side]+fore*contactOffset;
+        }
+        in.forward=fore;in.delta={0,0,-.25f};in.hasHeadTarget=in.hasFootTargets=true;
+        in.headTarget=in.spine[3]+in.delta;Output solved;
+        Require(Solve(in,solved),"tracked knee plane solves through full physical turns");
+        for(int side=0;side<2;++side){
+            CVector line=Unit(solved.foot[side]-solved.hip[side],{0,0,-1});
+            CVector bend=solved.knee[side]-solved.hip[side];bend-=line*DotProduct(bend,line);
+            Require(DotProduct(bend,fore)>.001f,"tracked knees bend anatomically forward rather than backwards or sideways");
+            Require(std::fabs((solved.knee[side]-solved.hip[side]).Magnitude()-(in.knee[side]-in.hip[side]).Magnitude())<.0002f,"knee direction correction preserves thigh length");
+            Require(std::fabs((solved.foot[side]-solved.knee[side]).Magnitude()-(in.foot[side]-in.knee[side]).Magnitude())<.0002f,"knee direction correction preserves shin length");
+            Near(solved.foot[side],in.footTarget[side],"knee plane correction retains reachable contacts");
+        }
+        Near(solved.spine[3],in.headTarget,"knee correction preserves head/pelvis solve");
+    }
     std::printf("PASS %u body posture checks\n",checks);
 }

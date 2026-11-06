@@ -55,7 +55,7 @@ static struct {void Reset(){++resets;}} gCrouchView,gKnockdownView;
 static CVector submittedHead,submittedRight,submittedUp,submittedForward;
 static CVector gVrOnFootSkeletonHead;
 static float Atan2(float y,float x){return std::atan2(y,x);}
-enum {PED_IDLE,PED_DRIVING,PED_JUMP};
+enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR};
 static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
 static int playerVehicleState=PED_IDLE;
 static bool PlayerKnockedDown(CPed*){return knockedDown;}
@@ -210,5 +210,21 @@ int main(){
             standingHead-CVector(0,0,.45f),"button crouch lowers vertically without native horizontal drift");
     }
     Near(button.Position(&player,&clump,nullptr,root,standingHead,false,true,true),standingHead,"button stand restores original position");
+    vehicleTransition=true;trainPassenger=false;knockedDown=false;
+    androidgame::boneView=false;
+    for(int entry:{PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR}){
+        playerVehicleState=entry;++CTimer::frame;
+        Final(&player,false,p,f);
+        Near(submittedForward,CVector(nativeHead.up),"car entry follows native animation facing rather than idle heading");
+        Near(submittedUp,CVector(nativeHead.right),"car entry retains authored head basis");
+    }
+    CVehicle car;player.vehicle=gVrInVehicle=true;player.m_pMyVehicle=&car;
+    vehicleTransition=false;playerVehicleState=PED_DRIVING;++CTimer::frame;
+    Final(&player,false,p,f);
+    Near(submittedForward,car.GetForward(),"completed entry hands view forward to driving carrier");
+    Near(submittedUp,car.GetUp(),"completed entry restores driving up vector");
+    player.vehicle=gVrInVehicle=false;player.m_pMyVehicle=nullptr;playerVehicleState=PED_IDLE;
+    ++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedUp,{0,0,1},"cancelled/finished entry does not leak animation tilt into on-foot comfort view");
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }
