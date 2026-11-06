@@ -381,7 +381,7 @@ void QuestProfilerSetEnabled(bool enabled);
 bool QuestProfilerIsEnabled(void);
 
 // App frame brackets the native renderer callback, excluding xrWaitFrame
-// pacing. Step brackets Vice City's simulation + render command recording.
+// pacing. Step brackets GTA III's simulation + render command recording.
 void QuestProfilerBeginAppFrame(void);
 void QuestProfilerCancelAppFrame(void);
 void QuestProfilerBeginVkBegin(void);

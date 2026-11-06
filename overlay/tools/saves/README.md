@@ -17,7 +17,7 @@ The default PC folder is `<workplace>/save-transfer/pc`; choose the PC game's
 actual save directory to transfer directly into or out of that installation.
 The direction, selected slots and folder are saved when the action is performed. The
 old Windows import/export BAT shortcuts now open this page with the appropriate
-preset direction. Legacy script entries are hidden from **Tools and tests**.
+preset direction. The incompatible legacy Vice City converter/scripts have been removed.
 
 ## Supported saves
 

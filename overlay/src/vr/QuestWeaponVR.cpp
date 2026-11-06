@@ -2811,7 +2811,7 @@ ApplyTouchInput(CControllerState *state)
 			state->RightShoulder1 = 0;
 		if(gAttachedMissionWeaponForced){
 			// Both grips belong to the mounted gun and its optional support
-			// grip. Never leak either into Vice City's L1/radio bindings.
+			// grip. Never leak either into GTA III's L1/radio bindings.
 			state->LeftShoulder1 = 0;
 			state->RightShoulder1 = 0;
 		}

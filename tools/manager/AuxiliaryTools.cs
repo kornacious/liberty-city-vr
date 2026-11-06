@@ -12,7 +12,7 @@ public sealed record AuxiliaryTool(string Path, string Category, string Descript
 /// <summary>
 /// Embedded auxiliary implementations preserve specialised authoring and regression tools.
 /// They are unpacked only into an isolated, local, source-only workspace, never into the checkout.
-/// Primary workflows use native C# services, not these compatibility modules.
+/// Primary workflows use native C# services; obsolete installer modules are removed.
 /// </summary>
 public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runner, PrivateLog log, Func<int, Task<int?>>? chooseDevice = null)
 {
@@ -25,8 +25,7 @@ public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runn
     }
     private static readonly HashSet<string> Primary = new(StringComparer.Ordinal)
     {
-        "assemble", "build-and-install", "update-and-install", "import-music", "install-game-files", "install-modern-models",
-        "prepare-modern-models", "prepare-xbox-models", "build-modern-modelset", "build-xbox-modelset", "xbox-modelset", "privacy_guard", "device-diagnostics"
+        "assemble", "device-diagnostics"
     };
     public static IEnumerable<AuxiliaryTool> Catalog => Sources.Keys
         .Where(p => !p.StartsWith("overlay/tools/saves/", StringComparison.Ordinal) && p != "overlay/android/diagnostics/asan-wrap.sh" &&

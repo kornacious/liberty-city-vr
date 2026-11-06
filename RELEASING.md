@@ -17,9 +17,8 @@ Before a tag or GitHub release:
 2. Confirm the repository contains no APK/AAB/SO/DLL, signing key,
    `release-signing.properties`, game data, save, profiler CSV, log, Modern
    model overlay, `.codex*`, `.claude`, `.agents`, `build`, `dist` or cache.
-   The only permitted EXE is the existing `tools/modelsets/txdcompress.exe`,
-   the Windows build of its adjacent source, described in
-   `tools/modelsets/TOOL_NOTICE.md`. No other executable belongs in the kit.
+   No prebuilt executable belongs in the source kit; the retired texture
+   compressor is no longer an exception.
    Exclude host-generated test `.inc` files and local iteration reports;
    preserve authored librw shader/font includes and source regression tests.
 3. Assemble from a clean public `mrxenginner/re3` `master` checkout at commit
@@ -46,7 +45,11 @@ Before a tag or GitHub release:
 6. Inspect the generated APK locally. It should contain only application
    metadata/resources and the arm64 `liblibertyvr.so`, `libc++_shared.so` and
    Khronos OpenXR loader. Do not add the APK to this source repository.
-7. Publish the commit/tag only after reviewing the complete GitHub file list.
+7. Review [NOTICE.md](NOTICE.md), [tools/README.md](tools/README.md) and the
+   manager's locked package inventory whenever dependencies change. Local
+   self-contained manager/editor distributions must retain the actual runtime,
+   NuGet and native component license/notice files; CMake installs editor notices.
+8. Publish the commit/tag only after reviewing the complete GitHub file list.
    If desired, use GitHub's automatic source archive; do not attach an APK,
    assembled re3 tree, retail data or a generated Modern model set.
 

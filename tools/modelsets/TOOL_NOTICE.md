@@ -14,6 +14,8 @@ The CMake target runs headlessly and requires a C++17 compiler.
 retail asset baseline, not original files. Source images, extracted files and
 converted overlays remain local and must never be redistributed or committed.
 
-`txdcompress.cpp` and its Windows executable are retained for existing auxiliary
-workflows. The Original Xbox importer does not recompress or cap retail textures.
-Historical embedded HD-mod preparation modules are not Manager action entrypoints.
+The obsolete HD-pack builder, `xbox-pack.json`, texture compressor source/binary
+and their regression adapters have been removed. The Original Xbox importer does
+not recompress or cap retail textures. CMake/CTest and the host compiler are
+external build tools; see the [tools inventory](../README.md) and
+[root notices](../../NOTICE.md).

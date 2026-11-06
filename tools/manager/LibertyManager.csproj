@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Terminal.Gui" Version="2.5.0" />
     <Compile Remove="tests/**/*.cs" />
+    <None Update="NOTICE.md;ONIGWRAP-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="../modelsets/xbox-disc.json" Link="xbox-disc.json" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,45 @@
 # Manager migration verification
 
+## Dependency and inherited-tool audit (2026-11-06)
+
+Local Windows execution; no original game data was read or transferred. Added
+workflow/dependency inventories and third-party notices for host tooling, all
+24 locked NuGet packages and editor/native components. Checked NuGet license
+metadata against the restored package manifests and external license details
+against upstream sources. Binary notice inventories are copied by the manager
+project and editor CMake install rules.
+
+Removed 48 superseded embedded modules and nine obsolete tracked files: script
+installers/updaters, the incompatible Vice City save converter, downloaded
+HD-pack preparation/compressor and associated fixtures, plus the five explicitly
+excluded reVC/reference-only suites and their C++ sources. Retained current GTA
+III suites are not deleted because an adapter fails. Historical validation
+entries below describe the older checkout and may mention now-removed modules.
+
+- 79/79 native manager checks passed, including real FFmpeg conversion of
+  synthetic IMA ADPCM audio. Retired resources are rejected and required assembly,
+  ASan, bridge and GTA III regression resources remain available.
+- Fresh assembly from the pinned public re3 tree and full arm64 debug APK build
+  passed. Existing upstream native warnings, SDK metadata warning and Gradle
+  deprecation notices remain. No authorized, responsive Quest 3 was found;
+  deployment was skipped. No app data or saves were changed.
+- Windows and Linux self-contained manager publishes passed using locked cached
+  packages. The NuGet vulnerability feed was unreachable; publish retries used
+  `NuGetAudit=false`. No online vulnerability audit is claimed.
+- Vehicle editor build, all five CTest suites, installation and ZIP packaging
+  passed, including the synthetic device bridge. Installed notices were checked.
+- Retained current-source gate: **61 passed, 6 failed**. Failures remain in
+  `physical-scope`, `vulkan-descriptors`, `vulkan-pipelines`, `xr-focus-input`,
+  `cheat-menu` and `ragdoll-menu`: host adapters lack current profiling/instancing,
+  replay-view or head-calibration declarations. The gate now records all failures
+  even when Windows PowerShell turns child stderr into an error record. The
+  normal manager launch of the gate encountered execution-policy/default-path
+  issues in the available Windows PowerShell host; this run used the materialized
+  source-only snapshot with explicit KitRoot and process-only policy bypass.
+- Privacy hooks installed; native privacy history scan passed. No Git push or
+  external publication was performed.
+
+
 ## Multi-slot save transfer and Autosave (2026-11-01)
 
 Replaced the single manual-slot selector with a checkbox list containing slots

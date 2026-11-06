@@ -177,7 +177,7 @@ static bool gViceCityColorEnabled = true;
 // Stable single-frame FXAA. The stronger 3x3 experiment produced no visible
 // headset improvement over this path, so do not expose duplicate choices.
 static int gSpatialAaMode = 1;
-// Vice City ships single-level world textures, so distant fences and
+// GTA III ships single-level world textures, so distant fences and
 // signs are minified straight off the full-size image and crawl. The
 // chain is built on a worker thread, so the only cost the player pays
 // is about a third more texture memory.
@@ -187,7 +187,7 @@ static int gGenerateMipmaps = 1;
 // Without it the invisible border around a railing cuts its own outline
 // out of the wall behind it.
 // Off by default all the same: every masked mesh goes twice, and a
-// street of railings, fences and foliage is most of what a Vice City
+// street of railings, fences and foliage is most of what a GTA III
 // block is made of. The fringe it removes is faint and daylight-only;
 // the draws are paid everywhere. On for anyone who would rather have
 // it the other way round.

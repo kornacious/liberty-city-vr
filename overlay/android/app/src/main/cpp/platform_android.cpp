@@ -398,7 +398,7 @@ decodeImaNibble(uint8_t nibble, int &predictor, int &stepIndex)
 }
 
 // Android's MediaPlayer WAV extractor does not accept the IMA ADPCM (0x0011)
-// mission-dialogue files shipped by Vice City. Decode them off the game thread
+// mission-dialogue files shipped by GTA III. Decode them off the game thread
 // into a short-lived PCM WAV which MediaPlayer can consume normally.
 static ImaWavConversion
 convertImaAdpcmWav(const std::string &source, const std::string &destination)

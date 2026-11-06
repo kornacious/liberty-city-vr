@@ -571,7 +571,7 @@ void AdvanceJob(unsigned &vertexWork,unsigned &triangleWork,bool &subdivided,boo
 #if defined(__ANDROID__)
 		// Early parts expose the body and panels without per-frame logs.
 		if(diagnostics.commits<=4 || firstDent)
-			__android_log_print(ANDROID_LOG_INFO,"MiamiVR",
+			__android_log_print(ANDROID_LOG_INFO,"LibertyVR",
 				"[VehicleDeformation] panel model=%d frame=%s flags=%x vertices=%u changed=%u height=%.3f displacement=%.3f normal=%.2f,%.2f,%.2f receiver=%d other=%d/%d",
 				diagnostics.model,GetFrameNodeName(RpAtomicGetFrame(job.atomic)),
 				unsigned(CVisibilityPlugins::GetAtomicId(job.atomic)),unsigned(m.vertices.size()),job.changed,

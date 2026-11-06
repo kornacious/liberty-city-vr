@@ -85,13 +85,9 @@ checks water visibility through all transparent material alpha values, opaque
 hull depth, the wheels-only cheat, and state restoration before the hull water
 mask and subsequent world draws. In-game appearance still needs headset QA.
 
-`python3 tools/tests/test-device-diagnostics.py --powershell powershell.exe`
-checks the production Windows installer selection and ADB boundaries using a
-fake native process. `--powershell pwsh` selects PowerShell 7; `--bash bash`
-checks the Unix installer functions and tee logs. Both flags may be combined.
-It verifies console/log redaction, numbered selection, unauthorized/offline
-devices, native stdout/stderr, failure exit codes and explicit target routing.
-It uses no Git commands, network, game data or real device.
+Device discovery, explicit target routing, log redaction and save/music provider
+boundaries are covered by the active C# manager checks using fake devices. The
+old script installer diagnostics tests were removed with those installers.
 
 `python3 tools/tests/test-patch-series.py <local-re3-clone>` checks that every
 patch uses LF and applies the complete series to the pinned upstream revision.
@@ -196,8 +192,9 @@ Run the supported Liberty City suites together from a normal PowerShell session:
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
 reVC input, assembles the current kit and all patches in a new directory, and
-runs 52 suites against that tree or the kit's production helpers. Each suite
-runs in a separate process. `results.json` records exit codes, log paths, totals
+runs 67 suites against that tree or the kit's production helpers. Each suite
+runs in a separate process. Child stderr cannot abort failure accounting on
+Windows PowerShell; failed suites are retained in the final report. `results.json` records exit codes, log paths, totals
 and exclusions; any failed suite makes the command fail after writing the
 report. Excluded scripts never count as passes. No game assets, headset or
 private historical checkout is needed. Use `-OutDir` with a new directory to
@@ -376,23 +373,21 @@ Optional `-UseBaseline` modes require a private historical snapshot and are
 outside the current-source run. Read each runner's parameter block before
 invoking it.
 
-The following retained reference fixtures are **not supported Liberty City
-regressions** and are excluded explicitly. Their presence is not validation
-evidence for this port:
+The five previously excluded reference-only suites (`devtools-culling`,
+`heli-bullets`, `modelset-wheels`, `ragdoll-visibility`, `vehicle-driveby`) and
+associated C++ fixtures have been removed. Their assumptions were incompatible
+with this port (missing `render/VrCullViz`, private reVC baselines/M60/bikes,
+different MODELFILE behavior or absent population-cleanup sites). No coverage is
+claimed for those behaviors. Active GTA III regressions with adapter failures
+remain available; see [manager validation](../manager/VALIDATION.md).
 
-| Runner | Incompatible assumption |
-| --- | --- |
-| `test-devtools-culling.ps1` | `render/VrCullViz` module absent from this port |
-| `test-heli-bullets.ps1` | Private `baseline-qbuild`, reVC revision `026cd10`, sniper and M60 paths |
-| `test-modelset-wheels.ps1` | Wheel texture-transfer behavior differs from Liberty City's MODELFILE loader |
-| `test-ragdoll-visibility.ps1` | Expects two population-cleanup integration sites absent in current sources |
-| `test-vehicle-driveby.ps1` | Requires `Bike.cpp`, `CBike`, and bike driving paths |
-
-These integration gaps need separate porting/audit work before those fixtures
-can be promoted into the current-source suite. The suite does not claim
-coverage of those behaviors. Installer/updater fixtures, shader-tool checks
-and actual-mesh diagnostics below are also separate from the synthetic
-host suites; they are not silently treated as passing.
+Superseded script installer/updater, old save converter, privacy script and
+HD-pack preparation tests were removed with the implementations they exercised.
+Use `dotnet run --project tools/manager/tests -c Release` for the active native
+manager, save, privacy, music and retail ISO workflows. See
+[the tool inventory](../README.md) and [notices](../../NOTICE.md) for prerequisites.
+Asset diagnostics and optional baseline modes remain separate from synthetic
+host suites and are never silently counted as passing.
 
 Actual-mesh diagnostics require the player's local, legally owned game data:
 
@@ -465,32 +460,14 @@ geometry and rely on the controller conversion's handedness signs; a positive
 basis determinant alone cannot establish correct anatomy. These checks require
 no game assets; the final visual fit still needs a headset check.
 
-### Xbox Version HD preparation and routing
+### Model-set routing
 
-`python tools/tests/test-xbox-modelset.py` runs seven synthetic production-builder
-cases without network or ADB: the Modern profile, archive precedence, full output
-hashes, source pinning, allowlisted extraction, conversion failure rollback,
-verified-cache reuse and official mirror/HTML-error handling. Windows uses the
-bundled compressor; build `tools/modelsets/txdcompress` first on Linux.
-
-`test-modelset-profiles.ps1` now tests Liberty City's production ModelSets and
-streaming category filter, and is included in `test-current-sources.ps1`.
-Its 77 checks cover complete-pack routing, ignored old category mixes, map/loose
-paths, Classic fallback, restart behavior and Xbox HD calibration identity. Actual-pack
-preparation and headset appearance/performance checks remain separate; see
-[the asset guide](../../overlay/docs/QUEST_MODELSETS.md).
-
-`python tools/tests/test-modelset-progress.py --powershell powershell.exe`
-launches the real Windows preparation script with synthetic game sentinels.
-It waits for each download/local-archive question to become visible before
-sending any answer, detecting prompts hidden by the PowerShell output pipeline.
-No download or device command is issued. The same test accepts PowerShell 7.
-
-`test-installer-native-tools.ps1` exercises the production build command wrapper
-under strict PowerShell error handling: successful stderr warnings, nonzero
-exit codes, missing executables and caller preference restoration. Its isolated
-ADB discovery checks cover the default `LCVRBuild` cache, explicit SDK precedence
-and missing-SDK failures, without discovering a device or transferring data.
+`test-modelset-profiles.ps1` tests Liberty City's production ModelSets and
+streaming category filter and remains in `test-current-sources.ps1`. Its checks
+cover complete-pack routing, ignored old category mixes, map/loose paths, Classic
+fallback, restart behavior and retained calibration identity. Native manager
+Xbox checks and the converter CTest cover the current retail ISO workflow;
+retired HD-pack downloader tests are not validation for that workflow.
 
 `test-hd-texture-loading.ps1` covers the production shared generic lookup
 (model-local precedence, missing names, repeated installation and shutdown),

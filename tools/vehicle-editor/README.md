@@ -5,12 +5,21 @@ map, status, clock, ammo, radio/music and speedometer dashboard elements. It rea
 directly; no game process, headset or converted/exported models are required.
 No game data is distributed with the tool or uploaded by it.
 
+## Third-party components
+
+The editor uses the bundled MIT librw fork, Dear ImGui and ImGuizmo, stb headers
+and generated glad, plus GLFW (zlib/libpng; pinned fallback 3.3.8). CMake, CTest,
+CPack and the host C++17/OpenGL toolchain build and package it. Device transfer
+uses external Python 3 and ADB through the included manager. See
+[editor notices](NOTICE.md), [root notices](../../NOTICE.md) and [manager notices](../manager/NOTICE.md).
+CMake installs the librw, ImGui, ImGuizmo and GLFW license files with the editor.
+
 ## Build and run
 
 Open Liberty City VR Manager (`MANAGE.bat` or `dotnet run --project tools/manager
 -c Release`) and choose **Vehicle editor**. Configure the output directory and
-ZIP packaging, then **Perform**. The manager builds all three native test targets,
-runs CTest, installs the editor and packages the chosen output.
+ZIP packaging, then **Perform**. The manager builds four native test targets and runs them plus the synthetic
+device-bridge suite through CTest, then installs and packages the editor.
 
 Windows requires Visual Studio/Build Tools with the Desktop C++ workload and CMake 3.22+.
 Linux requires C++17, CMake, Ninja, OpenGL/X11 and GLFW development dependencies.

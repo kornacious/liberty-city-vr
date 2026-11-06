@@ -67,7 +67,7 @@ struct PadInput
 };
 
 // Controller remapping. Every physical Touch input the game reads as a plain
-// button drives one of Vice City's pad buttons, and the CONTROLS page of the VR
+// button drives one of GTA III's pad buttons, and the CONTROLS page of the VR
 // menu decides which. It is an on-foot feature: the VR driving layer reads X, A
 // and B straight from the controller for the radio, the handbrake and the
 // drive-by weapon, so a vehicle keeps the shipped assignment rather than firing

@@ -1051,7 +1051,7 @@ android_main(android_app *app)
 		app->activity->externalDataPath);
 #endif
 
-	LOGI("Vice City VR (Quest) starting");
+	LOGI("Liberty City VR (Quest) starting");
 
 	std::thread gameThread(gameThreadMain, app, &state);
 
@@ -1071,7 +1071,7 @@ android_main(android_app *app)
 	state.stopRequested = true;
 	gameThread.join();
 
-	LOGI("Vice City VR (Quest) exiting");
+	LOGI("Liberty City VR (Quest) exiting");
 	ANativeActivity_finish(app->activity);
 
 	// This reverse-engineered game has process-lifetime singletons throughout

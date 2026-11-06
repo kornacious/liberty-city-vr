@@ -618,7 +618,7 @@ VrRestoreFov(void)
 
 // First person state, consumed by CRenderer to hide the player's own body.
 // The body is replaced by tracked hands on foot and during physical vehicle
-// driving, but DEFAULT driving retains Vice City's animated in-car Tommy.
+// driving, but DEFAULT driving retains GTA III's animated in-car Claude.
 // Set every frame below, next to the pad capture, which runs before rendering.
 bool gVrFirstPersonActive;
 bool gVrCameraInsidePlayerHead;

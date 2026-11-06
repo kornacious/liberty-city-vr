@@ -82,6 +82,13 @@ See [save transfer](../../overlay/tools/saves/README.md) for the supported forma
 
 ## Dependencies
 
+See [NOTICE.md](NOTICE.md) for Terminal.Gui, every locked transitive NuGet
+package and native Oniguruma attribution, and the [root tools inventory](../README.md)
+for tool roles, optional authoring packages and external licenses. FFmpeg and
+FFprobe are user-installed external processes. Xbox extraction uses the native
+XDVDFS reader plus librw/lzokay; extract-xiso and a downloaded HD pack are not needed.
+
+
 Primary workflows run natively in C# and do not use the legacy script engines.
 Build-tool downloads retain the original pinned versions and SHA256 checks:
 Git for Windows 2.55.0.3, Temurin 21.0.11+10, Android command-line tools 15859902,
@@ -107,9 +114,10 @@ relative imports, native test fixtures and authoring outputs while removing all
 standalone `.ps1`, `.sh` and `.py` source entrypoints from the checkout. Snapshots
 and outputs remain local for inspection. Scripts referenced by Android itself
 (the optional ASan wrapper) are generated only in the private assembled build.
-Primary-workflow compatibility sources in the resource support historical test
-fixtures; they are not selectable as alternative installers. The supported
-installer/update behavior is the native C# implementation.
+Superseded script installers, the Vice City save converter and downloaded
+HD-pack builder/tests have been removed from the resource. Build/update, repair,
+music, save transfer and local retail ISO preparation use native C# services.
+See the [tools audit](../README.md#removed-inherited-workflows).
 
 ## Command interface
 
@@ -122,15 +130,13 @@ dotnet run --project tools/manager -c Release -- --privacy install-hooks
 ```
 
 Module names are resource identifiers; those paths need not exist on disk.
-The old modules under `overlay/tools/saves/` cannot be launched with `--tool`;
-they remain embedded only as historical sources. Use `--page TransferSave`,
+The old modules under `overlay/tools/saves/` have been removed. Use `--page TransferSave`,
 `--page QuestToPc`, `--page PcToQuest` or the native `--run TransferSave` action.
 Use **Tools and tests** to see parameters before running. Quote paths with spaces.
 Device selection for auxiliary PowerShell tools with a Serial parameter is
 injected locally by the manager; do not supply or share a serial argument.
-Auxiliary tool outputs use the same sanitizing logger. Historical installer
-fixture tests validate compatibility sources; use the native manager checks
-below to validate the active primary workflows.
+Auxiliary tool outputs use the same sanitizing logger. Use the native manager
+checks below to validate the active primary workflows.
 
 For unattended native actions, pass `--run ACTION REQUEST.json`. The JSON has
 `Settings` (shared `ManagerSettings` properties) and `Options` (`ActionOptions`).

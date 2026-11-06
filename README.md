@@ -214,6 +214,19 @@ Then copy the assembled tree's replacement text/frontend files and VR hand
 assets as described in [BUILDING.md](BUILDING.md#6-supply-your-own-game-data).
 The guided installer performs these steps automatically.
 
+## Tools and third-party dependencies
+
+The [tools inventory](tools/README.md) covers compilation, signing, publishing,
+ADB deployment, FFmpeg/FFprobe audio conversion, native Xbox ISO extraction,
+editor dependencies and optional authoring/diagnostic utilities. See
+[NOTICE.md](NOTICE.md) and the [manager notices](tools/manager/NOTICE.md) for
+licenses and locked transitive dependencies.
+
+Liberty City VR builds **GTA III/re3**. Vice City VR and reVC references in the
+credits describe the original VR foundation. The old Vice City save converter,
+script installers, HD-pack downloader and incompatible test fixtures have been
+removed; active build compatibility aliases remain where required.
+
 ## Credits and Acknowledgments
 
 - **GeT_RiCh** — Original author (based on his Discord account) of the [vice-city-vr-quest](https://github.com/dubrovskiy-yevhen-stakelogic/vice-city-vr-quest) VR port for the major implementation made for GTA Vice City using the reVC engine as a contribution for VR support.

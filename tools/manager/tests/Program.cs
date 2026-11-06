@@ -206,15 +206,22 @@ await Test("Argument parsing preserves paths and avoids shell evaluation", () =>
     Assert(values.SequenceEqual(new[] { "--input", @"C:\My Folder\song.wav", "--value=$(command)", "" }));
     Throws<ArgumentException>(() => AuxiliaryTools.ParseArguments("\"unfinished")); return Task.CompletedTask;
 });
-await Test("All auxiliary source modules are embedded and discoverable", () =>
+await Test("Active auxiliary modules remain available without retired workflows", () =>
 {
-    Assert(AuxiliaryTools.Sources.Count == 176); Assert(AuxiliaryTools.Catalog.Any(t => t.Path.EndsWith("test_device_bridge.py")));
+    Assert(AuxiliaryTools.Catalog.Any(t => t.Path.EndsWith("test_device_bridge.py")));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-player-rig.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-head-attachment.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-gta3-ragdoll-rig.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-ped-vehicle-damage.ps1"));
     Assert(AuxiliaryTools.Catalog.Any(t => t.Path == "tools/tests/test-dodo-flight.ps1"));
-    Assert(AuxiliaryTools.Catalog.All(t => !t.Path.Contains("build-and-install"))); return Task.CompletedTask;
+    Assert(AuxiliaryTools.Catalog.All(t => !t.Path.Contains("build-and-install")));
+    string[] retired = ["overlay/tools/saves/convert_vr_save.py", "tools/modelsets/xbox-modelset.py",
+        "tools/tests/test-vehicle-driveby.ps1", "tools/tests/test-heli-bullets.ps1", "tools/tests/test-devtools-culling.ps1",
+        "tools/tests/test-modelset-wheels.ps1", "tools/tests/test-ragdoll-visibility.ps1", "tools/tests/test-unix-updater.py"];
+    Assert(retired.All(p => !AuxiliaryTools.Sources.ContainsKey(p)));
+    Assert(AuxiliaryTools.Sources.ContainsKey("overlay/android/diagnostics/asan-wrap.sh"));
+    Assert(AuxiliaryTools.Sources.ContainsKey("tools/assemble.ps1"));
+    return Task.CompletedTask;
 });
 await Test("Command runner keeps stderr diagnostics out of structured stdout", async () =>
 {

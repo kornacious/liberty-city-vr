@@ -595,9 +595,9 @@ createInstance(android_app *app)
 	info.next = &androidInfo;
 	info.enabledExtensionCount = (uint32_t)enabled.size();
 	info.enabledExtensionNames = enabled.data();
-	strcpy(info.applicationInfo.applicationName, "Vice City VR");
+	strcpy(info.applicationInfo.applicationName, "Liberty City VR");
 	info.applicationInfo.applicationVersion = 1;
-	strcpy(info.applicationInfo.engineName, "reVC");
+	strcpy(info.applicationInfo.engineName, "re3");
 	info.applicationInfo.engineVersion = 1;
 	info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
 
@@ -736,9 +736,9 @@ createVulkan(void)
 	// The runtime creates the VkInstance on our behalf so it can inject the
 	// extensions it needs for swapchain sharing.
 	VkApplicationInfo appInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
-	appInfo.pApplicationName = "Vice City VR";
+	appInfo.pApplicationName = "Liberty City VR";
 	appInfo.applicationVersion = 1;
-	appInfo.pEngineName = "reVC";
+	appInfo.pEngineName = "re3";
 	appInfo.engineVersion = 1;
 	appInfo.apiVersion = VK_API_VERSION_1_1;
 

@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string>
 
-#define MIAMIVR_LOG_TAG "MiamiVR"
+#define MIAMIVR_LOG_TAG "LibertyVR"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  MIAMIVR_LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN,  MIAMIVR_LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, MIAMIVR_LOG_TAG, __VA_ARGS__)
@@ -14,9 +14,9 @@ struct ANativeActivity;
 namespace platform {
 
 // Absolute path of the app-specific external directory, e.g.
-// /sdcard/Android/data/com.miamivr.quest/files. Readable and writable with no
-// runtime permission, which is where the original Vice City data is staged and
-// where reVC.ini / vr_settings.ini live on this platform.
+// /sdcard/Android/data/com.libertyvr.quest/files. Readable and writable with no
+// runtime permission, which is where the original GTA III data is staged and
+// where re3.ini / vr_settings.ini live on this platform.
 // Pipes stdout and stderr into logcat. The game reports through printf all
 // over -- CdStream traces, casepath failures, TXD load errors -- and none of
 // it is visible on Android otherwise.

@@ -267,7 +267,7 @@ HasPossibleCollision(const CVector &positionA, const CVector &velocityA,
 	const float speedSq = dv.x*dv.x+dv.y*dv.y;
 	if(speedSq < 0.000025f)
 		return false;
-	// Vice City move speed is displacement per original simulation tick.
+	// GTA III move speed is displacement per original simulation tick.
 	// A 100-tick horizon is roughly two seconds at the original 50 Hz.
 	float t = -(dp.x*dv.x+dp.y*dv.y)/speedSq;
 	t = clamp(t, 0.0f, 100.0f);

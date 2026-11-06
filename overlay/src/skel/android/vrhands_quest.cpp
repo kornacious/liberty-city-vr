@@ -19,7 +19,7 @@ extern bool gVrFirstPersonActive;
 namespace androidgame {
 namespace {
 
-#define HANDLOG(...) __android_log_print(ANDROID_LOG_INFO, "MiamiVR", __VA_ARGS__)
+#define HANDLOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)
 
 CVector
 VectorFromArray(const float value[3])
