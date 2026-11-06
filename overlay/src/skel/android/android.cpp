@@ -2273,6 +2273,19 @@ CapturePad(RwInt32 padID)
 	// 0..255 scale. QuestWeaponVR rebuilds the same buttons on foot without the
 	// triggers, which belong to the weapon there.
 	androidgame::VrApplyPadBindings(&state, bound, true);
+	if(frontendConsumesStick){
+		// Menu navigation uses physical A/B regardless of gameplay remapping.
+		// Match Frontend.cpp's GetBackJustDown/GetBackJustUp button selection.
+		state.Cross = in.a ? 255 : 0;
+		state.Circle = state.Square = state.Triangle = 0;
+#if defined(TRIANGLE_BACK_BUTTON)
+		state.Triangle = in.b ? 255 : 0;
+#elif defined(CIRCLE_BACK_BUTTON)
+		state.Circle = in.b ? 255 : 0;
+#else
+		state.Square = in.b ? 255 : 0;
+#endif
+	}
 	state.Start = in.menu ? 255 : 0;
 	if(remoteMode && in.a){
 		if(padMode == 3)

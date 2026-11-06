@@ -435,40 +435,29 @@ index 666774fe..763a203b 100644
  
  #ifdef GAMEPAD_MENU
  #ifdef __SWITCH__
-@@ -3032,6 +3039,40 @@ CMenuManager::DrawFrontEndNormal()
+@@ -3032,6 +3039,29 @@ CMenuManager::DrawFrontEndNormal()
  
  	CFont::DrawFonts();
  
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
 +	if (m_bGameNotLoaded && m_nCurrScreen == MENUPAGE_START_MENU) {
-+		wchar releaseName[64];
-+		wchar releaseStatus[64];
-+		AsciiToUnicode("LIBERTY CITY VR V" LIBERTYVR_VERSION_TEXT " ALPHA", releaseName);
-+		AsciiToUnicode("NOT FOR SALE", releaseStatus);
++		wchar releaseName[96];
++		AsciiToUnicode("LIBERTY CITY VR V" LIBERTYVR_VERSION_TEXT " ALPHA - NOT FOR RESALE", releaseName);
 +
 +		CFont::SetBackgroundOff();
 +		CFont::SetBackGroundOnlyTextOff();
 +		CFont::SetPropOn();
-+		CFont::SetCentreOff();
 +		CFont::SetJustifyOff();
-+		CFont::SetRightJustifyOn();
-+		CFont::SetRightJustifyWrap(0.0f);
++		CFont::SetRightJustifyOff();
++		CFont::SetCentreOn();
++		CFont::SetCentreSize(SCREEN_WIDTH);
 +		CFont::SetFontStyle(FONT_LOCALE(FONT_BANK));
-+		CFont::SetScale(SCREEN_SCALE_X(0.48f), SCREEN_SCALE_Y(0.72f));
++		CFont::SetScale(SCREEN_SCALE_X(0.40f), SCREEN_SCALE_Y(0.60f));
 +		CFont::SetDropShadowPosition(1);
 +		CFont::SetDropColor(CRGBA(0, 0, 0, FadeIn(220)));
 +		CFont::SetColor(CRGBA(255, 255, 255, FadeIn(235)));
-+		const float releaseX = SCREEN_STRETCH_FROM_RIGHT(24.0f);
-+		const float statusY = SCREEN_SCALE_FROM_BOTTOM(46.0f);
-+		const float statusWidth = CFont::GetStringWidth(releaseStatus, true);
-+		CFont::PrintString(releaseX, SCREEN_SCALE_FROM_BOTTOM(68.0f), releaseName);
-+		CSprite2d::DrawRect(CRect(
-+			releaseX-statusWidth-SCREEN_SCALE_X(8.0f),
-+			statusY-SCREEN_SCALE_Y(2.0f),
-+			releaseX+SCREEN_SCALE_X(4.0f),
-+			statusY+SCREEN_SCALE_Y(15.0f)),
-+			CRGBA(35, 105, 150, FadeIn(220)));
-+		CFont::PrintString(releaseX, statusY, releaseStatus);
++		// The yellow title strip ends above this bottom margin.
++		CFont::PrintString(SCREEN_WIDTH / 2.0f, SCREEN_SCALE_FROM_BOTTOM(40.0f), releaseName);
 +		CFont::DrawFonts();
 +	}
 +#endif
@@ -476,7 +465,7 @@ index 666774fe..763a203b 100644
  	// Draw mouse
  	RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void*)rwFILTERLINEAR);
  	RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
-@@ -5132,7 +5173,9 @@ CMenuManager::ProcessButtonPresses(void)
+@@ -5132,7 +5162,9 @@ CMenuManager::ProcessButtonPresses(void)
  						ControlsManager.MakeControllerActionsBlank();
  						ControlsManager.InitDefaultControlConfiguration();
  						ControlsManager.InitDefaultControlConfigMouse(MousePointerStateHelper.GetMouseSetUp());
