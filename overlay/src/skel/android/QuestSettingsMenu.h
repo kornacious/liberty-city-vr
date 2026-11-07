@@ -45,7 +45,6 @@ enum eVrMainMenuItem {
 	VR_MAIN_RADIO,
 	VR_MAIN_LANGUAGE,
 	VR_MAIN_ABOUT,
-	VR_MAIN_SIMULATION,
 	VR_MAIN_ITEM_COUNT
 };
 
@@ -64,6 +63,5 @@ static const QuestSettingsCategory QuestSettingsCategories[] = {
 	{ "AUDIO AND RADIO  < OPEN >", VR_MENU_PAGE_AUDIO },
 	{ "LANGUAGE AND SUBTITLES  < OPEN >", VR_MENU_PAGE_LANGUAGE },
 	{ "ABOUT LIBERTY CITY VR  < OPEN >", VR_MENU_PAGE_ABOUT },
-	{ "SIMULATION REPLAY  < OPEN >", VR_MENU_PAGE_SIMULATION },
 };
 static_assert(sizeof(QuestSettingsCategories)/sizeof(QuestSettingsCategories[0]) == VR_MAIN_ITEM_COUNT, "Every category needs a shared destination");

@@ -25,6 +25,9 @@ static const char*getRenderScaleFallbackReasonName(int){return "GAME RENDERER AL
 }
 namespace VrCullViz {static bool active;static int calls;inline bool IsActive(){++calls;return active;}inline const char*StatusLine(){++calls;return "CULL SNAPSHOT: DRAWN 123 OUTSIDE 456 OCCLUDED 789";}}
 namespace CMenuManager {static float m_PrefsLOD=1.2f;}
+static constexpr int GS_PLAYING_GAME=1;
+static int gGameState=GS_PLAYING_GAME;
+static struct {bool m_bGameNotLoaded=false,m_bMenuActive=false;} FrontEndMenuManager;
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
 namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}
@@ -75,7 +78,8 @@ static void Verify(){
  for(const Text&t:texts)if(t.bounds.top>=674)Check(!Overlap(highlights[0],t.bounds),"Back selection background cannot cover footer text");
 }
 static void VerifyOptimizations(){
- Check(drawnRows.size()==VR_OPT_ITEM_COUNT,"all optimization rows drawn once");
+ Check(drawnRows.size()==VR_OPT_ITEM_COUNT-(IsSimulationReplayAvailable()?0:1),"only available optimization rows drawn once");
+ Check(std::count_if(drawnRows.begin(),drawnRows.end(),[](const Row&r){return r.text=="SIMULATION REPLAY  < OPEN >";})==(IsSimulationReplayAvailable()?1:0),"Replay appears exactly once during live gameplay and is absent in frontend settings");
  Check(drawnRows.back().text=="BACK TO GRAPHICS","submenu returns to Graphics");
  Check(drawnRows[VR_OPT_WORLD_LOD].text.find(gWorldLodMode==WorldLodPolicy::Off?"OFF - HIGH DETAIL":gWorldLodMode==WorldLodPolicy::Aggressive?"AGGRESSIVE - EARLY / HIDE":gWorldLodMode==WorldLodPolicy::Performance?"PERFORMANCE - 1X SWITCH":"ON - CURRENT 2.2X MIN")!=std::string::npos,"all four LOD states visible");
  Check(drawnRows[VR_OPT_STATIC_INSTANCES].text==std::string("STATIC INSTANCING  < ")+(gStaticInstances?"ON":"OFF")+" >","instancing state preserved in submenu");
@@ -85,7 +89,8 @@ static void VerifyOptimizations(){
  Check(drawnRows[VR_OPT_FXAA_INTEGER].text==std::string("FXAA INTEGER SAMPLING  < ")+(gFxaaIntegerStencil?"ON":"OFF")+" >","FXAA sampling state visible");
  Check(highlights.size()==1,"one submenu selection");
  for(size_t i=0;i<drawnRows.size();++i){
-  Check(drawnRows[i].selected==(int(i)==gVrOptimizationSelection),"submenu selection matches row");
+  const int logicalRow=int(i)+(!IsSimulationReplayAvailable()&&int(i)>=VR_OPT_SIMULATION?1:0);
+  Check(drawnRows[i].selected==(logicalRow==gVrOptimizationSelection),"selection follows logical item after hiding replay and compacting rows");
   Check(drawnRows[i].y>=160 && drawnRows[i].y+18<580,"submenu rows fit before explanation");
  }
  for(size_t i=0;i<texts.size();++i){
@@ -100,8 +105,11 @@ int main(){
   xrvk::status.fallbackReason=scenario==3?1:0;xrvk::status.previousFallbackReason=scenario>=2?1:0;VrCullViz::active=scenario==2;
   DrawQuestGraphicsPage();Verify();
  }
- for(int mode=0;mode<WorldLodPolicy::Count;++mode)for(int state=0;state<2;++state)
+ for(int context=0;context<4;++context)for(int mode=0;mode<WorldLodPolicy::Count;++mode)for(int state=0;state<2;++state)
   for(int selection=0;selection<VR_OPT_ITEM_COUNT;++selection){
+   FrontEndMenuManager.m_bGameNotLoaded=context==1;FrontEndMenuManager.m_bMenuActive=context==2;gGameState=context==3?0:GS_PLAYING_GAME;
+   Check(IsSimulationReplayAvailable()==(context==0),"replay requires loaded live world outside frontend");
+   if(context!=0&&selection==VR_OPT_SIMULATION)continue;
    Clear();gWorldLodMode=mode;gLodFadeTransitions=state;gFxaaIntegerStencil=state;gStaticInstances=state;gWorldBackface=state;gWorldOcclusion=state;gVrOptimizationSelection=selection;
    DrawQuestOptimizationsPage();VerifyOptimizations();
   }

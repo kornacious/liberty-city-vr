@@ -694,6 +694,7 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_WORLD_BACKFACE,
 	VR_OPT_WORLD_OCCLUSION,
 	VR_OPT_OPAQUE_ORDER,
+	VR_OPT_SIMULATION,
 	VR_OPT_BACK,
 	VR_OPT_ITEM_COUNT
 };
@@ -2378,8 +2379,18 @@ CurrentMenuItemCount(void)
 // cannot be reached: a wrist placement under CLASSIC, or a steering wheel
 // under a DEFAULT view, is a control with nothing behind it.
 static bool
+IsSimulationReplayAvailable(void)
+{
+	// Replay records and profiles the live world; frontend settings pause it.
+	return gGameState == GS_PLAYING_GAME && !FrontEndMenuManager.m_bGameNotLoaded &&
+		!FrontEndMenuManager.m_bMenuActive;
+}
+
+static bool
 IsMenuItemVisible(int page, int item)
 {
+	if(page == VR_MENU_PAGE_OPTIMIZATIONS && item == VR_OPT_SIMULATION)
+		return IsSimulationReplayAvailable();
 	if(page == VR_MENU_PAGE_HUD){
 		const int preset = CurrentHudPreset();
 		switch(item){
@@ -2531,6 +2542,11 @@ CurrentMenuValueRepeats(void)
 static void
 ReturnFromCurrentMenuPage(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_SIMULATION){
+		gVrMenuPage = VR_MENU_PAGE_OPTIMIZATIONS;
+		gVrOptimizationSelection = VR_OPT_SIMULATION;
+		return;
+	}
 	if(gVrMenuPage == VR_MENU_PAGE_HEAD_CALIBRATION){
 		gVrMenuPage=VR_MENU_PAGE_LOCOMOTION; return;
 	}
@@ -2978,7 +2994,6 @@ VrDebugUpdate(const PadInput &in)
 			const int category = gVrMenuSelection;
 			gVrMenuPage = QuestSettingsCategories[category].page;
 			if(category != VR_MAIN_ABOUT) *CurrentMenuSelection() = 0;
-			if(category == VR_MAIN_SIMULATION) SimulationReplayMenuAction(-1, 0);
 			if(category == VR_MAIN_VEHICLE_SETTINGS) gVrVehicleSubpage = 0;
 			if(category == VR_MAIN_CHEATS) OpenCheatMenu();
 			if(category == VR_MAIN_ABOUT) {
@@ -3000,7 +3015,7 @@ VrDebugUpdate(const PadInput &in)
 		}else if(gVrMenuPage == VR_MENU_PAGE_SIMULATION &&
 		         (positivePulse || decreasePulse)){
 			const int row = *CurrentMenuSelection();
-			if(row == SimulationReplayMenuRows-1) gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+			if(row == SimulationReplayMenuRows-1) ReturnFromCurrentMenuPage();
 			else if(SimulationReplayMenuAction(row, decreasePulse ? -1 : 1)) gVrMenuVisible = false;
 		}else if(gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS && (positivePulse || decreasePulse)){
 			if(gVrOptimizationSelection == VR_OPT_WORLD_LOD){
@@ -3051,6 +3066,10 @@ VrDebugUpdate(const PadInput &in)
 				gOpaqueWorldAlphaFastPath = !gOpaqueWorldAlphaFastPath;
 				SaveVrInteger("OpaqueWorldAlphaFastPath", gOpaqueWorldAlphaFastPath);
 				rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(gOpaqueWorldAlphaFastPath);
+			}else if(gVrOptimizationSelection == VR_OPT_SIMULATION && IsSimulationReplayAvailable()){
+				gVrMenuPage = VR_MENU_PAGE_SIMULATION;
+				*CurrentMenuSelection() = 0;
+				SimulationReplayMenuAction(-1, 0);
 			}else if(gVrOptimizationSelection == VR_OPT_BACK){
 				gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
 			}
@@ -4146,9 +4165,14 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_WORLD_OCCLUSION],sizeof(rows[0]),"WORLD OCCLUSION  < %s >",gWorldOcclusion?"ON":"OFF");
 	snprintf(rows[VR_OPT_LOD_FADE],sizeof(rows[0]),"LOD FADE TRANSITION  < %s >",gLodFadeTransitions?"ON":"OFF");
 	snprintf(rows[VR_OPT_FXAA_INTEGER],sizeof(rows[0]),"FXAA INTEGER SAMPLING  < %s >",gFxaaIntegerStencil?"ON":"OFF");
+	strcpy(rows[VR_OPT_SIMULATION],"SIMULATION REPLAY  < OPEN >");
 	strcpy(rows[VR_OPT_BACK],"BACK TO GRAPHICS");
-	for(int item=0;item<VR_OPT_ITEM_COUNT;++item)
-		DrawFullVrMenuRow(rows[item],160+item*36,2,item==gVrOptimizationSelection,true,false,item!=VR_OPT_BACK);
+	int visibleRow = 0;
+	for(int item=0;item<VR_OPT_ITEM_COUNT;++item){
+		if(item == VR_OPT_SIMULATION && !IsSimulationReplayAvailable()) continue;
+		DrawFullVrMenuRow(rows[item],160+visibleRow++*36,2,item==gVrOptimizationSelection,true,false,
+			item!=VR_OPT_BACK && item!=VR_OPT_SIMULATION, item==VR_OPT_SIMULATION);
+	}
 	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_FXAA_INTEGER?"NATIVE 1:1 ONLY; OFF FILTERED / ON INTEGER STENCIL":
         gVrOptimizationSelection==VR_OPT_LOD_FADE?"LOD DISTANCE FADES; ASSET-LOADING FADES ARE SEPARATE":
         gVrOptimizationSelection==VR_OPT_WORLD_OCCLUSION?"BOTH EYES MUST BE HIDDEN; SWITCHES BACKFACE CULL OFF":

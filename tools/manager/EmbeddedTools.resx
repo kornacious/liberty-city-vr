@@ -3737,6 +3737,7 @@ $pieces.Add((Definition $source 'BeginFullVrMenuPage'))
 $pieces.Add((Definition $source 'DrawFullVrMenuRow').Replace('DrawFullVrMenuRow(','DrawFullVrMenuRowNative('))
 $page=Definition $source 'DrawQuestGraphicsPage'
 $pieces.Add($page)
+$pieces.Add((Definition $source 'IsSimulationReplayAvailable'))
 $pieces.Add((Definition $source 'DrawQuestOptimizationsPage'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'graphics-menu-layout-production.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
 Write-Host ('Menu SHA256: '+(Get-FileHash -LiteralPath $MenuSourcePath).Hash)

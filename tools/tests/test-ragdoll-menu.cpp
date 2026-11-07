@@ -244,6 +244,11 @@ int main()
 	Check(!CurrentMenuValueRepeats(), "back action never auto-repeats");
 	AdjustRagdollMenuValue(1);
 	Check(gVrMenuPage == VR_MENU_PAGE_TRAFFIC, "explicit back row returns to traffic");
+	gVrMenuPage = VR_MENU_PAGE_SIMULATION;
+	ReturnFromCurrentMenuPage();
+	Check(gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS && gVrOptimizationSelection == VR_OPT_SIMULATION, "Replay Back restores its Optimizations entry");
+	ReturnFromCurrentMenuPage();
+	Check(gVrMenuPage == VR_MENU_PAGE_GRAPHICS, "Optimizations Back returns to Graphics");
 	std::printf("Ragdoll submenu: %d production-control, persistence, repeat, navigation and layout checks passed.\n",checks);
 	return 0;
 }

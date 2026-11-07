@@ -24,6 +24,9 @@ The shared menu adds:
   skin changes apply immediately to a loaded player, or at the next game load.
 - Graphics: the inherited draw-distance preference, subject to the existing VR
   minimum-distance and world-LOD policies.
+- Graphics → Optimizations → Simulation Replay: performance recording and
+  profiling during live gameplay. Hidden in startup and frontend settings,
+  where the world is unloaded or paused. Back returns to Optimizations.
 - Locomotion: cinema-screen borders. Stereo cutscenes continue to omit borders.
 
 Desktop keyboard/mouse configuration, window mode, resolution, VSync, desktop

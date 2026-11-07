@@ -101,6 +101,7 @@ int main()
     // pages and enough space between every row and the help footer.
     for(int i=0;i<VR_MAIN_ITEM_COUNT;++i){
         Check(152+i*36+14<718,"category rows fit the menu");
+        Check(QuestSettingsCategories[i].page!=VR_MENU_PAGE_SIMULATION,"Replay is not a top-level settings category");
         for(int j=0;j<i;++j) Check(QuestSettingsCategories[i].page!=QuestSettingsCategories[j].page,"categories have unique destinations");
     }
     for(bool startup:{false,true}) {
