@@ -33,6 +33,16 @@ cancellation recovery, concurrent destination changes, backup failure, exact
 binary ADB sync-file transport, hidden legacy entries and saved action options.
 These tests never connect to a real headset or read personal save files.
 
+Curated mod checks pin the Upstate release identity, reject malformed archive
+paths/links/expansion limits and tampered payloads, and exercise production device
+shell transactions against disposable local directories. They cover unsupported
+runtime gating, auto-enable on supported runtimes, disable/re-enable/delete,
+upload verification failures, activation rollback, unmanaged-folder preservation
+and save preservation. These transaction fixtures use Git Bash on Windows and
+`/bin/sh` on Linux; they never run ADB. UI checks include the Mods lifecycle
+selector and Cancel behavior. See [curated mod guide](../../../overlay/docs/QUEST_MODS.md)
+for the current runtime limitation and local/download workflows.
+
 Artifacts remain under `.cache/manager-tests-*` for local inspection. They must
 not be committed. The synthetic privacy fixtures deliberately contain values
 assembled at runtime that the scanner must reject.

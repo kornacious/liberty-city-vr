@@ -50,7 +50,14 @@ Forms scroll and every path field has a terminal file/directory browser.
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean master, fetches official master, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
 | Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
 | Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake and optional auxiliary runtimes; pinned tool download preference. |
+| Mods | Curated Upstate Liberty v1.1.2: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete device mod files. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
+
+The [curated mod guide](../../overlay/docs/QUEST_MODS.md) documents package handling
+and the runtime protocol. **Current APKs do not yet support Upstate gameplay:**
+the Manager can prepare/install its files, but keeps them disabled until a compatible
+runtime advertises support. Automatic enablement and re-enabling are gated by that
+capability; Windows ASI binaries are excluded from device packages.
 
 Saved configuration lives in `%APPDATA%\LibertyCityVR\settings.json` on Windows
 and `~/.liberty-city-vr/settings.json` on Linux. Action options are saved when

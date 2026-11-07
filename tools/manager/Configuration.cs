@@ -17,6 +17,7 @@ public sealed record ManagerSettings
     public string Python { get; set; } = "";
     public string PowerShell { get; set; } = "";
     public string Bash { get; set; } = "";
+    public string SevenZip { get; set; } = "";
     public bool AllowToolDownloads { get; set; } = true;
     public Dictionary<ManagerAction, ActionOptions> Actions { get; set; } = [];
     public static string DefaultWorkplace(bool windows) => windows ? @"C:\LCVRBuild" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "LCVRBuild");
@@ -66,12 +67,17 @@ public sealed class SettingsStore(string? directory = null)
     }
 }
 
-public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ImportMusic = ManageMusic }
+public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, ImportMusic = ManageMusic }
+
+public enum ModOperation { Status, Install, Enable, Disable, Delete, Validate }
 
 public enum SaveTransferDirection { QuestToPc, PcToQuest }
 
 public sealed record ActionOptions
 {
+    public string ModId { get; set; } = "upstate-liberty";
+    public string ModArchive { get; set; } = "";
+    public ModOperation ModOperation { get; set; }
     public bool BuildOnly { get; set; }
     public bool Release { get; set; }
     public bool CopyGameData { get; set; }

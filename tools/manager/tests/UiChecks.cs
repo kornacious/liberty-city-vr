@@ -38,6 +38,15 @@ internal static class UiChecks
                 Button("_Save").InvokeCommand(Command.Accept);
                 if (store.Load().Workplace != settings.Workplace) throw new Exception("Settings did not persist.");
                 File.WriteAllText(Path.Combine(directory, "settings.txt"), app.ToString());
+                Button("Mods").InvokeCommand(Command.Accept);
+                var modChoices = Descendants(ui.Window).OfType<OptionSelector>().Single();
+                if (modChoices.Labels?.Count != 6 || modChoices.Height != 6)
+                    throw new Exception("Mod lifecycle options are missing or clipped.");
+                modChoices.Value = (int)ModOperation.Delete;
+                Button("_Cancel").InvokeCommand(Command.Accept);
+                if (Descendants(ui.Window).OfType<OptionSelector>().Single().Value != 0 || ui.Window.MostFocused?.Text != "Mods")
+                    throw new Exception("Mod Cancel did not discard the destructive action and restore navigation focus.");
+                File.WriteAllText(Path.Combine(directory, "mods.txt"), app.ToString());
                 Button("Manage music").InvokeCommand(Command.Accept);
                 var music = Descendants(ui.Window).OfType<MusicManagementView>().Single();
                 music.Load(new(new string('a', 64), Enumerable.Range(1, 12).Select(i => new MusicEntry { Name = i + ".mp3", Artist = "Artist", Album = "Album", Title = "Track " + i, SampleRate = 48000 }).ToArray()));
@@ -185,7 +194,7 @@ internal static class UiChecks
             app.RequestStop(); return false;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS UI: save checkboxes/Autosave/select-all/Cancel, music selection/import/deletion, settings and folder browser" : "FAIL UI: " + failure.Message);
+        Console.WriteLine(failure is null ? "PASS UI: mods lifecycle/Cancel, saves, music, settings and folder browser" : "FAIL UI: " + failure.Message);
         return failure is null ? 0 : 1;
     }
 }

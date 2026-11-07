@@ -10,8 +10,8 @@ namespace LibertyManager;
 
 public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSettings initial, bool loadMusicOnOpen = true) : IDisposable
 {
-    public const int SettingsPage = 7;
-    public const int ToolsPage = 8;
+    public const int SettingsPage = 8;
+    public const int ToolsPage = 9;
     // GTA III menu cyan, amber HUD, cream lettering and the dark blue of its cover art.
     public static readonly Color Midnight = new(16, 24, 32);
     public static readonly Color Cyan = new(112, 190, 202);
@@ -64,11 +64,11 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Settings", "Tools and tests"];
+        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Mods", "Settings", "Tools and tests"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
-            var button = new Button { Text = pages[i], X = 0, Y = i * 2, Width = Dim.Fill(), ShadowStyle = ShadowStyles.None };
+            var button = new Button { Text = pages[i], X = 0, Y = i, Width = Dim.Fill(), ShadowStyle = ShadowStyles.None };
             button.Accepting += (_, e) => { e.Handled = true; Render(index); form?.SetFocus(); };
             navigation.Add(button); navigationButtons.Add(button);
         }
@@ -122,7 +122,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
         perform.Text = page == SettingsPage ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "SETTINGS", "TOOLS AND TESTS"];
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS"];
         configuration.Title = titles[page];
         switch (page)
         {
@@ -178,6 +178,21 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Close the PC game first. The Quest game will be stopped. Existing destination saves are backed up before replacement.");
                 Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));
                 break;
+            case (int)ManagerAction.ManageMods:
+                options.ModId = CuratedMods.Upstate.Id;
+                Note("Upstate Liberty v1.1.2 — map expansion for Classic. Requires a compatible APK.");
+                var modOperation = new OptionSelector { X = 1, Y = row, Labels = ["Status", "Install", "Enable", "Disable", "Delete", "Validate locally"],
+                    Value = (int)options.ModOperation, Width = Dim.Fill(2), Height = 6 };
+                modOperation.SetScheme(Theme()); form.Add(modOperation); row += 7;
+                readFields.Add(() => options.ModOperation = (ModOperation)(modOperation.Value ?? 0));
+                Field("UL.7z package (blank: download v1.1.2)", options.ModArchive, v => options.ModArchive = v, OpenMode.File);
+                Note("Install: choose UL.7z or leave blank to download v1.1.2. SHA256 verified.");
+                Note("Current APK: Upstate is not playable yet; its engine adapter is still required.");
+                Note("Install auto-enables only when the APK reports Upstate runtime support.");
+                Note("Status reads the headset. Validate locally never accesses a device.");
+                Note("Disable keeps files. Enable verifies files. Delete keeps saves and the PC archive.");
+                Note("The game stops before changes. Restart after activation changes.");
+                break;
             case SettingsPage:
                 Note("Shared configuration. Cancel discards edits; Save stores them for every action.");
                 Field("Source repository", draft.Repository, v => draft.Repository = v, OpenMode.Directory);
@@ -192,6 +207,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("Python 3 executable (auxiliary tools)", draft.Python, v => draft.Python = v, OpenMode.File);
                 Field("PowerShell 7 executable (auxiliary tests)", draft.PowerShell, v => draft.PowerShell = v, OpenMode.File);
                 Field("Bash executable (auxiliary tools)", draft.Bash, v => draft.Bash = v, OpenMode.File);
+                Field("7-Zip executable (blank: installed 7zz/7z)", draft.SevenZip, v => draft.SevenZip = v, OpenMode.File);
                 Toggle("Allow pinned build-tool downloads", draft.AllowToolDownloads, v => draft.AllowToolDownloads = v);
                 Note("Saved to " + store.FilePath); break;
             case ToolsPage:
@@ -285,7 +301,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             if (selected < SettingsPage && !musicRefresh)
             {
                 // License consent is explicit for each run rather than inferred from a saved checkbox.
-                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [] };
+                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [], ModOperation = ModOperation.Status };
                 store.Save(draft); settings = draft with { Actions = new(draft.Actions) };
             }
         }

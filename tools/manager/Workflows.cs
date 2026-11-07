@@ -34,6 +34,24 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 }
                 break;
             case ManagerAction.RepairGameFiles: await Repair(options, token); break;
+            case ManagerAction.ManageMods:
+                var mods = new CuratedMods(settings, runner, log);
+                var mod = CuratedMods.Find(options.ModId);
+                if (!Enum.IsDefined(options.ModOperation)) throw new InvalidDataException("Select a valid mod operation.");
+                string? prepared = null;
+                if (options.ModOperation is ModOperation.Install or ModOperation.Validate)
+                    prepared = await mods.Prepare(mod, options.ModArchive, token);
+                if (options.ModOperation == ModOperation.Validate)
+                { log.Write("Package verified and prepared locally. No device access. " + prepared); break; }
+                var modDevice = await Connect(token) ?? throw new IOException("Connect an authorized Quest 3 to manage installed mods.");
+                var modStatus = options.ModOperation switch
+                {
+                    ModOperation.Install => await mods.Install(modDevice, mod, prepared!, token),
+                    ModOperation.Status => await mods.Status(modDevice, mod, token),
+                    _ => await mods.Change(modDevice, mod, options.ModOperation, token)
+                };
+                log.Write(mod.Name + " v" + mod.Version + ": " + modStatus);
+                break;
             case ManagerAction.Update: await Update(options, token); break;
             case ManagerAction.TransferSave:
                 await new SaveTransfer(settings, log, async (temporary, cancellation) =>

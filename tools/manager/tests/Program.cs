@@ -295,6 +295,7 @@ await Test("Music validation-only never applies pending deletion or contacts a h
 await MusicChecks.Run(root, Test);
 await RadioChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
+await ModChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");
 return failures == 0 ? 0 : 1;
 

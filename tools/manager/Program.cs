@@ -23,7 +23,10 @@ internal static class Program
                 Run with no arguments to open the TUI.
                 --run ACTION REQUEST.json   Run a configured action without the TUI.
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
-                         InstallModernModels, RepairGameFiles, Update, TransferSave.
+                         InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods.
+                ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
+                                    ModOperation 0 Status, 1 Install, 2 Enable, 3 Disable,
+                                                 4 Delete, 5 Validate locally (no device access).
                 TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),
                                       SaveSlots [1..9], PcSaveDirectory (9 = Autosave).
                                       Legacy SaveSlot selects one slot when SaveSlots is omitted.
