@@ -6,6 +6,17 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-particle-frame.cpp` compiles as C++17 with `overlay/src/renderer` on the
+include path. It executes the production particle frame resolver over Xbox
+fireball/flame ranges, six-texture explosions, native Classic sequences,
+explicit out-of-range frames, reversed ranges and integer limits. Xbox ranges
+that exceed the available raster array are mapped across that array; every
+lookup is bounded, including single-raster effects. The renderer derives array
+capacities from the actual raster arrays. Existing Xbox asset installations
+need no reconversion. This adapts animation to re3's available textures; it
+does not implement additional console animation textures. No game data is used
+by this test. Repeated vehicle explosions still require headset QA.
+
 `test-jump-heading.ps1 -StageRoot <assembled-tree>` compiles the production Quest
 jump-heading helper, walk-direction calculation and launch-impulse branch. It
 checks standing and moving jumps after physical quarter/half turns, independent

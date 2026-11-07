@@ -1,0 +1,57 @@
+diff --git a/src/renderer/Particle.cpp b/src/renderer/Particle.cpp
+index 999d3c7..84af9ca 100644
+--- a/src/renderer/Particle.cpp
++++ b/src/renderer/Particle.cpp
+@@ -1,4 +1,6 @@
+ #include "common.h"
++#include "ParticleFrame.h"
++#include "ModelSets.h"
+ 
+ #include "main.h"
+ #include "General.h"
+@@ -1499,6 +1501,25 @@ CParticle::GetTotalActiveCount(void)
+ 	return count;
+ }
+ 
++// Every other non-null binding in Initialise is the address of one raster.
++// Keep capacities tied to the actual arrays, never to asset configuration.
++static unsigned ParticleRasterCount(RwRaster **frames)
++{
++	if(frames == gpSmokeRaster) return ARRAY_SIZE(gpSmokeRaster);
++	if(frames == gpSmoke2Raster) return ARRAY_SIZE(gpSmoke2Raster);
++	if(frames == gpRubberRaster) return ARRAY_SIZE(gpRubberRaster);
++	if(frames == gpRainSplashRaster) return ARRAY_SIZE(gpRainSplashRaster);
++	if(frames == gpWatersprayRaster) return ARRAY_SIZE(gpWatersprayRaster);
++	if(frames == gpExplosionMediumRaster) return ARRAY_SIZE(gpExplosionMediumRaster);
++	if(frames == gpGunFlashRaster) return ARRAY_SIZE(gpGunFlashRaster);
++	if(frames == gpRainSplashupRaster) return ARRAY_SIZE(gpRainSplashupRaster);
++	if(frames == gpBirdfrontRaster) return ARRAY_SIZE(gpBirdfrontRaster);
++	if(frames == gpCarDebrisRaster) return ARRAY_SIZE(gpCarDebrisRaster);
++	if(frames == gpCarSplashRaster) return ARRAY_SIZE(gpCarSplashRaster);
++	if(frames == gpRainDropRaster) return ARRAY_SIZE(gpRainDropRaster);
++	return frames ? 1u : 0u;
++}
++
+ void CParticle::Render()
+ {
+ 	PUSH_RENDERGROUP("CParticle::Render");
+@@ -1526,6 +1547,7 @@ void CParticle::Render()
+ 		CParticle *particle = psystem->m_pParticles;
+ 		
+ 		RwRaster **frames = psystem->m_ppRaster;
++		const unsigned frameCount = ParticleRasterCount(frames);
+ #ifdef PC_PARTICLE
+ 		tParticleType type = psystem->m_Type;
+ 
+@@ -1589,7 +1611,10 @@ void CParticle::Render()
+ #endif
+ 			if ( canDraw && psystem->m_nFinalAnimationFrame != 0 && frames != nil )
+ 			{
+-				RwRaster *curFrame = frames[particle->m_nCurrentFrame];
++				const unsigned frame = ParticleFrame::Resolve(particle->m_nCurrentFrame,
++					psystem->m_nStartAnimationFrame, psystem->m_nFinalAnimationFrame,
++					frameCount, ModelSets::UseXboxParticles());
++				RwRaster *curFrame = frames[frame];
+ 				if ( prevFrame != curFrame )
+ 				{
+ 					CSprite::FlushSpriteBuffer();
