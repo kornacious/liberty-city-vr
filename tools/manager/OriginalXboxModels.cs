@@ -35,7 +35,9 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             info.GetValueOrDefault("BuilderVersion") != Disc.BuilderVersion) throw new InvalidDataException("Expected a verified Original Xbox US overlay.");
         var hashes = info.Where(p => p.Key.StartsWith("SHA256 ", StringComparison.Ordinal)).ToDictionary(p => p.Key[7..], p => p.Value);
         string[] required = ["models/gta3.img", "models/gta3.dir", "models/generic/player.bmp", "models/generic.txd", "data/default.ide", "vegetation_models.txt", "vehicle_models.txt", "asset_categories.json"];
-        if (required.Any(p => !hashes.ContainsKey(p))) throw new InvalidDataException("Original Xbox manifest lacks required files.");
+        if (required.Concat(OriginalXboxAudio.RequiredFiles).Any(p => !hashes.ContainsKey(p))) throw new InvalidDataException("Original Xbox manifest lacks required files. Reimport your ISO to include audio.");
+        if (!File.ReadAllLines(Path.Combine(root, "audio/READY.txt")).SequenceEqual(new[] { OriginalXboxAudio.Identity }.Concat(OriginalXboxAudio.RequiredFiles.Where(p => p != "audio/READY.txt").Order(StringComparer.Ordinal))))
+            throw new InvalidDataException("Invalid Xbox audio inventory.");
         var actual = SafeFiles(root).Select(p => Path.GetRelativePath(root, p).Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
         if (!actual.SetEquals(hashes.Keys.Append("BUILD_INFO.txt"))) throw new InvalidDataException("Overlay has missing or unmanifested files.");
         foreach (var (relative, hash) in hashes)
@@ -124,9 +126,11 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             }
             File.WriteAllLines(Path.Combine(stage, "vegetation_models.txt"), vegetation);
             File.WriteAllLines(Path.Combine(stage, "vehicle_models.txt"), vehicles);
+            await new OriginalXboxAudio(settings, runner, log).Prepare(discRoot, stage, scratch, token);
             File.WriteAllText(Path.Combine(stage, "asset_categories.json"), JsonSerializer.Serialize(new {
                 source = Disc.Disc, entries = selected.Length, vehicles = vehicles.Count, vegetation = vegetation.Count,
-                excluded = "Xbox executable, scripts, audio, console frontend, cutscene ANM/hand extensions; PC gameplay and cutscene animations retained",
+                audio = "Xbox SFX decoded to PCM16 with rebuilt SDT; speech and nine radio stations decoded to lossless FLAC at their authored rates",
+                excluded = "Xbox executable, scripts, console frontend, cutscene ANM/hand extensions; identical PC gameplay and cutscene animation archives retained",
                 rendering = "Quest Vulkan; desktop Neo effects are not enabled by importing assets"
             }, new JsonSerializerOptions { WriteIndented = true }));
             List<string> manifest = ["Profile=MODERN", "Source=" + Identity, "BuilderVersion=" + Disc.BuilderVersion];

@@ -4648,17 +4648,19 @@ DrawQuestDeformationPage(void)
 static void
 DrawQuestModelAssetsPage(void)
 {
-	BeginFullVrMenuPage("APPEARANCE", "ASSET PROFILE AND PLAYER SKIN");
+	BeginFullVrMenuPage("APPEARANCE", "ASSET SOURCE AND PLAYER SKIN");
 	char row[112];
-	snprintf(row, sizeof(row), "ASSET PROFILE  < %s >%s",
+	snprintf(row, sizeof(row), "ASSET SOURCE  < %s >%s",
 		ModelSets::GetSourceName(ModelSets::GetRequested()),
 		ModelSets::IsRestartRequired() ? "  RESTART" : "");
 	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
 	snprintf(row, sizeof(row), "PLAYER SKIN  < %.48s >", QuestGameSettings::SkinName());
 	DrawFullVrMenuRow(row, 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
 	DrawFullVrMenuRow("BACK TO SETTINGS", 294, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
-	DrawVrMenuText("ORIGINAL XBOX LOADS THE RETAIL DISC ASSETS", VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
-	DrawVrMenuText("ASSET PROFILE CHANGES REQUIRE RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+	DrawVrMenuText(ModelSets::IsOriginalXboxAudioActive() ? "ACTIVE AUDIO: ORIGINAL XBOX - SPEECH, SFX AND RADIO" :
+		ModelSets::IsModernActive() ? "ACTIVE AUDIO: CLASSIC - REIMPORT XBOX ISO TO ADD AUDIO" : "ACTIVE AUDIO: CLASSIC PC",
+		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
+	DrawVrMenuText("ASSET SOURCE CHANGES REQUIRE A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
 }
 
 static void
@@ -5371,7 +5373,7 @@ DrawQuestAboutPage(void)
 		"CHEATS: VR MENU OR ON FOOT BOTH GRIPS + B",
 		"CHOOSE IMMERSIVE DRIVING IN VEHICLE SETTINGS",
 		"CALIBRATE WEAPONS IF A MODEL OR GRIP IS MISALIGNED",
-		"MODEL ASSETS USE ONE COMPLETE PROFILE",
+		"ASSET SOURCE SELECTS VISUALS AND AUDIO TOGETHER",
 		"CLASSIC VEGETATION IS RECOMMENDED FOR QUEST PERFORMANCE",
 		"MODERN VEHICLES + HIGH TRAFFIC CAN HEAVILY LOAD THE GPU",
 		"AUTHORED CULLING HELPS PERFORMANCE BUT MAY SHOW RARE ARTIFACTS",

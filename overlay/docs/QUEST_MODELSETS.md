@@ -1,10 +1,13 @@
-# Classic and Original Xbox assets on Quest
+# Classic and Original Xbox asset sources on Quest
 
-The asset menu offers **Classic** (the base PC installation) and **Original Xbox**.
+**Appearance > Asset Source** offers **Classic** (the base PC installation) and **Original Xbox**.
 Original Xbox replaces the previous Modern (Xbox Version HD) profile. Its internal
 setting remains `ModelSet=1` and its storage folder remains `modelsets/modern` for
 compatibility. All world, vegetation, vehicle, pedestrian and weapon assets switch
-together. Fully restart the application after changing the profile.
+together, along with sound effects, speech, ambience and all nine radio stations.
+Fully close and restart the application after changing the source. The active
+audio source is displayed separately from the requested source so pending restart
+changes are clear. Custom music and saves are independent of this choice.
 
 ## Import from your own disc image
 
@@ -18,7 +21,7 @@ An ISO is required for each preparation run. Old saved extracted-source or downl
 options are rejected; clear them in the action settings if upgrading from a legacy
 request. The current page clears those obsolete options when opened.
 
-Conversion requires CMake 3.22+, Ninja and a C++17 compiler. Windows uses Visual
+Conversion requires FFmpeg/ffprobe, CMake 3.22+, Ninja and a C++17 compiler. Windows uses Visual
 Studio C++ Build Tools; Linux uses the installed C/C++ toolchain. The bundled
 librw source and MIT-licensed lzokay decoder are compiled locally. Python and
 extract-xiso are not required. The image is opened read-only; the built-in XDVDFS
@@ -56,15 +59,52 @@ falls back to Classic while only an old HD overlay is installed.
 
 ## Scope and acceptance
 
+### Audio comparison
+
+Reimport the ISO with the updated Manager to add audio to an existing Xbox
+visual collection. Older visual-only collections still work, with Classic audio;
+the menu identifies this and asks for reimport. No base PC audio is overwritten.
+The entire audio inventory is checked at startup. An incomplete collection uses
+Classic audio as a whole rather than mixing an Xbox bank with PC speech/radio.
+
+The Manager fingerprints all 197 retail audio files. It decodes Xbox ADPCM sound
+effects to mono PCM16 and rebuilds the SDT offsets, lengths and loop points while
+preserving all 3,032 sample IDs and authored playback rates. Xbox speech/ambience
+and WMA radio are decoded to lossless FLAC at their original rates and channel
+counts. This adds no lossy transcoding or upsampling. Every stream is checked for
+matching rate, channels and WAV frame count; decoded PCM SHA256 values must match
+between every source and FLAC output before the
+staged collection can replace an existing output. Generated audio is included in
+the checksummed installation manifest and atomic installation/rollback workflow.
+
+Xbox FLAC streams take precedence over the base PC WAV/MP3 and compressed radio
+siblings only when Xbox is active. Classic uses the existing base installation,
+including any previously converted PC radio. FLAC streams play through Android's
+media framework; their exact durations are read from STREAMINFO at startup.
+
+To compare, select Classic, fully restart, and listen to a repeatable scene or
+station. Select Original Xbox and fully restart before repeating it at the same
+volume. This changes visuals as well as audio. The import preserves the decoded
+retail sources; it does not assert that every Xbox sound is better. All nine Xbox
+stations are 44.1 kHz, versus 32 kHz for eight PC stations and 44.1 kHz for Game
+Radio. Of 3,032 indexed effects, 3,031 have matching rates and the Porsche horn
+changes from 11,025 to 32,000 Hz. Encoding, recordings and mastering must be judged
+separately from sample rate.
+
+### Visual and animation scope
+
 This imports the original Xbox visual collection for the existing Quest Vulkan
 renderer. It does not enable desktop Neo world lightmaps, gloss, rim lighting or
 Xbox reflection behavior. Material support still depends on the active renderer.
 
-PC mission scripts, handling/gameplay data, audio, save formats, cutscene animation
+PC mission scripts, handling/gameplay data, save formats, cutscene animation
 archives and the Quest frontend remain on the existing foundation. Xbox ANM
 cutscene-hand extensions and the Xbox console frontend are not imported. Original
 Xbox actor models are included, but exact console cutscene presentation is outside
 this importer. PC vehicle collision remains active, including train/boat records.
+The inspected retail `anim/ped.ifp`, `anim/cuts.img` and `anim/cuts.dir` are
+byte-identical between Xbox and PC; copying them would not change animations.
+Xbox's extra cutscene hand models/ANM/XML remain outside the supported runtime.
 Existing Xbox calibration offsets are selected as a starting point and need visual
 verification against the retail models in VR.
 

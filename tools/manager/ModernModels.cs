@@ -58,7 +58,7 @@ public sealed class ModernModels(ManagerSettings settings, ICommandRunner runner
             await device.Shell($"if [ -d {qFinal} ]; then mv {qFinal} {qBackup} || exit 1; fi; if mv {qStage} {qFinal}; then :; else if [ -d {qBackup} ]; then mv {qBackup} {qFinal}; fi; exit 1; fi", token);
             activated = true;
             await device.Shell("rm -rf " + qBackup, token);
-            log.Write("Original Xbox assets installed. Select Original Xbox under MODEL ASSETS and fully restart the game.");
+            log.Write("Original Xbox visuals and audio installed. Select Original Xbox under Appearance > Asset Source and fully restart the game.");
         }
         finally
         {

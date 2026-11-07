@@ -13,7 +13,7 @@ enum eModelSet
 	MODEL_SET_COUNT
 };
 
-// Select the complete Classic or Modern (Xbox HD) set. Categories share one selection.
+// Select the complete Classic or Original Xbox source. Categories share one selection.
 // Changes require a restart so loaded RenderWare objects are not replaced.
 enum eModelCategory
 {
@@ -34,6 +34,10 @@ void SetRequested(eModelSet modelSet);
 void CycleRequested(int direction);
 bool IsModernActive();
 bool IsXboxActive();
+bool IsOriginalXboxAudioActive();
+// Resolves only the complete, verified Xbox audio collection captured at startup.
+// Legacy visual-only profiles keep all audio on the base PC installation.
+bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size);
 bool IsRestartRequired();
 bool IsAvailable(eModelSet modelSet);
 const char *GetName(eModelSet modelSet);

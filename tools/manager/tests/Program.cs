@@ -175,9 +175,12 @@ await Test("Overlay manifests detect modified and unmanifested files", () =>
     var img = Path.Combine(overlay, "models/gta3.img"); File.WriteAllBytes(img, new byte[2048]);
     var dir = new byte[32]; BinaryPrimitives.WriteUInt32LittleEndian(dir.AsSpan(4), 1); Encoding.ASCII.GetBytes("car.dff").CopyTo(dir, 8); File.WriteAllBytes(Path.Combine(overlay, "models/gta3.dir"), dir);
     foreach (var p in new[] { "models/generic/player.bmp", "vegetation_models.txt", "vehicle_models.txt", "asset_categories.json", "models/generic.txd", "data/default.ide" }) File.WriteAllText(Path.Combine(overlay, p), "fixture");
+    Directory.CreateDirectory(Path.Combine(overlay, "audio"));
+    foreach (var p in OriginalXboxAudio.RequiredFiles) File.WriteAllText(Path.Combine(overlay, p), "fixture");
+    File.WriteAllLines(Path.Combine(overlay, "audio/READY.txt"), new[] { OriginalXboxAudio.Identity }.Concat(OriginalXboxAudio.RequiredFiles.Where(p => p != "audio/READY.txt").Order(StringComparer.Ordinal)));
     var manifest = new List<string> { "Profile=MODERN", "BuilderVersion=" + OriginalXboxModels.Disc.BuilderVersion, "Source=" + OriginalXboxModels.Identity };
     foreach (var file in Directory.GetFiles(overlay, "*", SearchOption.AllDirectories)) manifest.Add("SHA256 " + Path.GetRelativePath(overlay, file).Replace('\\', '/') + "=" + Digests.Sha256(file));
-    File.WriteAllLines(Path.Combine(overlay, "BUILD_INFO.txt"), manifest); Assert(ModernModels.ValidateOverlay(overlay).Count == 8);
+    File.WriteAllLines(Path.Combine(overlay, "BUILD_INFO.txt"), manifest); Assert(ModernModels.ValidateOverlay(overlay).Count == 206);
     File.WriteAllText(Path.Combine(overlay, "extra.txt"), "extra"); Throws<InvalidDataException>(() => ModernModels.ValidateOverlay(overlay)); File.Delete(Path.Combine(overlay, "extra.txt"));
     File.AppendAllText(Path.Combine(overlay, "vegetation_models.txt"), "tampered"); Throws<InvalidDataException>(() => ModernModels.ValidateOverlay(overlay)); return Task.CompletedTask;
 });
@@ -191,6 +194,7 @@ await Test("Original Xbox import rejects downloads and extracted mod sources bef
     Assert(fake.Calls.Count == 0);
 });
 await XboxChecks.Run(Test, Assert, root);
+await XboxAudioChecks.Run(Test, Assert, root);
 
 await Test("Game data copy rejects incomplete retail folders", () =>
 { Throws<IOException>(() => Workflows.ValidateGameDirectory(root)); return Task.CompletedTask; });

@@ -9,6 +9,8 @@
 #include "QuestAudio.h"
 #include "QuestHrtf.h"
 #include "QuestRadioStream.h"
+#include "QuestFlacDuration.h"
+#include "ModelSets.h"
 #include "platform_android.h"
 
 #include <aaudio/AAudio.h>
@@ -328,6 +330,7 @@ estimateMp3Length(const char *path)
 static bool
 resolveStreamPath(char *path, size_t capacity, unsigned int file)
 {
+    if(ModelSets::GetOriginalXboxAudioPath(StreamedNameTable[file], path, capacity)) return true;
     return QuestResolveRadioStream(path, capacity, StreamedNameTable[file],
         file < STREAMED_SOUND_RADIO_MP3_PLAYER,
         platform::resolveGamePathCaseInsensitive);
@@ -412,7 +415,8 @@ cSampleManager::Initialise(void)
 		char path[768];
 		if(resolveStreamPath(path, sizeof(path), i)){
             const char *extension = strrchr(path, '.');
-            gTrackLengths[i] = extension && strcasecmp(extension, ".m4a") == 0 ?
+            gTrackLengths[i] = extension && strcasecmp(extension, ".flac") == 0 ? QuestFlacDuration(path) :
+                extension && strcasecmp(extension, ".m4a") == 0 ?
                 platform::audioProbeDuration(path) : estimateMp3Length(path);
         }
 		if(gTrackLengths[i] == 0)
@@ -720,8 +724,11 @@ cSampleManager::InitialiseSampleBanks(void)
 {
 	char descPath[768];
 	char rawPath[768];
-	if(!platform::resolveGamePathCaseInsensitive(descPath, sizeof(descPath), "audio/sfx.SDT") ||
-	   !platform::resolveGamePathCaseInsensitive(rawPath, sizeof(rawPath), "audio/sfx.RAW"))
+	const bool xbox = ModelSets::IsOriginalXboxAudioActive();
+	if(xbox ? (!ModelSets::GetOriginalXboxAudioPath("audio/sfx.SDT", descPath, sizeof(descPath)) ||
+	           !ModelSets::GetOriginalXboxAudioPath("audio/sfx.RAW", rawPath, sizeof(rawPath))) :
+	   (!platform::resolveGamePathCaseInsensitive(descPath, sizeof(descPath), "audio/sfx.SDT") ||
+	    !platform::resolveGamePathCaseInsensitive(rawPath, sizeof(rawPath), "audio/sfx.RAW")))
 		return false;
 	FILE *desc = fopen(descPath, "rb");
 	if(desc == nullptr) return false;

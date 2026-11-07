@@ -9,6 +9,7 @@
 #include <chrono>
 #include <map>
 #include <string>
+#include "../../overlay/src/audio/QuestFlacDuration.h"
 #define nil nullptr
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define strcasecmp _stricmp
@@ -62,6 +63,29 @@ int main(){
  require(!QuestOverlayEntrySelected(md.c_str(),"bogus.col"),"unsupported archive entry rejected");
  require(!GetXboxAssetPath("models/gta3.img",gGameRoot,0),"duplicate Xbox archive never registered");
  char out[1024];
+ require(!IsOriginalXboxAudioActive(),"old visual-only import keeps PC audio");
+ require(!GetOriginalXboxAudioPath("audio/head.wav",out,sizeof(out)),"old import cannot redirect radio");
+ std::string inventory="ORIGINAL_XBOX_AUDIO_1\naudio/sfx.raw\naudio/sfx.sdt\naudio/head.flac\naudio/a1_sso.flac\n";
+ for(const char *name:{"audio/sfx.raw","audio/sfx.sdt","audio/head.flac","audio/a1_sso.flac"})touch(root/"modelsets/modern"/name);
+ for(int i=0;i<193;++i){auto name="audio/fixture"+std::to_string(i)+".flac";touch(root/"modelsets/modern"/name);inventory+=name+"\n";}
+ touch(root/"modelsets/modern/audio/READY.txt",inventory.c_str());reset(root);
+ require(IsOriginalXboxAudioActive(),"complete collection enables Xbox audio");
+ require(GetOriginalXboxAudioPath("AUDIO/HEAD.WAV",out,sizeof(out))&&std::string(out).find("modelsets/modern")!=std::string::npos,"Xbox radio bypasses PC compressed sibling");
+ require(GetOriginalXboxAudioPath("audio\\a1_sso.mp3",out,sizeof(out)),"PC MP3 identifier resolves Xbox FLAC");
+ require(GetOriginalXboxAudioPath("audio/sfx.RAW",out,sizeof(out)),"Xbox bank resolves");
+ for(const char *name:{"audio/../head.wav","/audio/head.wav","audio/nested/head.wav","mp3/custom.mp3","data/main.scm"})require(!GetOriginalXboxAudioPath(name,out,sizeof(out)),"audio override rejects unrelated and unsafe paths");
+ SetRequested(MODEL_SET_CLASSIC);require(IsOriginalXboxAudioActive(),"requested source does not hot-swap live audio");reset(root);
+ require(!IsOriginalXboxAudioActive()&&!GetOriginalXboxAudioPath("audio/head.wav",out,sizeof(out)),"Classic restart restores PC audio");
+ SetRequested(MODEL_SET_MODERN);std::filesystem::remove(root/"modelsets/modern/audio/fixture0.flac");reset(root);
+ require(!IsOriginalXboxAudioActive(),"one missing stream keeps entire collection on PC");
+ touch(root/"modelsets/modern/audio/fixture0.flac");reset(root);
+ // Test exact FLAC STREAMINFO duration, including non-whole-second tracks.
+ auto flac=root/"duration.flac";unsigned char header[42]={};memcpy(header,"fLaC",4);header[7]=34;
+ uint64_t packed=(uint64_t(44100)<<44)|44101;
+ for(int i=25;i>=18;--i){header[i]=uint8_t(packed);packed>>=8;}
+ FILE *duration=fopen(flac.string().c_str(),"wb");fwrite(header,1,42,duration);fclose(duration);
+ require(QuestFlacDuration(flac.string().c_str())==1000,"FLAC authored sample count determines duration");
+ touch(flac,"fLaC");require(QuestFlacDuration(flac.string().c_str())==0,"truncated FLAC rejected");
  for(const char *name:{"data/default.ide","data/maps/generic.ide","data/maps/comse/comse.ipl","data/maps/comse/comse.col","models/coll/generic.col","models/generic.txd","models/particle.txd","txd/splash1.txd","models/generic/wheels.dff","models/generic/player.bmp"})require(IsModernAssetPath(ResolveAssetPath(name,out,sizeof(out))),"complete Modern loose assets routed");
  for(const char *name:{"models/gta3.img","models/gta3.dir","models/coll/vehicles.col","skins/custom.bmp","data/main.scm","userfiles/GTA3sf1.b","../data/maps/generic.ide","C:/models/particle.txd"})require(ResolveAssetPath(name,out,sizeof(out))==name,"retail/private paths preserved");
  require(GetCalibrationSetForCategory(MODEL_CATEGORY_VEHICLES)==MODEL_SET_XBOX,"Xbox calibration identity retained internally");

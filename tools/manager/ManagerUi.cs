@@ -148,11 +148,11 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 break;
             case 3:
                 options.DownloadModels = false; options.ModelSource = "";
-                Note("Import original Xbox GTA III US 1.0 assets from your local disc image. No game downloads.");
+                Note("Import original Xbox GTA III US 1.0 visuals, speech, sound effects and radio from your local disc image. Requires FFmpeg/ffprobe. No game downloads.");
                 Note("Conversion requires CMake, Ninja and C++ build tools (Visual Studio C++ on Windows).");
                 Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
                 Field("Output folder named modern (blank: workplace)", options.ModelOutput, v => options.ModelOutput = v, OpenMode.Directory, false);
-                Toggle("Build only (skip model installation)", options.BuildOnly, v => options.BuildOnly = v); break;
+                Toggle("Build only (skip asset installation)", options.BuildOnly, v => options.BuildOnly = v); break;
             case 4:
                 Note("Repair replacement text and frontend assets on an existing installation.");
                 Field("Port gamefiles folder (blank: pinned source cache)", options.GameFiles, v => options.GameFiles = v, OpenMode.Directory);
