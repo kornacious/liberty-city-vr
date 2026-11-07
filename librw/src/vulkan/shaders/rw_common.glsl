@@ -79,12 +79,24 @@ layout(set = 0, binding = 0) uniform SceneData {
 	vec4 waterParams1;
 	vec4 waterParams2;
 	vec4 neoRimStart, neoRimEnd, neoParams, neoVehicle, neoDiffuse, neoSpec, neoControl;
+	vec4 neoRimView;
 	// x != 0 = culling visualizer active; the draw's flat colour index then
 	// arrives in surfaceProps.z instead of the packed light mask.
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	vec4 vizParams;
 #endif
 } scene;
+
+#include "rw_neo_rim.glsl"
+
+vec3 RwNeoRimLight(vec3 normal)
+{
+	float facing = dot(normal, scene.neoRimView.xyz);
+	return vec3(
+		RwNeoRimChannel(scene.neoRimEnd.r,scene.neoRimStart.r,scene.neoParams.y,scene.neoParams.z,scene.neoParams.w,facing),
+		RwNeoRimChannel(scene.neoRimEnd.g,scene.neoRimStart.g,scene.neoParams.y,scene.neoParams.z,scene.neoParams.w,facing),
+		RwNeoRimChannel(scene.neoRimEnd.b,scene.neoRimStart.b,scene.neoParams.y,scene.neoParams.z,scene.neoParams.w,facing));
+}
 
 layout(push_constant) uniform PushConstants {
 	mat4 model;

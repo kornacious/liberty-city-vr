@@ -492,6 +492,7 @@ struct SceneData
 	float32 waterParams2[4];
 	float32 neoRimStart[4], neoRimEnd[4], neoParams[4];
 	float32 neoVehicle[4], neoDiffuse[4], neoSpec[4], neoControl[4];
+	float32 neoRimView[4];
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	// Culling visualizer: x != 0 puts every world draw into flat debug
 	// colour, its index carried per draw in surfaceProps.z. Zero in play.

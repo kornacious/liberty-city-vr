@@ -606,6 +606,8 @@ void reportGeneratedMips(void);
 // owned by the startup asset collection, not the transient streaming cache.
 void setNeoEffects(TexDictionary *textures, const float32 values[22], bool32 enabled);
 void setNeoDroplets(float32 rain);
+// Scoped semantic context for rigid pedestrian parts. Returns the old state.
+bool32 setPedestrianRimPass(bool32 enabled);
 void setRenderDiagnostics(bool32 enabled);
 // How far down the mip chain masked geometry is pushed, in half
 // levels. Foliage sparkles because its mask is finer than a pixel;

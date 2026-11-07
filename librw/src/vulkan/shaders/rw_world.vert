@@ -55,9 +55,7 @@ void main()
 	          push.surfaceProps.y;
 
 	if(scene.neoControl.x > 0.5 && (int(push.ambientLight.w) & 16) != 0){
-		vec3 toEye=normalize(scene.im2dParams.yzw-world.xyz);
-		float f=scene.neoParams.y-scene.neoParams.z*dot(normal,toEye);
-		colour+=clamp(mix(scene.neoRimEnd.rgb,scene.neoRimStart.rgb,f)*scene.neoParams.w,0.0,1.0);
+		colour+=RwNeoRimLight(normal);
 	}
 	fragColour = vec4(clamp(colour, 0.0, 1.0), inColour.a) * push.materialColour;
 	fragTexCoord = inTexCoord;

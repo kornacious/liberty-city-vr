@@ -24,6 +24,7 @@ namespace GameRender
 {
 ProfileEntity::ProfileEntity(CEntity *entity){
 #ifdef RW_VULKAN
+	previousPedestrianRim=rw::vulkan::setPedestrianRimPass(entity && entity->IsPed())!=0;
 	if(entity && (rw::vulkan::getStaticInstancesEnabled()||rw::vulkan::getWorldBackfaceEnabled()||rw::vulkan::getWorldOcclusionEnabled()))
 		instanceActive=rw::vulkan::beginStaticInstanceEntity(entity->GetModelIndex(),
 			entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
@@ -39,6 +40,7 @@ ProfileEntity::ProfileEntity(CEntity *entity){
 }
 ProfileEntity::~ProfileEntity(){
 #ifdef RW_VULKAN
+	rw::vulkan::setPedestrianRimPass(previousPedestrianRim);
 	if(active)rw::vulkan::endGpuProfileEntity();
 	if(instanceActive)rw::vulkan::endStaticInstanceEntity();
 #endif
@@ -60,6 +62,7 @@ public:
 	{
 		if(command.atomic){
 #ifdef RW_VULKAN
+			const bool32 previousRim=rw::vulkan::setPedestrianRimPass(command.role==OBJECT_DRAW_PED_LIMB);
 			const int32 savedScopeRole = rw::vulkan::setPhysicalScopeDrawRole(
 				command.role == OBJECT_DRAW_VR_WEAPON ||
 				command.role == OBJECT_DRAW_PLAYER_PREVIEW ? 1 : 0);
@@ -71,6 +74,7 @@ public:
 #endif
 			RpAtomicRender(command.atomic);
 #ifdef RW_VULKAN
+			rw::vulkan::setPedestrianRimPass(previousRim);
 			rw::vulkan::setIm3DWater(0);
 			rw::vulkan::setPhysicalScopeDrawRole(savedScopeRole);
 #endif

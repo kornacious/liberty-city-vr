@@ -1,5 +1,6 @@
 #include "VehicleAlphaPolicy.h"
 #include "UniformAlphaPolicy.h"
+#include "NeoRim.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,8 @@ bool32 setHideVehicleWindows(bool32 enabled)
 
 bool32 getHideVehicleWindows() { return hideVehicleWindows; }
 static bool32 dynamicObjectPass;
+static NeoRim::Selection gPedestrianRim;
+bool32 setPedestrianRimPass(bool32 enabled) { return gPedestrianRim.SetPedestrian(enabled != 0); }
 static AtomicSubmissionStats gAtomicSubmissionStats;
 static WorldBackface::Stats gWorldBackfaceStats;
 static bool32 gOpaqueOrderEnabled;
@@ -1110,7 +1113,9 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 				auto mask=gvk.neoTextures->find("carreflectionmask");
 				if(mask && mask->raster)gloss=mask->raster;
 			}
-			if(shader==SHADER_SKIN && (geometry->flags&Geometry::LIGHT)) neoFlags|=16;
+			if(gPedestrianRim.Eligible(shader==SHADER_SKIN,
+			    (geometry->flags&Geometry::LIGHT)!=0,
+			    (geometry->flags&Geometry::NORMALS)!=0)) neoFlags|=16;
 			neoSets[0]=getTextureDescriptor(lightmap);neoSets[1]=getTextureDescriptor(gloss);
 			if(neoSets[0]!=boundNeo[0] || neoSets[1]!=boundNeo[1]){
 				vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,4,2,neoSets,0,nil);

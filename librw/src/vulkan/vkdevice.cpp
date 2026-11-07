@@ -14,6 +14,7 @@
 #include "../rwengine.h"
 #include "rwvk.h"
 #include "rwvkimpl.h"
+#include "NeoRim.h"
 #include "PhysicalScopeMath.h"
 #include "PostFxPolicy.h"
 
@@ -2342,6 +2343,8 @@ renderPhysicalScope(void)
 	scene.reflectionParams[0] = scene.reflectionParams[1] = 0.0f;
 	scene.waterParams1[3] = 0.0f;
 	scene.lightCount[2] = scene.lightCount[3] = 512.0f;
+	for(int i=0;i<3;i++) scene.neoRimView[i]=gvk.worldToPlay[i]*gScopeForward[0]+
+		gvk.worldToPlay[4+i]*gScopeForward[1]+gvk.worldToPlay[8+i]*gScopeForward[2];
 	for(int i = 0; i < 3; i++)
 		scene.im2dParams[i+1] = gvk.worldToPlay[i]*gScopePosition[0]+
 			gvk.worldToPlay[4+i]*gScopePosition[1]+
@@ -2659,6 +2662,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	scene->neoVehicle[2]=0.7f;scene->neoVehicle[3]=1.0f;
 	memcpy(scene->neoDiffuse,gvk.neoValues+14,16);memcpy(scene->neoSpec,gvk.neoValues+18,16);
 	scene->neoControl[0]=gvk.neoEnabled?1.0f:0.0f;
+	NeoRim::CameraForward(gvk.headQuat,scene->neoRimView);
 	memcpy(scene->waterParams1, gvk.waterParams,
 	       sizeof(scene->waterParams1));
 	memcpy(scene->waterParams2, gvk.waterParams+4,

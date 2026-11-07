@@ -12,6 +12,7 @@ namespace GameRender
 class ProfileEntity {
     bool active=false;
     bool instanceActive=false;
+    bool previousPedestrianRim=false;
 public:
     explicit ProfileEntity(CEntity *entity);
     ~ProfileEntity();
@@ -38,7 +39,8 @@ enum eObjectDrawRole
 	OBJECT_DRAW_PLAYER_PREVIEW,
 	OBJECT_DRAW_SHADOW,
 	OBJECT_DRAW_SPECIAL_FX,
-	OBJECT_DRAW_WATER
+	OBJECT_DRAW_WATER,
+	OBJECT_DRAW_PED_LIMB
 };
 
 struct AtomicDrawCommand
