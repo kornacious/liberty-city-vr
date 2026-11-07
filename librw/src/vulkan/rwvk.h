@@ -576,7 +576,7 @@ void setWaterParams(float32 waves, float32 speed, float32 distortion,
 // Culling visualizer. While active every world draw is replaced by a flat
 // debug colour whose index (1 = visible, 2 = frustum-culled, 3 = occluder-
 // culled, 4 = distance/LOD) the caller sets per entity with setDebugTint.
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 void setDebugVizActive(bool32 active);
 void setDebugTint(uint32 index);
 #else

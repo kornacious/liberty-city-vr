@@ -561,3 +561,11 @@ on tracking loss, support grip, vehicle entry and gameplay restriction. Guns
 retain native firing/ammo coverage in `test-weapon-cadence.ps1`. In-headset
 checks are still needed for reach, comfort and physical impact feel on peds
 and cars; host fixtures do not simulate the full collision world.
+
+`test-culling-visualizer-api.ps1 -StageRoot <assembled-tree>` compiles the
+production Liberty view predicate, developer classifier and snapshot accessors.
+It checks OFF/per-view gates, stereo box and sphere queries, mode margins, small
+map-building bounds, accessor bounds and camera snapshot copies. The visualizer
+reports view rejection and unlisted entities; Vulkan geometry occlusion has no
+per-entity classification in this tool. No game data is read. Frozen-frame colors
+and head-turn behavior still require headset QA.

@@ -136,7 +136,7 @@ androidgame::VrKnockdownPresentationActive(void)
 		(PlayerKnockedDown(player) || gKnockdownView.OwnsBody());
 }
 static VrVehicleSeatRecenter gVehicleSeatRecenter;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static uint32 gQuestQuickStartSkipFrames;
 static uint32 gQuestQuickStartPlayableFrames;
 static bool gQuestQuickStartCutsceneSkipIssued;
@@ -1345,7 +1345,7 @@ UpdateQuestVehicleSeatRecenter(CPlayerPed *player, bool seatReady, bool postPhys
 		// with fresh tracking, then apply the ordinary calibrated anchor below.
 		// Subsequent leaning and wheel grabs keep their basis.
 		androidgame::VrRecenterView();
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		ALOG("vehicle seat recentered model=%d seat=%d", vehicle->GetModelIndex(), seat);
 #endif
 	}
@@ -2719,7 +2719,7 @@ PrepareFrontendBeforeFrames(void)
 	}
 
 	if(gGameState == GS_INIT_FRONTEND){
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		if(QuestQuickTestStartEnabled()){
 			ALOG("quick test start: bypassing frontend and starting a new game");
 			LoadingScreen(nil, nil, "loadsc0");
@@ -2920,14 +2920,14 @@ Step(void)
 		break;
 
 	case GS_PLAYING_GAME:
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		SkipQuestQuickStartCutsceneIfNeeded();
 #endif
 		// No frame limiter: xrWaitFrame already paces the application to the
 		// headset's refresh rate, and a second limiter on top of it only adds
 		// judder.
 		RsEventHandler(rsIDLE, (void*)TRUE);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		// The script may have created the cutscene inside this very idle step.
 		// Mark it skipped before the following submitted frame can present it.
 		SkipQuestQuickStartCutsceneIfNeeded();

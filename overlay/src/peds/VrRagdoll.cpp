@@ -118,13 +118,13 @@ static bool enabled;
 static int active;
 static bool bulletTrace;
 static int sleepingCount;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static int lastUpdated, lastDeferred;
 static int shotHits, shotMisses, shotThaws, shotBusy;
 #endif
 static VrRagdollBrake::Ledger vehicleBrakeLedger;
 static VrRagdollBrake::HitCache vehicleHitCache;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static unsigned vehicleImpactCalls, vehicleBrakeEvents;
 static float lastVehicleBrakeKmh;
 static float lastVehicleBeforeKmh, lastVehicleAfterKmh;
@@ -132,7 +132,7 @@ static float lastVehicleBeforeKmh, lastVehicleAfterKmh;
 // Developer diagnostics distinguish the admission gates.
 enum { DENY_OFF, DENY_KIND, DENY_RANGE, DENY_SLOTS, DENY_BONES,
 	DENY_COUNT };
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static int taken;
 static int denied[DENY_COUNT];
 #endif
@@ -146,7 +146,7 @@ struct AdmissionRetry {
 };
 static AdmissionRetry admissionRetries[MAX_POSES];
 static uint32 admissionFrame = ~uint32(0);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static unsigned lateAdmissions, blastEvents;
 
 static void AdmissionEvent(const char *event, unsigned count, CPed *ped, int reason)
@@ -166,7 +166,7 @@ static void AdmissionEvent(const char *event, unsigned count, CPed *ped, int rea
 
 static bool DenyAdmission(int reason, CPed *ped)
 {
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	++denied[reason];
 	AdmissionEvent("denied",unsigned(denied[reason]),ped,reason);
 #else
@@ -312,7 +312,7 @@ static bool
 StartRagdoll(CPed *ped, bool live)
 {
 	if(!enabled){
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		denied[DENY_OFF]++;
 #endif
 		return false;
@@ -425,7 +425,7 @@ StartRagdoll(CPed *ped, bool live)
 	slot->boundsLinked = false;
 	slot->ped = ped;
 	active++;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	taken++;
 	AdmissionEvent("take",unsigned(taken),ped,-1);
 #endif
@@ -541,7 +541,7 @@ static Slot *TryLateAdmission(CPed *ped)
 	// An old corpse's native root velocity is no longer its visible momentum.
 	if(ped->m_nPedState == PED_DEAD)
 		SeedMotion(slot,CVector(0.0f,0.0f,0.0f),CVector(0.0f,0.0f,0.0f));
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	AdmissionEvent("late",++lateAdmissions,ped,-1);
 #endif
 	return slot;
@@ -550,7 +550,7 @@ static Slot *TryLateAdmission(CPed *ped)
 void ExplosionImpulse(const CVector &centre, float blastRadius, float power)
 {
 	if(!enabled || active == 0 || !(blastRadius > 0.0f) || !(power > 0.0f)) return;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	int affected = 0;
 #endif
 	for(int i = 0; i < MAX_POSES; ++i){
@@ -568,11 +568,11 @@ void ExplosionImpulse(const CVector &centre, float blastRadius, float power)
 		Wake(slot);
 		slot->world.valid = false;
 		slot->poseCached = false;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		++affected;
 #endif
 	}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(affected) AdmissionEvent("blast",++blastEvents,nil,affected);
 #endif
 }
@@ -581,7 +581,7 @@ void VehicleImpact(CPed *ped, CVehicle *car, const CVector &incomingGameSpeed, f
     const CVector *contactPoint, const CVector *incomingGameTurn)
 {
 	if(!enabled || ped == nil) return;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	++vehicleImpactCalls;
 #endif
 	Slot *slot = FindSlot(ped);
@@ -629,7 +629,7 @@ void VehicleImpact(CPed *ped, CVehicle *car, const CVector &incomingGameSpeed, f
 	if(amount <= 0.0f) return;
 	car->ApplyMoveForce(impulse*(1.0f/50.0f));
 	VrRagdollBrake::Record(vehicleHitCache,pedHandle,carHandle,now);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	++vehicleBrakeEvents;
 	const CVector after = car->m_vecMoveSpeed*50.0f;
 	const float beforeKmh = Sqrt(before.x*before.x+before.y*before.y)*3.6f;
@@ -640,7 +640,7 @@ void VehicleImpact(CPed *ped, CVehicle *car, const CVector &incomingGameSpeed, f
 #endif
 	VrRagdollMetrics::Count(VrRagdollMetrics::CAR_BRAKES);
 	VrRagdollMetrics::AddBrakeImpulse(amount);
-#if defined(__ANDROID__) && defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(__ANDROID__) && defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	// One developer diagnostic row per accepted initial impact.
 	__android_log_print(ANDROID_LOG_INFO,"QuestRagdollBrake",
 		"event=%u car=%d hit_game=%.2f setting=%d owned=%d before_kmh=%.2f after_kmh=%.2f delta_kmh=%.2f",
@@ -648,7 +648,7 @@ void VehicleImpact(CPed *ped, CVehicle *car, const CVector &incomingGameSpeed, f
 #endif
 }
 
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 const char*
 DebugLine(void)
 {
@@ -748,7 +748,7 @@ Update(void)
 		// End the old profiling window so its sample flag cannot time later
 		// scopes after all retained bodies have gone away.
 		sleepingCount = 0;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		lastUpdated = lastDeferred = 0;
 #endif
 		VrRagdollMetrics::sampling = false;
@@ -759,7 +759,7 @@ Update(void)
 		if(slots[s].ped && slots[s].asleep) sleepingCount++;
 	VrRagdollMetrics::BeginFrame(active,active-sleepingCount,sleepingCount);
 	VrRagdollMetrics::Scope updateTime(VrRagdollMetrics::UPDATE);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	lastUpdated = lastDeferred = 0;
 #endif
 	if(active == 0) return;
@@ -769,7 +769,7 @@ Update(void)
 	if(enabled) WakeSavedByVehicles();
 	const uint32 now = CTimer::GetTimeInMilliseconds();
 	VrRagdollSchedule::Candidate candidates[MAX_POSES] = {};
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	int waiting = 0;
 #endif
 	for(int s = 0; s < MAX_POSES; s++){
@@ -807,13 +807,13 @@ Update(void)
 			(slot->lastSupportCount > 0 && slot->lastMaxSpeedSq > 4.0f);
 		candidate.pending = slot->waitTime;
 		candidate.distanceSq = (slot->bounds.centre-TheCamera.GetPosition()).MagnitudeSqr();
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		if(candidate.ready) waiting++;
 #endif
 	}
 	int selected[VrRagdollSchedule::MAX_UPDATES];
 	const int selectedCount = VrRagdollSchedule::Select(candidates,MAX_POSES,selected);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	lastDeferred = waiting-selectedCount;
 #endif
 	int remainingSteps = VrRagdollSchedule::MAX_STEPS;
@@ -919,7 +919,7 @@ Update(void)
 		}
 		RefreshBounds(slot);
 		slot->waitTime = 0.0f;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		lastUpdated++;
 #endif
 	}
@@ -1102,12 +1102,12 @@ BulletHit(const CVector &source, const CVector &end, int weaponType,
 		}
 	}
 	if(hitSlot == nil){
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		shotMisses++;
 #endif
 		return nil;
 	}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	shotHits++;
 #endif
 	CPed *hitPed = hitSlot->ped;
@@ -1132,7 +1132,7 @@ BulletHit(const CVector &source, const CVector &end, int weaponType,
 	hitSlot = Thaw(hitSlot);
 	if(hitSlot){
 		if(wasSaved){
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 			shotThaws++;
 #endif
 			hitSlot->bulletCredit = VrRagdollImpact::BURST_IMPULSE;
@@ -1149,7 +1149,7 @@ BulletHit(const CVector &source, const CVector &end, int weaponType,
 				VrRagdollImpulse::MAX_POINT_DELTA_SPEED,VrRagdollSettings::WeightScale());
 		}
 	}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	else shotBusy++;
 #endif
 	VrRagdollMetrics::Count(VrRagdollMetrics::HITS);

@@ -1,0 +1,42 @@
+diff --git a/src/renderer/Renderer.cpp b/src/renderer/Renderer.cpp
+index 49201e7..2b6d56d 100644
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -1147,6 +1147,17 @@ CRenderer::ShouldRenderInCurrentView(CEntity *ent)
+ }
+ #endif
+ 
++#if (defined(GTA_VR_OCULUS) || defined(RW_VULKAN)) && defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
++int32
++CRenderer::VrClassifyPerView(CEntity *ent)
++{
++	// Reuse the actual predicate, including OFF/per-view gates and small-map
++	// building handling. Do not copy Vice City's authored-volume occlusion:
++	// Liberty rejects geometry separately in the Vulkan draw path.
++	return ShouldRenderInCurrentView(ent) ? 0 : 1;
++}
++#endif
++
+ // Aggressive transitions are per entity/distance, never stored in the shared
+ // model alpha: instances of one model can be on opposite sides of a cutoff.
+ static int32
+diff --git a/src/renderer/Renderer.h b/src/renderer/Renderer.h
+index c744302..4566b3f 100644
+--- a/src/renderer/Renderer.h
++++ b/src/renderer/Renderer.h
+@@ -110,6 +110,15 @@ public:
+ 	static void PrepareQuestOcclusionContexts(void) {}
+ #endif
+ 	static bool ShouldRenderInCurrentView(CEntity *ent);
++#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
++	// Read-only snapshot access. Classification matches Liberty's view test:
++	// 0 = kept, 1 = outside the view. Vulkan geometry occlusion is separate.
++	static int32 VrClassifyPerView(CEntity *ent);
++	static CEntity *GetVisibleEntity(int32 i) {
++		return i >= 0 && i < ms_nNoOfVisibleEntities ? ms_aVisibleEntityPtrs[i] : nil;
++	}
++	static CVector GetVrViewCameraPosition(void) { return ms_vecCameraPosition; }
++#endif
+ #endif
+ 
+ 	static void Init(void);

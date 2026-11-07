@@ -82,7 +82,7 @@ layout(set = 0, binding = 0) uniform SceneData {
 	vec4 neoRimView;
 	// x != 0 = culling visualizer active; the draw's flat colour index then
 	// arrives in surfaceProps.z instead of the packed light mask.
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	vec4 vizParams;
 #endif
 } scene;

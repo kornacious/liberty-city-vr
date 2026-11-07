@@ -82,7 +82,7 @@ bool32 beginWorldOcclusion(void){
     // Keep this experiment independent of the backface experiment: the map
     // rasterizes both sides of real triangles, matching the ordinary path.
     if(!mainView()||getWorldBackfaceEnabled()||!gstate.zTestEnabled||!gstate.zWriteEnabled||gstate.cullMode!=CULLNONE){++stats.invalid;return 0;}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
     if(gvk.debugVizActive){++stats.invalid;return 0;}
 #endif
     if(gstate.alphaTestFunction!=ALPHAALWAYS &&

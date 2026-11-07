@@ -30,7 +30,7 @@ static void VrRestoreFov(){++fovCalls;}
 #include "player-debug-gates-production.inc"
 int main(){
  Check(RunFrontend(),"normal or requested quick-start entry completes");
-#if MIAMIVR_DEV_TOOLS
+#if LIBERTYVR_DEV_TOOLS
  Check(gGameState==GS_PLAYING_GAME&&initCalls==1&&iniReads==1,"explicit developer build retains requested quick start");
  Check(!FrontEndMenuManager.m_bGameNotLoaded&&!FrontEndMenuManager.m_bWantToLoad&&!FrontEndMenuManager.m_bMenuActive,"developer quick-start establishes native new-game frontend state");
  RunStep();Check(skipCalls==1&&CTimer::scale==6,"developer helper skips once and advances scripted intro");
@@ -50,5 +50,5 @@ int main(){
 #endif
  Check(idleCalls==fovCalls&&idleCalls>0,"ordinary game logic and FOV restoration remain paired");
  Check(loadCalls==1,"frontend loads its normal splash once");
- std::printf("PASS: %d actual Android startup/idle checks (developer=%d).\n",checks,MIAMIVR_DEV_TOOLS);
+ std::printf("PASS: %d actual Android startup/idle checks (developer=%d).\n",checks,LIBERTYVR_DEV_TOOLS);
 }

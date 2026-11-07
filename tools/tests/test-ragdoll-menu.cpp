@@ -171,7 +171,7 @@ int main()
 		extendedRangeShown |= draw.text.find("0-2000%") != std::string::npos;
 	}
 	Check(maximumShown && extendedRangeShown, "menu displays actual2000percent strength and updated range");
-#if !MIAMIVR_DEV_TOOLS
+#if !LIBERTYVR_DEV_TOOLS
 	for(const auto &draw : draws)
 		Check(draw.text.find("RD5 ON") == std::string::npos && draw.text.find("CAR HITS") == std::string::npos,
 			"player menu omits temporary ragdoll diagnostics");

@@ -3566,7 +3566,7 @@ foreach ($alpha in @(0, 1)) {
 }
 
 $baselineDev = Compile-Shader 'world-noeffects-dev' 'rw_world.frag' @(
-    '-DRW_WORLD_EFFECTS_RESOURCES=0', '-DMIAMIVR_DEV_TOOLS=1')
+    '-DRW_WORLD_EFFECTS_RESOURCES=0', '-DLIBERTYVR_DEV_TOOLS=1')
 if ((Read-Spirv $baselineDev) -match 'DescriptorSet 3|Location [45]\b|OpLoopMerge|OpAtomic') {
     throw 'Development visualizer reintroduced baseline effects resources/work.'
 }
@@ -3725,7 +3725,7 @@ function Definition([string]$text,[string]$name){
  return $match.Value
 }
 $pieces=[Collections.Generic.List[string]]::new()
-$pieces.Add('#define MIAMIVR_DEV_TOOLS '+[int][bool]$DevTools)
+$pieces.Add('#define LIBERTYVR_DEV_TOOLS '+[int][bool]$DevTools)
 $enum=[regex]::Match($source,'(?ms)^enum eVrGraphicsMenuItem \{.*?^\};')
 if(-not $enum.Success){throw 'Graphics item enum missing'}
 $pieces.Add($enum.Value)
@@ -5030,7 +5030,7 @@ $path=Join-Path $StageRoot 'src/skel/android/android.cpp'
 if(-not(Test-Path -LiteralPath $path)){$path=Join-Path $StageRoot 'overlay/src/skel/android/android.cpp'}
 $source=[IO.File]::ReadAllText($path)
 $source=$source.Replace("`r`n","`n")
-$guard='#if defined(MIAMIVR_DEV_TOOLS) &amp;&amp; MIAMIVR_DEV_TOOLS'
+$guard='#if defined(LIBERTYVR_DEV_TOOLS) &amp;&amp; LIBERTYVR_DEV_TOOLS'
 $start=$source.IndexOf($guard+"`nstatic uint32 gQuestQuickStartSkipFrames;")
 $end=$source.IndexOf("`n#endif",$start)+7
 if($start -lt 0 -or $end -le $start){throw 'Missing guarded actual quick-start helpers.'}
@@ -5044,7 +5044,7 @@ $begin=$source.IndexOf('case GS_PLAYING_GAME:')
 $end=$source.IndexOf('default:',$begin)
 if($begin -lt 0 -or $end -lt 0){throw 'Missing actual game idle branch.'}
 $step=$source.Substring($begin,$end-$begin)
-$output=('#define MIAMIVR_DEV_TOOLS '+[int]$DevTools.IsPresent)+"`n"+$helpers+"`nbool RunFrontend(){`n"+$frontend+"`nreturn gGameState == GS_FRONTEND;`n}`nvoid RunStep(){switch(gGameState){`n"+$step+"default:break;}}`n"
+$output=('#define LIBERTYVR_DEV_TOOLS '+[int]$DevTools.IsPresent)+"`n"+$helpers+"`nbool RunFrontend(){`n"+$frontend+"`nreturn gGameState == GS_FRONTEND;`n}`nvoid RunStep(){switch(gGameState){`n"+$step+"default:break;}}`n"
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'player-debug-gates-production.inc'),$output,[Text.UTF8Encoding]::new($false))
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-player-debug-gates.cpp')
 if($LASTEXITCODE -ne 0){throw 'Player debug gate checks failed.'}
@@ -5497,7 +5497,7 @@ $code+="`nstatic void SeedVelocity(Slot*,CPed*);`n"
 foreach($name in @('SetEnabled','IsEnabled','FindSlot','Presentation','ApplyPresentation','RefreshBounds','AcquireSlot','Thaw','StartRagdoll','ObserveAnimatedPose','ForgetAnimatedPose','InheritAnimatedMotion','SeedVelocity','Begin','BeginFall')){$code+="`n"+(Extract $source $name)}
 if(-not $Baseline){foreach($name in @('TryLateAdmission','ExplosionImpulse')){$code+="`n"+(Extract $source $name)}}
 foreach($name in @('Apply','Release')){$code+="`n"+(Extract $source $name)}
-$code=('#define MIAMIVR_DEV_TOOLS '+[int]$DevTools.IsPresent)+"`n"+('#define OLD_BASELINE '+[int]$Baseline.IsPresent)+"`nnamespace VrRagdoll {`n"+$code+"`n}`n"
+$code=('#define LIBERTYVR_DEV_TOOLS '+[int]$DevTools.IsPresent)+"`n"+('#define OLD_BASELINE '+[int]$Baseline.IsPresent)+"`nnamespace VrRagdoll {`n"+$code+"`n}`n"
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-explosion-production.inc'),$code)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-explosion-bones.inc'),[IO.File]::ReadAllText((Join-Path $sourceRoot 'animation/Bones.h')))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'ragdoll-explosion-world.inc'),(Extract $world 'CWorld::TriggerExplosion'))
@@ -5571,7 +5571,7 @@ $headPath=Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent 
 $headEnum=[regex]::Match([IO.File]::ReadAllText($headPath),'(?s)enum Item \{.*?\};')
 if(-not $headEnum.Success){throw 'Missing head calibration item enum'}
 $pieces.Add('namespace QuestHeadCalibration { '+$headEnum.Value+' }')
-$pieces.Add('#define MIAMIVR_DEV_TOOLS '+[int][bool]$DevTools)
+$pieces.Add('#define LIBERTYVR_DEV_TOOLS '+[int][bool]$DevTools)
 $pieces.Add('#include "' + ($headerPath -replace '\\','/') + '"')
 foreach ($pattern in @(
     '(?ms)^enum \{\r?\n\s*VR_DEBUG_WIDTH.*?^\};',
@@ -5620,7 +5620,7 @@ $ErrorActionPreference='Stop'
 $sourcePath=Join-Path $StageRoot 'src/peds/VrRagdoll.cpp'
 if(-not(Test-Path -LiteralPath $sourcePath)){$sourcePath=Join-Path $StageRoot 'overlay/src/peds/VrRagdoll.cpp'}
 $source=[IO.File]::ReadAllText($sourcePath)
-$output='#define MIAMIVR_DEV_TOOLS 0'+"`n"
+$output='#define LIBERTYVR_DEV_TOOLS 0'+"`n"
 foreach($name in @('SetEnabled','FindSlot','Owns','ForgetAnimatedPose','Release')){
  $match=[regex]::Match($source,'(?m)^(?:static\s+)?(?:Slot\s*\*|bool|void)\s*'+$name+'\([^)]*\)\s*\{')
  if(-not $match.Success){throw ('Missing method '+$name)}
@@ -7839,5 +7839,26 @@ if(-not $bridge.Success){throw 'Missing shared frontend bridge'}
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-shared-settings.cpp')
 if($LASTEXITCODE -ne 0){throw 'Shared settings checks failed'}
 </value>
+  </data>
+  <data name="tools/tests/test-culling-visualizer-api.ps1" xml:space="preserve">
+    <value>param(
+    [Parameter(Mandatory=$true)][string]$StageRoot,
+    [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) (&apos;liberty-cull-api-&apos;+[guid]::NewGuid().ToString(&apos;N&apos;)))
+)
+$ErrorActionPreference=&apos;Stop&apos;
+$source=[IO.File]::ReadAllText((Join-Path $StageRoot &apos;src/renderer/Renderer.cpp&apos;))
+$header=[IO.File]::ReadAllText((Join-Path $StageRoot &apos;src/renderer/Renderer.h&apos;))
+$functions=@(&apos;ShouldRenderInCurrentView&apos;,&apos;VrClassifyPerView&apos;) | ForEach-Object {
+    $match=[regex]::Match($source,&apos;(?ms)^(?:bool|int32)\r?\nCRenderer::&apos;+$_+&apos;\(CEntity \*ent\)\r?\n\{.*?^\}&apos;)
+    if(-not $match.Success){throw (&apos;Missing production function: &apos;+$_)}
+    $match.Value
+}
+$accessors=[regex]::Match($header,&apos;(?ms)^#if defined\(LIBERTYVR_DEV_TOOLS\) &amp;&amp; LIBERTYVR_DEV_TOOLS\r?\n.*?^#endif&apos;)
+$count=[regex]::Match($header,&apos;(?m)^\s*static int32 GetVisibleEntityCount[^\r\n]+&apos;)
+if(-not $accessors.Success -or -not $count.Success){throw &apos;Missing production snapshot accessors&apos;}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;culling-visualizer-predicate.inc&apos;),($functions -join &quot;`n&quot;))
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot &apos;culling-visualizer-accessors.inc&apos;),$count.Value+&quot;`n&quot;+$accessors.Value)
+&amp; (Join-Path $PSScriptRoot &apos;test-ragdoll.ps1&apos;) -KitRoot $StageRoot -OutDir $OutDir -Sources @(&apos;test-culling-visualizer-api.cpp&apos;)
+if($LASTEXITCODE -ne 0){throw &apos;Culling visualizer API regression failed&apos;}</value>
   </data>
 </root>

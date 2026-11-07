@@ -1,4 +1,4 @@
-#define MIAMIVR_DEV_TOOLS 1 // Verify developer speed telemetry against actual forces.
+#define LIBERTYVR_DEV_TOOLS 1 // Verify developer speed telemetry against actual forces.
 #include "ragdoll-test-vector.h"
 #include "VrRagdollBrake.h"
 #include "VrRagdollSettings.h"

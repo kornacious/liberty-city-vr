@@ -41,7 +41,7 @@ void VehicleImpact(CPed *ped, CVehicle *car, const CVector &incomingGameSpeed, f
 // Runs before native explosion death callbacks: only existing owners receive
 // this impulse; newly killed peds retain their native velocity seed once.
 void ExplosionImpulse(const CVector &centre, float radius, float power);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 // Developer counters for the RAGDOLL page.
 const char *DebugLine(void);
 const char *VehicleDebugLine(void);

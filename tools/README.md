@@ -39,9 +39,9 @@ weapons/bikes or private historical snapshots. Their removal does not establish
 coverage for those behaviors. Retained current-source tests, including known
 adapter failures, remain explicit in [the test guide](tests/README.md).
 
-Compatibility definitions such as `MIAMIVR_DEV_TOOLS` and old Gradle/environment
-aliases remain where active C++/GLSL code or existing build configurations use
-them. `Modern` model-set names and on-device directories also remain as storage
-compatibility identifiers. Historical credits, changelogs and test reports keep
+Legacy CMake/Gradle options such as `MIAMIVR_DEV_TOOLS` and old environment
+aliases remain for existing build configurations. Internal C++/GLSL code and
+test adapters use `LIBERTYVR_DEV_TOOLS`. `Modern` model-set names and on-device
+directories also remain as storage compatibility identifiers. Historical credits, changelogs and test reports keep
 their original context. Runtime application/engine names and new signing examples
 use Liberty City VR/re3.

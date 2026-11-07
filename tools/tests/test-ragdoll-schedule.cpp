@@ -1,4 +1,4 @@
-#define MIAMIVR_DEV_TOOLS 1 // This fixture inspects the developer scheduler counters.
+#define LIBERTYVR_DEV_TOOLS 1 // This fixture inspects the developer scheduler counters.
 #include "ragdoll-test-vector.h"
 template<class T, class U> static T Min(T a,U b){return a<b?a:T(b);}
 template<class T, class U> static T Max(T a,U b){return a>b?a:T(b);}

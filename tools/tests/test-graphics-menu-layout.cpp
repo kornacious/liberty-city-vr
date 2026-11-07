@@ -47,7 +47,7 @@ static void DrawFullVrMenuRow(const char*,int,int,bool,bool=true,bool=false,bool
 static void DrawFullVrMenuRow(const char*text,int y,int scale,bool selected,bool available,bool warning,bool positive,bool highlight){drawnRows.push_back({text,y,scale,selected});DrawFullVrMenuRowNative(text,y,scale,selected,available,warning,positive,highlight);}
 static void Clear(){texts.clear();drawnRows.clear();highlights.clear();VrCullViz::calls=0;}
 static void Verify(){
-#if MIAMIVR_DEV_TOOLS
+#if LIBERTYVR_DEV_TOOLS
  Check(VR_GRAPHICS_ITEM_COUNT==21,"opt-in developer build includes its visualizer row");
 #else
  Check(VR_GRAPHICS_ITEM_COUNT==19&&VrCullViz::calls==0,"shipping graphics has no visualizer or quick-test row or backend calls");
@@ -113,5 +113,5 @@ int main(){
    Clear();gWorldLodMode=mode;gLodFadeTransitions=state;gFxaaIntegerStencil=state;gStaticInstances=state;gWorldBackface=state;gWorldOcclusion=state;gVrOptimizationSelection=selection;
    DrawQuestOptimizationsPage();VerifyOptimizations();
   }
- std::printf("Graphics layout: %u checks PASS; %d rows, %d rendered states, dev-tools %d; every selectable row and footer separate.\n",checks,VR_GRAPHICS_ITEM_COUNT,4*VR_GRAPHICS_ITEM_COUNT,MIAMIVR_DEV_TOOLS);
+ std::printf("Graphics layout: %u checks PASS; %d rows, %d rendered states, dev-tools %d; every selectable row and footer separate.\n",checks,VR_GRAPHICS_ITEM_COUNT,4*VR_GRAPHICS_ITEM_COUNT,LIBERTYVR_DEV_TOOLS);
 }

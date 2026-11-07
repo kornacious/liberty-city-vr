@@ -12,7 +12,7 @@
 #include "Timer.h"
 #include "VisibilityPlugins.h"
 #include <cstring>
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 #include <android/log.h>
 #endif
 
@@ -30,7 +30,7 @@ const unsigned PANEL_PROBES=64;
 struct Hit {
 	Vec point, normal; float depth=0, impulse=0; uint32 time=0;
 	float radius=0.85f, maxDent=0.32f;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	int32 otherHandle=-1, otherModel=-1, otherType=0;
 #endif
 };
@@ -52,7 +52,7 @@ struct State {
 State states[MAX_CARS];
 size_t privateVertices=0, privateTriangles=0, privateBytes=0;
 uint32 workFrame=~0u;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 #define DEFORM_DIAG(...) __VA_ARGS__
 struct Diagnostics {
 	uint32 contacts=0, admitted=0, noSlot=0, noPanel=0, commits=0;
@@ -101,7 +101,7 @@ struct Job {
 	size_t bytes=0;
 	bool subdivide=false, renderSource=false;
 	Vec boundMin, boundMax;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	float displacement=0;
 	float heightChange=0;
 #endif
@@ -559,7 +559,7 @@ void AdvanceJob(unsigned &vertexWork,unsigned &triangleWork,bool &subdivided,boo
 		job.atomic->setGeometry(job.result,0);
 		DEFORM_DIAG(const bool firstDent=!job.state->hasDent);
 		job.state->lastDent=CTimer::GetTimeInMilliseconds(); job.state->hasDent=true;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		diagnostics.commits++; diagnostics.displacement=job.displacement;
 		// Report this committed hit, not a weaker collision received meanwhile.
 		diagnostics.model=CPools::GetVehicle(job.state->handle)->GetModelIndex();
@@ -595,7 +595,7 @@ void RecordCollision(CVehicle *vehicle,const CVector &worldPoint,const CVector &
 	// Entity classification is intentionally independent of mutable mission flags.
 	if(other->GetType()!=ENTITY_TYPE_BUILDING && other->GetType()!=ENTITY_TYPE_OBJECT && other->GetType()!=ENTITY_TYPE_VEHICLE) return;
 	float depth=HitDepth(impulse,vehicle->m_fMass,GetStrengthPercent()*0.01f,GetThresholdPercent()*0.01f);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	diagnostics.model=vehicle->GetModelIndex(); diagnostics.impulse=impulse; diagnostics.depth=depth;
 	diagnostics.handle=CPools::GetVehicleRef(vehicle);diagnostics.otherType=other->GetType();
 	diagnostics.otherHandle=diagnostics.otherModel=-1;

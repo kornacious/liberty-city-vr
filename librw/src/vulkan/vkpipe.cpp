@@ -707,7 +707,7 @@ worldBackfaceAtomic(Atomic *atomic,Geometry *geometry,InstanceDataHeader *header
        (geometry->flags&Geometry::NATIVE)||header->primType!=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST){
         ++gWorldBackfaceStats.rejectState;return false;
     }
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
     if(gvk.debugVizActive){++gWorldBackfaceStats.rejectState;return false;}
 #endif
     auto *base=atomic->getPipeline();
@@ -917,7 +917,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		!dynamicObjectPass && !vehicleAlphaPass;
 	bool instanceSubmission=!gvk.neoEnabled && gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
 		!gvk.wristPanelOffscreen && !physicalScopeCaptureActive() && !worldEffectsActive() && !gvk.im3dWaterDraw;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(gvk.debugVizActive)instanceSubmission=false;
 #endif
 	if(!instanceSubmission)flushStaticInstances();
@@ -1174,7 +1174,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 				}
 			}
 		}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 		// The visualizer replaces the packed mask with a bare colour index.
 		// It cannot share the float: the normal bits already reach 2^24
 		// (water), and anything above that loses integer precision.

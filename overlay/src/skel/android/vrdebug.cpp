@@ -299,7 +299,7 @@ static bool gCutsceneAnchorConsumeUntilRelease;
 static double gCutsceneAnchorLastAdjustMs;
 static char gCutsceneAnchorNotice[64];
 static double gCutsceneAnchorNoticeUntilMs;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 static bool gQuestQuickTestStart;
 #endif
 static int gQuestRenderScalePercent = 100;
@@ -718,12 +718,12 @@ enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_SHADOWS,
 	VR_GRAPHICS_DYNAMIC_LIGHTS,
 	VR_GRAPHICS_OCCLUSION,
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	VR_GRAPHICS_CULL_VIZ,
 #endif
 	VR_GRAPHICS_FOUNTAIN,
 	VR_GRAPHICS_FOG,
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	VR_GRAPHICS_QUICK_START,
 #endif
 	VR_GRAPHICS_DRAW_DISTANCE,
@@ -1364,7 +1364,7 @@ LoadVrSettings(void)
 	QuestProfilerSetDisplayMode(gProfilerDisplayMode);
 	gSpatialAaMode = GetPrivateProfileIntA("VR", "AntiAliasing", 1,
 		".\\vr_settings.ini") != 0;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	gQuestQuickTestStart =
 		GetPrivateProfileIntA("VR", "QuickTestStart", 0,
 			".\\vr_settings.ini") != 0;
@@ -3186,7 +3186,7 @@ VrDebugUpdate(const PadInput &in)
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_FOG){
 				gDistanceFog = !gDistanceFog;
 				SaveVrInteger("DistanceFog", gDistanceFog ? 1 : 0);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_CULL_VIZ){
 				VrCullViz::Toggle();
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_QUICK_START){
@@ -4257,7 +4257,7 @@ DrawQuestGraphicsPage(void)
 	snprintf(rows[VR_GRAPHICS_OCCLUSION], sizeof(rows[0]),
 		"OCCLUSION CULLING  < %s >",
 		CRenderer::GetVrOcclusionCullingModeName());
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(VrCullViz::IsActive())
 		snprintf(rows[VR_GRAPHICS_CULL_VIZ], sizeof(rows[0]),
 			"CULLING VISUALIZER  < FROZEN - SELECT TO RESUME >");
@@ -4270,7 +4270,7 @@ DrawQuestGraphicsPage(void)
 		CParticleObject::GetVrFountainQualityName());
 	snprintf(rows[VR_GRAPHICS_FOG], sizeof(rows[0]),
 		"DISTANCE FOG  < %s >", gDistanceFog ? "ON" : "OFF");
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	snprintf(rows[VR_GRAPHICS_QUICK_START], sizeof(rows[0]),
 		"QUICK TEST START  < %s - NEXT LAUNCH >",
 		gQuestQuickTestStart ? "ON" : "OFF");
@@ -4323,7 +4323,7 @@ DrawQuestGraphicsPage(void)
 				255, 105, 85);
 		}
 	}
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(VrCullViz::IsActive()){
 		DrawVrMenuText(VrCullViz::StatusLine(),
 			VR_MENU_WIDTH/2, 728, 2, 210, 190, 145);
@@ -4607,7 +4607,7 @@ DrawQuestRagdollPage(void)
 		VR_MENU_WIDTH/2, 548, 2, 210, 190, 145);
 	DrawVrMenuText("CHANGES APPLY NOW AND SAVE AUTOMATICALLY",
 		VR_MENU_WIDTH/2, 576, 2, 210, 190, 145);
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	DrawVrMenuText(VrRagdoll::DebugLine(), VR_MENU_WIDTH/2, 620, 2,
 		240, 178, 48);
 	DrawVrMenuText(VrRagdoll::VehicleDebugLine(), VR_MENU_WIDTH/2, 648, 2,
@@ -5382,7 +5382,7 @@ DrawQuestAboutPage(void)
 {
 	BeginFullVrMenuPage(gVrWelcomeFirstRun ?
 		"WELCOME TO LIBERTY CITY VR" : "ABOUT LIBERTY CITY VR",
-		"VERSION " MIAMIVR_VERSION_TEXT " - NOT FOR SALE");
+		"VERSION " LIBERTYVR_VERSION_TEXT " - NOT FOR SALE");
 	static const char *lines[] = {
 		"OPEN THE VR MENU: HOLD BOTH GRIPS + MENU",
 		"CHEATS: VR MENU OR ON FOOT BOTH GRIPS + B",

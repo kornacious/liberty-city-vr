@@ -1,6 +1,6 @@
 #include "VrCullViz.h"
 
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 #include "common.h"
 #include "Camera.h"
 #include "Entity.h"
@@ -11,10 +11,11 @@
 #include "vulkan/rwvk.h"
 
 // The tool snapshots the frame once, on freeze: every drawn-list entity is
-// re-tested against the exact eye frusta (blue kept / red frustum / orange
-// occluder), and every other entity in the surrounding sectors is a
-// distance/LOD casualty (yellow). Simulation is code-paused, so the entities
-// hold still and the snapshot stays valid however the head turns. Each frame
+// re-tested by Liberty's view predicate (blue kept / red outside the view).
+// Other entities in surrounding sectors are yellow: absent from the draw list
+// due to distance/LOD, zones or other list exclusions. Vulkan geometry-level
+// occlusion has no per-entity classification here. Simulation is code-paused,
+// so the entities hold still and the snapshot stays valid however the head turns. Each frame
 // after that just redraws the stored set in its colours; the librw backend
 // carries the colour index per draw.
 
@@ -24,8 +25,7 @@ namespace VrCullViz
 enum {
 	COL_VISIBLE = 1,
 	COL_FRUSTUM = 2,
-	COL_OCCLUDED = 3,
-	COL_DISTANCE = 4,
+	COL_UNLISTED = 4,
 };
 
 static bool active;
@@ -65,15 +65,14 @@ Snapshot(void)
 	CWorld::AdvanceCurrentScanCode();
 	const uint16 sc = CWorld::GetCurrentScanCode();
 
-	const int32 drawn = CRenderer::GetNoOfVisibleEntities();
+	const int32 drawn = CRenderer::GetVisibleEntityCount();
 	for(int32 i = 0; i < drawn; i++){
 		CEntity *e = CRenderer::GetVisibleEntity(i);
 		if(e == nil || e->m_rwObject == nil)
 			continue;
 		e->m_scanCode = sc;
 		const int32 reason = CRenderer::VrClassifyPerView(e);
-		Store(e, reason == 0 ? (uint8)COL_VISIBLE :
-			reason == 1 ? (uint8)COL_FRUSTUM : (uint8)COL_OCCLUDED);
+		Store(e, reason == 0 ? (uint8)COL_VISIBLE : (uint8)COL_FRUSTUM);
 	}
 
 	// Everything else in range never reached the drawn list -- distance,
@@ -99,14 +98,14 @@ Snapshot(void)
 					   e->m_scanCode == sc)
 						continue;
 					e->m_scanCode = sc;
-					Store(e, COL_DISTANCE);
+					Store(e, COL_UNLISTED);
 				}
 		}
 
 	snprintf(status, sizeof(status),
-		"CULL VIZ  VIS %d  FRUSTUM %d  OCCLUDED %d  DIST %d",
+		"CULL VIZ  VIS %d  FRUSTUM %d  UNLISTED %d",
 		counts[COL_VISIBLE], counts[COL_FRUSTUM],
-		counts[COL_OCCLUDED], counts[COL_DISTANCE]);
+		counts[COL_UNLISTED]);
 }
 
 void

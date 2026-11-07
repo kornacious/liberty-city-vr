@@ -2667,7 +2667,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	       sizeof(scene->waterParams1));
 	memcpy(scene->waterParams2, gvk.waterParams+4,
 	       sizeof(scene->waterParams2));
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	scene->vizParams[0] = gvk.debugVizActive ? 1.0f : 0.0f;
 	scene->vizParams[1] = 0.0f;
 	scene->vizParams[2] = 0.0f;
@@ -3288,7 +3288,7 @@ setIm3DWater(bool32 water)
 	gvk.im3dWaterDraw = water;
 }
 
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 void
 setDebugVizActive(bool32 active)
 {

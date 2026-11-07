@@ -63,7 +63,6 @@ function(compile_shader SRC STAGE SYMBOL OUTDIR INCDIR)
 		OUTPUT "${OUT}"
 		COMMAND "${GLSLC}" -fshader-stage=${STAGE} --target-env=vulkan1.1 -O ${ARGN}
 		        -DLIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
-		        -DMIAMIVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
 		        -I "${INCDIR}" -MD -MF "${OUT}.d" -mfmt=c -o "${OUT}" "${SRC}"
 		DEPENDS "${SRC}"
 		DEPFILE "${OUT}.d"
@@ -170,7 +169,7 @@ add_library(librw STATIC
 add_dependencies(librw librw_shaders)
 target_include_directories(librw PUBLIC "${LIBRW_DIR}" "${LIBRW_DIR}/src")
 target_include_directories(librw PRIVATE "${LIBRW_SPIRV_DIR}")
-target_compile_definitions(librw PUBLIC RW_VULKAN LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}> MIAMIVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>)
+target_compile_definitions(librw PUBLIC RW_VULKAN LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>)
 target_link_libraries(librw vulkan log)
 target_compile_options(librw PRIVATE
 	-Wno-unused-parameter
@@ -311,7 +310,6 @@ target_include_directories(libertyvr PRIVATE
 target_compile_definitions(libertyvr PRIVATE
 	LIBERTYVR_VEHICLE_CAPTURE=$<BOOL:${LIBERTYVR_VEHICLE_CAPTURE}>
 	LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
-	MIAMIVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
 	XR_USE_PLATFORM_ANDROID
 	XR_USE_GRAPHICS_API_VULKAN
 	VK_USE_PLATFORM_ANDROID_KHR)

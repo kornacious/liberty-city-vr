@@ -181,7 +181,7 @@ int main(){
     Reset();SetEnabled(false);Fill(peds[0],0);Apply(&p);ExplosionImpulse({0,0,0},10,300);Check(active==0&&hierarchyReads==0&&poolReads==0&&groundReads==0,"OFF empty has no admission scan/query/capture");
     androidLogCalls=0;const int deniedBefore=denied[DENY_OFF];
     for(int death=0;death<1000;++death){Check(!Begin(&p),"OFF native death rejects takeover");Check(!BeginFall(&p),"OFF native fall rejects takeover");}
-    #if MIAMIVR_DEV_TOOLS
+    #if LIBERTYVR_DEV_TOOLS
     Check(denied[DENY_OFF]==deniedBefore+2000,"developer build retains OFF denial count without logs");
 #else
     Check(denied[DENY_OFF]==deniedBefore,"player build has no diagnostic counter work when OFF");
@@ -212,7 +212,7 @@ int main(){
     Check((points[1]-a[1]).Magnitude()<(points[0]-a[0]).Magnitude()*.01f,"edge falloff tends to zero");Check(Near(points[2],a[2]),"no force outside blast");
     const CVector old=a[0];Check(!VrRagdollExplosion::Apply(points,a,3,{0,0,0},up,10,std::numeric_limits<float>::quiet_NaN(),70,1,STEP)&&Near(old,a[0]),"invalid power no mutation");
     Check(!VrRagdollExplosion::Apply(points,a,3,{0,0,0},up,0,300,70,1,STEP),"zero radius no mutation");
-#if MIAMIVR_DEV_TOOLS
+#if LIBERTYVR_DEV_TOOLS
     Check(androidLogCalls>0,"developer build retains bounded enabled diagnostics");
 #else
     Check(androidLogCalls==0,"player build never calls Android ragdoll diagnostic logger while ON or OFF");

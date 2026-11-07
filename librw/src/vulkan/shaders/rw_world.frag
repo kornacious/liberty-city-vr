@@ -107,7 +107,7 @@ void main()
 	// the CPU: surfaceProps.z packs the surface mask in bits 0-7, the air-glow
 	// mask in bits 8-15 and a real-normals flag in bit 16, so the draws away
 	// from every light -- most of a frame -- skip everything here.
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	const bool vizActive = scene.vizParams.x > 0.5;
 #endif
 #if RW_WORLD_EFFECTS_RESOURCES
@@ -115,7 +115,7 @@ void main()
 	const int lightBits = int(push.surfaceProps.z);
 	const int surfaceMask = lightBits & 0xFF;
 	const int glowMask = (lightBits >> 8) & 0xFF;
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(!vizActive && (surfaceMask | glowMask) != 0 &&
 #else
 	if((surfaceMask | glowMask) != 0 &&
@@ -442,7 +442,7 @@ void main()
 
 	}
 #endif
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	// Culling visualizer: paint the draw its debug colour. The index is the
 	// whole of surfaceProps.z here (the pack was suppressed on the CPU), so
 	// the texture still reads through underneath at 40 percent.

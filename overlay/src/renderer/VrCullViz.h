@@ -1,12 +1,12 @@
 #pragma once
 
 // Culling visualizer. Freezes the frame and repaints it by cull reason so the
-// player can turn their head and see, in place, what the per-eye culling kept
-// (blue) and what it rejected and why (red frustum, orange occluder, yellow
-// distance/LOD). A debug aid for tuning the occlusion modes.
+// player can turn their head and see what Liberty's view test kept (blue) or
+// rejected (red), plus surrounding entities absent from the draw list (yellow).
+// Vulkan geometry occlusion is separate and is not classified by this tool.
 namespace VrCullViz
 {
-#if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 bool IsActive(void);
 // Freeze-and-classify, or release. Called from the menu.
 void Toggle(void);
