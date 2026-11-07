@@ -14,6 +14,8 @@
 #include "platform_android.h"
 #include "OculusVR.h"
 #include "QuestRadio.h"
+#include "QuestGameSettings.h"
+#include "QuestSettingsMenu.h"
 #include "QuestSpeedometer.h"
 #include "QuestMusic.h"
 #include "QuestProfiler.h"
@@ -33,6 +35,7 @@
 #include "Game.h"
 #include "Frontend.h"
 #include "Renderer.h"
+#include "RwHelper.h"
 #include "Shadows.h"
 #include "PointLights.h"
 #include "Timecycle.h"
@@ -155,6 +158,8 @@ androidgame::VrRecenterView(void)
 	OculusVR::ResetQuestDrivingInteraction();
 }
 static bool gVrMenuVisible;
+static bool gSettingsFromFrontend;
+static bool gSettingsReleaseGate;
 static bool gVrMenuShortcutDown;
 static bool gVrCheatShortcutDown;
 static bool gVrMenuSelectDown;
@@ -552,33 +557,7 @@ static int gQuestCpuPerformanceMode;
 static int gQuestCpuPerformanceSavedMode;
 static int gQuestGpuPerformanceMode = 1; // SUSTAINED; enum is declared below.
 
-enum {
-	VR_MENU_PAGE_SETTINGS,
-	VR_MENU_PAGE_GRAPHICS,
-	VR_MENU_PAGE_OPTIMIZATIONS,
-	VR_MENU_PAGE_LIGHTING,
-	VR_MENU_PAGE_WATER,
-	VR_MENU_PAGE_WEAPONS,
-	VR_MENU_PAGE_HUD,
-	VR_MENU_PAGE_WRIST_RADAR,
-	VR_MENU_PAGE_TRAFFIC,
-	VR_MENU_PAGE_RAGDOLL,
-	VR_MENU_PAGE_DEFORMATION,
-	VR_MENU_PAGE_MODEL_ASSETS,
-	VR_MENU_PAGE_VEHICLE,
-	VR_MENU_PAGE_VEHICLE_CALIBRATION,
-	VR_MENU_PAGE_RADIO,
-	VR_MENU_PAGE_SPEEDOMETER,
-	VR_MENU_PAGE_LOCOMOTION,
-	VR_MENU_PAGE_HEAD_CALIBRATION,
-	VR_MENU_PAGE_CONTROLS,
-	VR_MENU_PAGE_CALIBRATION,
-	VR_MENU_PAGE_HOLSTERS,
-	VR_MENU_PAGE_CHEATS,
-	VR_MENU_PAGE_MISSIONS,
-	VR_MENU_PAGE_ABOUT,
-	VR_MENU_PAGE_SIMULATION,
-};
+
 
 static int gVrSpeedometerReturnPage = VR_MENU_PAGE_VEHICLE;
 
@@ -702,22 +681,7 @@ enum eVrWristRadarMenuItem {
 // Native Quest exposes only settings backed by its Vulkan/OpenXR runtime.
 // Desktop-only D3D12 features are deliberately omitted so every visible row
 // is actionable on the headset.
-enum eVrMainMenuItem {
-	VR_MAIN_GRAPHICS = 0,
-	VR_MAIN_TRAFFIC_SETTINGS,
-	VR_MAIN_HUD,
-	VR_MAIN_MODEL_ASSETS,
-	VR_MAIN_VEHICLE_SETTINGS,
-	VR_MAIN_LOCOMOTION_SETTINGS,
-	VR_MAIN_CONTROLS,
-	VR_MAIN_WEAPONS,
-	VR_MAIN_HOLSTERS,
-	VR_MAIN_CHEATS,
-	VR_MAIN_RADIO,
-	VR_MAIN_ABOUT,
-	VR_MAIN_SIMULATION,
-	VR_MAIN_ITEM_COUNT
-};
+
 
 enum eVrOptimizationMenuItem {
 	VR_OPT_WORLD_LOD=0,
@@ -736,7 +700,6 @@ enum eVrOptimizationMenuItem {
 
 enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_RENDER_SCALE = 0,
-	VR_GRAPHICS_SGSR,
 	VR_GRAPHICS_MSAA,
 	VR_GRAPHICS_FXAA,
 	VR_GRAPHICS_MIPMAPS,
@@ -759,6 +722,7 @@ enum eVrGraphicsMenuItem {
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	VR_GRAPHICS_QUICK_START,
 #endif
+	VR_GRAPHICS_DRAW_DISTANCE,
 	VR_GRAPHICS_BACK,
 	VR_GRAPHICS_ITEM_COUNT
 };
@@ -779,6 +743,7 @@ enum eVrWeaponsMenuItem {
 
 enum eVrModelAssetsMenuItem {
 	VR_MODEL_ASSETS_PRESET = 0,
+	VR_MODEL_ASSETS_SKIN,
 	VR_MODEL_ASSETS_BACK,
 	VR_MODEL_ASSETS_ITEM_COUNT
 };
@@ -834,6 +799,7 @@ enum eVrLocomotionMenuItem {
 	VR_LOCOMOTION_HEAD_CALIBRATION,
 	VR_LOCOMOTION_REFRESH_RATE,
 	VR_LOCOMOTION_RECENTER,
+	VR_LOCOMOTION_BORDERS,
 	VR_LOCOMOTION_BACK,
 	VR_LOCOMOTION_ITEM_COUNT
 };
@@ -2327,9 +2293,13 @@ static int *
 CurrentMenuSelection(void)
 {
 	static int simulationSelection = 0;
+	static int audioSelection = 0;
+	static int languageSelection = 0;
 	static int speedometerSelection = 0;
 	switch(gVrMenuPage){
 	case VR_MENU_PAGE_SIMULATION: return &simulationSelection;
+	case VR_MENU_PAGE_AUDIO: return &audioSelection;
+	case VR_MENU_PAGE_LANGUAGE: return &languageSelection;
 	case VR_MENU_PAGE_GRAPHICS: return &gVrGraphicsSelection;
 	case VR_MENU_PAGE_OPTIMIZATIONS: return &gVrOptimizationSelection;
 	case VR_MENU_PAGE_LIGHTING: return &gVrLightingSelection;
@@ -2366,6 +2336,8 @@ CurrentMenuItemCount(void)
 {
 	switch(gVrMenuPage){
 	case VR_MENU_PAGE_SIMULATION: return SimulationReplayMenuRows;
+	case VR_MENU_PAGE_AUDIO: return QuestGameSettings::AudioCount;
+	case VR_MENU_PAGE_LANGUAGE: return QuestGameSettings::LanguageCount;
 	case VR_MENU_PAGE_SETTINGS: return VR_MAIN_ITEM_COUNT;
 	case VR_MENU_PAGE_GRAPHICS: return VR_GRAPHICS_ITEM_COUNT;
 	case VR_MENU_PAGE_OPTIMIZATIONS: return VR_OPT_ITEM_COUNT;
@@ -2572,7 +2544,11 @@ ReturnFromCurrentMenuPage(void)
 		gVrCalibrationNotice[0] = '\0';
 		return;
 	}
-	if(gVrMenuPage == VR_MENU_PAGE_RADIO) QuestRadio::CloseEditor();
+	if(gVrMenuPage == VR_MENU_PAGE_RADIO) {
+		QuestRadio::CloseEditor();
+		gVrMenuPage = VR_MENU_PAGE_AUDIO;
+		return;
+	}
 	if(gVrMenuPage == VR_MENU_PAGE_CHEATS){
 		ReturnFromCheatMenu();
 		return;
@@ -2658,6 +2634,45 @@ DidPlayerTakeWelcomeStep(const PadInput &in)
 	return movementInput && moved.x*moved.x+moved.y*moved.y >= 0.0025f;
 }
 
+// Both entry points use the same pages. Only exit ownership differs.
+static bool
+ServiceFrontendSettings(const PadInput &in)
+{
+	if(gSettingsFromFrontend && (!gVrMenuVisible || !FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_nCurrScreen != MENUPAGE_OPTIONS)) {
+		gSettingsFromFrontend = false;
+		gVrMenuVisible = false;
+		if(FrontEndMenuManager.m_nCurrScreen == MENUPAGE_OPTIONS) {
+			FrontEndMenuManager.m_nPrevScreen = MENUPAGE_OPTIONS;
+			FrontEndMenuManager.m_nCurrScreen = FrontEndMenuManager.m_bGameNotLoaded ? MENUPAGE_START_MENU : MENUPAGE_PAUSE_MENU;
+			FrontEndMenuManager.m_nCurrOption = 0;
+			const auto &parent = aScreens[FrontEndMenuManager.m_nCurrScreen];
+			for(int row = 0; row < NUM_MENUROWS; ++row)
+				if(parent.m_aEntries[row].m_TargetMenu == MENUPAGE_OPTIONS)
+					FrontEndMenuManager.m_nCurrOption = row;
+		}
+		gSettingsReleaseGate = true;
+	}
+	if(gSettingsReleaseGate) {
+		if(!AnyVrAboutButtonDown(in)) gSettingsReleaseGate = false;
+		return true;
+	}
+	if(!gSettingsFromFrontend && FrontEndMenuManager.m_bMenuActive &&
+	   FrontEndMenuManager.m_nCurrScreen == MENUPAGE_OPTIONS) {
+		gSettingsFromFrontend = true;
+		gVrMenuVisible = true;
+		gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+		gVrMenuSelection = 0;
+		gVrMenuSelectDown = in.a || in.rightStickClick;
+		gVrMenuBackDown = in.b || in.leftStickClick;
+		gVrMenuIncreaseDown = in.rightTrigger >= 0.55f;
+		gVrMenuDecreaseDown = in.leftTrigger >= 0.55f;
+		gVrMenuIncreaseRepeatAt = gVrMenuDecreaseRepeatAt = 0.0;
+		ResetMenuNavigationRepeat();
+		return true;
+	}
+	return false;
+}
+
 // Runs once per rendered frame from the pad path. All menu state changes are
 // edge/repeat driven so a tap remains one exact step while a held trigger can
 // traverse large calibration ranges without hundreds of clicks.
@@ -2665,6 +2680,7 @@ void
 VrDebugUpdate(const PadInput &in)
 {
 	LoadVrSettings();
+	if(ServiceFrontendSettings(in)) return;
 	OculusVR::UpdateQuestTrainCamera(in.rightStickClick,
 		gVrMenuVisible || FrontEndMenuManager.m_bMenuActive ||
 		CCutsceneMgr::IsRunning() || CCutsceneMgr::IsCutsceneProcessing());
@@ -2680,6 +2696,8 @@ VrDebugUpdate(const PadInput &in)
 	// The VR menu is available before CGame::Initialise loads gta3.ini. Keep
 	// the persisted headset values authoritative after that later load too.
 	ApplyTrafficSettings();
+	// The game supplies alpha-test state; the overlay owns the Vulkan toggle.
+	gPS2alphaTest = true;
 	const double now = MonotonicMilliseconds();
 	if(gCutsceneAnchorConsumeUntilRelease && !in.a && !in.b &&
 	   !in.leftStickClick && !in.rightStickClick)
@@ -2697,7 +2715,7 @@ VrDebugUpdate(const PadInput &in)
 		if(!button)
 			gVrAboutDismissArmed = true;
 		else if(gVrAboutDismissArmed){
-			gVrMenuVisible = false;
+			gVrMenuVisible = !gVrWelcomeFirstRun;
 			gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 			gVrAboutDismissArmed = false;
 			gVrAboutReleaseGate = true;
@@ -2957,48 +2975,28 @@ VrDebugUpdate(const PadInput &in)
 
 		if(gVrMenuPage == VR_MENU_PAGE_SETTINGS &&
 		   (positivePulse || decreasePulse)){
-			if(gVrMenuSelection == VR_MAIN_RADIO){
-				gVrMenuPage = VR_MENU_PAGE_RADIO;
-				gVrRadioSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_SIMULATION){
-				gVrMenuPage = VR_MENU_PAGE_SIMULATION;
-				SimulationReplayMenuAction(-1, 0);
-			}else if(gVrMenuSelection == VR_MAIN_GRAPHICS){
-				gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
-				gVrGraphicsSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_HUD){
-				gVrMenuPage = VR_MENU_PAGE_HUD;
-				gVrHudSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_TRAFFIC_SETTINGS){
-				gVrMenuPage = VR_MENU_PAGE_TRAFFIC;
-				gVrTrafficSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_MODEL_ASSETS){
-				gVrMenuPage = VR_MENU_PAGE_MODEL_ASSETS;
-				gVrModelAssetsSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_VEHICLE_SETTINGS){
-				gVrMenuPage = VR_MENU_PAGE_VEHICLE;
-				gVrVehicleSelection = 0;
-				gVrVehicleSubpage = 0;
-			}else if(gVrMenuSelection == VR_MAIN_LOCOMOTION_SETTINGS){
-				gVrMenuPage = VR_MENU_PAGE_LOCOMOTION;
-				gVrLocomotionSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_CONTROLS){
-				gVrMenuPage = VR_MENU_PAGE_CONTROLS;
-				gVrControlsSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_WEAPONS){
-				gVrMenuPage = VR_MENU_PAGE_WEAPONS;
-				gVrWeaponsSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_HOLSTERS){
-				gVrMenuPage = VR_MENU_PAGE_HOLSTERS;
-				gVrHolsterSelection = 0;
-			}else if(gVrMenuSelection == VR_MAIN_CHEATS){
-				OpenCheatMenu();
-			}else if(gVrMenuSelection == VR_MAIN_ABOUT){
-				gVrMenuPage = VR_MENU_PAGE_ABOUT;
+			const int category = gVrMenuSelection;
+			gVrMenuPage = QuestSettingsCategories[category].page;
+			if(category != VR_MAIN_ABOUT) *CurrentMenuSelection() = 0;
+			if(category == VR_MAIN_SIMULATION) SimulationReplayMenuAction(-1, 0);
+			if(category == VR_MAIN_VEHICLE_SETTINGS) gVrVehicleSubpage = 0;
+			if(category == VR_MAIN_CHEATS) OpenCheatMenu();
+			if(category == VR_MAIN_ABOUT) {
 				gVrWelcomeFirstRun = false;
 				gVrWelcomePending = false;
 				gVrAboutDismissArmed = false;
 			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_AUDIO && (positivePulse || decreasePulse)) {
+			const int row = *CurrentMenuSelection();
+			if(row == QuestGameSettings::RadioBoard) {
+				gVrMenuPage = VR_MENU_PAGE_RADIO;
+				gVrRadioSelection = 0;
+			} else if(row == QuestGameSettings::AudioBack) ReturnFromCurrentMenuPage();
+			else QuestGameSettings::AudioAction(row, decreasePulse ? -1 : 1);
+		}else if(gVrMenuPage == VR_MENU_PAGE_LANGUAGE && (positivePulse || decreasePulse)) {
+			const int row = *CurrentMenuSelection();
+			if(row == QuestGameSettings::LanguageBack) ReturnFromCurrentMenuPage();
+			else QuestGameSettings::LanguageAction(row, decreasePulse ? -1 : 1);
 		}else if(gVrMenuPage == VR_MENU_PAGE_SIMULATION &&
 		         (positivePulse || decreasePulse)){
 			const int row = *CurrentMenuSelection();
@@ -3072,8 +3070,6 @@ VrDebugUpdate(const PadInput &in)
 					(int)ARRAY_SIZE(scales);
 				gQuestRenderScalePercent = scales[index];
 				SaveVrInteger("RenderScalePercent", gQuestRenderScalePercent);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_SGSR){
-				// Reserved for a future stereo-stable temporal AA path.
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_MSAA){
 				// Off, 2x, 4x. It smooths the geometry it was made
 				// for -- railings, poles, wires. Masks are left to the
@@ -3172,6 +3168,8 @@ VrDebugUpdate(const PadInput &in)
 				SaveVrInteger("QuickTestStart",
 					gQuestQuickTestStart ? 1 : 0);
 #endif
+			}else if(gVrGraphicsSelection == VR_GRAPHICS_DRAW_DISTANCE){
+				QuestGameSettings::AdjustDrawDistance(decreasePulse ? -1 : 1);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_BACK){
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 			}
@@ -3202,6 +3200,8 @@ VrDebugUpdate(const PadInput &in)
 			if(gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET){
 				ModelSets::CycleRequested(direction);
 
+			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN){
+				QuestGameSettings::CycleSkin(direction);
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK &&
 			         positivePulse)
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
@@ -3626,7 +3626,7 @@ VrDebugUpdate(const PadInput &in)
 			if(*CurrentMenuSelection() == QuestSpeedometer::BackRow) ReturnFromCurrentMenuPage();
 			else QuestSpeedometer::MenuAction(*CurrentMenuSelection(), (decreasePulse ? -1 : 1)*repeatMagnitude);
 		}else if(gVrMenuPage == VR_MENU_PAGE_RADIO && (positivePulse || decreasePulse)){
-            if(gVrRadioSelection == QuestRadio::BackRow) { QuestRadio::CloseEditor(); gVrMenuPage = VR_MENU_PAGE_SETTINGS; }
+            if(gVrRadioSelection == QuestRadio::BackRow) ReturnFromCurrentMenuPage();
             else QuestRadio::MenuAction(gVrRadioSelection, (decreasePulse ? -1 : 1)*repeatMagnitude);
 		}else if(gVrMenuPage == VR_MENU_PAGE_VEHICLE &&
 		         (positivePulse || decreasePulse)){
@@ -3823,6 +3823,9 @@ VrDebugUpdate(const PadInput &in)
 			case VR_LOCOMOTION_HEAD_BOBBING:
 				gQuestHeadBobbing = !gQuestHeadBobbing;
 				SaveVrInteger("HeadBobbing", gQuestHeadBobbing);
+				break;
+			case VR_LOCOMOTION_BORDERS:
+				QuestGameSettings::ToggleCinemaBorders();
 				break;
 			case VR_LOCOMOTION_KNOCKDOWN_TILT:
 				if(ModelSets::IsModernActive()){
@@ -4084,33 +4087,31 @@ DrawQuestSettingsPage(void)
 		(int)QUEST_CPU_PERFORMANCE_AUTO),
 		(int)QUEST_CPU_PERFORMANCE_COUNT-1);
 	BeginFullVrMenuPage("SETTINGS");
-	char rows[VR_MAIN_ITEM_COUNT][112];
-	strcpy(rows[VR_MAIN_GRAPHICS], "GRAPHICS  < OPEN >");
-	strcpy(rows[VR_MAIN_TRAFFIC_SETTINGS],
-		"TRAFFIC  < OPEN >");
-	strcpy(rows[VR_MAIN_HUD], "HUD  < OPEN >");
-	strcpy(rows[VR_MAIN_MODEL_ASSETS],
-		"MODEL ASSETS  < OPEN >");
-	strcpy(rows[VR_MAIN_VEHICLE_SETTINGS],
-		"VEHICLE  < OPEN >");
-	strcpy(rows[VR_MAIN_LOCOMOTION_SETTINGS],
-		"LOCOMOTION  < OPEN >");
-	strcpy(rows[VR_MAIN_CONTROLS], "CONTROLS  < OPEN >");
-	strcpy(rows[VR_MAIN_WEAPONS], "WEAPONS  < OPEN >");
-	strcpy(rows[VR_MAIN_HOLSTERS], "HOLSTER LOADOUT  < OPEN >");
-	strcpy(rows[VR_MAIN_CHEATS], "CHEAT MENU  < OPEN >");
-	strcpy(rows[VR_MAIN_RADIO], "RADIO AND CUSTOM MUSIC  < OPEN >");
-	strcpy(rows[VR_MAIN_ABOUT], "ABOUT LIBERTY CITY VR  < OPEN >");
-	strcpy(rows[VR_MAIN_SIMULATION], "SIMULATION REPLAY  < OPEN >");
-
-	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
-		DrawFullVrMenuRow(rows[item], 160+item*44, 3,
+	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++)
+		DrawFullVrMenuRow(QuestSettingsCategories[item].label, 152+item*36, 2,
 			item == gVrMenuSelection, true);
 
-	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+}
+
+static void
+DrawQuestGameSettingsPage(bool audio)
+{
+	BeginFullVrMenuPage(audio ? "AUDIO AND RADIO" : "LANGUAGE AND SUBTITLES");
+	const int count = audio ? QuestGameSettings::AudioCount : QuestGameSettings::LanguageCount;
+	for(int row = 0; row < count; ++row) {
+		char text[112];
+		if(audio) QuestGameSettings::AudioText(row, text, sizeof(text));
+		else QuestGameSettings::LanguageText(row, text, sizeof(text));
+		DrawFullVrMenuRow(text, 180+row*52, 2, row == *CurrentMenuSelection(), true);
+	}
+	if(!audio) {
+		DrawVrMenuText("ONLY INSTALLED GAME LANGUAGES ARE SELECTABLE", VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
+		DrawVrMenuText("VR SETTINGS LABELS USE ENGLISH", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+	}
+	DrawVrMenuText("LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK", VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
 static void
@@ -4173,8 +4174,6 @@ DrawQuestGraphicsPage(void)
 		snprintf(rows[VR_GRAPHICS_RENDER_SCALE], sizeof(rows[0]),
 			"OUTPUT REQUEST  < %d%% - RESTART >",
 			gQuestRenderScalePercent);
-	snprintf(rows[VR_GRAPHICS_SGSR], sizeof(rows[0]),
-		"TEMPORAL AA < DISABLED - UNSTABLE >");
 	snprintf(rows[VR_GRAPHICS_MSAA], sizeof(rows[0]),
 		"* STEREO MSAA  < %s - RESTART >",
 		gQuestMsaaSamples >= 4 ? "4X" :
@@ -4242,6 +4241,7 @@ DrawQuestGraphicsPage(void)
 		gQuestQuickTestStart ? "ON" : "OFF");
 #endif
 	snprintf(rows[VR_GRAPHICS_OPTIMIZATIONS],sizeof(rows[0]),"OPTIMIZATIONS  < OPEN >");
+	snprintf(rows[VR_GRAPHICS_DRAW_DISTANCE], sizeof(rows[0]), "DRAW DISTANCE  < %.2fX >", CMenuManager::m_PrefsLOD);
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++)
 		// Compact rows leave room for the status footer.
@@ -4624,15 +4624,17 @@ DrawQuestDeformationPage(void)
 static void
 DrawQuestModelAssetsPage(void)
 {
-	BeginFullVrMenuPage("MODEL ASSETS", "CLASSIC / ORIGINAL XBOX - RESTART REQUIRED");
+	BeginFullVrMenuPage("APPEARANCE", "ASSET PROFILE AND PLAYER SKIN");
 	char row[112];
 	snprintf(row, sizeof(row), "ASSET PROFILE  < %s >%s",
 		ModelSets::GetSourceName(ModelSets::GetRequested()),
 		ModelSets::IsRestartRequired() ? "  RESTART" : "");
 	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
-	DrawFullVrMenuRow("BACK TO SETTINGS", 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+	snprintf(row, sizeof(row), "PLAYER SKIN  < %.48s >", QuestGameSettings::SkinName());
+	DrawFullVrMenuRow(row, 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
+	DrawFullVrMenuRow("BACK TO SETTINGS", 294, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
 	DrawVrMenuText("ORIGINAL XBOX LOADS THE RETAIL DISC ASSETS", VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
-	DrawVrMenuText("MODELS AND TEXTURES SWITCH TOGETHER", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+	DrawVrMenuText("ASSET PROFILE CHANGES REQUIRE RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
 }
 
 static void
@@ -5026,9 +5028,10 @@ DrawQuestLocomotionPage(void)
 	snprintf(rows[VR_LOCOMOTION_REFRESH_RATE], sizeof(rows[0]),
 		"REFRESH RATE  < %d HZ >", gQuestRefreshRateHz);
 	strcpy(rows[VR_LOCOMOTION_RECENTER], "RECENTER VIEW");
+	snprintf(rows[VR_LOCOMOTION_BORDERS], sizeof(rows[0]), "CINEMA SCREEN BORDERS  < %s >", CMenuManager::m_PrefsCutsceneBorders ? "ON" : "OFF");
 	strcpy(rows[VR_LOCOMOTION_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++)
-		DrawFullVrMenuRow(rows[item], 150+item*42, 3,
+		DrawFullVrMenuRow(rows[item], 150+item*38, 3,
 			item == gVrLocomotionSelection);
 	// The one setting a standing player can be hurt by without knowing why.
 	if(gVrLocomotionSelection == VR_LOCOMOTION_MOVEMENT_ORIENTATION)
@@ -5477,6 +5480,12 @@ VrDebugPixels(int *width, int *height)
 
 	if(gVrMenuVisible){
 		switch(gVrMenuPage){
+		case VR_MENU_PAGE_AUDIO:
+			DrawQuestGameSettingsPage(true);
+			break;
+		case VR_MENU_PAGE_LANGUAGE:
+			DrawQuestGameSettingsPage(false);
+			break;
 		case VR_MENU_PAGE_OPTIMIZATIONS:
 			DrawQuestOptimizationsPage();
 			break;
@@ -5838,7 +5847,7 @@ VrMenuConsumesInput(void)
 {
 	// Keep the service chord from leaking through as Pause when the menu is
 	// opened or closed. Gameplay resumes only after Menu has been released.
-	return gVrMenuVisible || gVrMenuShortcutDown ||
+	return gVrMenuVisible || gSettingsReleaseGate || gVrMenuShortcutDown ||
 		gCutsceneAnchorConsumeUntilRelease ||
 		androidgame::VrCutsceneCameraAnchorCalibrationActive();
 }

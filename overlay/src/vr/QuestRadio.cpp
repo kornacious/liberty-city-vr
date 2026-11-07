@@ -1,6 +1,7 @@
 #include "common.h"
 #if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
 #include "QuestRadio.h"
+#include "QuestGameSettings.h"
 #include "VehiclePlacement.h"
 #include "ModelSets.h"
 #include "RadioBoardLayout.h"
@@ -153,28 +154,13 @@ bool BuildPlane(Plane &p) {
 }
 void Station(int direction) {
     CVehicle *v=Vehicle(); if(!v || MusicManager.UsesPoliceRadio(v)) return;
-    int station=v->m_nRadioStation;
-    // Include RADIO OFF, omit police radio and unavailable user tracks.
-    for(int tries=0;tries<12;++tries) {
-        station=(station+direction+12)%12;
-        if(station==POLICE_RADIO || (station==USERTRACK && !QuestMusic::Available())) continue;
-        MusicManager.SetRadioInCar(station);
-        // SetRadioInCar only saves the tuning; ServiceGameMode needs the same
-        // retune request as the normal station shortcut to change the stream.
-        // The board already selected an exact station, so discard pending taps.
-        gNumRetunePresses=0;
-        gRetuneCounter=0;
-        MusicManager.m_bSetNextStation=true;
-        break;
-    }
+    QuestGameSettings::CycleRadioStation(direction);
 }
 void Activate(int button) {
     bool custom=MusicManager.GetNextTrack()==USERTRACK;
     if(button<2) Station(button==0?-1:1);
     else if(button<4) {
-        int volume=FrontEndMenuManager.m_PrefsMusicVolume+(button==2?-8:8);
-        volume=volume<0?0:volume>127?127:volume;
-        FrontEndMenuManager.m_PrefsMusicVolume=volume; SampleManager.SetMusicMasterVolume(volume); FrontEndMenuManager.SaveSettings();
+        QuestGameSettings::SetMusicVolume(FrontEndMenuManager.m_PrefsMusicVolume+(button==2?-8:8));
     } else if(button<7 && custom) {
         if(button==5) QuestMusic::TogglePause(); else QuestMusic::Skip(button==4?-1:1);
     } else if(button==7) QuestMusic::Rescan();

@@ -3205,6 +3205,7 @@ if (-not [string]::IsNullOrWhiteSpace($MenuSourcePath)) { $sourcePath = $MenuSou
 $headerPath = Join-Path $sourceRoot 'skel\android\VrCheatMenu.h'
 if (-not [string]::IsNullOrWhiteSpace($HeaderSourcePath)) { $headerPath = $HeaderSourcePath }
 $source = [IO.File]::ReadAllText($sourcePath)
+$source += "`n"+[IO.File]::ReadAllText((Join-Path (Split-Path -Parent $sourcePath) 'QuestSettingsMenu.h'))
 if ([string]::IsNullOrWhiteSpace($PadSourcePath)) { $PadSourcePath = Join-Path $sourceRoot 'core\Pad.cpp' }
 if (-not (Test-Path -LiteralPath $PadSourcePath)) {
     throw 'Pass -PadSourcePath with the assembled src/core/Pad.cpp when testing an overlay-only kit.'
@@ -3237,6 +3238,11 @@ for ($i = 0; $i -lt $legacy.Count; ++$i) {
 }
 
 $pieces = [Collections.Generic.List[string]]::new()
+$pieces.Add('#include "../../overlay/src/core/QuestGameSettings.h"')
+$headPath=Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $sourcePath))) 'peds/QuestHeadCalibration.h'
+$headEnum=[regex]::Match([IO.File]::ReadAllText($headPath),'(?s)enum Item \{.*?\};')
+if(-not $headEnum.Success){throw 'Missing head calibration item enum'}
+$pieces.Add('namespace QuestHeadCalibration { '+$headEnum.Value+' }')
 $pieces.Add('#include "' + ($headerPath -replace '\\','/') + '"')
 $pieces.Add('static const char *nativeNames[] = {' + (($labels | ForEach-Object { '"' + $_ + '"' }) -join ',') + '};')
 $pieces.Add($specialMatch.Value)
@@ -3246,7 +3252,7 @@ if (-not $countMatch.Success) { throw 'Cannot extract actual backend cheat count
 $pieces.Add($countMatch.Value.Replace('GetVrCheatCount', 'ActualBackendCheatCount'))
 foreach ($pattern in @(
     '(?ms)^enum \{\r?\n\s*VR_DEBUG_WIDTH.*?^\};',
-    '(?ms)^enum \{\r?\n\s*VR_MENU_PAGE_SETTINGS.*?^\};'
+    '(?ms)^enum (?:eQuestSettingsPage )?\{\r?\n\s*VR_MENU_PAGE_SETTINGS.*?^\};'
 )) {
     $match = [regex]::Match($source, $pattern)
     if (-not $match.Success) { throw "Cannot extract declaration: $pattern" }
@@ -5356,6 +5362,8 @@ function Extract([string]$text,[string]$pattern) {
     if(-not $match.Success){throw "Missing production code: $pattern"}
     return $match.Value
 }
+$settings=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestGameSettings.cpp'))
+$cycle=Extract $settings '(?ms)^void CycleRadioStation\(.*?^}'
 $station=Extract $radio '(?ms)^void Station\(.*?^}'
 $set=Extract $music '(?ms)^void\r?\ncMusicManager::SetRadioInCar\(.*?^}'
 $tuning=Extract $music '(?ms)^uint8\r?\ncMusicManager::GetNextCarTuning\(.*?^}'
@@ -5365,7 +5373,7 @@ $start=$music.IndexOf("`t`t// Because when you switch radio back and forth")
 $end=$music.IndexOf("`t`tif (m_nNextTrack &lt; RADIO_OFF)",$start)
 if($start -lt 0 -or $end -lt 0){throw 'Missing ServiceGameMode retune dispatch'}
 $dispatch=$music.Substring($start,$end-$start)
-$code=$set+"`n"+$tuning+"`n"+$change+"`nnamespace QuestRadio {`n"+$station+"`n}`nvoid cMusicManager::ServiceRetune() {`n"+$dispatch+"`n}"
+$code="namespace QuestGameSettings {`n"+$cycle+"`n}`n"+$set+"`n"+$tuning+"`n"+$change+"`nnamespace QuestRadio {`n"+$station+"`n}`nvoid cMusicManager::ServiceRetune() {`n"+$dispatch+"`n}"
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'radio-station-production.inc'),$code,[Text.UTF8Encoding]::new($false))
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-radio-station.cpp')
 if($LASTEXITCODE -ne 0){throw 'Radio station regression failed'}
@@ -5555,12 +5563,18 @@ if (-not (Test-Path -LiteralPath $sourcePath)) {
 $headerPath = Join-Path (Split-Path -Parent $sourcePath) 'VrCheatMenu.h'
 if (-not [string]::IsNullOrWhiteSpace($MenuSourcePath)) { $sourcePath = $MenuSourcePath }
 $source = [IO.File]::ReadAllText($sourcePath)
+$source += "`n"+[IO.File]::ReadAllText((Join-Path (Split-Path -Parent $sourcePath) 'QuestSettingsMenu.h'))
 $pieces = [Collections.Generic.List[string]]::new()
+$pieces.Add('#include "../../overlay/src/core/QuestGameSettings.h"')
+$headPath=Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $sourcePath))) 'peds/QuestHeadCalibration.h'
+$headEnum=[regex]::Match([IO.File]::ReadAllText($headPath),'(?s)enum Item \{.*?\};')
+if(-not $headEnum.Success){throw 'Missing head calibration item enum'}
+$pieces.Add('namespace QuestHeadCalibration { '+$headEnum.Value+' }')
 $pieces.Add('#define MIAMIVR_DEV_TOOLS '+[int][bool]$DevTools)
 $pieces.Add('#include "' + ($headerPath -replace '\\','/') + '"')
 foreach ($pattern in @(
     '(?ms)^enum \{\r?\n\s*VR_DEBUG_WIDTH.*?^\};',
-    '(?ms)^enum \{\r?\n\s*VR_MENU_PAGE_SETTINGS.*?^\};',
+    '(?ms)^enum (?:eQuestSettingsPage )?\{\r?\n\s*VR_MENU_PAGE_SETTINGS.*?^\};',
     '(?ms)^struct DebugGlyph.*?^\};'
 )) {
     $match = [regex]::Match($source, $pattern)
@@ -7807,6 +7821,22 @@ if($ik -notmatch '(?s)void Apply\(CPed \*ped\).*?CaptureNativeCameraHead\(ped\);
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'head-attachment-final.inc'),$final)
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-head-attachment.cpp')
 if($LASTEXITCODE -ne 0){throw 'Native head attachment regression failed.'}
+</value>
+  </data>
+  <data name="tools/tests/test-shared-settings.ps1" xml:space="preserve">
+    <value>param(
+ [string]$KitRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+ [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-shared-settings-'+[Guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference='Stop'
+$source=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestGameSettings.cpp'))
+$source=[regex]::Replace($source,'(?m)^#include [^\r\n]+\r?\n','')
+$menu=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/skel/android/vrdebug.cpp'))
+$bridge=[regex]::Match($menu,'(?ms)^static bool\r?\nServiceFrontendSettings\(.*?^\}')
+if(-not $bridge.Success){throw 'Missing shared frontend bridge'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'shared-settings-production.inc'),$source+"`n"+$bridge.Value,[Text.UTF8Encoding]::new($false))
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-shared-settings.cpp')
+if($LASTEXITCODE -ne 0){throw 'Shared settings checks failed'}
 </value>
   </data>
 </root>

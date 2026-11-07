@@ -1,0 +1,24 @@
+--- a/src/core/Frontend.cpp
++++ b/src/core/Frontend.cpp
+@@ -2540,6 +2540,10 @@
+ void
+ CMenuManager::DrawFrontEnd()
+ {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// Shared Quest settings are composited by OpenXR, without PC rows underneath.
++	if(m_nCurrScreen == MENUPAGE_OPTIONS) return;
++#endif
+ 	CFont::SetAlphaFade(255.0f);
+ 
+ #ifdef PS2_LIKE_MENU
+@@ -4135,6 +4139,10 @@
+ void
+ CMenuManager::Process(void)
+ {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++	// Keep frontend pause ownership; the shared menu owns Options input.
++	if(m_bMenuActive && m_nCurrScreen == MENUPAGE_OPTIONS) return;
++#endif
+ 	m_bMenuStateChanged = false;
+ 
+ 	if (!m_bSaveMenuActive && TheCamera.GetScreenFadeStatus() != FADE_0)

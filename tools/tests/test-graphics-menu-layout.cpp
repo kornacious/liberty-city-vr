@@ -24,6 +24,7 @@ static int getActiveGpuPerformanceMode(){return 2;}
 static const char*getRenderScaleFallbackReasonName(int){return "GAME RENDERER ALLOCATION";}
 }
 namespace VrCullViz {static bool active;static int calls;inline bool IsActive(){++calls;return active;}inline const char*StatusLine(){++calls;return "CULL SNAPSHOT: DRAWN 123 OUTSIDE 456 OCCLUDED 789";}}
+namespace CMenuManager {static float m_PrefsLOD=1.2f;}
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
 namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}

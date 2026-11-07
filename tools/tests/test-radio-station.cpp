@@ -50,6 +50,12 @@ struct cMusicManager {
     bool ChangeRadioChannel();
     void ServiceRetune();
 } MusicManager;
+struct { int m_PrefsRadioStation=0; void SaveSettings(){} } FrontEndMenuManager;
+struct {
+    int GetRadioInCar(){return inCar&&hasVehicle?vehicle.m_nRadioStation:MusicManager.m_nRadioInCar;}
+    void SetRadioInCar(int station){MusicManager.SetRadioInCar(station);}
+    bool IsMP3RadioChannelAvailable(){return available;}
+} DMAudio;
 // Upstream tuning stores integer arithmetic back into byte-sized station IDs.
 #ifdef _MSC_VER
 #pragma warning(push)
