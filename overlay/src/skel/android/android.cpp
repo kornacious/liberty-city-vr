@@ -1959,7 +1959,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				player->InVehicle() ? player->m_pMyVehicle : nil,
 				player->GetMatrix(), boneHead, androidgame::VrHeadBobbingEnabled(),
 				routineHeadMotion, postPhysics,
-				player->bIsDucking && !gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player));
+				player->bIsDucking && !gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player),
+				playerVehicleState == PED_JUMP && !gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player));
 			// Animation head roll/nods/look-arounds never steer the HMD.
 			// Use the locomotion/carrier frame; the headset owns head rotation.
 			// Preserve the train's carriage-relative boarding-side window turn.
@@ -1994,11 +1995,18 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				QuestHeadAttachment::ViewBasis(heading, vertical,
 					boneRight, boneUp, boneForward);
 			float eyeForward, eyeHeight, eyeSide;
+			CVector eyeRight = boneRight, eyeForwardBasis = boneForward;
+			if(!gVrInVehicle && !vehicleTransition && !PlayerKnockedDown(player)){
+				float localYaw = 0.0f;
+				rw::vulkan::getFirstPersonLocalHeadYaw(&localYaw);
+				head = QuestHeadAttachment::FacingPosition(player->GetMatrix(), head,
+					boneRight, boneUp, boneForward, localYaw, eyeRight, eyeForwardBasis);
+			}
 			// Publish the camera's pre-eye-fit anatomical target for the body
 			// solver. Its solved/rendered head must never feed this value back.
 			gVrOnFootSkeletonHead=head;
 			androidgame::VrGetXboxHeadOffset(&eyeForward,&eyeHeight,&eyeSide);
-			head += boneForward*eyeForward + boneUp*eyeHeight + boneRight*eyeSide;
+			head += eyeForwardBasis*eyeForward + boneUp*eyeHeight + eyeRight*eyeSide;
 			forward = boneForward;
 			gCrouchView.Reset();
 			gKnockdownView.Reset();
@@ -2327,11 +2335,6 @@ CapturePad(RwInt32 padID)
 	const bool remoteMode =
 		CWorld::Players[CWorld::PlayerInFocus].IsPlayerInRemoteMode();
 	ApplyQuestSnapTurn(rightStickX);
-#ifdef GTA_VR_WEAPONS
-	const bool trackedScopeActive = OculusVR::IsTrackedScopeActive();
-#else
-	const bool trackedScopeActive = false;
-#endif
 	const bool onFootGameplay =
 		gGameState == GS_PLAYING_GAME &&
 		!FrontEndMenuManager.m_bGameNotLoaded &&
@@ -2341,7 +2344,6 @@ CapturePad(RwInt32 padID)
 		!remoteMode &&
 		!CCutsceneMgr::IsRunning() &&
 		!CCutsceneMgr::IsCutsceneProcessing() &&
-		!trackedScopeActive &&
 		!TheCamera.m_WideScreenOn;
 	float localHeadYaw = 0.0f;
 	const bool localHeadYawValid =

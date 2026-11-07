@@ -22,7 +22,7 @@ class ComfortAnchor
 public:
 	CVector Position(const void *ped, const void *model, const void *vehicle,
 		const CMatrix &root, const CVector &nativeHead, bool bobbing,
-		bool routineMotion, bool postPhysics, bool buttonCrouch=false)
+		bool routineMotion, bool postPhysics, bool buttonCrouch=false, bool jumping=false)
 	{
 		if(owner != ped || clump != model || carrier != vehicle){
 			owner = ped; clump = model; carrier = vehicle; valid = false;
@@ -32,6 +32,13 @@ public:
 		if(buttonCrouch){
 			if(!valid){local=Invert(root)*nativeHead;local.z+=0.45f;valid=true;}
 			return root*local-CVector(0,0,0.45f);
+		}
+		if(jumping && valid){
+			// The visible upper body is stabilized during a jump. Retain its
+			// horizontal neck reference while following authored vertical motion.
+			CVector position = root*local;
+			position.z = nativeHead.z;
+			return position;
 		}
 		if(bobbing){
 			if(routineMotion && postPhysics){local=Invert(root)*nativeHead;valid=true;}
@@ -67,6 +74,21 @@ inline void ViewBasis(CVector heading, CVector vertical,
 	right = CrossProduct(heading, vertical); right.Normalise();
 	up = CrossProduct(right, heading); up.Normalise();
 	forward = heading;
+}
+
+// Presentation IK turns the on-foot body into the physical view heading.
+// Carry the authored head displacement in that same frame, including jumps;
+// the native snapshot and gameplay root must remain untouched.
+inline CVector FacingPosition(const CMatrix &root, const CVector &head,
+	const CVector &right, const CVector &up, const CVector &forward,
+	float localYaw, CVector &facingRight, CVector &facingForward)
+{
+	const float c = cosf(localYaw), s = sinf(localYaw);
+	facingRight = right*c + forward*s;
+	facingForward = forward*c - right*s;
+	const CVector local = Invert(root)*head;
+	return root*CVector(0,0,0) + facingRight*local.x +
+		facingForward*local.y + up*local.z;
 }
 
 class Snapshot

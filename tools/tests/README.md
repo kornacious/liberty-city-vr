@@ -6,6 +6,15 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-physical-turn-input.ps1` compiles the production on-foot input gate and
+head-relative stick transform. It covers tracked sniper held/unheld, physical
+quarter/half turns, body/head movement modes and gameplay/tracking exclusions.
+`test-head-attachment.cpp` also covers physical and thumbstick facing during
+idle/jump: stabilized horizontal neck position, authored vertical jump motion,
+eye calibration, unchanged native animation and a single application of HMD yaw.
+These checks read no game data; body/hand alignment and sniper locomotion still
+require headset QA.
+
 `test-quest-surrender.cpp` compiles as C++17 with `overlay/src/vr` on the
 include path. Extract `static void UpdateSurrender(bool blocked)` from
 `QuestWeaponVR.cpp`, ending before the following `} // namespace`, into

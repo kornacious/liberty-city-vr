@@ -70,6 +70,8 @@ static void VrGetXboxHeadOffset(float *forward,float *height,float *side){*forwa
 namespace OculusVR {static bool IsQuestBikeHorizonLocked(){return false;}}
 static struct {struct {CVector Front{0,1,0};} Cams[1];int ActiveCam=0;} TheCamera;
 namespace rw {namespace vulkan {
+static float physicalYaw=0;
+static bool getFirstPersonLocalHeadYaw(float *yaw){*yaw=physicalYaw;return true;}
 static void setFirstPersonAnchorBasis(const float*h,const float*r,const float*u,const float*f,float,int,bool preserve){
     if(!preserve)std::exit(2);++anchorWrites;
     submittedHead={h[0],h[1],h[2]};submittedRight={r[0],r[1],r[2]};submittedUp={u[0],u[1],u[2]};submittedForward={f[0],f[1],f[2]};
@@ -167,8 +169,9 @@ int main(){
         ++CTimer::frame;vehicleTransition=posture==0;knockedDown=posture==1;player.bIsDucking=posture==2;playerVehicleState=posture==3?PED_JUMP:PED_IDLE;
         nativeHead.pos=player.root*CVector(-.3f,.3f,.4f);
         Final(&player,false,p,f);
-        Near(submittedHead,posture==2 ? player.root*CVector(.1f,.2f,1.6f)-CVector(0,0,.45f) : nativeHead.pos,
-            "button crouch lowers in place; boarding/falls/jump retain live head position");
+        Near(submittedHead,posture==2 ? player.root*CVector(.1f,.2f,1.6f)-CVector(0,0,.45f) :
+            posture==3 ? player.root*CVector(.1f,.2f,.4f) : nativeHead.pos,
+            "crouch and jump retain horizontal neck alignment; jump retains live height");
     }
     vehicleTransition=knockedDown=player.bIsDucking=false;playerVehicleState=PED_IDLE;
     ++CTimer::frame;nativeHead.pos=player.root*CVector(.3f,.3f,1.1f);
@@ -265,5 +268,27 @@ int main(){
     trainPassenger=vehicleTransition=false;playerVehicleState=PED_IDLE;player.m_pMyVehicle=nullptr;
     TheCamera.Cams[0].Front={0,1,0};++CTimer::frame;Final(&player,false,p,f);
     Near(submittedForward,{0,1,0},"completed train exit restores on-foot heading policy");
+    androidgame::bobbing=true;androidgame::eyeOffset={.02f,.06f,.08f};
+    for(float rootYaw:{0.0f,.7f,3.14159265f})
+    for(float cameraYaw:{0.0f,1.5707963f,3.14159265f})
+    for(float physicalYaw:{0.0f,1.5707963f,3.14159265f,-1.5707963f})
+    for(int state:{PED_IDLE,PED_JUMP}){
+        player.root.r={std::cos(rootYaw),std::sin(rootYaw),0};
+        player.root.f={-std::sin(rootYaw),std::cos(rootYaw),0};player.root.p={12,7,3};
+        TheCamera.Cams[0].Front={-std::sin(cameraYaw),std::cos(cameraYaw),0};
+        rw::vulkan::physicalYaw=physicalYaw;playerVehicleState=state;
+        const CVector local(.03f,.04f,state==PED_JUMP?1.3f:1.6f);
+        nativeHead.pos=player.root*(local+CVector(0,state==PED_JUMP?.31f:0,0));
+        const CVector originalNativeHead=nativeHead.pos;
+        ++CTimer::frame;Final(&player,false,p,f);
+        const float yaw=cameraYaw+physicalYaw;
+        const CVector facing(-std::sin(yaw),std::cos(yaw),0),right(std::cos(yaw),std::sin(yaw),0);
+        Near(submittedHead,player.root.p+right*(local.x+.02f)+facing*(local.y+.06f)+CVector(0,0,local.z+.08f),
+            "idle/jump head and eye fit follow physical facing independently of native heading");
+        Near(gVrOnFootSkeletonHead,player.root.p+right*local.x+facing*local.y+CVector(0,0,local.z),
+            "posture target shares the physical head frame before eye fit");
+        Near(nativeHead.pos,originalNativeHead,"facing correction never mutates native animation");
+        Near(submittedForward,TheCamera.Cams[0].Front,"physical yaw is not applied twice to anchor orientation");
+    }
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }
