@@ -6,6 +6,14 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-jump-heading.ps1 -StageRoot <assembled-tree>` compiles the production Quest
+jump-heading helper, walk-direction calculation and launch-impulse branch. It
+checks standing and moving jumps after physical quarter/half turns, independent
+camera/entity headings, steep downward gaze, both native camera paths and
+NPC/vehicle/tracking gates. Source integration checks require facing updates at
+the jump request and before takeoff collision probes. No game data is read;
+actual jump direction and obstacle clearance still require headset QA.
+
 `test-physical-turn-input.ps1` compiles the production on-foot input gate and
 head-relative stick transform. It covers tracked sniper held/unheld, physical
 quarter/half turns, body/head movement modes and gameplay/tracking exclusions.
