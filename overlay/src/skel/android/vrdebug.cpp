@@ -28,6 +28,7 @@
 #include "IniFile.h"
 #include "Population.h"
 #include "ModelSets.h"
+#include "QuestNeoEffects.h"
 #include "VehiclePlacement.h"
 #include "CarCtrl.h"
 #include "vulkan/rwvk.h"
@@ -229,6 +230,8 @@ static int gDynamicLightMax = 4;
 // panorama where that lookup has no answer. The original drew these
 // as a second textured pass the Vulkan backend never picked up.
 static int gCarReflections = 0;
+static int gNeoEffects = 1;
+static int gNeoDroplets = 0;
 // Player-tuned reflection strengths. Intensity scales the whole layer --
 // at 100 some paints read glassy, lowering it is the cure. The SSR percent
 // scales only the live previous-frame part, 0 leaves every car on the
@@ -744,6 +747,8 @@ enum eVrWeaponsMenuItem {
 
 enum eVrModelAssetsMenuItem {
 	VR_MODEL_ASSETS_PRESET = 0,
+	VR_MODEL_ASSETS_NEO,
+	VR_MODEL_ASSETS_DROPLETS,
 	VR_MODEL_ASSETS_SKIN,
 	VR_MODEL_ASSETS_BACK,
 	VR_MODEL_ASSETS_ITEM_COUNT
@@ -1309,6 +1314,8 @@ LoadVrSettings(void)
 		"DynamicLightGlowIntensity", 100, ".\\vr_settings.ini"), 25, 200);
 	gDynamicLightMax = clamp((int)(int32)GetPrivateProfileIntA("VR",
 		"DynamicLightMax", 4, ".\\vr_settings.ini"), 2, 8) & ~1;
+	gNeoEffects=GetPrivateProfileIntA("VR","XboxNeoEffects",1,".\\vr_settings.ini")!=0;
+	gNeoDroplets=GetPrivateProfileIntA("VR","XboxNeoDroplets",0,".\\vr_settings.ini")!=0;
 	gCarReflections = GetPrivateProfileIntA("VR", "CarReflections", 0,
 		".\\vr_settings.ini") != 0 ? 1 : 0;
 	gCarReflectionIntensity = clamp((int)(int32)GetPrivateProfileIntA("VR",
@@ -3219,6 +3226,10 @@ VrDebugUpdate(const PadInput &in)
 			if(gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET){
 				ModelSets::CycleRequested(direction);
 
+			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_NEO){
+				gNeoEffects=!gNeoEffects;SaveVrInteger("XboxNeoEffects",gNeoEffects);
+			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_DROPLETS){
+				gNeoDroplets=!gNeoDroplets;SaveVrInteger("XboxNeoDroplets",gNeoDroplets);
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN){
 				QuestGameSettings::CycleSkin(direction);
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK &&
@@ -4654,9 +4665,13 @@ DrawQuestModelAssetsPage(void)
 		ModelSets::GetSourceName(ModelSets::GetRequested()),
 		ModelSets::IsRestartRequired() ? "  RESTART" : "");
 	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
+	snprintf(row,sizeof(row),"XBOX NEO MATERIALS  < %s >",gNeoEffects?"ON":"OFF");
+	DrawFullVrMenuRow(row,252,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_NEO,true);
+	snprintf(row,sizeof(row),"XBOX RAIN DROPLETS  < %s >",gNeoDroplets?"ON":"OFF");
+	DrawFullVrMenuRow(row,294,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_DROPLETS,true);
 	snprintf(row, sizeof(row), "PLAYER SKIN  < %.48s >", QuestGameSettings::SkinName());
-	DrawFullVrMenuRow(row, 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
-	DrawFullVrMenuRow("BACK TO SETTINGS", 294, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+	DrawFullVrMenuRow(row, 336, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
+	DrawFullVrMenuRow("BACK TO SETTINGS", 378, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
 	DrawVrMenuText(ModelSets::IsOriginalXboxAudioActive() ? "ACTIVE AUDIO: ORIGINAL XBOX - SPEECH, SFX AND RADIO" :
 		ModelSets::IsModernActive() ? "ACTIVE AUDIO: CLASSIC - REIMPORT XBOX ISO TO ADD AUDIO" : "ACTIVE AUDIO: CLASSIC PC",
 		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
@@ -6027,6 +6042,7 @@ void
 VrPushDynamicLights(void)
 {
 	LoadVrSettings();
+	QuestNeoEffects::Update(gNeoEffects!=0,gNeoDroplets!=0);
 	rw::vulkan::setCarReflectionsEnabled(gCarReflections);
 	rw::vulkan::setCarReflectionParams(gCarReflectionIntensity/100.0f,
 		gCarReflectionSsr/100.0f,

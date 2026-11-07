@@ -35,6 +35,7 @@ void CycleRequested(int direction);
 bool IsModernActive();
 bool IsXboxActive();
 bool IsOriginalXboxAudioActive();
+bool UseXboxParticles();
 // Resolves only the complete, verified Xbox audio collection captured at startup.
 // Legacy visual-only profiles keep all audio on the base PC installation.
 bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size);

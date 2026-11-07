@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <vector>
 #include <limits>
+#include <cstring>
 #include "../../librw/src/vulkan/PhysicalScopeMath.h"
 #include "../../overlay/src/vr/QuestScopeLens.h"
 #include "../../overlay/src/vr/QuestScopeZoom.h"
@@ -29,17 +30,18 @@ struct Sphere { struct { float x,y,z; } center; float radius; };
 struct Atomic { Sphere sphere; const Sphere *getWorldBoundingSphere() const { return &sphere; } };
 bool32 capturePhysicalScopeDraw(VkPipeline, VkDescriptorSet, const PushConstants &,
     VkBuffer, VkDeviceSize, VkBuffer, VkDeviceSize, uint32, uint32,
-    const uint32 * = nullptr, Atomic * = nullptr);
+    const uint32 * = nullptr, Atomic * = nullptr, const VkDescriptorSet * = nullptr);
 struct Call { uint32 kind; uint64_t a,b,c; };
 static std::vector<Call> calls;
 static VkPipelineLayout getPipelineLayout() { return 44; }
 static VkDescriptorSet getBoneDescriptor() { return 55; }
+static void countGpuProfileDraw() {}
 static void vkCmdBindPipeline(VkCommandBuffer, uint32, VkPipeline p)
 { calls.push_back({1,p,0,0}); }
 static void vkCmdBindDescriptorSets(VkCommandBuffer, uint32, VkPipelineLayout,
     uint32 first, uint32 count, const VkDescriptorSet *sets, uint32 dynamicCount,
     const uint32 *offset)
-{ assert(count == 1); calls.push_back({2,first,*sets,dynamicCount ? *offset : 0}); }
+{ for(uint32 i=0;i<count;i++) calls.push_back({2,first+i,sets[i],dynamicCount ? *offset : 0}); }
 static void vkCmdPushConstants(VkCommandBuffer, VkPipelineLayout, uint32, uint32,
     size_t, const PushConstants *p)
 { calls.push_back({3,(uint64_t)p->model[0],0,0}); }
@@ -253,5 +255,12 @@ int main()
 {
 	testProjection(); testLens(); testCaptureReplay(); testModes();
 	testThumbstickZoom();
+	gScopeCapture=1;gScopeFrameValid=1;gScopeDrawRole=0;gvk.wristPanelOffscreen=0;
+	gScopeWorldDraws.clear();calls.clear();PushConstants push={};VkDescriptorSet resources[2]={84,85};
+	capturePhysicalScopeDraw(10,11,push,12,0,0,0,3,0,nullptr,nullptr,resources);
+	resources[0]=99;replayScopeDraws(gScopeWorldDraws);
+	bool lightmap=false,gloss=false;
+	for(auto &call:calls){if(call.kind==2 && call.a==4 && call.b==84)lightmap=true;if(call.kind==2 && call.a==5 && call.b==85)gloss=true;}
+	assert(lightmap && gloss); // each scope draw replays its captured Neo textures
 	puts("Physical scope: projection, cap fitting, draw replay, modes and right-thumbstick zoom passed.");
 }

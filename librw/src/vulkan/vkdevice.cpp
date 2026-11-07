@@ -119,6 +119,7 @@ struct ScopeDraw {
 	uint32 count, first, boneOffset;
 	bool32 skinned;
 	float32 bounds[4]; // play-space sphere; negative radius = immediate geometry
+	VkDescriptorSet neoTextures[2];
 };
 static std::vector<ScopeDraw> gScopeWorldDraws, gScopeLensDraws;
 
@@ -146,7 +147,7 @@ void setPhysicalScopeFrame(const float32 position[3], const float32 right[3],
 bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
     const PushConstants &push, VkBuffer vertices, VkDeviceSize vertexOffset,
     VkBuffer indices, VkDeviceSize indexOffset, uint32 count, uint32 first,
-    const uint32 *boneOffset, Atomic *atomic)
+    const uint32 *boneOffset, Atomic *atomic, const VkDescriptorSet *neoTextures)
 {
 	if(!gScopeCapture || gvk.wristPanelOffscreen || gScopeDrawRole == 1)
 		return 0;
@@ -156,6 +157,7 @@ bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
 	ScopeDraw draw = { pipeline, texture, push, vertices, indices,
 		vertexOffset, indexOffset, count, first, boneOffset ? *boneOffset : 0,
 		boneOffset != nil, {0.0f,0.0f,0.0f,-1.0f} };
+	if(neoTextures) memcpy(draw.neoTextures,neoTextures,sizeof(draw.neoTextures));
 	if(atomic){
 		const Sphere *sphere = atomic->getWorldBoundingSphere();
 		for(int i = 0; i < 3; i++)
@@ -1279,7 +1281,7 @@ createPostFxResources(void)
 		return 0;
 	}
 
-	VkDescriptorSetLayoutBinding inputBindings[5] = {};
+	VkDescriptorSetLayoutBinding inputBindings[6] = {};
 	for(uint32 binding = 0; binding < 3; binding++){
 		inputBindings[binding].binding = binding;
 		inputBindings[binding].descriptorType =
@@ -1297,10 +1299,11 @@ createPostFxResources(void)
 	inputBindings[4].descriptorCount = 1;
 	inputBindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+	inputBindings[5]=inputBindings[4];inputBindings[5].binding=5;
 	VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo = {};
 	descriptorLayoutInfo.sType =
 		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descriptorLayoutInfo.bindingCount = 5;
+	descriptorLayoutInfo.bindingCount = 6;
 	descriptorLayoutInfo.pBindings = inputBindings;
 	if(vkCreateDescriptorSetLayout(gvk.device, &descriptorLayoutInfo, nil,
 	                               &gvk.postFxDescriptorLayout) != VK_SUCCESS){
@@ -1310,7 +1313,7 @@ createPostFxResources(void)
 
 	VkDescriptorPoolSize poolSizes[2] = {};
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[0].descriptorCount = NUM_FRAME_CONTEXTS*4;
+	poolSizes[0].descriptorCount = NUM_FRAME_CONTEXTS*5;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[1].descriptorCount = NUM_FRAME_CONTEXTS;
 	VkDescriptorPoolCreateInfo poolInfo = {};
@@ -1339,9 +1342,9 @@ createPostFxResources(void)
 		return 0;
 	}
 
-	VkDescriptorImageInfo imageDescriptors[NUM_FRAME_CONTEXTS][4] = {};
+	VkDescriptorImageInfo imageDescriptors[NUM_FRAME_CONTEXTS][5] = {};
 	VkDescriptorBufferInfo bufferDescriptors[NUM_FRAME_CONTEXTS] = {};
-	VkWriteDescriptorSet writes[NUM_FRAME_CONTEXTS][5] = {};
+	VkWriteDescriptorSet writes[NUM_FRAME_CONTEXTS][6] = {};
 	for(uint32 i = 0; i < NUM_FRAME_CONTEXTS; i++){
 		gvk.frames[i].postFxDescriptor = descriptorSets[i];
 		imageDescriptors[i][0].sampler = gvk.postFxSampler;
@@ -1400,8 +1403,10 @@ createPostFxResources(void)
 		writes[i][4].descriptorType =
 			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		writes[i][4].pImageInfo = &imageDescriptors[i][3];
+		imageDescriptors[i][4]=imageDescriptors[i][3];imageDescriptors[i][4].imageView=getFallbackTextureView();
+		writes[i][5]=writes[i][4];writes[i][5].dstBinding=5;writes[i][5].pImageInfo=&imageDescriptors[i][4];
 	}
-	vkUpdateDescriptorSets(gvk.device, NUM_FRAME_CONTEXTS*5,
+	vkUpdateDescriptorSets(gvk.device, NUM_FRAME_CONTEXTS*6,
 	                      &writes[0][0], 0, nil);
 
 	VkPushConstantRange pushRange = {};
@@ -1869,7 +1874,7 @@ setIdentityMatrix(float32 matrix[16])
 static void
 prepareMotionUniform(FrameContext &frame)
 {
-	if(gvk.sgsrMode == SGSR_OFF || frame.motionMapped == nil)
+	if(frame.motionMapped == nil)
 		return;
 	MotionUniformData data = {};
 	// Frontend, loading and cutscene frames do not have a stable immersive
@@ -1905,8 +1910,35 @@ prepareMotionUniform(FrameContext &frame)
 	data.sgsrParams[2] = gvk.sgsrHorizontalTanHalfFov > 0.0f ?
 		gvk.sgsrHorizontalTanHalfFov : 1.0f;
 	data.sgsrParams[3] = historyValid ? 0.0f : 1.0f;
+	// Put droplets on a shared head-relative visor plane. Each eye unprojects
+	// through its own camera; never stamp identical NDC coordinates into two
+	// asymmetric VR frustums.
+	float32 headToPlay[16],playToHead[16];setIdentityMatrix(headToPlay);
+	const float x=gvk.headQuat[0],y=gvk.headQuat[1],z=gvk.headQuat[2],w=gvk.headQuat[3];
+	headToPlay[0]=1-2*(y*y+z*z);headToPlay[1]=2*(x*y+z*w);headToPlay[2]=2*(x*z-y*w);
+	headToPlay[4]=2*(x*y-z*w);headToPlay[5]=1-2*(x*x+z*z);headToPlay[6]=2*(y*z+x*w);
+	headToPlay[8]=2*(x*z+y*w);headToPlay[9]=2*(y*z-x*w);headToPlay[10]=1-2*(x*x+y*y);
+	memcpy(headToPlay+12,gvk.headPosition,12);
+	bool drops=gvk.neoEnabled && gvk.firstPersonActive && gvk.neoDropletRain>0.0f && invertMatrix4(playToHead,headToPlay);
+	for(int eye=0;eye<2;eye++){
+		float inverse[16];
+		if(drops && invertMatrix4(inverse,gvk.stereoViewProjectionUnjittered[eye]))
+			multiplyMatrix(data.dropClipToHead[eye],playToHead,inverse);
+		else drops=false;
+	}
+	data.dropParams[0]=gvk.effectsTime;data.dropParams[1]=drops?gvk.neoDropletRain:0.0f;
+	VkImageView mask=getFallbackTextureView();
+	if(gvk.neoTextures){auto tex=gvk.neoTextures->find("dropmask");if(tex && tex->raster){
+		auto native=PLUGINOFFSET(VulkanRaster,tex->raster,nativeRasterOffset);
+		if(native->view)mask=native->view;
+	}}
+	VkDescriptorImageInfo image={gvk.postFxSampler,mask,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+	VkWriteDescriptorSet write={};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write.dstSet=frame.postFxDescriptor;write.dstBinding=5;write.descriptorCount=1;
+	write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;
+	vkUpdateDescriptorSets(gvk.device,1,&write,0,nil);
 	memcpy(frame.motionMapped, &data, sizeof(data));
-	gvk.temporalHistoryValid = gvk.firstPersonActive;
+	if(gvk.sgsrMode != SGSR_OFF) gvk.temporalHistoryValid = gvk.firstPersonActive;
 }
 
 // ---------------------------------------------------------------------------
@@ -2187,6 +2219,7 @@ replayScopeDraws(const std::vector<ScopeDraw> &draws, const float32 *projection 
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.pipeline);
 		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
 			1, 1, &draw.texture, 0, nil);
+		if(draw.neoTextures[0]) vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,4,2,draw.neoTextures,0,nil);
 		if(draw.skinned){
 			VkDescriptorSet bones = getBoneDescriptor();
 			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout,
@@ -2618,6 +2651,14 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	scene->reflectionParams[1] = reflectionHistoryValid ? gvk.carReflectionSsr : 0.0f;
 	scene->reflectionParams[2] = gvk.carReflectionSsrDistance;
 	scene->reflectionParams[3] = gvk.effectsTime;
+	memcpy(scene->neoRimStart,gvk.neoValues+1,16);
+	memcpy(scene->neoRimEnd,gvk.neoValues+5,16);
+	scene->neoParams[0]=gvk.neoValues[0];
+	scene->neoParams[1]=gvk.neoValues[9];scene->neoParams[2]=gvk.neoValues[10];scene->neoParams[3]=gvk.neoValues[11];
+	scene->neoVehicle[0]=gvk.neoValues[12];scene->neoVehicle[1]=gvk.neoValues[13];
+	scene->neoVehicle[2]=0.7f;scene->neoVehicle[3]=1.0f;
+	memcpy(scene->neoDiffuse,gvk.neoValues+14,16);memcpy(scene->neoSpec,gvk.neoValues+18,16);
+	scene->neoControl[0]=gvk.neoEnabled?1.0f:0.0f;
 	memcpy(scene->waterParams1, gvk.waterParams,
 	       sizeof(scene->waterParams1));
 	memcpy(scene->waterParams2, gvk.waterParams+4,
@@ -2761,8 +2802,8 @@ endFrame(void)
 	beginGpuProfilePass(GpuPassProfile::Scope);
 	renderPhysicalScope();
 	endGpuProfilePass(GpuPassProfile::Scope);
+	prepareMotionUniform(frame);
 	if(gvk.sgsrMode != SGSR_OFF){
-		prepareMotionUniform(frame);
 		VkImageMemoryBarrier depthBarrier = {};
 		depthBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		depthBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -3211,6 +3252,18 @@ setPointLights(const PointLight *lights, uint32 count, float32 glowStrength)
 		memcpy(gvk.pointLights, lights, count*sizeof(PointLight));
 	gvk.pointLightCount = count;
 	gvk.pointLightGlowStrength = glowStrength > 0.0f ? glowStrength : 0.0f;
+}
+
+void setNeoDroplets(float32 rain) { gvk.neoDropletRain=rain>0.0f?(rain<1.0f?rain:1.0f):0.0f; }
+
+void
+setNeoEffects(TexDictionary *textures, const float32 values[22], bool32 enabled)
+{
+	gvk.neoTextures=textures;
+	memcpy(gvk.neoValues,values,sizeof(gvk.neoValues));
+	const bool32 active=enabled && textures && gvk.deviceProperties.limits.maxBoundDescriptorSets>=6;
+	if(active!=gvk.neoEnabled)VKLOG("Original Xbox Neo effects %s",active?"active":"disabled");
+	gvk.neoEnabled=active;
 }
 
 void

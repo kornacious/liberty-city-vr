@@ -1,5 +1,5 @@
 {
-  "BuilderVersion": "original-xbox-us-2-audio",
+  "BuilderVersion": "original-xbox-us-3-effects",
   "Disc": "GTA III Original Xbox US 1.0",
   "Files": {
     "audio/a1_a.wav": {
@@ -1042,6 +1042,10 @@
       "Bytes": 8546,
       "Sha256": "69BEDCBAFAF79D87E12F5AE3C460F1EB5838E7B55D8E158388284267182DDC43"
     },
+    "data/particle.cfg": {
+      "Bytes": 24306,
+      "Sha256": "2EB50B401D9419BC3323752E2CBC1236144F979F9CBC8C41CE1474EBD3100001"
+    },
     "default.xbe": {
       "Bytes": 3072000,
       "Sha256": "8BF66ECE15D4438BF9205E61EADE5BCEE2877B0194B4428F4C8CE2B4DE351AC3"
@@ -1145,6 +1149,78 @@
     "models/particle.txd": {
       "Bytes": 659816,
       "Sha256": "5BA7246B955E277563F2954329BF6EA4D6D5E0143436B3228127D3529A626105"
+    },
+    "neo/carreflectionmask.dds": {
+      "Bytes": 8320,
+      "Sha256": "2F8230A9EA57A211F7F7D4CE0B0A8BA0D9EF61E0A526B63CFDD64FDF5FCCF4AC"
+    },
+    "neo/cartweakingtable.dat": {
+      "Bytes": 5822,
+      "Sha256": "0A431507C1AD0D5BBC735FEB22E27D0CDFED0EA5CDF59DEF65D2F4555820EC22"
+    },
+    "neo/dropmask.dds": {
+      "Bytes": 2176,
+      "Sha256": "097B95226D270C426FA674612F7590E8C2976F9B488A24B7764F4BDDC860672F"
+    },
+    "neo/gloss/lo1road_128_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "8B94D15E7A3B56BB75B16847FBF3B4D27D11DB83261206C664AA77C983CDA411"
+    },
+    "neo/gloss/road_1line128hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "B5E24F18AE0B3422317EDE9273F46194051E76F1EF4EF7CC89F55AC0332595BC"
+    },
+    "neo/gloss/road_1line256hv128_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "3E29F9FE61950D2B0858A5313B91FB6BE224FED43A8A23055AF0208B857C0F88"
+    },
+    "neo/gloss/road_1line256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "BD0B32800E92156BD48199C841C6769A058D6AA5EF007861592B7AEC49AD4F61"
+    },
+    "neo/gloss/road_2line256hv128_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "8C327630530FD4573CD636918268842D7ED2CF53891E9D8A4F3A213EA9FBC513"
+    },
+    "neo/gloss/road_2line256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "97EE5A37C2568C1130AA199BCB904A09DE0FDA57F837EDF9DCFB26A83F9FD178"
+    },
+    "neo/gloss/road_blank256hv128_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "9BDC400DDC38FF474754D1B24660F0355D1580751280369A4DC9756E5B6473BF"
+    },
+    "neo/gloss/road_blank256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "673230D28A697D3EA5945D46ACA9DF2C3F92CB181359C15184DA5DFED977B479"
+    },
+    "neo/gloss/road_yellowline128hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "5F3A14B0BD6D781F006534758B84DBF61D89125E254B38278DF550563662FCD6"
+    },
+    "neo/gloss/road_yellowline256hv128_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "BE5CD899046107403D69DF77E48017DE2CE5A244CFD455DAE03D6C9DC69DDB6D"
+    },
+    "neo/gloss/road_yellowline256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "944D307FC3B5BBB56101344AD4AFC59BD88845611F989E9E6D481FFF6FC320F4"
+    },
+    "neo/gloss/tar_1line256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "6E29A48CE2E37A986008B5C86AFFFB82642E580757316F2A5BC28BB24FBA7EC3"
+    },
+    "neo/gloss/tar_mix256hv_gloss.dds": {
+      "Bytes": 8320,
+      "Sha256": "E151658A55FD43A707D392FAE0AB5821D37FAF50DF1D8CE6AE709089F74F84EE"
+    },
+    "neo/rimtweakingtable.dat": {
+      "Bytes": 5696,
+      "Sha256": "6FC9ECC1B93D3F5CD2B32E38C294EA47EDA12A5280EB96AEB8F0552CA20CF0CA"
+    },
+    "neo/worldtweakingtable.dat": {
+      "Bytes": 1139,
+      "Sha256": "D4B1252439460EBA9875E680A810260C0F5888F01ADE2162C5D6F6BD50C0835E"
     },
     "txd/loadsc0.txd": {
       "Bytes": 131240,

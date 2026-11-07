@@ -63,6 +63,10 @@ int main(){
  require(!QuestOverlayEntrySelected(md.c_str(),"bogus.col"),"unsupported archive entry rejected");
  require(!GetXboxAssetPath("models/gta3.img",gGameRoot,0),"duplicate Xbox archive never registered");
  char out[1024];
+ require(!UseXboxParticles(),"legacy collection retains Classic particle settings");
+ for(const char *name:{"data/particle.cfg","neo/tuning.bin","neo/neo.txd"})touch(root/"modelsets/modern"/name);
+ reset(root);require(UseXboxParticles(),"prepared Xbox particle settings selected at startup");
+ for(const char *name:{"data/particle.cfg","neo/tuning.bin","neo/neo.txd"})require(IsModernAssetPath(ResolveAssetPath(name,out,sizeof(out))),"particle and Neo resources resolve only inside active source");
  require(!IsOriginalXboxAudioActive(),"old visual-only import keeps PC audio");
  require(!GetOriginalXboxAudioPath("audio/head.wav",out,sizeof(out)),"old import cannot redirect radio");
  std::string inventory="ORIGINAL_XBOX_AUDIO_1\naudio/sfx.raw\naudio/sfx.sdt\naudio/head.flac\naudio/a1_sso.flac\n";
@@ -75,6 +79,7 @@ int main(){
  require(GetOriginalXboxAudioPath("audio/sfx.RAW",out,sizeof(out)),"Xbox bank resolves");
  for(const char *name:{"audio/../head.wav","/audio/head.wav","audio/nested/head.wav","mp3/custom.mp3","data/main.scm"})require(!GetOriginalXboxAudioPath(name,out,sizeof(out)),"audio override rejects unrelated and unsafe paths");
  SetRequested(MODEL_SET_CLASSIC);require(IsOriginalXboxAudioActive(),"requested source does not hot-swap live audio");reset(root);
+ require(!UseXboxParticles(),"Classic restart preserves base particle settings");
  require(!IsOriginalXboxAudioActive()&&!GetOriginalXboxAudioPath("audio/head.wav",out,sizeof(out)),"Classic restart restores PC audio");
  SetRequested(MODEL_SET_MODERN);std::filesystem::remove(root/"modelsets/modern/audio/fixture0.flac");reset(root);
  require(!IsOriginalXboxAudioActive(),"one missing stream keeps entire collection on PC");

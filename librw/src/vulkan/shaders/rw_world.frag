@@ -1,6 +1,14 @@
 #version 450
 
 #include "rw_common.glsl"
+#ifndef RW_NEO_RESOURCES
+#define RW_NEO_RESOURCES 0
+#endif
+#if RW_NEO_RESOURCES
+layout(set=4,binding=0) uniform sampler2D neoLightmap;
+layout(set=5,binding=0) uniform sampler2D neoGlossTexture;
+layout(location=6) in vec2 fragTexCoord1;
+#endif
 
 // Alpha test is a specialisation constant rather than a uniform branch. On a
 // tiler a discard in the shader disables early-Z for the whole draw, so the
@@ -31,7 +39,7 @@ layout(location = 0) in vec4 fragColour;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec2 fragFog;
 layout(location = 3) flat in vec2 fragDynamicMotion;
-#if RW_WORLD_EFFECTS_RESOURCES
+#if RW_WORLD_EFFECTS_RESOURCES || RW_NEO_RESOURCES
 layout(location = 4) in vec3 fragWorldPos;
 layout(location = 5) in vec3 fragNormal;
 #endif
@@ -71,6 +79,13 @@ void main()
 	// untextured variant to compile or select.
 	vec4 texColour = texture(diffuseTexture, fragTexCoord);
 	vec4 colour = fragColour * texColour;
+#if RW_NEO_RESOURCES
+	const int neoFlags=int(push.ambientLight.w);
+	if((neoFlags & 2)!=0){
+		vec3 lightmap=texture(neoLightmap,fragTexCoord1).rgb;
+		colour.rgb*=1.0+scene.neoParams.x*(2.0*lightmap-1.0);
+	}
+#endif
 
 	if(RW_ALPHA_TEST == 1){
 		// The PS2 rule splits a blended mesh in two: the solid half is
@@ -296,6 +311,14 @@ void main()
 		vec4 sun = unpackUnorm4x8(floatBitsToUint(push.lightDirColour.w));
 		float glint = max(dot(reflected, -push.lightDirColour.xyz), 0.0);
 		env += sun.rgb*pow(glint, 24.0);
+#if RW_NEO_RESOURCES
+		if((neoFlags & 8)!=0){
+			env*=textureLod(neoGlossTexture,envUV,0.0).rgb;
+			float b=1.0-clamp(dot(-viewDir,reflNormal),0.0,1.0);
+			float reflectivity=mix(pow(b,5.0),1.0,clamp(scene.neoVehicle.x,0.0,1.0))*scene.neoVehicle.z*(float((neoFlags>>5)&63)/63.0);
+			colour.rgb=mix(colour.rgb,env,clamp(reflectivity*envFade*scene.reflectionParams.x,0.0,1.0));
+		}else
+#endif
 		colour.rgb += env*(envFade*scene.reflectionParams.x*
 		                   float(envBits)*(1.0/63.0));
 		}
@@ -435,6 +458,20 @@ void main()
 	}
 #endif
 
+#if RW_NEO_RESOURCES
+	if((neoFlags & 12)!=0){
+		vec3 toEye=normalize(scene.im2dParams.yzw-fragWorldPos);
+		vec3 halfLight=normalize(toEye-push.lightDirColour.xyz);
+		if((neoFlags & 4)!=0){
+			float highlight=pow(max(halfLight.y,0.0),8.0);
+			colour.rgb+=texture(neoGlossTexture,fragTexCoord).rgb*highlight;
+		}
+		if((neoFlags & 8)!=0){
+			float spec=pow(max(dot(normalize(fragNormal),halfLight),0.0),max(scene.neoVehicle.y,1.0));
+			colour.rgb+=scene.neoSpec.rgb*scene.neoSpec.a*spec*float(((neoFlags>>5)&63)>0);
+		}
+	}
+#endif
 	vec3 fogTarget = mix(scene.fogColour.rgb, scene.skyColour.rgb, fragFog.y);
 	colour.rgb = mix(fogTarget, colour.rgb, fragFog.x);
 	outColour = colour;

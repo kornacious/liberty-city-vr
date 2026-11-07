@@ -602,6 +602,10 @@ void setPlayerVehicle(const float32 position[3], float32 radius,
 // away. Silent unless diagnostics are switched on: a player's logcat is
 // not the place for it.
 void reportGeneratedMips(void);
+// Retail Xbox tables, interpolated by the game clock/weather. Textures remain
+// owned by the startup asset collection, not the transient streaming cache.
+void setNeoEffects(TexDictionary *textures, const float32 values[22], bool32 enabled);
+void setNeoDroplets(float32 rain);
 void setRenderDiagnostics(bool32 enabled);
 // How far down the mip chain masked geometry is pushed, in half
 // levels. Foliage sparkles because its mask is finer than a pixel;

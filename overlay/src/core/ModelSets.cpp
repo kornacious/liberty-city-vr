@@ -36,6 +36,7 @@ bool gModernArchivePairAvailable;
 bool gXboxAvailable;
 bool gOriginalXboxProfiles[MODEL_SET_COUNT];
 bool gOriginalXboxAudioAvailable;
+bool gXboxParticlesAvailable;
 enum { MAX_VEGETATION_MODELS = 512, MAX_MANIFEST_MODEL_NAME = 24 };
 char gVegetationModels[MODEL_SET_COUNT][MAX_VEGETATION_MODELS][MAX_MANIFEST_MODEL_NAME] = {};
 int gNumVegetationModels[MODEL_SET_COUNT];
@@ -130,6 +131,9 @@ bool IsSafeModelsPath(const char *path)
 	if(strstr(path, "..") != nil)
 		return false;
 	return MODELSET_STRICMP(path, "data\\default.ide") == 0 ||
+		MODELSET_STRICMP(path, "data/particle.cfg") == 0 ||
+		MODELSET_STRICMP(path, "data\\particle.cfg") == 0 ||
+		MODELSET_STRNICMP(path, "neo/", 4) == 0 ||
 		MODELSET_STRICMP(path, "data/default.ide") == 0 ||
 		MODELSET_STRNICMP(path, "models\\", 7) == 0 ||
 		MODELSET_STRNICMP(path, "models/", 7) == 0 ||
@@ -281,6 +285,8 @@ void InitializeStartup(const char *gameRoot)
 	LoadPackIdentity(MODEL_SET_MODERN);
 	gModernArchivePairAvailable = gModernArchivePairAvailable && gOriginalXboxProfiles[MODEL_SET_MODERN];
 	LoadAudioInventory();
+	BuildOverlayPath(MODEL_SET_MODERN, "data/particle.cfg", path, sizeof(path));
+	gXboxParticlesAvailable = FileExists(path);
 	LoadVegetationManifest(MODEL_SET_MODERN);
 	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
 		MODEL_SET_MODERN, gSettingsPath);
@@ -339,6 +345,7 @@ bool IsModernActive()
 bool IsXboxActive() { return false; }
 
 bool IsOriginalXboxAudioActive() { return IsModernActive() && gOriginalXboxAudioAvailable; }
+bool UseXboxParticles() { return IsModernActive() && gXboxParticlesAvailable; }
 
 bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size)
 {

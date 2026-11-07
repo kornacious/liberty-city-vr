@@ -479,11 +479,14 @@ defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 	V3d *positions = geo->morphTargets[0].vertices;
 	V3d *normals = geo->morphTargets[0].normals;
 	TexCoords *texCoords = hasTexCoords ? geo->texCoords[0] : nil;
+	TexCoords *texCoords1=geo->numTexCoordSets>1?geo->texCoords[1]:nil;
 	RGBA *colours = isPrelit ? geo->colors : nil;
 	header->orderBoundsValid = header->totalNumVertex > 0 && positions != nil;
 
 	for(uint32 i = 0; i < header->totalNumVertex; i++){
 		WorldVertex &v = vertices[i];
+		v.texCoord1[0]=texCoords1?texCoords1[i].u:0.0f;
+		v.texCoord1[1]=texCoords1?texCoords1[i].v:0.0f;
 		v.position[0] = positions[i].x;
 		v.position[1] = positions[i].y;
 		v.position[2] = positions[i].z;
@@ -909,7 +912,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
         atomic,geometry,header,shader,boneOffset,push.model,objectToWorld);
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
-	bool instanceSubmission=gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
+	bool instanceSubmission=!gvk.neoEnabled && gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
 		!gvk.wristPanelOffscreen && !physicalScopeCaptureActive() && !worldEffectsActive() && !gvk.im3dWaterDraw;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	if(gvk.debugVizActive)instanceSubmission=false;
@@ -936,6 +939,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout>
 		bindings(cacheBindings,measureBindings);
 	const VkPipelineLayout layout = getPipelineLayout();
+	VkDescriptorSet boundNeo[2]={};
 	const VkDeviceSize vertexOffset = 0;
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &header->vbo, &vertexOffset);
 	vkCmdBindIndexBuffer(commandBuffer, header->ibo, 0, VK_INDEX_TYPE_UINT16);
@@ -1086,6 +1090,34 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                        layout, 1, 1, &textureSet, 0, nil);
 
+		VkDescriptorSet neoSets[2]={};
+		uint32 neoFlags=0;
+		if(gvk.neoEnabled){
+			Raster *lightmap=nil,*gloss=nil;
+			MatFX *fx=material?MatFX::get(material):nil;
+			if(fx && geometry->numTexCoordSets>1 && fx->getEffects(material)==MatFX::DUAL){
+				auto tex=fx->getDualTexture();if(tex && tex->raster){lightmap=tex->raster;neoFlags|=2;}
+			}
+			if(material && material->texture){
+				char name[64];snprintf(name,sizeof(name),"%s_gloss",material->texture->name);
+				auto tex=gvk.neoTextures->find(name);if(tex && tex->raster){gloss=tex->raster;neoFlags|=4;}
+			}
+			if(fx && fx->getEffectIndex(MatFX::ENVMAP)>=0 && (geometry->flags&Geometry::NORMALS) &&
+			   !gvk.im3dWaterDraw){
+				neoFlags|=8;
+				const float32 spec=fminf(fmaxf(material->surfaceProps.specular,0.0f),1.0f);
+				neoFlags|=uint32(spec*63.0f+0.5f)<<5;
+				auto mask=gvk.neoTextures->find("carreflectionmask");
+				if(mask && mask->raster)gloss=mask->raster;
+			}
+			if(shader==SHADER_SKIN && (geometry->flags&Geometry::LIGHT)) neoFlags|=16;
+			neoSets[0]=getTextureDescriptor(lightmap);neoSets[1]=getTextureDescriptor(gloss);
+			if(neoSets[0]!=boundNeo[0] || neoSets[1]!=boundNeo[1]){
+				vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,4,2,neoSets,0,nil);
+				boundNeo[0]=neoSets[0];boundNeo[1]=neoSets[1];
+			}
+		}
+		push.ambientLight[3]=(gstate.fogEnabled?1.0f:0.0f)+float32(neoFlags);
 		if(material && (geometry->flags & Geometry::MODULATE)){
 			push.materialColour[0] = material->color.red / 255.0f;
 			push.materialColour[1] = material->color.green / 255.0f;
@@ -1107,6 +1139,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			push.surfaceProps[0] = 1.0f;
 			push.surfaceProps[1] = 1.0f;
 		}
+		if(neoFlags&2) push.materialColour[0]=push.materialColour[1]=push.materialColour[2]=1.0f;
 		// The specular coefficient never reached the shaders, so the slot
 		// carries the dynamic-light state for this draw instead, packed as an
 		// exact small integer: bits 0-7 the surface light mask, bits 8-15 the
@@ -1261,7 +1294,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		                   0, sizeof(push), &push);
 
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
-			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic);
+			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic, neoSets);
 		countGpuProfileDraw(drawIndices, header->primType,profileFlags);
 		vkCmdDrawIndexed(commandBuffer, drawIndices, 1,
 		                 inst->offset / 2, 0, 0);

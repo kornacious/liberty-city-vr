@@ -106,6 +106,13 @@ foreach(SHADER rw_world:vert:vertex rw_world:frag:fragment
 	list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
 endforeach()
 
+foreach(NEO_ENV 0 1)
+    set(SHADER_OUTPUTS "")
+    compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment "rw_world_neo${NEO_ENV}_frag"
+        "${LIBRW_SPIRV_DIR}" "${LIBRW_SHADER_DIR}" -DRW_NEO_RESOURCES=1 -DRW_WORLD_EFFECTS_RESOURCES=${NEO_ENV})
+    list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
+endforeach()
+
 set(SHADER_OUTPUTS "")
 compile_shader("${LIBRW_SHADER_DIR}/rw_world.vert" vertex
                "rw_world_instanced_vert" "${LIBRW_SPIRV_DIR}"

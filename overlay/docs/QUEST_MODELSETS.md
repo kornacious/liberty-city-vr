@@ -93,9 +93,39 @@ separately from sample rate.
 
 ### Visual and animation scope
 
-This imports the original Xbox visual collection for the existing Quest Vulkan
-renderer. It does not enable desktop Neo world lightmaps, gloss, rim lighting or
-Xbox reflection behavior. Material support still depends on the active renderer.
+The updated importer adds the Xbox particle settings and Neo resources to the
+Quest Vulkan renderer. Reimport with the current Manager to upgrade an existing
+visual/audio collection; base PC files and saves are preserved.
+
+Particle rows are matched by name and emitted in stable engine-ID order. Xbox's
+extra `CARFLAME_MOVING` type is appended rather than inserted into the PC enum;
+moving burning cars select it, while stationary fires retain `CARFLAME`. The
+existing 68 IDs, including those used by saved particle objects, remain stable.
+
+**Appearance > XBOX NEO MATERIALS** is on by default with Original Xbox and can
+be switched live. It enables authored second-UV world lightmaps, skinned-character
+rim lighting, the 13 road-gloss masks, and vehicle diffuse/specular/Fresnel tuning.
+Hour and weather blending use the three retail tuning tables. The Manager
+fingerprints the raw inputs, converts the DDS effect textures to a portable TXD,
+and writes a bounded binary tuning table. Classic never enables these effects.
+Physical scopes capture and replay each draw's lightmap/gloss descriptors too.
+
+**XBOX RAIN DROPLETS** is a separate opt-in, off by default. This uses the retail
+mask on a shared head-relative visor plane, unprojected independently for each
+eye. It adds bounded rain-driven distortion during immersive gameplay, excludes
+no-rain camera zones, and leaves temporal history undistorted. It is a VR
+adaptation rather than a reproduction of every original camera-lens splash and
+droplet simulation rule.
+
+Vehicle highlights use authored material specularity. Reflective surroundings
+continue to come from the existing Quest **Lighting > Car Reflections** controls;
+this does not introduce the original console's separate environment-camera scene
+render. The Neo mask and Fresnel blend are applied to that existing reflection
+source. This avoids layering two competing reflection implementations. Precise
+console pixel parity and performance acceptance require headset comparison.
+
+Effects require both the updated APK and the newly prepared asset collection.
+Neo controls apply live; Asset Source changes still require a full restart.
 
 PC mission scripts, handling/gameplay data, save formats, cutscene animation
 archives and the Quest frontend remain on the existing foundation. Xbox ANM

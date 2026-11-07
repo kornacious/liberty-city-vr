@@ -29,6 +29,12 @@ static const uint32_t kWorldInstancedVertSpv[] =
 static const uint32_t kWorldVertSpv[] =
 #include "rw_world_vert.h"
 ;
+static const uint32_t kNeo0Spv[] =
+#include "rw_world_neo0_frag.h"
+;
+static const uint32_t kNeo1Spv[] =
+#include "rw_world_neo1_frag.h"
+;
 static const uint32_t kWorldFragSpv[] =
 #include "rw_world_frag.h"
 ;
@@ -142,6 +148,7 @@ struct State
 	VkShaderModule modules[SHADER_COUNT][2];	// [variant][0=vert,1=frag]
 	VkShaderModule im2dCoverageModule;
 	VkShaderModule worldNoEffectsModule;
+	VkShaderModule neoModules[2];
 
 	std::vector<PipelineEntry> pipelines;
 	std::vector<PendingPipeline> pending;
@@ -344,6 +351,7 @@ makePipelineKey(uint32 shader, VkPrimitiveTopology topology)
 	key |= (uint64)(strictIm2D ? 1 : 0) << 21;
 	key |= (uint64)(shader != SHADER_IM2D && worldEffectsActive() ? 1 : 0) << 22;
 	key |= (uint64)(shader == SHADER_IM2D && reflectionCoverageActive() ? 1 : 0) << 23;
+	key |= uint64(gvk.neoEnabled && (shader==SHADER_WORLD || shader==SHADER_SKIN || shader==SHADER_WORLD_INSTANCED))<<24;
 	return key;
 }
 
@@ -768,8 +776,8 @@ stateInit(void)
 	// Every pipeline declares all four sets so they can share one layout;
 	// only the skin pipeline actually binds set 2, and set 3 is only read by
 	// rw_world.frag's reflection block.
-	const VkDescriptorSetLayout layouts[4] = {
-		gs.sceneLayout, gs.textureLayout, gs.boneLayout, gs.envLayout
+	const VkDescriptorSetLayout layouts[6] = {
+		gs.sceneLayout, gs.textureLayout, gs.boneLayout, gs.envLayout, gs.textureLayout, gs.textureLayout
 	};
 	VkPushConstantRange pushRange = {};
 	pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -777,7 +785,7 @@ stateInit(void)
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 4;
+	pipelineLayoutInfo.setLayoutCount = gvk.deviceProperties.limits.maxBoundDescriptorSets>=6?6:4;
 	pipelineLayoutInfo.pSetLayouts = layouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushRange;
@@ -878,6 +886,9 @@ stateInit(void)
 		vkUpdateDescriptorSets(gvk.device, 2, sceneWrites, 0, nil);
 	}
 
+	gs.neoModules[0]=createModule(kNeo0Spv,sizeof(kNeo0Spv));
+	gs.neoModules[1]=createModule(kNeo1Spv,sizeof(kNeo1Spv));
+	if(!gs.neoModules[0] || !gs.neoModules[1]) return 0;
 	gs.modules[SHADER_WORLD][0] = createModule(kWorldVertSpv, sizeof(kWorldVertSpv));
 	gs.modules[SHADER_WORLD][1] = createModule(kWorldFragSpv, sizeof(kWorldFragSpv));
 	gs.modules[SHADER_WORLD_INSTANCED][0] = createModule(kWorldInstancedVertSpv,sizeof(kWorldInstancedVertSpv));
@@ -1050,6 +1061,7 @@ stateShutdown(void)
 	if(gs.worldNoEffectsModule)
 		vkDestroyShaderModule(gvk.device, gs.worldNoEffectsModule, nil);
 	gs.worldNoEffectsModule = VK_NULL_HANDLE;
+	for(auto &module:gs.neoModules){if(module) vkDestroyShaderModule(gvk.device,module,nil);module=VK_NULL_HANDLE;}
 
 	// SHADER_IM3D's fragment module aliases SHADER_WORLD's, so it must not be
 	// destroyed twice.
@@ -1201,7 +1213,7 @@ readAndResetCoverage(uint32 out[16])
 static VkPipeline
 findEffectsOffFallback(uint64 key)
 {
-	const uint64 effectBits = (uint64(1) << 22) | (uint64(1) << 23);
+	const uint64 effectBits = (uint64(1) << 22) | (uint64(1) << 23) | (uint64(1) << 24);
 	if((key & effectBits) == 0)
 		return VK_NULL_HANDLE;
 	if((key & (uint64(1) << 23)) != 0)
@@ -1289,6 +1301,7 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 		stages[1].module = gs.worldNoEffectsModule;
 	if((key & (uint64(1) << 23)) != 0)
 		stages[1].module = gs.im2dCoverageModule;
+	if(key & (uint64(1)<<24)) stages[1].module=gs.neoModules[(key>>22)&1];
 	stages[1].pName = "main";
 	stages[1].pSpecializationInfo = &specInfo;
 
@@ -1297,7 +1310,7 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	binding.binding = 0;
 	binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	VkVertexInputAttributeDescription attributes[8] = {};
+	VkVertexInputAttributeDescription attributes[9] = {};
 	uint32 attributeCount = 0;
 
 	if(shader == SHADER_WORLD || shader == SHADER_WORLD_INSTANCED){
@@ -1310,11 +1323,12 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 		                  (uint32)offsetof(WorldVertex, colour) };
 		attributes[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,
 		                  (uint32)offsetof(WorldVertex, texCoord) };
-		attributeCount = 4;
+		attributes[4]={8,0,VK_FORMAT_R32G32_SFLOAT,(uint32)offsetof(WorldVertex,texCoord1)};
+		attributeCount = 5;
 		if(shader==SHADER_WORLD_INSTANCED){
 			for(uint32 column=0;column<4;++column)
-				attributes[4+column]={4+column,1,VK_FORMAT_R32G32B32A32_SFLOAT,column*16};
-			attributeCount=8;
+				attributes[5+column]={4+column,1,VK_FORMAT_R32G32B32A32_SFLOAT,column*16};
+			attributeCount=9;
 		}
 	}else if(shader == SHADER_SKIN){
 		binding.stride = sizeof(SkinVertex);
@@ -1552,6 +1566,8 @@ retireRasterTextureDescriptors(VulkanRaster *native)
 		retireTextureDescriptorSets(&entry.set, 1);
 	textureDescriptors.erase(found);
 }
+
+VkImageView getFallbackTextureView(void) { return gs.whiteView; }
 
 VkDescriptorSet
 getTextureDescriptor(Raster *raster)

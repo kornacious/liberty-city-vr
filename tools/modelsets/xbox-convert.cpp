@@ -165,6 +165,22 @@ static void convert(const fs::path &input,const fs::path &output) {
 int main(int argc,char **argv) {
     try {
         if(argc==2 && std::strcmp(argv[1],"--self-test")==0) {decoderTest();return 0;}
+        if(argc==4 && std::strcmp(argv[1],"--neo")==0) {
+            init(); auto dict=rw::TexDictionary::create();unsigned count=0;
+            for(auto &entry:fs::directory_iterator(argv[2])) {
+                if(entry.path().extension()!=".png") continue;
+                auto img=rw::readPNG(entry.path().string().c_str());
+                if(!img) throw std::runtime_error("Invalid Neo image");
+                auto raster=rw::Raster::createFromImage(img,rw::PLATFORM_D3D8);img->destroy();
+                if(!raster) throw std::runtime_error("Cannot create Neo raster");
+                auto tex=rw::Texture::create(raster);auto name=entry.path().stem().string();
+                if(name.size()>=32) throw std::runtime_error("Neo texture name too long");
+                std::strcpy(tex->name,name.c_str());tex->setFilter(rw::Texture::LINEAR);dict->add(tex);count++;
+            }
+            if(count!=15) throw std::runtime_error("Incomplete Neo image collection");
+            rw::StreamFile output;if(!output.open(argv[3],"wb")) throw std::runtime_error("Cannot create Neo dictionary");
+            dict->streamWrite(&output);output.close();dict->destroy();verify(argv[3]);return 0;
+        }
         if(argc!=3) throw std::runtime_error("Usage: xbox-convert INPUT_DIRECTORY OUTPUT_DIRECTORY");
         init();unsigned count=0;
         for(auto &entry:fs::recursive_directory_iterator(argv[1])) {

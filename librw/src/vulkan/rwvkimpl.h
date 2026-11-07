@@ -100,6 +100,8 @@ struct MotionUniformData
 	// xy = current SGSR2 Halton jitter in render pixels,
 	// z = horizontal tan-half-FOV approximation, w = history reset.
 	float32 sgsrParams[4];
+	float32 dropClipToHead[2][16];
+	float32 dropParams[4];
 };
 
 // Everything the GPU may still be reading after a frame is submitted lives
@@ -336,6 +338,10 @@ struct Globals
 	float32 waterSunColour[3];
 	// The seven WATER sliders in SceneData order; see setWaterParams.
 	float32 waterParams[8];
+	TexDictionary *neoTextures;
+	float32 neoValues[22];
+	bool32 neoEnabled;
+	float32 neoDropletRain;
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	// Culling visualizer: the master switch, and the flat colour index the
 	// next world draw is tinted with (1..4, 0 = untinted).
@@ -408,6 +414,7 @@ struct WorldVertex
 	float32 normal[3];
 	uint8 colour[4];
 	float32 texCoord[2];
+	float32 texCoord1[2];
 };
 
 // Skinned geometry: the world vertex plus the four bone weights and indices
@@ -483,6 +490,8 @@ struct SceneData
 	// speed, distortion, reflection / sheen, glint, sparks, unused.
 	float32 waterParams1[4];
 	float32 waterParams2[4];
+	float32 neoRimStart[4], neoRimEnd[4], neoParams[4];
+	float32 neoVehicle[4], neoDiffuse[4], neoSpec[4], neoControl[4];
 #if defined(MIAMIVR_DEV_TOOLS) && MIAMIVR_DEV_TOOLS
 	// Culling visualizer: x != 0 puts every world draw into flat debug
 	// colour, its index carried per draw in surfaceProps.z. Zero in play.
@@ -514,7 +523,7 @@ struct PushConstants
 bool32 capturePhysicalScopeDraw(VkPipeline pipeline, VkDescriptorSet texture,
     const PushConstants &push, VkBuffer vertices, VkDeviceSize vertexOffset,
     VkBuffer indices, VkDeviceSize indexOffset, uint32 count, uint32 first,
-    const uint32 *boneOffset = nil, Atomic *atomic = nil);
+    const uint32 *boneOffset = nil, Atomic *atomic = nil, const VkDescriptorSet *neoTextures = nil);
 bool32 physicalScopeCaptureActive(void);
 VkDescriptorSet uploadPhysicalScopeScene(const SceneData &scene);
 
@@ -568,6 +577,7 @@ VkPipelineLayout getPipelineLayout(void);
 
 // Descriptor set 1 for a raster, or the 1x1 white fallback when raster is nil.
 VkDescriptorSet getTextureDescriptor(Raster *raster);
+VkImageView getFallbackTextureView(void);
 VkDescriptorSet getSceneDescriptor(void);
 
 // Descriptor set 2: the bone matrix block, a dynamic uniform buffer aliased

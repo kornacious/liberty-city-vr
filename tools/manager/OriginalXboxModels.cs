@@ -34,7 +34,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
         if (info.GetValueOrDefault("Profile") != "MODERN" || info.GetValueOrDefault("Source") != Identity ||
             info.GetValueOrDefault("BuilderVersion") != Disc.BuilderVersion) throw new InvalidDataException("Expected a verified Original Xbox US overlay.");
         var hashes = info.Where(p => p.Key.StartsWith("SHA256 ", StringComparison.Ordinal)).ToDictionary(p => p.Key[7..], p => p.Value);
-        string[] required = ["models/gta3.img", "models/gta3.dir", "models/generic/player.bmp", "models/generic.txd", "data/default.ide", "vegetation_models.txt", "vehicle_models.txt", "asset_categories.json"];
+        string[] required = ["models/gta3.img", "models/gta3.dir", "models/generic/player.bmp", "models/generic.txd", "data/default.ide", "data/particle.cfg", "neo/tuning.bin", "neo/neo.txd", "vegetation_models.txt", "vehicle_models.txt", "asset_categories.json"];
         if (required.Concat(OriginalXboxAudio.RequiredFiles).Any(p => !hashes.ContainsKey(p))) throw new InvalidDataException("Original Xbox manifest lacks required files. Reimport your ISO to include audio.");
         if (!File.ReadAllLines(Path.Combine(root, "audio/READY.txt")).SequenceEqual(new[] { OriginalXboxAudio.Identity }.Concat(OriginalXboxAudio.RequiredFiles.Where(p => p != "audio/READY.txt").Order(StringComparer.Ordinal))))
             throw new InvalidDataException("Invalid Xbox audio inventory.");
@@ -100,7 +100,9 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
                     var target = Paths.Child(stage, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
                 }
             }
+            File.WriteAllText(Path.Combine(stage, "data/particle.cfg"), OriginalXboxParticles.Normalize(File.ReadAllText(Path.Combine(discRoot, "data/particle.cfg"))));
             var converter = await Converter(token);
+            await OriginalXboxEffects.Prepare(settings, runner, discRoot, stage, scratch, converter, token);
             log.Write($"Converting {selected.Length} archived assets and loose dictionaries/models; preserving original dimensions and mip levels.");
             var conversion = await runner.Run(converter, [raw, stage], showOutput: false, check: false, token: token);
             if (conversion.ExitCode != 0)
@@ -131,7 +133,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
                 source = Disc.Disc, entries = selected.Length, vehicles = vehicles.Count, vegetation = vegetation.Count,
                 audio = "Xbox SFX decoded to PCM16 with rebuilt SDT; speech and nine radio stations decoded to lossless FLAC at their authored rates",
                 excluded = "Xbox executable, scripts, console frontend, cutscene ANM/hand extensions; identical PC gameplay and cutscene animation archives retained",
-                rendering = "Quest Vulkan; desktop Neo effects are not enabled by importing assets"
+                rendering = "Quest Vulkan Neo adaptation: Xbox particles, world lightmaps, rim lighting, road gloss and vehicle highlights; optional stereo visor rain droplets; Quest reflection source retained"
             }, new JsonSerializerOptions { WriteIndented = true }));
             List<string> manifest = ["Profile=MODERN", "Source=" + Identity, "BuilderVersion=" + Disc.BuilderVersion];
             foreach (var file in SafeFiles(stage).Order(StringComparer.Ordinal)) manifest.Add("SHA256 " + Path.GetRelativePath(stage, file).Replace('\\', '/') + "=" + Digests.Sha256(file));

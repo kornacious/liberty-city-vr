@@ -24,8 +24,11 @@ layout(std140, set = 0, binding = 3) uniform MotionData {
 	// xy = scene size, z = history valid, w = temporal mode.
 	vec4 temporalParams;
 	vec4 sgsrParams;
+	mat4 dropClipToHead[2];
+	vec4 dropParams;
 } temporal;
 layout(set = 0, binding = 4) uniform sampler2DArray sceneHistory;
+layout(set=0,binding=5) uniform sampler2D dropletMask;
 
 layout(push_constant) uniform PostFxConstants
 {
@@ -40,8 +43,35 @@ layout(location = 0) out vec4 outColour;
 // pipelines discard this output and therefore retain their exact behaviour.
 layout(location = 1) out vec4 outResolvedHistory;
 
+float DropHash(vec2 cell) { return fract(sin(dot(cell,vec2(127.1,311.7)))*43758.5453); }
+vec3 VisorDroplets(vec3 colour)
+{
+	if(temporal.dropParams.y<=0.0) return colour;
+	vec2 uv=gl_FragCoord.xy/vec2(postFx.upscale.xy);
+	vec2 ndc=uv*2.0-1.0;
+	mat4 unproject=temporal.dropClipToHead[gl_ViewIndex];
+	vec4 a=unproject*vec4(ndc,0.0,1.0),b=unproject*vec4(ndc,0.5,1.0);
+	if(abs(a.w)<1e-6 || abs(b.w)<1e-6) return colour;
+	vec3 start=a.xyz/a.w,ray=b.xyz/b.w-start;
+	if(abs(ray.z)<1e-6) return colour;
+	vec2 visor=(start+ray*((-0.6-start.z)/ray.z)).xy;
+	vec2 cell=floor(visor/0.12),local=fract(visor/0.12);
+	float seed=DropHash(cell),phase=fract(temporal.dropParams.x*0.10+seed);
+	if(seed>temporal.dropParams.y*0.65) return colour;
+	vec2 centre=vec2(0.25+0.5*DropHash(cell+2.0),0.2+0.6*phase);
+	vec2 q=(local-centre)/vec2(0.15,0.23);
+	if(dot(q,q)>1.0) return colour;
+	float fade=smoothstep(0.0,0.1,phase)*(1.0-smoothstep(0.7,1.0,phase));
+	float mask=texture(dropletMask,q*0.5+0.5).r*fade;
+	vec2 offset=q*mask*0.003;
+	vec3 original=texture(sceneColour,vec3(uv,float(gl_ViewIndex))).rgb;
+	vec3 warped=texture(sceneColour,vec3(clamp(uv+offset,vec2(0.001),vec2(0.999)),float(gl_ViewIndex))).rgb;
+	return max(colour+(warped-original)*mask,vec3(0.0));
+}
+
 vec4 DisplayColour(vec4 colour)
 {
+	colour.rgb=VisorDroplets(colour.rgb);
 	return vec4(mix(colour.rgb, postFx.screenFade.rgb,
 	                postFx.screenFade.a), colour.a);
 }

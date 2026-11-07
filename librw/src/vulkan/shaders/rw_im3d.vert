@@ -41,7 +41,7 @@ void main()
 	// player instead of sitting still in the world.
 	vec3 viewOffset = world.xyz - scene.im2dParams.yzw;
 	float fogDistance = length(viewOffset);
-	float fogFactor = (scene.fogParams.w * push.ambientLight.w) > 0.5 ?
+	float fogFactor = (scene.fogParams.w * float(int(push.ambientLight.w) & 1)) > 0.5 ?
 		clamp((scene.fogParams.y - fogDistance) * scene.fogParams.z, 0.0, 1.0) :
 		1.0;
 	float elevation = fogDistance > 1e-4 ? (viewOffset.y / fogDistance) : 0.0;

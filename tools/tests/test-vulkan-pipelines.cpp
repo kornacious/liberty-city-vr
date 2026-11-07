@@ -13,7 +13,7 @@ using VkPipeline = uint64;
 using VkPrimitiveTopology = uint32;
 #define nil nullptr
 enum { VK_NULL_HANDLE = 0, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 3,
-    SHADER_WORLD = 0, SHADER_IM2D, SHADER_IM3D, SHADER_SKIN, SHADER_COUNT,
+    SHADER_WORLD = 0, SHADER_IM2D, SHADER_IM3D, SHADER_SKIN, SHADER_WORLD_INSTANCED, SHADER_COUNT,
     BLENDZERO = 1, BLENDONE = 2, BLENDSRCALPHA = 5, BLENDINVSRCALPHA = 6,
     CULLNONE = 1, CULLBACK = 2, ALPHAALWAYS = 1, ALPHAGREATEREQUAL = 2 };
 struct RenderState {
@@ -27,7 +27,7 @@ static bool reflectionCoverageActive() { return effects; }
 static bool getImmediate2DStrictDepth() { return strict; }
 #include "vulkan-pipelines-types.inc"
 static struct { std::vector<PipelineEntry> pipelines; std::vector<PendingPipeline> pending; } gs;
-static struct { bool inFrame = false; } gvk;
+static struct { bool inFrame = false; bool neoEnabled = false; } gvk;
 static FrameBeginStats gFrameBeginStats{};
 static uint64 failKey;
 static std::set<uint64> warmed;
@@ -62,6 +62,7 @@ int main()
     assert(std::memcmp(&saved, &gstate, sizeof(gstate)) == 0);
     // Fading meshes must be ready before the first gameplay frame.
     for(uint32 shader = SHADER_WORLD; shader < SHADER_COUNT; ++shader) {
+        if(shader==SHADER_WORLD_INSTANCED) continue; // opaque depth-writing draws only
         gstate.zTestEnabled = 1; gstate.zWriteEnabled = 0;
         assert(warmed.count(makePipelineKey(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) == 1);
     }
@@ -73,6 +74,12 @@ int main()
     effects = true;
     assert(makePipelineKey(SHADER_WORLD, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) != plain);
     effects = false;
+    gvk.neoEnabled=true;
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)!=(plain));
+    assert(makePipelineKey(SHADER_SKIN,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)&(uint64(1)<<24));
+    assert(!(makePipelineKey(SHADER_IM2D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)&(uint64(1)<<24)));
+    assert(!(makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)&(uint64(1)<<24)));
+    gvk.neoEnabled=false;
     const RenderState before = gstate;
     gs.pending = {{1, SHADER_WORLD, 3, saved}, {2, SHADER_WORLD, 3, saved}, {3, SHADER_WORLD, 3, saved}};
     gs.pipelines.push_back({3, 13});

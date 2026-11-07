@@ -1,0 +1,83 @@
+diff --git a/src/renderer/ParticleType.h b/src/renderer/ParticleType.h
+--- a/src/renderer/ParticleType.h
++++ b/src/renderer/ParticleType.h
+@@ -73,7 +73,9 @@
+ 	PARTICLE_RAINDROP_2D,
+ 	
++	// Append to preserve every Classic particle ID. Manager reorders Xbox rows by name.
++	PARTICLE_CARFLAME_MOVING,
+ 	MAX_PARTICLES,
+ 	PARTICLE_FIRST = PARTICLE_SPARK,
+-	PARTICLE_LAST = PARTICLE_RAINDROP_2D
++	PARTICLE_LAST = PARTICLE_CARFLAME_MOVING
+ };
+ 
+diff --git a/src/renderer/ParticleMgr.h b/src/renderer/ParticleMgr.h
+--- a/src/renderer/ParticleMgr.h
++++ b/src/renderer/ParticleMgr.h
+@@ -127,5 +127,5 @@
+ };
+ 
+-VALIDATE_SIZE(cParticleSystemMgr, 0x2420);
++VALIDATE_SIZE(cParticleSystemMgr, 0x24A8);
+ 
+ extern cParticleSystemMgr mod_ParticleSystemManager;
+diff --git a/src/renderer/ParticleMgr.cpp b/src/renderer/ParticleMgr.cpp
+--- a/src/renderer/ParticleMgr.cpp
++++ b/src/renderer/ParticleMgr.cpp
+@@ -3,4 +3,5 @@
+ #include "main.h"
+ #include "FileMgr.h"
++#include "ModelSets.h"
+ #include "ParticleMgr.h"
+ 
+@@ -24,7 +25,13 @@
+ void cParticleSystemMgr::LoadParticleData()
+ {
+-	CFileMgr::SetDir("DATA");
+-	CFileMgr::LoadFile(ParticleFilename, work_buff, ARRAY_SIZE(work_buff), "r");
+-	CFileMgr::SetDir("");
++	char selected[1024];
++	if(ModelSets::UseXboxParticles()){
++		CFileMgr::SetDir("");
++		CFileMgr::LoadFile(ModelSets::ResolveAssetPath("data/particle.cfg", selected, sizeof(selected)), work_buff, ARRAY_SIZE(work_buff), "r");
++	}else{
++		CFileMgr::SetDir("DATA");
++		CFileMgr::LoadFile(ParticleFilename, work_buff, ARRAY_SIZE(work_buff), "r");
++		CFileMgr::SetDir("");
++	}
+ 	
+ 	tParticleSystemData *entry = nil;
+@@ -245,3 +252,8 @@
+ 		lineEnd++;
+ 	}
++	if(!ModelSets::UseXboxParticles()){
++		m_aParticles[PARTICLE_CARFLAME_MOVING] = m_aParticles[PARTICLE_CARFLAME];
++		m_aParticles[PARTICLE_CARFLAME_MOVING].m_Type = PARTICLE_CARFLAME_MOVING;
++	}
++
+ }
+diff --git a/src/renderer/Particle.cpp b/src/renderer/Particle.cpp
+--- a/src/renderer/Particle.cpp
++++ b/src/renderer/Particle.cpp
+@@ -469,4 +469,5 @@
+ 			case PARTICLE_FLAME:
+ 			case PARTICLE_CARFLAME:
++			case PARTICLE_CARFLAME_MOVING:
+ 				entry->m_ppRaster = &gpFlame1Raster;
+ 				break;
+diff --git a/src/vehicles/Automobile.cpp b/src/vehicles/Automobile.cpp
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1,3 +1,4 @@
+ #include "common.h"
++#include "ModelSets.h"
+ #ifdef __ANDROID__
+ #include "QuestSirenInput.h"
+@@ -1174,5 +1175,5 @@
+ 		// Car is on fire
+ 
+-		CParticle::AddParticle(PARTICLE_CARFLAME, damagePos,
++		CParticle::AddParticle(ModelSets::UseXboxParticles() && m_vecMoveSpeed.MagnitudeSqr() > 0.01f ? PARTICLE_CARFLAME_MOVING : PARTICLE_CARFLAME, damagePos,
+ 			CVector(0.0f, 0.0f, CGeneral::GetRandomNumberInRange(0.01125f, 0.09f)),
+ 			nil, 0.9f);

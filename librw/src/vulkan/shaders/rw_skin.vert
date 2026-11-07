@@ -23,6 +23,7 @@ layout(location = 2) out vec2 fragFog;
 layout(location = 3) flat out vec2 fragDynamicMotion;
 layout(location = 4) out vec3 fragWorldPos;
 layout(location = 5) out vec3 fragNormal;
+layout(location = 6) out vec2 fragTexCoord1;
 
 layout(set = 2, binding = 0) uniform BoneData {
 	mat4 bone[RW_MAX_BONES];
@@ -49,15 +50,22 @@ void main()
 	vec3 normal = normalize(mat3(model) * mat3(pose) * inNormal);
 	vec3 colour = inColour.rgb + push.ambientLight.rgb * push.surfaceProps.x;
 	vec4 dirColour = unpackUnorm4x8(floatBitsToUint(push.lightDirColour.w));
+	if(scene.neoControl.x>0.5 && (int(push.ambientLight.w)&8)!=0) dirColour.rgb=scene.neoDiffuse.rgb*scene.neoSpec.a;
 	colour += dirColour.rgb *
 	          max(dot(normal, -push.lightDirColour.xyz), 0.0) *
 	          push.surfaceProps.y;
 
+	if(scene.neoControl.x > 0.5 && (int(push.ambientLight.w) & 16) != 0){
+		vec3 toEye=normalize(scene.im2dParams.yzw-world.xyz);
+		float f=scene.neoParams.y-scene.neoParams.z*dot(normal,toEye);
+		colour+=clamp(mix(scene.neoRimEnd.rgb,scene.neoRimStart.rgb,f)*scene.neoParams.w,0.0,1.0);
+	}
 	fragColour = vec4(clamp(colour, 0.0, 1.0), inColour.a) * push.materialColour;
 	fragTexCoord = inTexCoord;
+	fragTexCoord1 = vec2(0.0);
 	// For the per-pixel dynamic lights; skinned meshes always carry real
 	// normals, so the fragment stage uses this one as it is.
-	if(RW_WORLD_EFFECTS != 0){
+	if(RW_WORLD_EFFECTS != 0 || scene.neoControl.x > 0.5){
 		fragWorldPos = world.xyz;
 		fragNormal = normal;
 	}
@@ -68,7 +76,7 @@ void main()
 	// player instead of sitting still in the world.
 	vec3 viewOffset = world.xyz - scene.im2dParams.yzw;
 	float fogDistance = length(viewOffset);
-	float fogFactor = (scene.fogParams.w * push.ambientLight.w) > 0.5 ?
+	float fogFactor = (scene.fogParams.w * float(int(push.ambientLight.w) & 1)) > 0.5 ?
 		clamp((scene.fogParams.y - fogDistance) * scene.fogParams.z, 0.0, 1.0) :
 		1.0;
 	float elevation = fogDistance > 1e-4 ? (viewOffset.y / fogDistance) : 0.0;

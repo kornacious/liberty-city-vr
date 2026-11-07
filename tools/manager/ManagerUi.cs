@@ -148,7 +148,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 break;
             case 3:
                 options.DownloadModels = false; options.ModelSource = "";
-                Note("Import original Xbox GTA III US 1.0 visuals, speech, sound effects and radio from your local disc image. Requires FFmpeg/ffprobe. No game downloads.");
+                Note("Import Xbox US 1.0 visuals, particles, Neo effects and audio from your local ISO. Requires FFmpeg/ffprobe. No game downloads.");
                 Note("Conversion requires CMake, Ninja and C++ build tools (Visual Studio C++ on Windows).");
                 Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
                 Field("Output folder named modern (blank: workplace)", options.ModelOutput, v => options.ModelOutput = v, OpenMode.Directory, false);
