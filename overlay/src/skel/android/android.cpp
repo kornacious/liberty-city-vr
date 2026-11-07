@@ -1456,7 +1456,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	}
 	entryCameraPlayer=player;entryCameraActive=xboxCarEntry;
 	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson &&
-		((trainPassenger && player->InVehicle()) ||
+		((trainPassenger && (player->InVehicle() ||
+		  (ModelSets::IsModernActive() && playerVehicleState==PED_EXIT_TRAIN))) ||
 		 xboxCarEntry || (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
 	rw::vulkan::setFirstPersonHeightLocked(wantFirstPerson && !thirdPersonVehicle &&
 		ModelSets::IsModernActive() && !player->InVehicle() && player->bIsDucking && !xboxKnockdown);
@@ -1965,7 +1966,15 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			// Preserve the train's carriage-relative boarding-side window turn.
 			// Passenger entity forward need not match the skinned standing pose.
 			CVector heading = trainPassenger && gVrInVehicle ? forward : player->GetForward(), vertical(0,0,1);
-			if(gVrInVehicle && player->m_pMyVehicle != nil){
+			if(trainPassenger && playerVehicleState==PED_EXIT_TRAIN && player->m_pMyVehicle!=nil){
+				// Exit clears the riding flag before the animation completes.
+				// Keep facing away from the carriage on the occupied side;
+				// entity/gameplay forward can face inward during this lineup.
+				CVehicle *train=player->m_pMyVehicle;
+				const CVector right=train->GetRight();
+				heading=right*(DotProduct(boneHead-train->GetPosition(),right)<0.0f ? -1.0f : 1.0f);
+				vertical=train->GetUp();
+			}else if(gVrInVehicle && player->m_pMyVehicle != nil){
 				CVehicle *carrier = player->m_pMyVehicle;
 				if(!trainPassenger) heading = carrier->GetForward();
 				vertical = carrier->GetUp();

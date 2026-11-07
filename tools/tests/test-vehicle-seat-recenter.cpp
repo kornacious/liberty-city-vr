@@ -452,8 +452,16 @@ static void XboxTrainWindowFacing(){
  }
  Head(.7f,1.4f,-.2f,1.5f);++CTimer::frame;publish(true);
  Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"passenger can look away from window without forced recenter every frame");
+ p.inVehicle=false;p.state=PED_EXIT_TRAIN;EvaluateSeat(true);
+ Check(rw::vulkan::gFirstPersonPositionLocked,"Xbox exit keeps head position locked after vehicle occupancy clears");
+ const CVector exitEye=Eye();Head(1.2f,.8f,-.9f,1.1f);EvaluateSeat(true);
+ const CVector movedExitEye=Eye();
+ Check(Near(exitEye.x,movedExitEye.x)&&Near(exitEye.y,movedExitEye.y)&&Near(exitEye.z,movedExitEye.z),"physical translation cannot detach camera during Xbox train exit");
+ Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"Xbox exit preserves passenger heading calibration");
  p.inVehicle=false;p.state=PED_IDLE;EvaluateSeat(true);EvaluateTrain(true,head,forward);
  Check(!rw::vulkan::gFirstPersonPositionLocked,"leaving passenger context restores ordinary tracking policy");
+ ModelSets::modern=false;p.state=PED_EXIT_TRAIN;EvaluateSeat(true);
+ Check(!rw::vulkan::gFirstPersonPositionLocked,"Classic late train exit retains its existing tracking policy");
  trainNeckReady=false;ModelSets::modern=false;
 }
 

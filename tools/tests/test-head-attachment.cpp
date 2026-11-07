@@ -25,6 +25,7 @@ static unsigned rwUpdates,animUpdates,checks;
 struct CVehicle {
     CMatrix matrix;
     CVector GetForward(){return matrix.f;} CVector GetUp(){return matrix.u;}
+    CVector GetRight(){return matrix.r;} CVector GetPosition(){return matrix.p;}
     bool IsBike(){return false;}
 };
 struct CPed {
@@ -55,7 +56,7 @@ static struct {void Reset(){++resets;}} gCrouchView,gKnockdownView;
 static CVector submittedHead,submittedRight,submittedUp,submittedForward;
 static CVector gVrOnFootSkeletonHead;
 static float Atan2(float y,float x){return std::atan2(y,x);}
-enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR};
+enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_EXIT_TRAIN};
 static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
 static int playerVehicleState=PED_IDLE;
 static bool PlayerKnockedDown(CPed*){return knockedDown;}
@@ -241,5 +242,20 @@ int main(){
     player.vehicle=gVrInVehicle=false;player.m_pMyVehicle=nullptr;playerVehicleState=PED_IDLE;
     ++CTimer::frame;Final(&player,false,p,f);
     Near(submittedUp,{0,0,1},"cancelled/finished entry does not leak animation tilt into on-foot comfort view");
+    train.matrix=CMatrix();player.m_pMyVehicle=&train;player.vehicle=gVrInVehicle=false;
+    trainPassenger=vehicleTransition=headModeOnFoot=true;playerVehicleState=PED_EXIT_TRAIN;
+    androidgame::eyeOffset={.02f,.06f,.08f};
+    for(float side:{-1.0f,1.0f})for(int step=0;step<36;++step){
+        const float angle=float(step)*.1745329252f;train.matrix.r={std::cos(angle),std::sin(angle),0};train.matrix.f={-std::sin(angle),std::cos(angle),0};
+        player.root=train.matrix;nativeHead.pos=player.root*CVector(side*.7f,.1f,1.8f);
+        f=-train.matrix.r*side;TheCamera.Cams[0].Front=f;
+        ++CTimer::frame;Final(&player,false,p,f);
+        const CVector outward=train.matrix.r*side,right=CrossProduct(outward,train.matrix.u);
+        Near(submittedForward,outward,"train exit stays outward on either carriage side despite inward gameplay heading");
+        Near(submittedHead,nativeHead.pos+outward*.06f+train.matrix.u*.08f+right*.02f,"train exit eye fit remains attached in the outward basis");
+    }
+    trainPassenger=vehicleTransition=false;playerVehicleState=PED_IDLE;player.m_pMyVehicle=nullptr;
+    TheCamera.Cams[0].Front={0,1,0};++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedForward,{0,1,0},"completed train exit restores on-foot heading policy");
     std::printf("PASS %u native head attachment and final camera checks\n",checks);
 }

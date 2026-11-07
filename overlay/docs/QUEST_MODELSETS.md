@@ -93,8 +93,10 @@ the boarding-side windows over 300 ms. The Xbox camera override uses that window
 heading instead of the passenger entity's forward axis. Eye fit is applied along
 the outward basis at the live head; a frozen first-boarded pose cannot leave the
 camera behind the standing body. Physical looking remains additive while riding,
-and the existing passenger position lock remains active. Classic train behavior
-is unchanged.
+and the existing passenger position lock remains active. During train exit, the
+camera retains the occupied carriage side's outward heading and head position
+lock until the exit state ends, including after vehicle occupancy clears. The
+ordinary on-foot camera then resumes. Classic train behavior is unchanged.
 
 Head hiding, body IK, tracked weapons and holsters share the resulting view
 anchor. Vehicle-transition fallbacks never read skinned animation keys as rigid
