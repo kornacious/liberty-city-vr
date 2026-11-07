@@ -6,6 +6,17 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-quest-surrender.cpp` compiles as C++17 with `overlay/src/vr` on the
+include path. Extract `static void UpdateSurrender(bool blocked)` from
+`QuestWeaponVR.cpp`, ending before the following `} // namespace`, into
+`quest-surrender-production.inc` on the include path. The fixture executes
+the production gesture and officer scan: three-second holds, shooting and
+punching officers, wanted/ignore flags, officer target/state/range, obstructed
+sight, unavailable officers, control/vehicle/menu/tracking gates, interrupted
+holds, suspended frames, timer rollover and duplicate arrest prevention.
+No game data is read. In-game gesture comfort, native Busted presentation and
+police-station restart still require headset QA.
+
 `test-shop-transition.cpp` compiles with the assembled `src/control` include
 path, with and without `__ANDROID__`. Extract the `shopTransitionParams`
 block from `Script.cpp` (ending before `USE_ADVANCED_SCRIPT_DEBUG_OUTPUT`)

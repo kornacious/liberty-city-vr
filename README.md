@@ -142,6 +142,11 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   aiming and physical steering for cars and boats.
 - Remappable face buttons, grips and stick clicks; a swapped-hands layout;
   per-weapon and per-seat calibration.
+- Hands-up surrender: while wanted and on foot, hold both tracked hands at
+  head height or higher, within 65 cm of each other, for three seconds. A law
+  enforcement officer attacking Claude within 15 metres and with clear sight
+  triggers the normal Busted sequence. Lowering either hand, losing tracking,
+  opening a menu or leaving combat resets the hold.
 - The Dodo uses powered fixed-wing flight on Quest. Hold the right trigger to
   build runway speed, then gently pull the left stick back to take off. Use
   left/right to bank, forward/back to pitch, and the left trigger to reduce

@@ -4,6 +4,10 @@
 
 #include "OculusVR.h"
 #include "QuestRadio.h"
+#include "QuestSurrender.h"
+#include "CopPed.h"
+#include "Pools.h"
+#include "Wanted.h"
 #include "VrBodyIK.h"
 
 #include "android.h"
@@ -457,6 +461,8 @@ IsGameplayAvailable()
 {
 	CPlayerPed *player = FindPlayerPed();
 	return gVrFirstPersonActive && player && !player->DyingOrDead() &&
+		player->GetPedState() != PED_ARRESTED &&
+		CWorld::Players[CWorld::PlayerInFocus].m_WBState == WBSTATE_PLAYING &&
 		!androidgame::VrKnockdownPresentationActive() &&
 		!FrontEndMenuManager.m_bMenuActive &&
 		!CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing() &&
@@ -2710,6 +2716,55 @@ ResetKnockdownInteraction()
 	gBodyForwardValid = false;
 }
 
+static void
+UpdateSurrender(bool blocked)
+{
+	static QuestSurrender::Hold hold;
+	CPlayerPed *player = FindPlayerPed();
+	if(blocked || !AreTrackedHandsEnabled() || !player ||
+	   !player->IsPedInControl() || FindPlayerVehicle() ||
+	   CPad::GetPad(0)->DisablePlayerControls ||
+	   CWorld::Players[CWorld::PlayerInFocus].m_WBState != WBSTATE_PLAYING ||
+	   !player->m_pWanted || player->m_pWanted->GetWantedLevel() == 0 ||
+	   player->m_pWanted->IsIgnoredByCops() || player->m_pWanted->m_bIgnoredByEveryone ||
+	   !gPoseValid[0] || !gPoseValid[1]){
+		hold.Reset();
+		return;
+	}
+	float right[3], up[3], at[3], position[3];
+	if(!rw::vulkan::getFirstPersonViewFrame(right, up, at, position) ||
+	   !QuestSurrender::HandsRaised(gGripMatrix[0].GetPosition(),
+	       gGripMatrix[1].GetPosition(), VectorFromArray(position))){
+		hold.Reset();
+		return;
+	}
+	// Scan live pool entries each frame; never retain a cop pointer over time.
+	// FBI, SWAT and army also use PEDTYPE_COP/CCopPed.
+	CCopPed *arrestingCop = nil;
+	float nearest = 15.0f * 15.0f;
+	CPedPool *pool = CPools::GetPedPool();
+	for(int i = 0; pool && i < pool->GetSize(); ++i){
+		CPed *ped = pool->GetSlot(i);
+		if(!ped || ped->m_nPedType != PEDTYPE_COP) continue;
+		CCopPed *cop = (CCopPed*)ped;
+		if(!cop->IsPedInControl() || cop->InVehicle() ||
+		   cop->m_bIsDisabledCop || cop->m_bZoneDisabled ||
+		   cop->m_pedInObjective != player ||
+		   (cop->GetPedState() != PED_ATTACK && cop->GetPedState() != PED_FIGHT)) continue;
+		const float distance = (cop->GetPosition() - player->GetPosition()).MagnitudeSqr();
+		if(distance > nearest || !CWorld::GetIsLineOfSightClear(
+		   cop->GetPosition() + CVector(0, 0, 1.0f), VectorFromArray(position),
+		   true, false, false, true, false, false)) continue;
+		nearest = distance;
+		arrestingCop = cop;
+	}
+	if(hold.Update(CTimer::GetTimeInMilliseconds(), arrestingCop != nil)){
+		// Native arrest owns invulnerability, cop references and Busted/restart.
+		arrestingCop->SetArrestPlayer(player);
+		ResetInteraction();
+	}
+}
+
 } // namespace
 
 bool
@@ -2721,6 +2776,7 @@ ApplyTouchInput(CControllerState *state)
 	const androidgame::PadInput &input = androidgame::GetPadInput();
 	UpdatePoses(input);
 	const bool menu = androidgame::VrMenuConsumesInput();
+	UpdateSurrender(menu || !IsGameplayAvailable());
 	const bool gameplay = IsGameplayAvailable();
 	// Passenger hands stay free even if a weapon was held when boarding.
 	if(IsQuestTrainPassenger())
