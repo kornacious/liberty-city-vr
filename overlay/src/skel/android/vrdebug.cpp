@@ -2389,7 +2389,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_CONTROLS: return VR_CONTROLS_ITEM_COUNT;
 	case VR_MENU_PAGE_CALIBRATION: return VrWeaponCalibrationMenu::Count(gVrCalibrationGroup);
 	case VR_MENU_PAGE_HOLSTERS:
-		return OculusVR::GetQuestHolsterPointCount()+2;
+		return OculusVR::GetQuestHolsterPointCount()+3;
 	case VR_MENU_PAGE_CHEATS:
 		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+1 :
 			gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
@@ -3992,7 +3992,9 @@ VrDebugUpdate(const PadInput &in)
 					decreasePulse ? -1 : 1);
 			else if(gVrHolsterSelection == points && (positivePulse || decreasePulse))
 				OculusVR::CycleQuestHolsterGrabDistance(decreasePulse ? -1 : 1);
-			else if(gVrHolsterSelection == points+1 && positivePulse)
+			else if(gVrHolsterSelection == points+1 && (positivePulse || decreasePulse))
+				OculusVR::ToggleQuestHolsteredWeaponsVisible();
+			else if(gVrHolsterSelection == points+2 && positivePulse)
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 		}else if(gVrMenuPage == VR_MENU_PAGE_CHEATS){
 			if((increasePulse || decreasePulse) && !selectPulse)
@@ -5156,7 +5158,7 @@ DrawQuestHolsterPage(void)
 	BeginFullVrMenuPage("HOLSTER LOADOUT",
 		"SEVEN BODY POINTS - CENTER SELECTS GRENADE OR MOLOTOV");
 	const int points = OculusVR::GetQuestHolsterPointCount();
-	for(int item = 0; item <= points+1; item++){
+	for(int item = 0; item <= points+2; item++){
 		char row[128];
 		if(item < points){
 			const int slot =
@@ -5168,13 +5170,16 @@ DrawQuestHolsterPage(void)
 		}else if(item == points)
 			snprintf(row, sizeof(row), "FRONT GRAB DISTANCE  < %s >",
 				OculusVR::GetQuestHolsterGrabDistanceName());
+		else if(item == points+1)
+			snprintf(row, sizeof(row), "HOLSTERED WEAPONS  < %s >",
+				OculusVR::AreQuestHolsteredWeaponsVisible() ? "SHOW" : "HIDE");
 		else
 			strcpy(row, "BACK TO SETTINGS");
 		DrawFullVrMenuRow(row, 180+item*48, 3,
 			item == gVrHolsterSelection);
 	}
 	DrawVrMenuText(
-		"CLEAR THE OLD POINT BEFORE MOVING AN ASSIGNED SLOT",
+		"HIDDEN WEAPONS CAN STILL BE GRABBED AT THEIR BODY POINTS",
 		VR_MENU_WIDTH/2, 650, 2, 255, 222, 145);
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B BACK",

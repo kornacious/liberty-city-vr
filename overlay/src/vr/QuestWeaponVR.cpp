@@ -355,6 +355,7 @@ static WeaponCalibration
 static bool gSettingsLoaded;
 static bool gHandsEnabled = true;
 static bool gHolsterHighlights = true;
+static bool gHolsteredWeaponsVisible = true;
 // Metres from front holster anchors. Back/shoulder points keep the full reach.
 static const float kHolsterGrabRadii[] = { 0.27f, 0.20f, 0.14f };
 static int gHolsterGrabDistance = 0;
@@ -503,6 +504,8 @@ LoadSettings()
 	gWeaponLaser = GetPrivateProfileIntA("VR", "WeaponLaser", 0,
 		kSettingsPath) != 0;
 	gHolsterHighlights = GetPrivateProfileIntA("VR", "HolsterHighlights", 0,
+		kSettingsPath) != 0;
+	gHolsteredWeaponsVisible = GetPrivateProfileIntA("VR", "HolsteredWeaponsVisible", 1,
 		kSettingsPath) != 0;
 	gHolsterGrabDistance = clamp((int)(int32)GetPrivateProfileIntA(
 		"VR", "HolsterGrabDistance", 0, kSettingsPath), 0,
@@ -3201,7 +3204,10 @@ ConsumeWeaponHolsterSelection(int hand, int *slot)
 bool
 GetWeaponHolsterMatrix(int slot, CMatrix *matrix, int copy)
 {
-	if(IsQuestTrainPassenger() || !AreTrackedHandsEnabled() ||
+	// Rendering only: input and returns use BuildHolsterMatrix directly so
+	// hidden weapons remain grabbable at their assigned body points.
+	LoadSettings();
+	if(!gHolsteredWeaponsVisible || IsQuestTrainPassenger() || !AreTrackedHandsEnabled() ||
 	   (FindPlayerVehicle() && !IsImmersiveDrivingActive()) ||
 	   (gWeaponHolsterMask & (1u << slot)) == 0)
 		return false;
@@ -4354,6 +4360,22 @@ GetQuestHolsterGrabDistanceName()
 	LoadSettings();
 	static const char *names[] = { "FAR", "MEDIUM", "CLOSE" };
 	return names[gHolsterGrabDistance];
+}
+
+bool
+AreQuestHolsteredWeaponsVisible()
+{
+	LoadSettings();
+	return gHolsteredWeaponsVisible;
+}
+
+void
+ToggleQuestHolsteredWeaponsVisible()
+{
+	LoadSettings();
+	gHolsteredWeaponsVisible = !gHolsteredWeaponsVisible;
+	WritePrivateProfileStringA("VR", "HolsteredWeaponsVisible",
+		gHolsteredWeaponsVisible ? "1" : "0", kSettingsPath);
 }
 
 void

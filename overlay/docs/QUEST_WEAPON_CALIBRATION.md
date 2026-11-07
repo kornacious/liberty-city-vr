@@ -40,6 +40,11 @@ saved VERY CLOSE or PRECISE settings load as CLOSE.
 This controls drawing from holsters; returning and catching weapons retain
 their existing distances.
 
+Holster Loadout also saves **Holstered Weapons: SHOW / HIDE** (SHOW by default).
+HIDE removes all holstered weapon models and their highlights. Grab the usual
+body point to draw its assigned weapon; grab distances and returning weapons
+are unchanged. Held and dropped weapons remain visible.
+
 The centre chest holster cycles through Molotov, grenade and EMPTY; EMPTY is
 saved and leaves that holster unused after restarting.
 
