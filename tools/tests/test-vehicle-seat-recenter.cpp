@@ -36,9 +36,13 @@ struct CVector {
  CVector operator-(CVector b)const{return {x-b.x,y-b.y,z-b.z};}
  CVector operator*(float f)const{return {x*f,y*f,z*f};}
  CVector &operator+=(CVector b){x+=b.x;y+=b.y;z+=b.z;return *this;}
+ CVector &operator*=(float f){x*=f;y*=f;z*=f;return *this;}
+ float MagnitudeSqr()const{return x*x+y*y+z*z;}
+ float Heading()const{return std::atan2(-x,y);}
  void Normalise(){float n=std::sqrt(x*x+y*y+z*z);x/=n;y/=n;z/=n;}
 };
 static float Dot(CVector a,CVector b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+static float DotProduct(CVector a,CVector b){return Dot(a,b);}
 static CVector CrossProduct(CVector a,CVector b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 struct CMatrix {
  CVector position,right={1,0,0},forward={0,1,0},up={0,0,1};
@@ -71,16 +75,21 @@ struct CVehicle {
  bool IsTrain(){return train;} CMatrix &GetMatrix(){return matrix;}
  bool IsBike(){return false;}
  CVector GetUp(){return matrix.up;}
+ CVector GetRight(){return matrix.right;} CVector GetPosition(){return matrix.position;}
  int GetModelIndex(){return model;} CVector GetForward(){return matrix.forward;}
 };
 struct CPlayerPed:CEntity {
  bool inVehicle=false,dead=false,bIsDucking=false; int state=0,m_objective=0;
  CVehicle *m_pMyVehicle=nullptr; void *m_rwObject=this,*m_pFrames[64]={};
  CVector position,forward={0,1,0};
+ float m_fRotationCur=0,m_fRotationDest=0;bool isPlayer=true;
+ bool IsPlayer(){return isPlayer;}
+ void SetHeading(float a){forward={-std::sin(a),std::cos(a),0};}
  CVector GetPosition(){return position;} CVector GetForward(){return forward;}
  bool InVehicle(){return inVehicle;} int GetPedState(){return state;} bool DyingOrDead(){return dead;}
  void *GetClump(){return m_rwObject;}
 };
+using CPed=CPlayerPed;
 namespace ModelSets {static bool modern=false;static bool IsModernActive(){return modern;}}
 static bool IsClumpSkinned(void*){return true;}
 static bool testKnockdown;
@@ -97,7 +106,8 @@ struct { bool m_bMenuActive=false,m_bGameNotLoaded=false,m_bWantToRestart=false,
 struct CGame { static bool playingIntro; }; bool CGame::playingIntro;
 struct CCutsceneMgr { static bool running,processing; static bool IsRunning(){return running;} static bool IsCutsceneProcessing(){return processing;} };
 bool CCutsceneMgr::running, CCutsceneMgr::processing;
-struct { bool m_WideScreenOn=false; } TheCamera;
+struct CCam {CVector Front{0,1,0},Up{0,0,1},Source;float Beta=0,m_fTrueBeta=0,m_fTargetBeta=0,BetaSpeed=0;bool Rotating=false;};
+struct { bool m_WideScreenOn=false,m_bUseTransitionBeta=false;int ActiveCam=0;CCam Cams[1];float Orientation=0; } TheCamera;
 static constexpr int GS_PLAYING_GAME=1;
 static int gGameState=GS_PLAYING_GAME;
 static CEntity *gCutsceneCameraActor,*gVrPlayerEntity;
@@ -117,8 +127,11 @@ void VrRecenterView();
 namespace OculusVR {
 bool IsQuestTrainPassenger();
 bool IsQuestTrainCinematic();
+bool IsQuestXboxTrainTransition();
 static bool hands=true,immersive=false,gVehicleThirdPerson[1]={};
-bool AreTrackedHandsEnabled(){return hands;}
+static bool &gHandsEnabled=hands;
+static void LoadSettings(){}
+bool AreTrackedHandsEnabled();
 bool IsImmersiveDrivingActive(){return immersive;}
 static bool thirdPerson=false;
 bool IsQuestVehicleThirdPerson(){return thirdPerson;}
@@ -426,8 +439,9 @@ static void XboxEntryAttachment(){
 static void XboxTrainWindowFacing(){
  CPlayerPed p;CVehicle train;Reset(p,train);ModelSets::modern=true;train.train=true;
  p.inVehicle=false;p.state=PED_ENTER_TRAIN;train.pDriver=nullptr;train.pPassengers[0]=&p;
- Head(.3f,1.6f,-.2f,1.1f);CVector head,forward;
+ Head(.3f,1.6f,-.2f,1.1f);rw::vulkan::setFirstPersonAnchor(nullptr,0,0,0);Anchor();CVector head,forward;
  EvaluateSeat(false);EvaluateTrain(false,head,forward);
+ Check(!OculusVR::AreTrackedHandsEnabled()&&!OculusVR::ShouldUseTrackedHands(),"Xbox boarding uses connected native hands rather than detached tracked meshes");
  const float beforeBoard=rw::vulkan::gvk.fpLatchedHeadYaw;
  p.inVehicle=true;p.state=PED_DRIVING;p.position={3,-2,0};p.forward={0,1,0};
  trainNeckReady=true;trainNeck={-.4f,1.3f,2.1f};
@@ -437,7 +451,9 @@ static void XboxTrainWindowFacing(){
   rw::vulkan::setFirstPersonAnchorBasis(&head.x,&right.x,&train.matrix.up.x,&forward.x,Atan2(forward.y,forward.x),1,true);
  };
  publish(false);Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,beforeBoard),"Xbox train does not capture heading before boarding lineup finishes");
- publish(true);Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"Xbox train completion captures current physical facing once");
+ publish(true);Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,beforeBoard),"Xbox train completion preserves physical heading rather than recentering again");
+ Check(Near(forward.x,-1)&&Near(forward.y,0),"first completed boarding frame is already outward without a repeated window turn");
+ Check(OculusVR::AreTrackedHandsEnabled(),"tracked hands resume when boarding completes");
  for(int i=0;i<16;++i){++CTimer::frame;publish(true);}
  float r[3],u[3],f[3],eye[3];rw::vulkan::getFirstPersonViewFrame(r,u,f,eye);
  Check(Near(f[0],-1)&&Near(f[1],0),"completed window turn faces outside without a physical headset turn");
@@ -453,18 +469,49 @@ static void XboxTrainWindowFacing(){
  Head(.7f,1.4f,-.2f,1.5f);++CTimer::frame;publish(true);
  Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"passenger can look away from window without forced recenter every frame");
  p.inVehicle=false;p.state=PED_EXIT_TRAIN;EvaluateSeat(true);
+ Check(!OculusVR::AreTrackedHandsEnabled()&&!OculusVR::ShouldUseTrackedHands(),"Xbox unboarding returns hand ownership to the native animation");
  Check(rw::vulkan::gFirstPersonPositionLocked,"Xbox exit keeps head position locked after vehicle occupancy clears");
  const CVector exitEye=Eye();Head(1.2f,.8f,-.9f,1.1f);EvaluateSeat(true);
  const CVector movedExitEye=Eye();
  Check(Near(exitEye.x,movedExitEye.x)&&Near(exitEye.y,movedExitEye.y)&&Near(exitEye.z,movedExitEye.z),"physical translation cannot detach camera during Xbox train exit");
  Check(Near(rw::vulkan::gvk.fpLatchedHeadYaw,1.1f),"Xbox exit preserves passenger heading calibration");
  p.inVehicle=false;p.state=PED_IDLE;EvaluateSeat(true);EvaluateTrain(true,head,forward);
+ Check(OculusVR::AreTrackedHandsEnabled(),"tracked hands return after unboarding completes");
  Check(!rw::vulkan::gFirstPersonPositionLocked,"leaving passenger context restores ordinary tracking policy");
  ModelSets::modern=false;p.state=PED_EXIT_TRAIN;EvaluateSeat(true);
  Check(!rw::vulkan::gFirstPersonPositionLocked,"Classic late train exit retains its existing tracking policy");
  trainNeckReady=false;ModelSets::modern=false;
 }
 
-int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();XboxEntryAttachment();XboxTrainWindowFacing();
+static void XboxTrainExitHandoff(){
+ CPlayerPed p;CVehicle train;Reset(p,train);ModelSets::modern=true;train.train=true;
+ p.inVehicle=false;p.state=PED_IDLE;gVrFirstPersonActive=true;
+ OculusVR::UpdateQuestTrainCamera(false,false);
+ for(float side:{-1.0f,1.0f})for(int step=0;step<72;++step){
+  const float angle=.0872664626f*step;
+  train.matrix.right={std::cos(angle),std::sin(angle),0};train.matrix.forward={-std::sin(angle),std::cos(angle),0};train.matrix.position={8,9,2};
+  p.position=train.matrix*CVector(side*2.2f,.4f,0);p.forward=train.matrix.right*(-side);
+  TheCamera.Cams[0].Front=p.forward;TheCamera.Cams[0].Rotating=true;TheCamera.Cams[0].BetaSpeed=1;TheCamera.m_bUseTransitionBeta=true;
+  const float physicalYaw=rw::vulkan::gvk.fpLatchedHeadYaw;
+  OculusVR::FinishQuestXboxTrainExit(&p,&train);
+  const CVector outside=train.matrix.right*side;
+  Check(Dot(p.forward,outside)>.99999f,"native exit completion leaves Claude facing away from the train");
+  Check(Dot(TheCamera.Cams[0].Front,outside)>.99999f,"head-relative camera inherits the same outward exit heading");
+  Check(Near(p.m_fRotationCur,p.m_fRotationDest),"movement destination cannot rotate Claude back inward");
+  Check(!TheCamera.m_bUseTransitionBeta&&!TheCamera.Cams[0].Rotating&&Near(TheCamera.Cams[0].BetaSpeed,0),"stale camera turn cannot resume after exit");
+  Check(Near(TheCamera.Cams[0].Beta,std::atan2(outside.y,outside.x))&&Near(TheCamera.Orientation,std::atan2(outside.x,outside.y)),"follow camera and movement yaw conventions match outward vector");
+  Check(Near(physicalYaw,rw::vulkan::gvk.fpLatchedHeadYaw),"exit handoff preserves physical looking calibration");
+ }
+ for(int mode=0;mode<3;++mode){
+  ModelSets::modern=mode!=0;gVrFirstPersonActive=mode!=1;p.isPlayer=mode!=2;
+  p.forward={0,1,0};TheCamera.Cams[0].Front={0,1,0};
+  OculusVR::FinishQuestXboxTrainExit(&p,&train);
+  Check(Near(p.forward.x,0)&&Near(TheCamera.Cams[0].Front.x,0),"Classic, inactive VR and NPC exits retain native heading");
+ }
+ p.isPlayer=true;ModelSets::modern=false;gVrFirstPersonActive=true;p.state=PED_ENTER_TRAIN;
+ Check(OculusVR::AreTrackedHandsEnabled(),"Classic train boarding retains tracked-hand policy");
+}
+
+int main(){try{EntryAndMotion();SuppressionAndLifecycle();TrackingTruthTable();TrainPassengerMotion();KnockdownAttachment();XboxEntryAttachment();XboxTrainWindowFacing();XboxTrainExitHandoff();
  std::printf("PASS: %u production seat/train/XR/backend checks; carriage motion, free controllers and tracking continuity verified.\n",checks);return 0;
  }catch(const std::exception&e){std::fprintf(stderr,"FAIL after %u checks: %s\n",checks,e.what());return 1;}}

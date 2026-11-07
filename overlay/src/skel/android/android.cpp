@@ -1767,12 +1767,6 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(trainPassenger && gVrInVehicle){
 			CVehicle *train = player->m_pMyVehicle;
 			if(!trainAnchorLatched){
-				if(postPhysics && ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump())){
-					// Boarding completion establishes a fresh physical forward.
-					// The subsequent window-facing turn must not retain the yaw
-					// used while the player was looking toward the train outside.
-					rw::vulkan::setFirstPersonAnchor(nil,0.0f,0,0);
-				}
 				// The entry callback enables occupancy before the next native
 				// lineup. The marker is already inside: the native -1.5m root
 				// offset is compensated by its train animation, not by the camera.
@@ -1807,6 +1801,11 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				const float yaw = trainTurnStartYaw +
 					VrKnockdownView::Wrap(outsideYaw-trainTurnStartYaw)*blend;
 				trainForwardLocal = CVector(Cos(yaw), Sin(yaw), 0.0f);
+			}
+			if(ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump())){
+				// The skinned entry animation already performed the window turn.
+				// Continue its final heading instead of starting a second turn.
+				trainForwardLocal=CVector(trainEyeLocal.x<0.0f ? -1.0f : 1.0f,0,0);
 			}
 			head = train->GetMatrix() * trainEyeLocal;
 			forward = Multiply3x3(train->GetMatrix(), trainForwardLocal);
@@ -1966,7 +1965,10 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 			// Preserve the train's carriage-relative boarding-side window turn.
 			// Passenger entity forward need not match the skinned standing pose.
 			CVector heading = trainPassenger && gVrInVehicle ? forward : player->GetForward(), vertical(0,0,1);
-			if(trainPassenger && playerVehicleState==PED_EXIT_TRAIN && player->m_pMyVehicle!=nil){
+			if(trainPassenger && playerVehicleState==PED_ENTER_TRAIN){
+				// Follow the authored boarding turn once, with a level horizon.
+				heading=boneForward;
+			}else if(trainPassenger && playerVehicleState==PED_EXIT_TRAIN && player->m_pMyVehicle!=nil){
 				// Exit clears the riding flag before the animation completes.
 				// Keep facing away from the carriage on the occupied side;
 				// entity/gameplay forward can face inward during this lineup.

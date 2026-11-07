@@ -56,7 +56,7 @@ static struct {void Reset(){++resets;}} gCrouchView,gKnockdownView;
 static CVector submittedHead,submittedRight,submittedUp,submittedForward;
 static CVector gVrOnFootSkeletonHead;
 static float Atan2(float y,float x){return std::atan2(y,x);}
-enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_EXIT_TRAIN};
+enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_ENTER_TRAIN,PED_EXIT_TRAIN};
 static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
 static int playerVehicleState=PED_IDLE;
 static bool PlayerKnockedDown(CPed*){return knockedDown;}
@@ -253,6 +253,14 @@ int main(){
         const CVector outward=train.matrix.r*side,right=CrossProduct(outward,train.matrix.u);
         Near(submittedForward,outward,"train exit stays outward on either carriage side despite inward gameplay heading");
         Near(submittedHead,nativeHead.pos+outward*.06f+train.matrix.u*.08f+right*.02f,"train exit eye fit remains attached in the outward basis");
+    }
+    playerVehicleState=PED_ENTER_TRAIN;
+    for(int step=0;step<=36;++step){
+        const float yaw=float(step)*.0872664626f;
+        nativeHead.up={std::cos(yaw),std::sin(yaw),0};nativeHead.right={0,0,1};nativeHead.at=-CrossProduct(nativeHead.up,nativeHead.right);
+        ++CTimer::frame;Final(&player,false,p,f);
+        Near(submittedForward,nativeHead.up,"boarding camera follows the authored turn despite an unrelated gameplay heading");
+        Near(submittedUp,{0,0,1},"boarding maintains a level horizon");
     }
     trainPassenger=vehicleTransition=false;playerVehicleState=PED_IDLE;player.m_pMyVehicle=nullptr;
     TheCamera.Cams[0].Front={0,1,0};++CTimer::frame;Final(&player,false,p,f);

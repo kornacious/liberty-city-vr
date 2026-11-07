@@ -2830,7 +2830,7 @@ ApplyTouchInput(CControllerState *state)
 	return true;
 }
 
-bool AreTrackedHandsEnabled() { LoadSettings(); return gHandsEnabled && gVrFirstPersonActive && !IsQuestTrainCinematic(); }
+bool AreTrackedHandsEnabled() { LoadSettings(); return gHandsEnabled && gVrFirstPersonActive && !IsQuestTrainCinematic() && !IsQuestXboxTrainTransition(); }
 bool ShouldUseTrackedHands()
 {
 	return AreTrackedHandsEnabled() &&

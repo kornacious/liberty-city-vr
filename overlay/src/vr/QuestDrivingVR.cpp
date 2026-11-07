@@ -3366,6 +3366,40 @@ bool IsQuestTrainInterior()
 	return IsQuestTrainPassenger() && !IsQuestTrainCinematic();
 }
 
+bool IsQuestXboxTrainTransition()
+{
+	CPed *player=FindPlayerPed();
+	return ModelSets::IsModernActive() && IsQuestTrainInterior() && player &&
+		(player->GetPedState()==PED_ENTER_TRAIN || player->GetPedState()==PED_EXIT_TRAIN);
+}
+
+void FinishQuestXboxTrainExit(CPed *ped, CVehicle *train)
+{
+	if(!ModelSets::IsModernActive() || !gVrFirstPersonActive || !ped || !ped->IsPlayer() ||
+	   !train || (gTrainCameraVehicle==train && gTrainCinematic)) return;
+	// Called after native exit placement: the platform position unambiguously
+	// identifies the occupied side without the animation's displaced root.
+	CVector outward=train->GetRight();
+	if(DotProduct(ped->GetPosition()-train->GetPosition(),outward)<0.0f) outward*=-1.0f;
+	outward.z=0.0f;
+	if(outward.MagnitudeSqr()<0.000001f) return;
+	outward.Normalise();
+	ped->m_fRotationCur=outward.Heading();
+	ped->m_fRotationDest=ped->m_fRotationCur;
+	ped->SetHeading(ped->m_fRotationCur);
+	// Seed the ordinary follow camera as well as Claude. Keeping only the VR
+	// anchor outward would let head-relative locomotion restore the inward yaw.
+	CCam &cam=TheCamera.Cams[TheCamera.ActiveCam];
+	cam.Front=outward;
+	cam.Up=CVector(0,0,1);
+	cam.Source=ped->GetPosition()+CVector(0,0,0.75f)-outward*2.0f;
+	cam.Beta=cam.m_fTrueBeta=cam.m_fTargetBeta=atan2f(outward.y,outward.x);
+	cam.BetaSpeed=0.0f;
+	cam.Rotating=false;
+	TheCamera.m_bUseTransitionBeta=false;
+	TheCamera.Orientation=atan2f(outward.x,outward.y);
+}
+
 void UpdateQuestTrainCamera(bool r3Down, bool blocked)
 {
 	CVehicle *train = IsQuestTrainPassenger() ? FindPlayerPed()->m_pMyVehicle : nil;

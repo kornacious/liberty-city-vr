@@ -6,6 +6,7 @@ class CMatrix;
 class CVector;
 class CControllerState;
 class CEntity;
+class CPed;
 class CVehicle;
 
 // Single source of truth for the build name shown to players: the flat main
@@ -109,6 +110,8 @@ bool IsQuestFirstPersonOnFoot();
 bool IsQuestTrainPassenger();
 bool IsQuestTrainCinematic();
 bool IsQuestTrainInterior();
+bool IsQuestXboxTrainTransition();
+void FinishQuestXboxTrainExit(CPed *ped, CVehicle *train);
 void UpdateQuestTrainCamera(bool r3Down, bool blocked);
 bool IsTrackedWeaponHeld(int hand);
 int GetHeldWeaponSlot(int hand);
