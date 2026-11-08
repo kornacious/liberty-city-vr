@@ -6,6 +6,7 @@ namespace QuestNativeSettings {
 struct Row {
     std::string label, value;
     bool selected, available;
+    float sliderProgress = -1.0f;
     Row(const char *text, bool chosen, bool enabled) : selected(chosen), available(enabled) {
         std::string line(text);
         if(line.compare(0, 2, "* ") == 0) line.erase(0, 2);
@@ -24,6 +25,7 @@ struct Row {
     }
 };
 struct Page {
+    bool categories = false;
     std::string heading, subtitle;
     std::vector<Row> rows;
     std::vector<std::string> notes;

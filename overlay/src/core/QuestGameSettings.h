@@ -10,6 +10,7 @@ void AudioText(int row, char *text, int size);
 void AudioAction(int row, int direction);
 void SetMusicVolume(int volume);
 void CycleRadioStation(int direction);
+void ServiceFrontendAudioPreview(bool active);
 void AdjustDrawDistance(int direction);
 void ToggleCinemaBorders();
 void LanguageText(int row, char *text, int size);

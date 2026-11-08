@@ -21,7 +21,9 @@ struct CMenuManager {
     void InitialiseChangedLanguageSettings(){++reloads; m_bFrontEnd_ReloadObrTxtGxt=false;}
 } FrontEndMenuManager;
 struct Audio {
-    int music=-1,effects=-1,station=0; bool custom=false;
+    int music=-1,effects=-1,station=0,previewStarts=0,previewStops=0,previewStation=-1; bool custom=false;
+    void PlayFrontEndTrack(int stationValue,bool){++previewStarts;previewStation=stationValue;}
+    void StopFrontEndTrack(){++previewStops;}
     void SetMusicMasterVolume(int v){music=v;}
     void SetEffectsMasterVolume(int v){effects=v;}
     int GetRadioInCar(){return station;}
@@ -121,5 +123,17 @@ int main()
     }
     FrontEndMenuManager.m_bMenuActive=false;gVrMenuVisible=true;
     Check(!ServiceFrontendSettings(PadInput{})&&gVrMenuVisible&&!gSettingsFromFrontend,"shortcut overlay retains its own exit ownership");
+    DMAudio.station=FrontEndMenuManager.m_PrefsRadioStation=0;
+    ServiceFrontendAudioPreview(true);
+    Check(DMAudio.previewStarts==1&&DMAudio.previewStation==0,"Audio entry starts station preview");
+    ServiceFrontendAudioPreview(true);Check(DMAudio.previewStarts==1,"preview does not restart every frame");
+    AudioAction(Station,1);Check(DMAudio.previewStarts==2&&DMAudio.previewStation==1,"station adjustment switches preview immediately");
+    AudioAction(Music,1);Check(DMAudio.previewStarts==2,"volume adjustment does not restart station preview");
+    FrontEndMenuManager.m_PrefsRadioStation=11;ServiceFrontendAudioPreview(true);
+    Check(DMAudio.previewStops==1,"Radio Off stops the preview");
+    FrontEndMenuManager.m_PrefsRadioStation=2;ServiceFrontendAudioPreview(true);
+    ServiceFrontendAudioPreview(false);ServiceFrontendAudioPreview(false);
+    Check(DMAudio.previewStops==2,"leaving Audio stops its preview exactly once");
+    AudioAction(Station,1);Check(DMAudio.previewStarts==3,"gameplay station actions do not start frontend previews");
     std::printf("Shared settings: %u checks PASS.\n",checks);
 }

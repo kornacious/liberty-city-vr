@@ -18,6 +18,8 @@ extern int32 gNumRetunePresses;
 extern int32 gRetuneCounter;
 
 namespace QuestGameSettings {
+static bool gFrontendPreviewActive, gFrontendPreviewPlaying;
+static int gFrontendPreviewStation = -1;
 static int Volume(int value) { return value < 0 ? 0 : value > 127 ? 127 : value; }
 static const char *const stations[] = { "HEAD RADIO", "DOUBLE CLEF", "K-JAH", "RISE FM",
     "LIPS 106", "GAME FM", "MSX FM", "FLASHBACK", "CHATTERBOX", "CUSTOM SOUNDTRACKS", "POLICE RADIO", "RADIO OFF" };
@@ -46,8 +48,28 @@ void AudioAction(int row, int direction)
     }
     if(row == Station) {
         CycleRadioStation(direction);
+        if(gFrontendPreviewActive) ServiceFrontendAudioPreview(true);
     }
     if(row == Effects || row == AudioDefaults) menu.SaveSettings();
+}
+
+void ServiceFrontendAudioPreview(bool active)
+{
+    gFrontendPreviewActive = active;
+    const int station = FrontEndMenuManager.m_PrefsRadioStation;
+    const bool playable = active && station >= 0 && station < 10 &&
+        (station != 9 || DMAudio.IsMP3RadioChannelAvailable());
+    if(!playable) {
+        if(gFrontendPreviewPlaying) DMAudio.StopFrontEndTrack();
+        gFrontendPreviewPlaying = false;
+        gFrontendPreviewStation = -1;
+        return;
+    }
+    if(!gFrontendPreviewPlaying || station != gFrontendPreviewStation) {
+        DMAudio.PlayFrontEndTrack(station, true);
+        gFrontendPreviewStation = station;
+        gFrontendPreviewPlaying = true;
+    }
 }
 
 void SetMusicVolume(int volume)

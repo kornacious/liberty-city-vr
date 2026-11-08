@@ -2413,9 +2413,9 @@ IsFrontendMenuItemVisible(int page, int item)
 	case VR_MENU_PAGE_CALIBRATION: case VR_MENU_PAGE_HEAD_CALIBRATION:
 	case VR_MENU_PAGE_WRIST_RADAR: case VR_MENU_PAGE_VEHICLE_CALIBRATION:
 	case VR_MENU_PAGE_HOLSTERS: case VR_MENU_PAGE_CHEATS:
-	case VR_MENU_PAGE_MISSIONS: case VR_MENU_PAGE_SIMULATION: return false;
+	case VR_MENU_PAGE_MISSIONS: case VR_MENU_PAGE_SIMULATION: case VR_MENU_PAGE_ABOUT: return false;
 	case VR_MENU_PAGE_SETTINGS:
-		return item != VR_MAIN_HOLSTERS && item != VR_MAIN_CHEATS;
+		return item != VR_MAIN_HOLSTERS && item != VR_MAIN_CHEATS && item != VR_MAIN_ABOUT;
 	case VR_MENU_PAGE_GRAPHICS:
 		return item != VR_GRAPHICS_PROFILER && item != VR_GRAPHICS_DIAGNOSTICS
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
@@ -2423,7 +2423,7 @@ IsFrontendMenuItemVisible(int page, int item)
 #endif
 			;
 	case VR_MENU_PAGE_OPTIMIZATIONS: return item != VR_OPT_SIMULATION;
-	case VR_MENU_PAGE_WEAPONS: return item != VR_WEAPONS_CALIBRATION;
+	case VR_MENU_PAGE_WEAPONS: return item != VR_WEAPONS_CALIBRATION && item != VR_WEAPONS_DUAL_WIELD;
 	case VR_MENU_PAGE_HUD:
 		return !(item >= VR_HUD_HORIZONTAL_SCALE && item <= VR_HUD_OFFSET_Y) &&
 			item != VR_HUD_PANEL_HAND && item != VR_HUD_PANEL_SIDE && item != VR_HUD_PANEL_CALIBRATE;
@@ -2564,6 +2564,7 @@ NormalizeMenuSelection(void)
 static bool
 CurrentMenuValueRepeats(void)
 {
+	if(gVrMenuPage == VR_MENU_PAGE_AUDIO) return *CurrentMenuSelection() == QuestGameSettings::Music || *CurrentMenuSelection() == QuestGameSettings::Effects;
 	if(gVrMenuPage == VR_MENU_PAGE_SPEEDOMETER) return *CurrentMenuSelection() >= QuestSpeedometer::FirstPlacementRow && *CurrentMenuSelection() <= QuestSpeedometer::LastPlacementRow;
 	if(gVrMenuPage == VR_MENU_PAGE_RADIO) return gVrRadioSelection >= QuestRadio::FirstPlacementRow && gVrRadioSelection <= QuestRadio::LastPlacementRow;
 	if(gVrMenuPage == VR_MENU_PAGE_CALIBRATION)
@@ -2767,6 +2768,9 @@ void
 VrDebugUpdate(const PadInput &in)
 {
 	LoadVrSettings();
+	QuestGameSettings::ServiceFrontendAudioPreview(gSettingsFromFrontend && gVrMenuVisible &&
+		FrontEndMenuManager.m_bMenuActive && FrontEndMenuManager.m_nCurrScreen == MENUPAGE_OPTIONS &&
+		gVrMenuPage == VR_MENU_PAGE_AUDIO);
 	if(ServiceFrontendSettings(in)) return;
 	OculusVR::UpdateQuestTrainCamera(in.rightStickClick,
 		gVrMenuVisible || FrontEndMenuManager.m_bMenuActive ||
@@ -4225,6 +4229,11 @@ DrawQuestGameSettingsPage(bool audio)
 		if(audio) QuestGameSettings::AudioText(row, text, sizeof(text));
 		else QuestGameSettings::LanguageText(row, text, sizeof(text));
 		DrawFullVrMenuRow(text, 180+row*52, 2, row == *CurrentMenuSelection(), true);
+#ifdef __ANDROID__
+		if(gNativeSettingsPage && audio && (row == QuestGameSettings::Music || row == QuestGameSettings::Effects))
+			gNativeSettingsPage->rows.back().sliderProgress = (row == QuestGameSettings::Music ?
+				FrontEndMenuManager.m_PrefsMusicVolume : FrontEndMenuManager.m_PrefsSfxVolume)/127.0f;
+#endif
 	}
 	if(!audio) {
 		DrawVrMenuText("ONLY INSTALLED GAME LANGUAGES ARE SELECTABLE", VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
@@ -5699,6 +5708,7 @@ VrCollectNativeSettings(QuestNativeSettings::Page &page)
 	NormalizeMenuSelection();
 	gNativeSettingsPage = &page;
 	DrawSharedSettingsPage();
+	page.categories = gVrMenuPage == VR_MENU_PAGE_SETTINGS;
 	gNativeSettingsPage = nil;
 	return true;
 }

@@ -4,7 +4,9 @@ Main menu / Pause menu → Options and the VR settings shortcut open the same
 category catalog, page state and input handlers. Frontend Options renders those
 shared rows through GTA III's native fonts, textured background and selection
 bar on the game's cinema screen. The gameplay shortcut retains the VR overlay.
-Native pages paginate automatically as the selection moves. The standard menu
+Native pages paginate automatically as the selection moves. Main categories are
+centered without OPEN labels or an item-position counter. Entry typography uses
+the original GTA III heading font and frontend scales. The standard menu
 keeps ownership of pause and returns to its Settings entry when the shared menu
 closes; the gameplay shortcut closes back to play. Held opening/closing inputs
 are consumed so they cannot change a setting or immediately leave the parent.
@@ -16,7 +18,7 @@ it owns no copies of the settings or action handlers.
 
 Frontend settings hide weapon/hand and head/body calibration, HUD placement,
 vehicle seat/wheel calibration, radio and speedometer placement, recenter,
-holster loadout, cheats, spawning, missions, replay, profiler and renderer
+holster loadout, Dual Wield, About, cheats, spawning, missions, replay, profiler and renderer
 diagnostics. Drawing, navigation and activation use the same availability rules.
 Persistent preferences such as HUD visibility, speedometer style/units, weapon
 behaviour, traffic and graphics quality remain editable before loading a game.
@@ -28,8 +30,10 @@ settings, including traffic density and Vulkan PS2 alpha rendering.
 
 The shared menu adds:
 
-- Audio and Radio: music/SFX volume, radio station, board/custom-music setup and
-  audio-volume defaults. Defaults affect volumes only.
+- Audio and Radio: native segmented music/SFX volume sliders, station playback
+  previews, board/custom-music setup and audio-volume defaults. Previews follow
+  station changes and stop when leaving Audio or selecting Radio Off. The
+  gameplay overlay retains its normal radio behaviour. Defaults affect volumes only.
 - Language and Subtitles: installed game languages and subtitle visibility.
   The settings interface itself uses English labels.
 - Appearance: asset profile and player skin. Profile changes require restart;
