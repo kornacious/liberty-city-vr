@@ -14,15 +14,13 @@
 #define PLUGIN_ID ID_DRIVER
 
 #ifdef RW_VULKAN
-#include <android/log.h>
-#define VKLOG(...) __android_log_print(ANDROID_LOG_INFO, "librw-vk", __VA_ARGS__)
+#include "VulkanPlatform.h"
 #include <time.h>
 #include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <thread>
-#define VKERR(...) __android_log_print(ANDROID_LOG_ERROR, "librw-vk", __VA_ARGS__)
 #endif
 
 namespace rw {
@@ -89,9 +87,7 @@ static uint32 gMipTooLarge, gMipLanded;
 static uint64
 microseconds(void)
 {
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	return (uint64)now.tv_sec*1000000ull + (uint64)now.tv_nsec/1000ull;
+	return VulkanPlatform::microseconds();
 }
 
 void

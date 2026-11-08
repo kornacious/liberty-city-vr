@@ -16,11 +16,10 @@
 namespace rw {
 
 #ifdef RW_VULKAN
-// On Android the OpenXR runtime creates the Vulkan instance and device itself
+// The OpenXR platform layer creates the Vulkan instance and device through
 // (xrCreateVulkanInstanceKHR / xrCreateVulkanDeviceKHR) so it can inject the
-// extensions it needs to share swapchain images. The backend therefore adopts
-// an existing device instead of opening one, which is the opposite of how the
-// D3D12 backend is entered on Windows.
+// extensions it needs to share swapchain images. Both Quest and Windows Vulkan
+// therefore adopt an existing device rather than choosing their own GPU.
 struct EngineOpenParams
 {
 	VkInstance instance;

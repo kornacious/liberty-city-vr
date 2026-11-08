@@ -12,7 +12,7 @@
 #include "OculusVR.h"
 #endif
 
-#include <android/log.h>
+#include "RuntimeLog.h"
 
 extern bool gVrFirstPersonActive;
 

@@ -6,8 +6,10 @@ APK and native About/menu version strings are **0.8.5**. See the
 [changelog](CHANGELOG.md#085--release-candidate) for the release changes.
 
 These instructions build the **Quest Android application**. Windows and Linux
-are build-host platforms here. Windows PCVR is planned and has no build target
-or launch workflow in 0.8.5; see [platform scope](PLATFORMS.md).
+are build-host platforms here. An experimental [Windows PCVR game and renderer
+diagnostic](overlay/windows/README.md) now have a separate CMake workflow with
+local source/data preparation commands. Interactive manager target selection and
+desktop packaging remain planned; see [platform scope](PLATFORMS.md).
 
 The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 

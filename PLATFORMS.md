@@ -7,11 +7,18 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 | Game target | Status | Current workflow |
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Implemented; release candidate | Manager source assembly, APK build and local headset installation. |
-| Windows PCVR, x64, OpenXR + Vulkan | Planned | No desktop game build, package, launcher or manager target in 0.8.5. |
+| Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Direct CMake game/diagnostic builds; CLI source/data preparation, no packaged installer or interactive manager target. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
 Existing `QUEST_*.md` guides document the implemented headset target.
+
+Development after the 0.8.5 scope preparation adds a standalone
+[Windows bring-up executable](overlay/windows/README.md). It compiles the same
+librw Vulkan sources and shaders as Quest, uses shared stereo transforms, and
+implements runtime/device negotiation, stereo diagnostic rendering and basic
+controller grip/select actions. A separate experimental game target reuses the re3
+game loop, tracked VR interactions, menus and spatial audio mixer. Neither bundles game assets.
 
 ## Shared architecture and planned implementation
 
@@ -32,7 +39,13 @@ The intended sequence is:
 5. Add matched replay benchmarks and a desktop Quest compatibility profile;
    consider PC-specific graphics features after feature parity is validated.
 
-These are roadmap items, not features delivered in 0.8.5. Runtime/controller
+The shared Vulkan/game source builds, logging/timing boundary, stereo math,
+OpenXR game lifecycle/input and Windows diagnostic/game entry points are implemented.
+Windows services provide local data/save paths, WASAPI effects output, Media
+Foundation music and local ACM ADPCM conversion. Menus, New Game, tracking and
+music and clean engine/siren playback have been confirmed through VirtualDesktopXR.
+Interactive manager target selection, packaging and the
+Quest profile remain future work. Runtime/controller
 compatibility and any fallback for unavailable Vulkan features need validation;
 OpenXR alone does not establish support for every headset/runtime combination.
 

@@ -150,6 +150,22 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         return required.Concat(new[] { "mp3", "skins", "txd" }.Where(directories.ContainsKey)).Select(n => directories[n]).ToList();
     }
 
+    public static void PrepareWindowsData(string repository, string source, string destination, CancellationToken token)
+    {
+        Paths.RequireRepository(repository);
+        var directories = ValidateGameDirectory(source);
+        Paths.NoLinks(source); Paths.NoLinks(destination);
+        if (Directory.Exists(destination) || File.Exists(destination)) throw new IOException("Windows data preparation requires a new destination.");
+        if (Paths.Within(source, destination) || Paths.Within(destination, source) ||
+            Paths.Within(repository, destination) || Paths.Within(destination, repository))
+            throw new IOException("Windows game data must remain separate from source and repository directories.");
+        Directory.CreateDirectory(destination);
+        foreach (var directory in directories) Paths.CopyTree(directory, Path.Combine(destination, Path.GetFileName(directory)), token);
+        Paths.CopyTree(Path.Combine(repository, "overlay/gamefiles"), destination, token);
+        // Marker is written last so an interrupted preparation cannot be launched as complete.
+        File.WriteAllText(Path.Combine(destination, ".libertyvr-pcvr-data"), "Liberty City VR local Windows data v1\n");
+    }
+
     public static async Task PushGameTree(QuestDevice device, string source, string relative, CancellationToken token, bool convertedRadio = false)
     {
         Paths.NoLinks(source);

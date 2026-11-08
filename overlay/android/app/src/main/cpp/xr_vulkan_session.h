@@ -7,10 +7,9 @@ struct android_app;
 // OpenXR session bound to a Vulkan device, targeting a single two-layer
 // swapchain rendered with VK_KHR_multiview.
 //
-// This is the platform floor the ported VR layer sits on. The desktop build
-// binds OpenXR to D3D12 and resolves a double-wide target; here the equivalent
-// role is played by an array target plus multiview, which is the arrangement
-// Quest's runtime and tiler are built around.
+// Android/Quest session integration. The Windows Vulkan bring-up uses the same
+// librw renderer and stereo math through its own platform entry point; full
+// game session/input integration remains here until the Windows game port.
 namespace xrvk {
 
 // Creates the loader, instance, system, Vulkan device and session. Safe to

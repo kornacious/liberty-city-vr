@@ -1,0 +1,138 @@
+# Windows OpenXR/Vulkan development builds
+
+Two developer executables use the same librw Vulkan backend and shaders as Quest:
+`libertyvr-pcvr` renders a diagnostic scene without game data; `libertyvr-game`
+is an experimental playable GTA III port using the shared re3/VR integration.
+Desktop packaging, interactive manager target selection and the Quest compatibility
+profile remain in the [roadmap](../../PLATFORMS.md).
+
+## Build
+
+Use Windows x64, an MSVC-compatible C++17 toolchain (Visual Studio Desktop C++ tools), CMake 3.22.1
+or newer, Ninja and a Vulkan SDK providing headers, `vulkan-1.lib` and `glslc`.
+Use a CMake version that supports your installed Visual Studio, or build with
+Ninja inside its x64 developer terminal. From the source-kit root:
+
+```text
+cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build out/windows-pcvr --parallel
+ctest --test-dir out/windows-pcvr --output-on-failure
+out\windows-pcvr\libertyvr-pcvr.exe --help
+```
+
+For a Visual Studio generator, select x64 and add `--config Release` to the build
+and `-C Release` to CTest. The executable is then under `Release` in the build
+directory. `GLSLC` can explicitly select a shader compiler; normal SDK discovery
+uses `VULKAN_SDK`/PATH. `Vulkan_INCLUDE_DIR` and `Vulkan_LIBRARY` support an
+existing SDK in a custom location. Do not add an Android sysroot's entire include
+directory to MSVC: its C runtime headers are incompatible with Windows.
+
+CMake first tries an installed `OpenXR` CMake package. Otherwise it fetches the
+official OpenXR-SDK `release-1.1.58` source archive, checked against SHA256
+`43d75ce00e31be8f662b58e8c74af8c04156bcaa7acbfc19112aa2880f3a3669`, and builds
+the loader DLL from pre-generated sources. No Python code generation is required.
+For an offline checkout, set `FETCHCONTENT_SOURCE_DIR_OPENXR_SDK` to that SDK's
+source directory. The source-built loader DLL is copied beside the executable;
+for an installed SDK, ensure its loader DLL can be found at launch.
+
+Keep the matching loader DLL and license notices with any local binary bundle.
+The source fallback copies its `LICENSE`, `COPYING.adoc`, `.reuse/dep5`, license
+texts and JsonCpp license into `openxr-notices` beside the executable. Installed
+SDK users must retain their SDK's equivalent notices. The source kit does not
+publish prebuilt DLLs, EXEs or game assets.
+
+## Run and interpret results
+
+### Experimental game
+
+Use .NET 10 and a clean local checkout of the pinned public re3 commit
+`b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. Assemble into a new directory;
+the manager applies patches and overlays without modifying the checkout.
+Prepare a separate local data directory from your owned PC GTA III installation:
+
+```text
+dotnet run --project tools/manager -c Release -- --assemble C:/LCVRBuild/re3-public C:/LCVRBuild/windows-src
+dotnet run --project tools/manager -c Release -- --prepare-windows-data C:/Games/GTAIII C:/LCVRBuild/windows-data
+cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIBERTYVR_RE3_ROOT=C:/LCVRBuild/windows-src -DLIBERTYVR_GPU_TESTS=ON -DLIBERTYVR_AUDIO_TESTS=ON
+cmake --build out/windows-pcvr --parallel
+ctest --test-dir out/windows-pcvr --output-on-failure
+out\windows-pcvr\libertyvr-game.exe --game-data C:/LCVRBuild/windows-data --user-data C:/LCVRBuild/windows-user
+```
+
+Adjust paths to your machine. Preparation rejects existing or overlapping output
+directories and symbolic links, copies locally owned data plus authored overlays,
+and writes `.libertyvr-pcvr-data` only after completion. Never upload these files.
+The game requires that marker. Use a distinct user directory; saves, crash/performance
+diagnostics and generated audio caches stay there, while preferences stay in the
+isolated data copy. Do not share live writable saves with another game instance.
+Reassemble sources after changing patches/overlays; rebuild after source changes.
+
+The shared game integration includes head/controller tracking, VR menus, gameplay
+and spatial/HRTF sound effects. Windows uses event-driven WASAPI for 48 kHz stereo
+effects and Media Foundation for music. Retail IMA/MS ADPCM WAVs are decoded locally
+through Windows ACM to `audio-cache` under the user directory; originals stay intact.
+Logs report output buffer exhaustion and longest mixer callback to help investigate
+crackle. Endpoint changes during playback currently require restarting the game.
+RenderDoc integration uses an already injected DLL and never loads one automatically.
+
+`--frames N` bounds visible game frames for smoke tests; omit it for normal play.
+Use the in-game Quit option for a clean shutdown. Audio tests need an active Windows
+audio endpoint, and the GPU test needs a working Vulkan device. Synthetic playback
+tests verify the platform path; listen to engines, sirens, music and spatial effects
+in the headset before claiming playback quality. Other runtimes/controllers, complete
+mission progression and focus recovery still need Windows-specific validation.
+
+### Renderer diagnostic
+
+Activate a PC OpenXR runtime that supports Vulkan enable2 and connect a PCVR
+headset to it. For example, a Quest used through Virtual Desktop must be connected
+to that PC runtime; an ADB connection alone does not provide a PCVR session.
+The application uses the already selected runtime and does not change registry
+settings or runtime selection.
+
+- `--vulkan-probe`: enumerate desktop Vulkan GPUs and multiview support. This
+  does not test the runtime's GPU selection or a headset.
+- `--renderer-probe`: allocate a two-layer offscreen target and submit five
+  stereo frames through librw, including shader/pipeline setup and GPU completion.
+  Read back both eye layers and require visible triangle pixels with the expected
+  stereo disparity. This does not test OpenXR/compositor presentation.
+- `--probe`: let OpenXR select the GPU, create its Vulkan device and an XR session,
+  then exit. Failure to obtain a headset system is an environment/runtime result,
+  not a successful rendering test.
+- `--frames 300` (default): submit the diagnostic scene for 300 visible frames.
+  A center triangle appears two metres ahead of the LOCAL origin. Tracked grip
+  markers turn yellow while Select is held. Simple, Touch and Index bindings are
+  suggested; each runtime/controller combination needs validation.
+
+The render loop checks a 60-second deadline between frames; Ctrl+C requests exit.
+OpenXR wait calls remain controlled by the runtime. Exit code 0 means the selected
+operation completed; 1 indicates an error; 2 means rendering ended before the
+requested visible-frame count. Focus loss suppresses controller data, invalid
+view poses submit an empty frame, and `shouldRender=false` does not acquire images.
+The initial renderer uses 1x MSAA and waits for queue completion each frame;
+these timings are not representative PCVR or Quest performance.
+
+Run `ctest` for CPU/CLI checks. Enable `LIBERTYVR_GPU_TESTS=ON` to include the
+offscreen renderer smoke test; this requires a working Vulkan GPU and driver.
+For headset QA, check both eyes, head motion, controller tracking/select, focus
+loss/recovery, runtime stop and clean exit. No automated host check substitutes
+for that visual test. Keep diagnostic logs local and omit personal device IDs.
+
+## Initial validation — 2026-11-08
+
+Windows x64 Release built with MSVC. All four CTest checks passed, including
+GPU readback of 6,633 triangle pixels in each eye and the expected stereo disparity
+on an AMD Radeon RX 6700 XT. The corrected headset run through VirtualDesktopXR
+submitted 2,700/2,700 stereo frames at 2496 x 2688 per eye, 1x MSAA, and exited
+successfully. The user confirmed visible stereo geometry and both controller
+markers tracking and changing color with trigger input on the personal Quest 3
+device. The subsequent game run confirmed menu navigation, New Game, tracked
+looking/movement and audio; music was confirmed after adding the ADPCM cache.
+The WASAPI follow-up confirmed clean engines/sirens with music still working;
+16,071 game frames completed, with zero empty output buffers and a longest mixer
+callback of 3.36 ms on this PC. All five Windows CTest checks and all 99 manager
+checks passed. The shared-code Quest APK also built and updated successfully on
+the personal Quest 3 device; standalone gameplay was not retested in this stage.
+Focus-loss recovery and other controllers/runtimes remain separate validation
+work. These results do not establish performance parity
+with the standalone Quest build.

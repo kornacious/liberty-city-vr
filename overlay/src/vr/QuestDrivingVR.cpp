@@ -1,6 +1,6 @@
 #include "common.h"
 
-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
 
 #include "OculusVR.h"
 #include "QuestRadio.h"

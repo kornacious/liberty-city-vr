@@ -60,7 +60,7 @@
 #include "OculusVR.h"
 #endif
 
-#include <android/log.h>
+#include "RuntimeLog.h"
 #define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LibertyVR", __VA_ARGS__)
 
@@ -80,7 +80,11 @@ extern RsGlobalType RsGlobal;
 // Owned by the skeleton on every platform; the desktop builds define these in
 // win.cpp / glfw.cpp.
 RwUInt32 gGameState;
+#ifdef _WIN32
+DWORD _dwOperatingSystemVersion;
+#else
 long _dwOperatingSystemVersion;
+#endif
 
 // CStreaming sizes its budget as (_dwMemAvailPhys - 10MB)/2. Quest 3 has 8 GB,
 // but an Android app never gets to use all of it and the OpenXR compositor
@@ -259,7 +263,11 @@ psNativeTextureSupport(void)
 	return TRUE;
 }
 
+#ifdef _WIN32
+RwUInt32
+#else
 double
+#endif
 psTimer(void)
 {
 	// While frames are flowing, game time follows the compositor's predicted
@@ -2533,10 +2541,15 @@ psInitialize(void)
 	PsGlobal.joy1id = -1;
 	PsGlobal.joy2id = -1;
 
+#ifdef _WIN32
+    MEMORYSTATUSEX memory{}; memory.dwLength=sizeof(memory); GlobalMemoryStatusEx(&memory);
+    size_t physical=size_t(memory.ullTotalPhys);
+#else
 	const long pages = sysconf(_SC_PHYS_PAGES);
 	const long pageSize = sysconf(_SC_PAGESIZE);
 	size_t physical = pages > 0 && pageSize > 0 ?
 		(size_t)pages * (size_t)pageSize : (size_t)2048 * 1024 * 1024;
+#endif
 	// 2.5GB: full-map residency (ISLAND_LOADING_HIGH) needs the streaming
 	// budget headroom, or the streamer starts evicting models in plain
 	// sight — hydrants and poles blinking out right in front of the player.

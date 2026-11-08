@@ -1,7 +1,8 @@
 #include "common.h"
 #include "SimulationReplay.h"
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 #include "SimulationReplayCore.h"
+#include "platform_android.h"
 #include "Automobile.h"
 #include "HandlingMgr.h"
 #include "Pools.h"
@@ -32,7 +33,14 @@ namespace Core=SimulationReplayCore;
 #ifndef LCVR_SIMULATION_REPLAY_ROOT
 #define LCVR_SIMULATION_REPLAY_ROOT "/sdcard/Android/data/com.libertyvr.quest/files/simulation-replays"
 #endif
-const char *Root(){ return LCVR_SIMULATION_REPLAY_ROOT; }
+const char *Root(){
+#ifdef LIBERTYVR_WINDOWS
+    static std::string root=std::string(platform::storageRoot())+"/simulation-replays";
+    return root.c_str();
+#else
+    return LCVR_SIMULATION_REPLAY_ROOT;
+#endif
+}
 enum Mode { Idle,Recording,Preparing,Playing,Finishing };
 Mode mode=Idle;
 int request=0,reference=-1,selectedDemo=0;
@@ -46,6 +54,11 @@ uint64_t captureAtUs=37000000,runCaptureAtUs=0,capturedAtUs=0,captureStartNs=0,c
 std::string captureResult="off",capturePrefix,captureFile;
 #ifndef LCVR_RENDERDOC_CAPTURE_ROOT
 #define LCVR_RENDERDOC_CAPTURE_ROOT "/sdcard/Android/data/com.libertyvr.quest/files/renderdoc-captures"
+#endif
+#ifdef LIBERTYVR_WINDOWS
+const char *WindowsRenderDocRoot() { static std::string root=std::string(platform::storageRoot())+"/renderdoc-captures"; return root.c_str(); }
+#undef LCVR_RENDERDOC_CAPTURE_ROOT
+#define LCVR_RENDERDOC_CAPTURE_ROOT WindowsRenderDocRoot()
 #endif
 const char *RenderDocRoot(){return LCVR_RENDERDOC_CAPTURE_ROOT;}
 unsigned corrections=0;

@@ -22,9 +22,7 @@
 #define PLUGIN_ID ID_DRIVER
 
 #ifdef RW_VULKAN
-#include <android/log.h>
-#define VKLOG(...) __android_log_print(ANDROID_LOG_INFO, "librw-vk", __VA_ARGS__)
-#define VKERR(...) __android_log_print(ANDROID_LOG_ERROR, "librw-vk", __VA_ARGS__)
+#include "VulkanPlatform.h"
 
 static const uint32_t kPostFxVertSpv[] =
 #include "rw_postfx_vert.h"
@@ -93,9 +91,7 @@ bool32 getGpuPassProfile(GpuPassProfile::Result *out){
 static double
 frameBeginNowMs(void)
 {
-	timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	return (double)now.tv_sec*1000.0+(double)now.tv_nsec/1000000.0;
+	return VulkanPlatform::milliseconds();
 }
 
 void resetFrameBeginStats(void) { gFrameBeginStats = {}; }

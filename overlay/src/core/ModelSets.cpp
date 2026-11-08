@@ -5,9 +5,9 @@
 #include "QuestUpstate.h"
 #include "crossplatform.h"
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 #include "platform_android.h"
-#include <android/log.h>
+#include "RuntimeLog.h"
 #define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "LibertyVR", __VA_ARGS__)
 #else

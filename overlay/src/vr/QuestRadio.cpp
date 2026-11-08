@@ -1,5 +1,5 @@
 #include "common.h"
-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
 #include "QuestRadio.h"
 #include "QuestGameSettings.h"
 #include "VehiclePlacement.h"
@@ -227,10 +227,10 @@ bool Update(bool blocked) {
         if(touchMode) {
             CVector tip;
             if(available && OculusVR::GetTrackedIndexTip(hand,&tip)) {
-                CVector delta=tip-plane.origin; int near=-1;
+                CVector delta=tip-plane.origin; int nearbyControl=-1;
                 int press=touch[hand].Update(DotProduct(delta,plane.right),DotProduct(delta,plane.up),
-                    DotProduct(delta,plane.normal),plane.width,near);
-                if(near>=0) { hover=near; interacting=true; }
+                    DotProduct(delta,plane.normal),plane.width,nearbyControl);
+                if(nearbyControl>=0) { hover=nearbyControl; interacting=true; }
                 if(press>=0 && !activated) { Activate(press); activated=true; }
             } else touch[hand].Reset();
         } else if(interacting && aim.valid && !OculusVR::IsTrackedWeaponHeld(hand)) {

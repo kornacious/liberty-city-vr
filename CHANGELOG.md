@@ -3,6 +3,54 @@
 The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
 port from GTA Vice City to GTA III. Later entries describe Liberty City VR releases.
 
+## Unreleased — Windows OpenXR/Vulkan game integration
+
+- Added an experimental Windows x64 game executable using the shared re3 loop,
+  OpenXR session/actions, tracked VR gameplay, wrist/theatre menus and renderer.
+  Shared game-source definitions and Windows portability adapters preserve the
+  Android lifecycle and platform services for Quest.
+- Added manager CLI source assembly from clean pinned re3 and isolated Windows
+  data preparation, rejecting existing/overlapping destinations and symbolic links.
+  Original game files and saves stay untouched; desktop saves and generated audio
+  caches use a separate user directory.
+- Split native effects output from the shared spatial/HRTF mixer. Quest retains
+  AAudio; Windows uses event-driven 48 kHz stereo WASAPI with MMCSS scheduling
+  and aggregate buffer/mixing diagnostics, replacing the initial waveOut output
+  after reports of crackling engines and sirens. The user confirmed clean playback
+  with music preserved; the follow-up run recorded zero empty output buffers.
+- Added Media Foundation music streams with seek/pause/loop/volume and duration
+  handling. Fixed silent retail ADPCM music with local ACM decoding into a reusable
+  PCM cache, preserving original files.
+- Added Windows file/streaming and atomic-save adapters, optional injected RenderDoc
+  support and local crash stack diagnostics. Fixed an exit crash by releasing
+  frontend textures before closing the renderer.
+- Added synthetic PCM/IMA playback, cache and duration checks and manager
+  data-isolation coverage. Documented the experimental desktop game workflow.
+
+- Added a Windows x64 CMake diagnostic executable using the existing librw
+  Vulkan backend and GLSL/SPIR-V shaders. Extracted shared shader/backend build
+  definitions from Android rather than creating a separate desktop renderer.
+- Replaced backend Android-only logging and POSIX timing with a portable
+  boundary that retains Android logcat and uses monotonic clocks on both targets.
+  Extracted stereo projection and pose math for use by Quest and Windows.
+- Added runtime-selected Vulkan GPU/device/session negotiation through
+  `XR_KHR_vulkan_enable2`, explicit Vulkan 1.1/stereo multiview checks, supported
+  feature negotiation without requiring ASTC, and array swapchain rendering.
+- Added a tracked stereo triangle scene, basic controller grip/select bindings,
+  session/focus handling, cleanup, bounded frame-count controls, and separate
+  Vulkan-only, offscreen renderer and OpenXR negotiation probes.
+- Added Windows host checks for pose inverses, asymmetric FOV, Vulkan clip/depth
+  conventions, API ranges, graphics queues, optional features and CLI errors.
+- Fixed invisible diagnostic geometry by initializing the backend's no-camera
+  world-to-play transform. The offscreen GPU test now reads back both eye layers
+  and rejects missing triangle pixels or incorrect stereo disparity, rather than
+  treating successful command submission as proof of rendered geometry.
+- Added Windows build/validation documentation and pinned, SHA256-checked
+  Khronos OpenXR loader source fallback. Original game data is not required.
+- Interactive manager target selection, desktop packaging and the Quest
+  compatibility profile remain planned; Windows game support is experimental.
+  The diagnostic deliberately serializes GPU submissions and is not a benchmark.
+
 ## 0.8.5 — Release candidate
 
 Quest source-build release candidate. Changes since the 0.8.0 version commit

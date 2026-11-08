@@ -13,6 +13,10 @@
   `org.khronos.openxr:openxr_loader_for_android` package. The repository also
   includes Khronos OpenXR 1.1.58 headers. Both are Apache License 2.0; the
   bundled header license is preserved under `overlay/vendor/openxr-1.1.58/`.
+  The Windows game and diagnostic use an installed OpenXR SDK or build the official
+  Khronos OpenXR-SDK 1.1.58 loader from a SHA256-pinned source archive. Retain its
+  upstream license/copyright files and JsonCpp notices with local binary builds;
+  see [Windows build notes](overlay/windows/README.md).
 - **Qualcomm SGSR2 research code** — adapted under the BSD 3-Clause License.
   It is disabled in the release player path; the original notice is preserved
   at `librw/src/vulkan/SGSR_LICENSE.txt`.

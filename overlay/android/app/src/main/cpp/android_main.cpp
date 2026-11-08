@@ -1,8 +1,10 @@
 #include "platform_android.h"
 #include "xr_vulkan_session.h"
 
+#ifdef __ANDROID__
 #include <android_native_app_glue.h>
-#include <android/log.h>
+#endif
+#include "RuntimeLog.h"
 #include <math.h>
 #include <stdio.h>
 #include <time.h>
@@ -28,6 +30,7 @@
 
 namespace {
 
+#ifdef __ANDROID__
 struct AppState
 {
 	std::atomic<bool> resumed{false};
@@ -35,6 +38,8 @@ struct AppState
 	std::atomic<bool> stopRequested{false};
 	std::atomic<bool> gameThreadFinished{false};
 };
+
+#endif
 
 #ifndef MIAMIVR_BRINGUP
 // A high-resolution OpenXR colour swapchain can succeed before librw allocates
@@ -499,6 +504,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 }
 #endif
 
+#ifdef __ANDROID__
 void
 handleAppCmd(android_app *app, int32_t cmd)
 {
@@ -665,6 +671,8 @@ gameThreadMain(android_app *app, AppState *state)
 	// dead instance.
 	ALooper_wake(app->looper);
 }
+
+#endif
 
 } // namespace
 
@@ -1029,6 +1037,41 @@ EndVrWristPanel(void)
 
 }  // namespace androidgame
 
+#ifdef LIBERTYVR_WINDOWS
+#include "platform_windows.h"
+int RunWindowsGame(unsigned frameLimit)
+{
+    VehiclePlacement::configureRuntime(platform::gameDataRoot());
+    if(!xrvk::create(nullptr)) { xrvk::destroy(); return 1; }
+    xrvk::GraphicsContext graphics{};
+    if(!xrvk::getContext(&graphics)) { xrvk::destroy(); return 1; }
+    androidgame::VulkanContext context{};
+    context.instance=graphics.instance; context.physicalDevice=graphics.physicalDevice;
+    context.device=graphics.device; context.fragmentStoresAndAtomicsEnabled=graphics.fragmentStoresAndAtomicsEnabled;
+    context.queue=graphics.queue; context.queueFamilyIndex=graphics.queueFamilyIndex;
+    context.width=graphics.width; context.height=graphics.height;
+    context.renderScaleEffectivePercent=graphics.renderScaleEffectivePercent;
+    context.viewCount=graphics.viewCount; context.colourFormat=graphics.colourFormat;
+    if(!androidgame::Initialise(context)) { xrvk::destroy(); return 1; }
+    if(!androidgame::PrepareFrontendBeforeFrames()) { androidgame::Shutdown(); xrvk::destroy(); return 1; }
+    xrvk::confirmRenderScaleRendererReady(); xrvk::setFrameRenderer(renderGameFrame);
+    unsigned frames=0;
+    while(!platform::exitRequested() && !androidgame::WantsToQuit() && (!frameLimit || frames<frameLimit)) {
+        if(!xrvk::pollEvents()) break;
+        if(xrvk::shouldRender()) { xrvk::renderFrame(); ++frames; }
+        else { androidgame::SetPadInput(androidgame::PadInput{}); std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+    }
+    LOGI("Windows game frames completed: %u",frames);
+    xrvk::setFrameRenderer(nullptr);
+    // Frontend sprites are static objects. Release their textures while librw
+    // still exists, before the Windows CRT runs their destructors at process exit.
+    FrontEndMenuManager.UnloadTextures();
+    if(gGameState==GS_PLAYING_GAME) CGame::ShutDown();
+    androidgame::Shutdown(); xrvk::destroy(); return 0;
+}
+#endif
+
+#ifdef __ANDROID__
 void
 android_main(android_app *app)
 {
@@ -1082,3 +1125,5 @@ android_main(android_app *app)
 	// the same state as the first launch.
 	_exit(0);
 }
+
+#endif

@@ -1,5 +1,5 @@
 #include "common.h"
-#if defined(RW_VULKAN) && defined(__ANDROID__)
+#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
 #include "QuestNativeSettings.h"
 #include "Frontend.h"
 #include "Font.h"

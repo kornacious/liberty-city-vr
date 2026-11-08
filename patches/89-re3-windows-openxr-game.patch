@@ -1,0 +1,2395 @@
+--- a/src/control/GameLogic.cpp
++++ b/src/control/GameLogic.cpp
+@@ -89,7 +89,7 @@
+ #else
+ 		if ((CTimer::GetTimeInMilliseconds() - pPlayerInfo.m_nWBTime > 0x800) && (CTimer::GetPreviousTimeInMilliseconds() - pPlayerInfo.m_nWBTime <= 0x800)) {
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			TheCamera.SetFadeColour(255, 255, 255);
+ #else
+ 			TheCamera.SetFadeColour(200, 200, 200);
+@@ -141,7 +141,7 @@
+ 			CCarCtrl::CountDownToCarsAtStart = 2;
+ 			CPad::GetPad(CWorld::PlayerInFocus)->DisablePlayerControls = PLAYERCONTROL_ENABLED;
+ 			if (CRestart::bFadeInAfterNextDeath) { 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 				TheCamera.SetFadeColour(255, 255, 255);
+ #else
+ 				TheCamera.SetFadeColour(200, 200, 200);
+--- a/src/control/Garages.cpp
++++ b/src/control/Garages.cpp
+@@ -4,7 +4,7 @@
+ 
+ #include "Garages.h"
+ #include "main.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "android.h"
+ #endif
+ 
+@@ -296,7 +296,7 @@
+ {
+ 	// The stock fixed garage camera also supplies the movement heading. Keep
+ 	// the normal player camera in Quest VR, including while driving inside.
+-#ifndef __ANDROID__
++#if !defined(__ANDROID__) && !defined(LIBERTYVR_WINDOWS)
+ 	if (m_eGarageType != GARAGE_CRUSHER) {
+ 		switch (m_eGarageState) {
+ 		case GS_FULLYCLOSED:
+@@ -611,7 +611,7 @@
+ 			}
+ 			break;
+ 		case GS_CLOSING:
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 			// Physical movement can cross back into the doorway even while
+ 			// the game has disabled stick movement for the delivery sequence.
+ 			if (!m_bClosingWithoutTargetCar && !IsEntityEntirelyOutside(FindPlayerPed(), 2.0f)) {
+@@ -1246,7 +1246,7 @@
+ 
+ bool CGarage::IsEntityEntirelyOutside(CEntity * pEntity, float fMargin)
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	if (pEntity == FindPlayerPed()) {
+ 		float eye[3];
+ 		const bool haveEye = androidgame::VrGetViewBasis(eye, nil, nil, nil);
+--- a/src/core/Camera.cpp
++++ b/src/core/Camera.cpp
+@@ -32,7 +32,7 @@
+ #include "GenericGameStorage.h"
+ #include "MemoryCard.h"
+ #include "Camera.h"
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
+ 
+@@ -3107,7 +3107,7 @@
+ void
+ CCamera::Process_Train_Camera_Control(void)
+ {
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	if(OculusVR::IsQuestTrainPassenger() &&
+ 	   !OculusVR::IsQuestTrainCinematic() &&
+ 	   !CCutsceneMgr::IsRunning() && !CCutsceneMgr::IsCutsceneProcessing()){
+--- a/src/core/CdStream_win.cpp
++++ b/src/core/CdStream_win.cpp
+@@ -21,7 +21,7 @@
+ 
+ VALIDATE_SIZE(CdReadInfo, 0x30);
+ 
+-char gCdImageNames[MAX_CDIMAGES+1][64];
++char gCdImageNames[MAX_CDIMAGES+1][1024];
+ int32 gNumImages;
+ int32 gNumChannels;
+ 
+@@ -479,6 +479,7 @@
+ {
+ 	ASSERT(path != nil);
+ 	ASSERT(gNumImages < MAX_CDIMAGES);
++    if(gNumImages >= MAX_CDIMAGES || !path || strlen(path) >= sizeof(gCdImageNames[0])) return false;
+ 	
+ 	SetLastError(0);
+ 	
+@@ -491,7 +492,7 @@
+ 	                                   nil);
+ 	
+ 	ASSERT( gImgFiles[gNumImages] != nil );
+-	if ( gImgFiles[gNumImages] == NULL )
++	if ( gImgFiles[gNumImages] == INVALID_HANDLE_VALUE )
+ 		return false;
+ 	
+ 	strcpy(gCdImageNames[gNumImages], path);
+--- a/src/core/common.h
++++ b/src/core/common.h
+@@ -295,7 +295,7 @@
+ 
+ extern wchar *AllocUnicode(const char*src);
+ 
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ namespace platform { void setCheckpoint(const char *label); }
+ #define RE3_CHECKPOINT(label) platform::setCheckpoint(label)
+ #else
+--- a/src/core/config.h
++++ b/src/core/config.h
+@@ -358,7 +358,7 @@
+ //#define PS2_ALTERNATIVE_CARSPLASH // unused on PS2
+ 
+ // Pad
+-#if !defined(RW_GL3) && defined(_WIN32)
++#if !defined(RW_GL3) && defined(_WIN32) && !defined(LIBERTYVR_WINDOWS)
+ #define XINPUT
+ #endif
+ #if defined XINPUT || (defined RW_GL3 && !defined LIBRW_SDL2 && !defined GTA_HANDHELD)
+--- a/src/core/Frontend.cpp
++++ b/src/core/Frontend.cpp
+@@ -34,7 +34,7 @@
+ #include "Messages.h"
+ #include "FileLoader.h"
+ #include "frontendoption.h"
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #include "QuestNativeSettings.h"
+ #include "QuestGameSettings.h"
+ #endif
+@@ -2555,7 +2555,7 @@
+ void
+ CMenuManager::DrawFrontEnd()
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Use the native frontend presenter with the shared Quest settings model.
+ 	if(m_nCurrScreen == MENUPAGE_OPTIONS) { androidgame::VrDrawNativeSettings(); return; }
+ #endif
+@@ -4177,7 +4177,7 @@
+ void
+ CMenuManager::Process(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Keep frontend pause ownership; the shared menu owns Options input.
+ 	if(m_bMenuActive && m_nCurrScreen == MENUPAGE_OPTIONS) {
+ 		QuestGameSettings::ServiceFrontendAudioFrame();
+--- a/src/core/Game.cpp
++++ b/src/core/Game.cpp
+@@ -1,11 +1,11 @@
+ #include "common.h"
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ #include "QuestProfiler.h"
+ #endif
+ #include "platform.h"
+ 
+ #include "Game.h"
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "VehicleDeformation.h"
+ #endif
+ #include "main.h"
+@@ -1048,11 +1048,11 @@
+ 		FrontEndMenuManager.Process();
+ 	POP_MEMID();
+ 
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_STREAMING);
+ #endif
+ 	CStreaming::Update();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_STREAMING);
+ #endif
+ 	if (!CTimer::GetIsPaused())
+@@ -1068,11 +1068,11 @@
+ 		CWeather::Update();
+ 
+ 		PUSH_MEMID(MEMID_SCRIPT);
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_SCRIPT);
+ #endif
+ 		CTheScripts::Process();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_SCRIPT);
+ #endif
+ 		POP_MEMID();
+@@ -1089,19 +1089,19 @@
+ 		CSceneEdit::Update();
+ #endif
+ 		CEventList::Update();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_PARTICLE_UPDATE);
+ #endif
+ 		CParticle::Update();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_PARTICLE_UPDATE);
+ #endif
+ 		gFireManager.Update();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_POPULATION);
+ #endif
+ 		CPopulation::Update();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_POPULATION);
+ #endif
+ 		CWeapon::UpdateWeapons();
+@@ -1116,11 +1116,11 @@
+ 		CReplay::Update();
+ 
+ 		PUSH_MEMID(MEMID_WORLD);
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_WORLD_PROCESS);
+ #endif
+ 		CWorld::Process();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_WORLD_PROCESS);
+ #endif
+ 		POP_MEMID();
+@@ -1134,7 +1134,7 @@
+ 		CTimeCycle::Update();
+ 		if (CReplay::ShouldStandardCameraBeProcessed())
+ 			TheCamera.Process();
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 		if(VehicleDeformation::IsVehicleDeformationEnabled()) VehicleDeformation::Update();
+ #endif
+ 		CCullZones::Update();
+@@ -1149,13 +1149,13 @@
+ 		if (!CReplay::IsPlayingBack())
+ 		{
+ 			PUSH_MEMID(MEMID_CARS);
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerBeginPhase(androidgame::QUEST_PROFILER_PHASE_CAR);
+ #endif
+ 			CCarCtrl::GenerateRandomCars();
+ 			CRoadBlocks::GenerateRoadBlocks();
+ 			CCarCtrl::RemoveDistantCars();
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 		androidgame::QuestProfilerEndPhase(androidgame::QUEST_PROFILER_PHASE_CAR);
+ #endif
+ 			POP_MEMID();
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -18,7 +18,7 @@
+ #endif
+ #ifdef RW_VULKAN
+ #include "vulkan/rwvk.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "../skel/android/android.h"
+ #include "../skel/android/QuestProfiler.h"
+ #endif
+@@ -97,7 +97,7 @@
+ #include "VrBodyIK.h"
+ #include "VRHandModel.h"
+ #endif
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "QuestRadio.h"
+ #include "QuestSpeedometer.h"
+ #endif
+@@ -326,7 +326,7 @@
+ #endif
+ }
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ // One fit operation for startup, loading, island screens and the world fade.
+ // The swapchain is portrait even when displayed on the landscape theater quad.
+ static void
+@@ -407,7 +407,7 @@
+ 	}
+ 
+ 	if(CDraw::FadeValue != 0 || CMenuManager::m_PrefsBrightness < 256){
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// Solid fades remain neutral and cover both eyes after world grading.
+ 		if(CDraw::FadeValue != 0 && !TheCamera.m_FadeTargetIsSplashScreen){
+ 			rw::vulkan::setScreenFade(CDraw::FadeRed, CDraw::FadeGreen,
+@@ -474,7 +474,7 @@
+ 			fadeColor.g = 255;
+ 			fadeColor.b = 255;
+ 			fadeColor.a = CDraw::FadeValue;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			DrawQuestLoadingArtwork(splash, fadeColor);
+ #else
+ 			splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), fadeColor, fadeColor, fadeColor, fadeColor);
+@@ -745,7 +745,7 @@
+ 
+ 	if(name == nil)
+ 		return &splash;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// All loading requests share the cyan artwork, including mainsc/level names.
+ 	name = "splash1";
+ #endif
+@@ -862,7 +862,7 @@
+ 		CFont::InitPerFrame();
+ 		DefinedState();
+ 		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		DrawQuestLoadingArtwork(splash, CRGBA(255, 255, 255, 255));
+ #else
+ 		splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(255, 255, 255, 255));
+@@ -935,7 +935,7 @@
+ 	CFont::InitPerFrame();
+ 	DefinedState();
+ 	col = CRGBA(255, 255, 255, 255);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	DrawQuestLoadingArtwork(splash, col);
+ #else
+ 	splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), col, col, col, col);
+@@ -1581,7 +1581,7 @@
+ }
+ #endif
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #define QUEST_RENDER_PROFILE_BEGIN(phase) \
+ 	androidgame::QuestProfilerBeginPhase(phase)
+ #define QUEST_RENDER_PROFILE_END(phase) \
+@@ -2664,12 +2664,12 @@
+ 	CAntennas::Render();
+ 	if(QUEST_VIZ_SHOW(Particles)) CRubbish::Render();
+ 	if(QUEST_VIZ_SHOW(Particles)) CCoronas::Render();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerBeginPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_PARTICLE_RENDER);
+ #endif
+ 	if(QUEST_VIZ_SHOW(Particles)) CParticle::Render();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerEndPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_PARTICLE_RENDER);
+ #endif
+@@ -2678,7 +2678,7 @@
+ 	if(QUEST_VIZ_SHOW(Particles)) CPointLights::RenderFogEffect();
+ 	if(QUEST_VIZ_SHOW(Objects)) CMovingThings::Render();
+ 	CRenderer::RenderFirstPersonVehicle();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #ifdef GTA_VR_WEAPONS
+ 	// Independent of hand visibility and physical steering mode.
+ 	QuestRadio::Render();
+@@ -2696,7 +2696,7 @@
+ Render2dStuff(void)
+ {
+ 	PUSH_RENDERGROUP("Render2dStuff");
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(androidgame::VrShouldUseTheaterMode() ||
+ 	   OculusVR::IsTrackedScopeOverlayActive()){
+ 		rw::vulkan::setIm2DSafeAreaTransform(
+@@ -2734,7 +2734,7 @@
+ #ifdef CUTSCENE_BORDERS_SWITCH
+ 		&& CMenuManager::m_PrefsCutsceneBorders
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		&& androidgame::VrCutsceneMode() == 0
+ #endif
+ 		)
+@@ -2788,7 +2788,7 @@
+ #ifdef DEBUGMENU
+ 	DebugMenuRender();
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	rw::vulkan::setIm2DSafeAreaTransform(
+ 		1.0f, 1.0f, 0.0f, 0.0f);
+ #endif
+@@ -2854,12 +2854,12 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_GAME);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_GAME);
+ #endif
+ 		CGame::Process();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerEndPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_GAME);
+ #endif
+@@ -2873,12 +2873,12 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_AUDIO);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_AUDIO);
+ #endif
+ 		DMAudio.Service();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerEndPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_AUDIO);
+ #endif
+@@ -2899,12 +2899,12 @@
+ #ifdef GTA_VR_OCULUS
+ 	OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_GAME);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerBeginPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_GAME);
+ #endif
+ 	CGame::Process();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerEndPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_GAME);
+ #endif
+@@ -2918,12 +2918,12 @@
+ #ifdef GTA_VR_OCULUS
+ 	OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_AUDIO);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerBeginPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_AUDIO);
+ #endif
+ 	DMAudio.Service();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerEndPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_AUDIO);
+ #endif
+@@ -2979,7 +2979,7 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_WORLD_LIST);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_WORLD_LIST);
+ #endif
+@@ -2990,7 +2990,7 @@
+ 		}
+ #endif
+ 		CRenderer::ConstructRenderList();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerEndPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_WORLD_LIST);
+ #endif
+@@ -3003,12 +3003,12 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_PRE_RENDER);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_PRE_RENDER);
+ #endif
+ 		CRenderer::PreRender();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerEndPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_PRE_RENDER);
+ #endif
+@@ -3021,7 +3021,7 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_SCENE_SETUP);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_SCENE_SETUP);
+ #endif
+@@ -3053,7 +3053,7 @@
+ 		}
+ 
+ 		DefinedState();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerEndPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_SCENE_SETUP);
+ #endif
+@@ -3071,7 +3071,7 @@
+ 		if(!skipDesktopGameplayRender)
+ 			OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_DESKTOP_RENDER);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(!skipDesktopGameplayRender)
+ 			androidgame::QuestProfilerBeginPhase(
+ 				androidgame::QUEST_PROFILER_PHASE_WORLD_RENDER);
+@@ -3126,7 +3126,7 @@
+ 		if(!skipDesktopGameplayRender)
+ 			OculusVR::PerfEndPhase(OculusVR::PERF_PHASE_DESKTOP_RENDER);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(!skipDesktopGameplayRender)
+ 			androidgame::QuestProfilerEndPhase(
+ 				androidgame::QUEST_PROFILER_PHASE_WORLD_RENDER);
+@@ -3136,7 +3136,7 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_UI);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_UI);
+ #endif
+@@ -3146,7 +3146,7 @@
+ #ifdef GTA_VR_OCULUS
+ 		OculusVR::PerfBeginPhase(OculusVR::PERF_PHASE_UI);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestProfilerBeginPhase(
+ 			androidgame::QUEST_PROFILER_PHASE_UI);
+ #endif
+@@ -3191,7 +3191,7 @@
+ #ifdef GTA_VR_OCULUS
+ 	OculusVR::PerfEndPhase(OculusVR::PERF_PHASE_UI);
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerEndPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_UI);
+ #endif
+--- a/src/core/MenuScreens.cpp
++++ b/src/core/MenuScreens.cpp
+@@ -87,7 +87,7 @@
+ 		MENUACTION_CHECKSAVE,	"FEM_SL5", SAVESLOT_6,		MENUPAGE_LOAD_SLOT_CONFIRM,
+ 		MENUACTION_CHECKSAVE,	"FEM_SL6", SAVESLOT_7,		MENUPAGE_LOAD_SLOT_CONFIRM,
+ 		MENUACTION_CHECKSAVE,	"FEM_SL7", SAVESLOT_8,		MENUPAGE_LOAD_SLOT_CONFIRM,
+-#if defined(__ANDROID__) && defined(MISSION_REPLAY)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(MISSION_REPLAY)
+ 		MENUACTION_LOADAUTOSAVE, "FET_LG", SAVESLOT_NONE, MENUPAGE_LOAD_SLOT_CONFIRM,
+ #endif
+ 	},
+--- a/src/core/MenuScreensCustom.cpp
++++ b/src/core/MenuScreensCustom.cpp
+@@ -508,7 +508,7 @@
+ 		MENUACTION_CHECKSAVE,	"FEM_SL5", { nil, SAVESLOT_6,		MENUPAGE_LOAD_SLOT_CONFIRM },
+ 		MENUACTION_CHECKSAVE,	"FEM_SL6", { nil, SAVESLOT_7,		MENUPAGE_LOAD_SLOT_CONFIRM },
+ 		MENUACTION_CHECKSAVE,	"FEM_SL7", { nil, SAVESLOT_8,		MENUPAGE_LOAD_SLOT_CONFIRM },
+-#if defined(__ANDROID__) && defined(MISSION_REPLAY)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(MISSION_REPLAY)
+ 		MENUACTION_LOADAUTOSAVE, "FET_LG", { nil, SAVESLOT_NONE, MENUPAGE_LOAD_SLOT_CONFIRM },
+ #endif
+ 	},
+--- a/src/core/Pad.cpp
++++ b/src/core/Pad.cpp
+@@ -17,7 +17,7 @@
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrStickLookBehindEnabled(void);
+ bool VrStickCrouchEnabled(void);
+@@ -2597,7 +2597,7 @@
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if ( OculusVR::IsQuestFirstPersonOnFoot() &&
+ 	     !androidgame::VrStickLookBehindEnabled() )
+ 		return false;
+@@ -3144,7 +3144,7 @@
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// On Quest, use the physical L3 rising edge captured before remapping.
+ 	// Native PlayerPed code still performs SetDuck()/ClearDuck().
+ 	if ( OculusVR::IsQuestFirstPersonOnFoot() )
+@@ -3430,7 +3430,7 @@
+ 	if ( ArePlayerControlsDisabled() )
+ 		return false;
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if ( OculusVR::IsQuestFirstPersonOnFoot() )
+ 		return false;
+ #endif
+--- a/src/core/Timer.cpp
++++ b/src/core/Timer.cpp
+@@ -154,7 +154,7 @@
+ #ifdef FIX_BUGS
+ uint32 CTimer::m_LogicalFrameCounter;
+ uint32 CTimer::m_LogicalFramesPassed;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ uint64 CTimer::m_GameFrameCounter;
+ uint32 CTimer::m_GameFramesPassed;
+ uint32 CTimer::m_GameFrameRemainder;
+@@ -192,7 +192,7 @@
+ #ifdef FIX_BUGS
+ 	m_LogicalFrameCounter = 0;
+ 	m_LogicalFramesPassed = 0;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	m_GameFrameCounter = 0;
+ 	m_GameFramesPassed = 0;
+ 	m_GameFrameRemainder = 0;
+@@ -316,7 +316,7 @@
+ 	}
+   
+ 
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	// The game clock already carries fractional milliseconds and clips stalls.
+ 	// Pause and time scale therefore affect gameplay schedules exactly as physics.
+ 	const uint32 advance = GetIsPaused() ? 0 : Min(uint32(60), m_snTimeInMilliseconds - m_snPreviousTimeInMilliseconds);
+--- a/src/core/Timer.h
++++ b/src/core/Timer.h
+@@ -22,7 +22,7 @@
+ #ifdef FIX_BUGS
+ 	static uint32 m_LogicalFrameCounter;
+ 	static uint32 m_LogicalFramesPassed;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	static uint64 m_GameFrameCounter;
+ 	static uint32 m_GameFramesPassed;
+ 	static uint32 m_GameFrameRemainder;
+@@ -36,7 +36,7 @@
+ 	static void SetTimeStep(float ts) { ms_fTimeStep = ts; }
+ 	static float GetTimeStepInSeconds() { return ms_fTimeStep / 50.0f; }
+ 	static uint32 GetTimeStepInMilliseconds() {
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 		// Update already carries fractional milliseconds into the game clock.
+ 		// Share its whole-frame delta across integer timer consumers instead
+ 		// of truncating each frame's floating timestep independently. Unsigned
+@@ -95,7 +95,7 @@
+ 	friend class CMemoryCard;
+ 
+ #ifdef FIX_BUGS
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	static uint64 GetGameFrameCounter(void) { return m_GameFrameCounter; }
+ 	static uint32 GetGameFramesPassed(void) { return m_GameFramesPassed; }
+ #endif
+--- a/src/core/World.cpp
++++ b/src/core/World.cpp
+@@ -1874,7 +1874,7 @@
+ 		CRecordDataForChase::ProcessControlCars();
+ 		CRecordDataForChase::SaveOrRetrieveCarPositions();
+ 	} else {
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 		// Ragdolls may relink sectors and apply vehicle reactions. Run once
+ 		// before native animation/control and any moving-entity traversal.
+ 		VrRagdoll::Update();
+--- a/src/core/ZoneCull.h
++++ b/src/core/ZoneCull.h
+@@ -114,7 +114,7 @@
+ 		float minz, float maxz,
+ 		uint16 flag, int16 wantedLevel);
+ 	static bool CamCloseInForPlayer(void) { return (CurrentFlags_Player & ATTRZONE_CAMCLOSEIN) != 0; }
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	// Automatic stair zones use a fixed outside camera on desktop.
+ 	// That camera ignores look input and replaces the heading used
+ 	// by Quest's head-relative anchor. Keep the normal player camera in VR.
+--- a/src/entities/Physical.cpp
++++ b/src/entities/Physical.cpp
+@@ -9,7 +9,7 @@
+ #include "Vehicle.h"
+ #include "Ped.h"
+ #include "VrRagdoll.h"
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "VehicleDeformation.h"
+ #endif
+ #include "Object.h"
+@@ -23,7 +23,7 @@
+ #include "Automobile.h"
+ #include "Physical.h"
+ 
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ // Every point in a manifold was generated from the same two poses. Native
+ // response may roll B back after the first point, so retain those poses before
+ // applying any response. This POD copies no matrices or vectors while OFF.
+@@ -104,7 +104,7 @@
+ 
+ 	bUsesCollision = true;
+ 	m_audioEntityId = -5;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fSleepDistance = 0.0f;
+ #else
+ 	m_phys_unused1 = 100.0f;
+@@ -120,7 +120,7 @@
+ 	bSkipLineCol = false;
+ 
+ 	m_fDistanceTravelled = 0.0f;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 	m_treadable[PATH_CAR] = nil;
+@@ -597,7 +597,7 @@
+ 	}else{
+ 		float f = Pow(1.0f/Abs(m_fAirResistance*0.5f*m_vecMoveSpeed.MagnitudeSqr() + 1.0f), CTimer::GetTimeStep());
+ 		m_vecMoveSpeed *= f;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		// The original loses one percent of spin per frame at 30 FPS.
+ 		m_vecTurnSpeed *= Pow(0.99f, CTimer::GetTimeStepInSeconds()*30.0f);
+ #else
+@@ -1371,7 +1371,7 @@
+ 	return false;
+ 
+ collision:
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	VehicleDeformationCollisionContext deformationContext(A,B);
+ #endif
+ 
+@@ -1379,7 +1379,7 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1404,7 +1404,7 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1440,7 +1440,7 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1470,7 +1470,7 @@
+ 		for(i = 0; i < numCollisions; i++){
+ 			if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 				continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1638,7 +1638,7 @@
+ 				numCollisions = A->ProcessEntityCollision(B, aColPoints);
+ 				if(numCollisions <= 0)
+ 					continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 				VehicleDeformationCollisionContext deformationContext(A,B);
+ #endif
+ 
+@@ -1649,7 +1649,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollisionAlt(B, aColPoints[i], impulseA, moveSpeed, turnSpeed))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseA);
+ #endif
+ 
+@@ -1673,7 +1673,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollisionAlt(B, aColPoints[i], impulseA, moveSpeed, turnSpeed))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseA);
+ #endif
+ 
+@@ -1738,7 +1738,7 @@
+ 				numCollisions = A->ProcessEntityCollision(B, aColPoints);
+ 				if(numCollisions <= 0)
+ 					continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 				VehicleDeformationCollisionContext deformationContext(A,B);
+ #endif
+ 
+@@ -1751,7 +1751,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1779,7 +1779,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1818,7 +1818,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1851,7 +1851,7 @@
+ 					for(i = 0; i < numCollisions; i++){
+ 						if(!A->ApplyCollision(B, aColPoints[i], impulseA, impulseB))
+ 							continue;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						RecordVehicleDeformationPair(deformationContext,A,B,aColPoints[i],impulseA,impulseB);
+ #endif
+ 
+@@ -1943,7 +1943,7 @@
+ CPhysical::ProcessShift(void)
+ {
+ 	m_fDistanceTravelled = 0.0f;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 	if(GetStatus() == STATUS_SIMPLE){
+@@ -1977,7 +1977,7 @@
+ 		bIsStuck = false;
+ 		bIsInSafePosition = true;
+ 		m_fDistanceTravelled = (GetPosition() - matrix.GetPosition()).Magnitude();
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 		m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 		RemoveAndAdd();
+@@ -1994,7 +1994,7 @@
+ 	CPed *ped = (CPed*)this;
+ 
+ 	m_fDistanceTravelled = 0.0f;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 	m_bIsVehicleBeingShifted = false;
+@@ -2134,7 +2134,7 @@
+ 	}
+ 	bHitByTrain = false;
+ 	m_fDistanceTravelled = (GetPosition() - savedMatrix.GetPosition()).Magnitude();
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 	bSkipLineCol = false;
+--- a/src/entities/Physical.h
++++ b/src/entities/Physical.h
+@@ -17,7 +17,7 @@
+ {
+ public:
+ 	int32 m_audioEntityId;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	union { float m_phys_unused1; float m_fSleepDistance; }; // Same storage/layout.
+ #else
+ 	float m_phys_unused1;
+--- a/src/objects/CutsceneHead.cpp
++++ b/src/objects/CutsceneHead.cpp
+@@ -13,7 +13,7 @@
+ #include "CutsceneMgr.h"
+ #include "Streaming.h"
+ #include "CutsceneHead.h"
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame { void *VrCutsceneCameraActor(void); }
+ #endif
+ #include "CdStream.h"
+@@ -117,7 +117,7 @@
+ void
+ CCutsceneHead::Render(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(androidgame::VrCutsceneCameraActor() == (void*)m_parentObject)
+ 		return;
+ #endif
+--- a/src/objects/CutsceneObject.cpp
++++ b/src/objects/CutsceneObject.cpp
+@@ -15,7 +15,7 @@
+ #include "Shadows.h"
+ #include "Timecycle.h"
+ #include "CutsceneObject.h"
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame { void *VrCutsceneCameraActor(void); }
+ #endif
+ 
+@@ -92,7 +92,7 @@
+ CCutsceneObject::Render(void)
+ {
+ 	bool hideHead = false;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	hideHead = androidgame::VrCutsceneCameraActor() == (void*)this;
+ #endif
+ 	RwMatrix *headMatrix = nil;
+--- a/src/peds/CopPed.cpp
++++ b/src/peds/CopPed.cpp
+@@ -261,7 +261,7 @@
+ void
+ CCopPed::ScanForCrimes(void)
+ {
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// CivilianAI consumes ScanForThreats; cops have a separate crime scan.
+ 	// A tracked hand does not set the player's legacy lock-on target, so
+ 	// deliver visible barrel aim to the ordinary police threat reaction here.
+--- a/src/peds/Ped.cpp
++++ b/src/peds/Ped.cpp
+@@ -37,16 +37,16 @@
+ #include "SaveBuf.h"
+ #include "VrBodyIK.h"
+ #include "VrRagdoll.h"
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "QuestPedGetup.h"
+ #endif
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
+ #include "VrVehicleEntry.h"
+ #endif
+ #include "GameRenderCommand.h"
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrUsesHeadRelativeMovement(void);
+ bool VrGetOnFootAnimationAngle(float *angle);
+@@ -54,7 +54,7 @@
+ void *VrCutsceneCameraActor(void);
+ bool VrKnockdownPresentationActive(void);
+ }
+-#include <android/log.h>
++#include "RuntimeLog.h"
+ #endif
+ #endif
+ 
+@@ -1379,7 +1379,7 @@
+ static bool
+ ApplyQuestMovementVelocity(CPed *ped)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(ped != FindPlayerPed() || ped->InVehicle() || ped->bIsInTheAir ||
+ 	   ped->m_nPedState == PED_JUMP || !ped->CanStrafeOrMouseControl() ||
+ 	   !androidgame::VrGetOnFootAnimationAngle(nil))
+@@ -1453,7 +1453,7 @@
+ 		return;
+ 
+ 	float movementReferenceHeading = m_fRotationCur;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Head modes measure the walk angle against the gameplay camera rather
+ 	// than the body, so the animation set matches the real heading.
+ 	if(androidgame::VrUsesHeadRelativeMovement())
+@@ -1472,7 +1472,7 @@
+ 	}
+ 
+ 	// Interestingly this part is responsible for diagonal walking.
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if (IsPlayer() && androidgame::VrUsesHeadRelativeMovement()) {
+ 		// The stock gate applies the requested direction only within 50
+ 		// degrees of the body and folds anything past 90, which silently
+@@ -1814,7 +1814,7 @@
+ void
+ CPed::ProcessControl(void)
+ {
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS) && defined(CANCELLABLE_CAR_ENTER)
+ 	// Observe entry even on an early-return frame, so death, an ended entry or
+ 	// disabled controls cannot leave an armed gesture for the next attempt.
+ 	static VrVehicleEntry::CancelInput vrEntryCancelInput;
+@@ -2793,7 +2793,7 @@
+ 					bSomeVCflag1 = false;
+ 			}
+ #endif
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			ReactToTrackedGun();
+ #endif
+ 			ProcessObjective();
+@@ -2841,7 +2841,7 @@
+ 					if (!pad->ArePlayerControlsDisabled()) {
+ 						int vehAnim = m_pVehicleAnim->animId;
+ 
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 						if (vrCancelEntryMovement) {
+ #else
+ 						int16 padWalkX = pad->GetPedWalkLeftRight();
+@@ -3160,7 +3160,7 @@
+ 	if(androidgame::SimulationReplayIgnoreCollision(this, collidingEnt)) return 0;
+ 	bool collidedWithBoat = false;
+ 	bool belowTorsoCollided = false;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	// Preserve the original 30 Hz step-down reach even inside the player's
+ 	// shorter collision substeps. Only bWasStanding extends the ground line;
+ 	// airborne landing, jumping and gravity keep their existing behavior.
+@@ -5316,7 +5316,7 @@
+ 	renderWeaponOnPed = !IsPlayer() || !gVrCameraInsidePlayerHead ||
+ 		(!OculusVR::ShouldUseTrackedHands() && !VrBodyIK::WeaponOwnershipActive());
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	if(IsPlayer() && androidgame::VrKnockdownPresentationActive())
+ 		renderWeaponOnPed = false;
+ #endif
+@@ -5648,7 +5648,7 @@
+ 		}
+ 
+ 		bool blockedByVehicle;
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 		if(VrRagdoll::IsEnabled() && !IsPlayer() && CharCreatedBy==RANDOM_CHAR && !bInVehicle){
+ 			CEntity *obstacle=CPedPlacement::IsPositionClearOfCars(&GetPosition());
+ 			blockedByVehicle=(obstacle && !obstacle->IsVehicle()) || QuestPedGetup::Blocked(this);
+@@ -8431,7 +8431,7 @@
+ static bool
+ UpdateQuestJumpHeading(CPed *ped)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(ped != FindPlayerPed() || ped->InVehicle() ||
+ 	   !androidgame::VrGetOnFootAnimationAngle(nil))
+ 		return false;
+@@ -9009,7 +9009,7 @@
+ #undef CopyToBuf
+ #endif
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ void
+ CPed::ReactToTrackedGun(void)
+ {
+--- a/src/peds/Ped.h
++++ b/src/peds/Ped.h
+@@ -549,7 +549,7 @@
+ 	void ApplyHeadShot(eWeaponType weaponType, CVector pos, bool evenOnPlayer);
+ 	void RemoveBodyPart(PedNode nodeId, int8 direction);
+ 	bool OurPedCanSeeThisOne(CEntity *target);
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	CPed *CheckForAimedGun(void);
+ 	void ReactToTrackedGun(void);
+ #endif
+--- a/src/peds/PedAI.cpp
++++ b/src/peds/PedAI.cpp
+@@ -26,7 +26,7 @@
+ #include "Zones.h"
+ #include "Cranes.h"
+ 
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
+ CVector vecPedCarDoorAnimOffset;
+@@ -4727,7 +4727,7 @@
+ 	ped->SetPosition(posAfterExit);
+ 	ped->SetHeading(ped->m_fRotationCur);
+ 	veh->RemovePassenger(ped);
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	OculusVR::FinishQuestXboxTrainExit(ped, veh);
+ #endif
+ }
+--- a/src/peds/PlayerPed.cpp
++++ b/src/peds/PlayerPed.cpp
+@@ -23,13 +23,13 @@
+ #include "OculusVR.h"
+ #include "QuestWeaponTiming.h"
+ #include "QuestDualWield.h"
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrUsesHeadRelativeMovement(void);
+ bool VrGetOnFootAnimationAngle(float *angle);
+ bool VrUsesHeadDirectedMovement(void);
+ }
+-#include <android/log.h>
++#include "RuntimeLog.h"
+ #endif
+ #endif
+ 
+@@ -349,7 +349,7 @@
+ static bool
+ UseQuestDirectionalLocomotion(CPlayerPed *player)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	return !player->InVehicle() && !player->bIsInTheAir &&
+ 		player->m_nPedState != PED_JUMP && player->CanStrafeOrMouseControl() &&
+ 		androidgame::VrGetOnFootAnimationAngle(nil);
+@@ -953,7 +953,7 @@
+ void
+ CPlayerPed::PlayerControl1stPersonRunAround(CPad *padUsed)
+ {
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	ProcessQuestCrouch(this, padUsed);
+ #endif
+ 	float leftRight = padUsed->GetPedWalkLeftRight();
+@@ -961,7 +961,7 @@
+ 	float padMove = CVector2D(leftRight, upDown).Magnitude();
+ 	float padMoveInGameUnit = padMove / PAD_MOVE_TO_GAME_WORLD_MOVE;
+ 	if (padMoveInGameUnit > 0.0f) {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// VR head modes: the ped runs where the player looks instead of
+ 		// facing the camera and strafing the difference.
+ 		if(androidgame::VrUsesHeadRelativeMovement() &&
+@@ -1223,7 +1223,7 @@
+ 	AssocGroupId groupToSet;
+ 	float animationWalkAngle = m_fWalkAngle;
+ 	const bool questDirectional = UseQuestDirectionalLocomotion(this);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(questDirectional)
+ 		androidgame::VrGetOnFootAnimationAngle(&animationWalkAngle);
+ #endif
+@@ -2025,7 +2025,7 @@
+ void
+ CPlayerPed::PlayerControlZelda(CPad *padUsed)
+ {
+-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	ProcessQuestCrouch(this, padUsed);
+ #endif
+ 	bool doSmoothSpray = DoWeaponSmoothSpray();
+@@ -2064,7 +2064,7 @@
+ 
+ 		float maxAcc = 0.07f * CTimer::GetTimeStep();
+ 		m_fMoveSpeed = Min(padMoveInGameUnit, m_fMoveSpeed + maxAcc);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// The camera mode decides which controller runs, so VR needs the same
+ 		// behaviour here: m_fRotationDest already holds the requested
+ 		// direction, aim the body at it instead of turning at the stock rate.
+--- a/src/peds/Population.cpp
++++ b/src/peds/Population.cpp
+@@ -25,7 +25,7 @@
+ #include "Script.h"
+ #include "Shadows.h"
+ #include "Bike.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "VrRagdoll.h"
+ #endif
+ 
+@@ -115,7 +115,7 @@
+ static CVector
+ VrPedSpatialPosition(CPed *ped)
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	CVector centre;
+ 	float radius;
+ 	return VrRagdoll::GetBounds(ped, centre, radius) ? centre : ped->GetPosition();
+@@ -127,7 +127,7 @@
+ static bool
+ IsVrPedObservable(CPed *ped)
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	CVector centre;
+ 	float radius;
+ 	if(VrRagdoll::GetBounds(ped, centre, radius))
+--- a/src/renderer/Clouds.cpp
++++ b/src/renderer/Clouds.cpp
+@@ -14,7 +14,7 @@
+ #include "Renderer.h"
+ #include "Clouds.h"
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #include "GameRenderCommand.h"
+ 
+ extern bool gVrFirstPersonActive;
+@@ -173,7 +173,7 @@
+ static void
+ UpdateCloudCameraRoll(const CVector &up, const CVector &forward)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Quest world sprites now use a world-up basis in FaceQuestWorldSprite.
+ 	// Keep authored cloud rotation, without applying camera roll twice.
+ 	if(!androidgame::VrShouldUseTheaterMode()){
+@@ -304,7 +304,7 @@
+ 
+ 	int minute = CClock::GetHours()*60 + CClock::GetMinutes();
+ 	RwV3d campos = TheCamera.GetPosition();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// The desktop VR renderer temporarily puts its eye camera in TheCamera
+ 	// before drawing sky sprites. Native Quest keeps the simulation camera in
+ 	// TheCamera and writes the post-physics first-person view into Scene.camera
+@@ -400,7 +400,7 @@
+ 	int r = CTimeCycle::GetLowCloudsRed() * lowcloudintensity;
+ 	int g = CTimeCycle::GetLowCloudsGreen() * lowcloudintensity;
+ 	int b = CTimeCycle::GetLowCloudsBlue() * lowcloudintensity;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const bool renderWorldClouds = gVrFirstPersonActive;
+ 	WorldCloudBatch worldCloudBatch;
+ #endif
+@@ -411,7 +411,7 @@
+ 			worldpos.x = campos.x + pos.x;
+ 			worldpos.y = campos.y + pos.y;
+ 			worldpos.z = 40.0f + pos.z;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			if(renderWorldClouds){
+ 				// The legacy CPU projection follows the body camera, not an HMD
+ 				// head turn.  Submit the tiny sky ring in full and let the XR GPU
+@@ -425,7 +425,7 @@
+ 				CSprite::RenderBufferedOneXLUSprite_Rotate_Dimension(screenpos.x, screenpos.y, screenpos.z,
+ 					szx*320.0f, szy*40.0f, r, g, b, 255, 1.0f/screenpos.z, ms_cameraRoll, 255);
+ 		}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(renderWorldClouds)
+ 			RenderWorldCloudBatch(worldCloudBatch);
+ 		else
+@@ -440,7 +440,7 @@
+ 	if(fluffyalpha != 0){
+ 		static bool bCloudOnScreen[37];
+ 		float hilight;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		CVector fluffyWorldPosition[37];
+ 		float fluffyHilight[37];
+ 		bool fluffyHighlightVisible[37];
+@@ -455,7 +455,7 @@
+ 			worldpos.y = pos.x*rot_sin - pos.y*rot_cos + campos.y;
+ 			worldpos.z = pos.z;
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			if(renderWorldClouds){
+ 				int tr = CTimeCycle::GetFluffyCloudsTopRed();
+ 				int tg = CTimeCycle::GetFluffyCloudsTopGreen();
+@@ -522,7 +522,7 @@
+ 			}else
+ 				bCloudOnScreen[i] = false;
+ 		}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(renderWorldClouds)
+ 			RenderWorldCloudBatch(worldCloudBatch);
+ 		else
+@@ -535,7 +535,7 @@
+ 		RwRenderStateSet(rwRENDERSTATETEXTURERASTER, RwTextureGetRaster(gpCloudTex[3]));
+ 
+ 		for(i = 0; i < 37; i++){
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			if(renderWorldClouds){
+ 				if(bCloudOnScreen[i] && fluffyHighlightVisible[i]){
+ 					const uint8 red = (uint8)(200.0f*fluffyHilight[i]);
+@@ -563,7 +563,7 @@
+ 				}
+ 			}
+ 		}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(renderWorldClouds)
+ 			RenderWorldCloudBatch(worldCloudBatch);
+ 		else
+--- a/src/renderer/Coronas.cpp
++++ b/src/renderer/Coronas.cpp
+@@ -18,7 +18,7 @@
+ #include "Bridge.h"
+ #include "GameRenderCommand.h"
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrShouldUseTheaterMode(void);
+ }
+@@ -342,7 +342,7 @@
+ 			aCoronas[i].offScreen = true;
+ 			aCoronas[i].sightClear = false;
+ 		}else{
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			RemapCoronaToQuestTheater(&spriteCoors, &spritew, &spriteh);
+ #endif
+ 			aCoronas[i].offScreen = false;
+--- a/src/renderer/Draw.cpp
++++ b/src/renderer/Draw.cpp
+@@ -5,7 +5,7 @@
+ #include "Camera.h"
+ #include "CutsceneMgr.h"
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrShouldUseTheaterMode(void);
+ float VrTheaterAspectRatio(void);
+@@ -40,7 +40,7 @@
+ float
+ CDraw::FindAspectRatio(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Theater mode shows the frame on a quad of a fixed shape. AR_AUTO would
+ 	// report the eye buffer's own ratio, which is nearly square, and the
+ 	// interface would be laid out for one shape and displayed on another.
+--- a/src/renderer/Hud.cpp
++++ b/src/renderer/Hud.cpp
+@@ -24,7 +24,7 @@
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrGameplayHudEnabled(void);
+ bool VrShouldUseTheaterMode(void);
+@@ -539,7 +539,7 @@
+ 	}
+ }
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ void
+ VrDrawWristRadarContents(void)
+ {
+@@ -844,7 +844,7 @@
+ 	vrTrackedScope = OculusVR::IsTrackedScopeOverlayActive();
+ #endif
+ 	bool drawGameplayHud = m_Wants_To_Draw_Hud;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// The setting affects only immersive gameplay. Flat menus, loading frames
+ 	// and cinema-mode cutscenes keep their original 2D presentation.
+ 	drawGameplayHud = drawGameplayHud &&
+@@ -1001,7 +1001,7 @@
+ 					if (vrTrackedScope){
+ 						float target[3];
+ 						if (OculusVR::GetTrackedScopeReticlePos(&reticleX, &reticleY, target)) {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 							rw::vulkan::setImmediate2DScopeTarget(target, reticleX, reticleY);
+ #endif
+ 						}
+@@ -1056,7 +1056,7 @@
+ 					rect.bottom = rBottom;
+ 					Sprites[HUD_SITESNIPER].Draw(CRect(rect), CRGBA(255, 255, 255, 255),
+ 						0.99f, 0.99f,  0.01f, 0.99f,  0.99f, 0.01f,  0.01f, 0.01f);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 					rw::vulkan::setImmediate2DScopeTarget(nil, 0.0f, 0.0f);
+ #endif
+ 				}
+@@ -1072,7 +1072,7 @@
+ 		if (CrossHairHidesHud)
+ 			return;
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// Money, health, armour and the wanted level live on the player's
+ 		// other wrist in that mode: they were rendered into a texture of
+ 		// their own before this frame opened its pass.
+@@ -1085,7 +1085,7 @@
+ 		*/
+ 		wchar sPrint[16];
+ 		char sTemp[16];
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if (androidgame::VrHudWeaponPanelEnabled()) {
+ #endif
+ 		if (playerPed) {
+@@ -1145,7 +1145,7 @@
+ 				CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(AMMO_X), SCREEN_SCALE_Y(73.0f), sPrint);
+ 			}
+ 		}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		}
+ #endif
+ 
+@@ -1347,14 +1347,14 @@
+ 		/*
+ 			DrawClock
+ 		*/
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// The watch has its own switch and is armed from here every frame it is
+ 		// worn, whatever the corner clock is set to. When it draws, the corner
+ 		// one stands down: nobody wants the time in two places.
+ 		const bool wristClock = DrawWristClockQuad();
+ 		DrawWristAmmoQuad();
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if (androidgame::VrHudClockEnabled() && !wristClock)
+ #endif
+ 		{
+@@ -1562,7 +1562,7 @@
+ 			DrawRadar
+ 		*/
+ 		if (m_ItemToFlash == ITEM_RADAR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_RADAR) {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			// Wrist mode draws no map here. It was rendered into a texture of
+ 			// its own before this frame opened its pass -- see
+ 			// VrDrawWristRadarContents -- and lands on the arm as one quad.
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -31,13 +31,13 @@
+ #include "custompipes.h"
+ #include "Debug.h"
+ #include "GameRenderCommand.h"
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #include "OculusVR.h"
+ #endif
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "CarCtrl.h"
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #include "../skel/android/QuestProfiler.h"
+ #include "VehicleVisualDirector.h"
+ #endif
+@@ -199,7 +199,7 @@
+ #ifndef MASTER
+ 	if(gbDontRenderBuildings)
+ 		return;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerCountVisibleBuilding(e);
+ #endif
+ 	if(gbShowCollisionPolys)
+@@ -246,7 +246,7 @@
+ 	CVehicle *veh = nil;
+ 	int i;
+ 	bool resetLights;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	bool useVehicleVisualVlo = false;
+ #endif
+ 
+@@ -286,7 +286,7 @@
+ 	}
+ #endif
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const bool profileRenderEntity =
+ 		androidgame::QuestProfilerIsEnabled();
+ 	androidgame::QuestRenderEntitySample renderSample = {};
+@@ -302,7 +302,7 @@
+ 	}
+ #endif
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(e->IsBuilding())
+ 		androidgame::QuestProfilerCountVisibleBuilding(e);
+ #endif
+@@ -314,13 +314,13 @@
+ 
+ 	PUSH_RENDERGROUP(CModelInfo::GetModelInfo(e->GetModelIndex())->GetModelName());
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const uint64 vehicleLightingSetupStartedNs =
+ 		profileRenderEntity && e->IsVehicle() ?
+ 			androidgame::QuestProfilerNowNanoseconds() : 0;
+ #endif
+ 	resetLights = e->SetupLighting();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(vehicleLightingSetupStartedNs != 0)
+ 		renderSample.vehiclePhaseNs
+ 			[androidgame::QUEST_VEHICLE_RENDER_PHASE_LIGHTING] +=
+@@ -330,7 +330,7 @@
+ 
+ 	if(e->IsVehicle()){
+ 		CVisibilityPlugins::InitAlphaAtomicList();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		useVehicleVisualVlo =
+ 			androidgame::QuestVehicleVisualBudgetBeginVehicle((CVehicle*)e);
+ #endif
+@@ -339,7 +339,7 @@
+ 	// Render Peds in vehicle before vehicle itself
+ 	if(e->IsVehicle()){
+ 		veh = (CVehicle*)e;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		const uint64 occupantsStartedNs = profileRenderEntity ?
+ 			androidgame::QuestProfilerNowNanoseconds() : 0;
+ #endif
+@@ -351,31 +351,31 @@
+ 		        (CEntity*)veh->pDriver == gVrPlayerEntity)
+ #endif
+ 		   ){
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			if(useVehicleVisualVlo)
+ 				androidgame::QuestVehicleVisualBudgetRecordOccupantSkipped();
+ 			else
+ #endif
+ 			GameRender::SubmitEntity(veh->pDriver, GameRender::ENTITY_DRAW_VEHICLE_OCCUPANT);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			if(profileRenderEntity && !useVehicleVisualVlo)
+ 				renderSample.vehicleOccupantsSubmitted++;
+ #endif
+ 		}
+ 		for(i = 0; i < 8; i++)
+ 			if(veh->pPassengers[i] && veh->pPassengers[i]->m_nPedState == PED_DRIVING){
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 				if(useVehicleVisualVlo)
+ 					androidgame::QuestVehicleVisualBudgetRecordOccupantSkipped();
+ 				else
+ #endif
+ 				GameRender::SubmitEntity(veh->pPassengers[i], GameRender::ENTITY_DRAW_VEHICLE_OCCUPANT);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 				if(profileRenderEntity && !useVehicleVisualVlo)
+ 					renderSample.vehicleOccupantsSubmitted++;
+ #endif
+ 			}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(occupantsStartedNs != 0)
+ 			renderSample.vehiclePhaseNs
+ 				[androidgame::QUEST_VEHICLE_RENDER_PHASE_OCCUPANTS] +=
+@@ -385,16 +385,16 @@
+ 		BACKFACE_CULLING_OFF;
+ 	}
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	const bool32 savedHideWindows = rw::vulkan::setHideVehicleWindows(
+ 		e->IsVehicle() && OculusVR::ShouldHideQuestCarWindows((CVehicle*)e));
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const uint64 bodySubmitStartedNs =
+ 		profileRenderEntity && e->IsVehicle() ?
+ 			androidgame::QuestProfilerNowNanoseconds() : 0;
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const bool renderedVehicleVisualVlo = useVehicleVisualVlo &&
+ 		androidgame::QuestVehicleVisualBudgetRenderPreparedVehicle(veh);
+ 	if(!renderedVehicleVisualVlo)
+@@ -409,7 +409,7 @@
+ #endif
+ 			GameRender::SubmitEntity(e);
+ 	}
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(bodySubmitStartedNs != 0)
+ 		renderSample.vehiclePhaseNs
+ 			[androidgame::QUEST_VEHICLE_RENDER_PHASE_BODY_SUBMIT] +=
+@@ -420,12 +420,12 @@
+ 	if(e->IsVehicle()){
+ 		BACKFACE_CULLING_OFF;
+ 		e->bImBeingRendered = true;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		const uint64 alphaAtomicsStartedNs = profileRenderEntity ?
+ 			androidgame::QuestProfilerNowNanoseconds() : 0;
+ #endif
+ 		CVisibilityPlugins::RenderAlphaAtomics();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(alphaAtomicsStartedNs != 0)
+ 			renderSample.vehiclePhaseNs
+ 				[androidgame::QUEST_VEHICLE_RENDER_PHASE_ALPHA_ATOMICS] +=
+@@ -434,22 +434,22 @@
+ #endif
+ 		e->bImBeingRendered = false;
+ 		BACKFACE_CULLING_ON;
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		androidgame::QuestVehicleVisualBudgetEndVehicle();
+ #endif
+ 	}
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	rw::vulkan::setHideVehicleWindows(savedHideWindows);
+ #endif
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const uint64 vehicleLightingRemoveStartedNs =
+ 		profileRenderEntity && e->IsVehicle() ?
+ 			androidgame::QuestProfilerNowNanoseconds() : 0;
+ #endif
+ 	e->RemoveLighting(resetLights);
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(vehicleLightingRemoveStartedNs != 0)
+ 		renderSample.vehiclePhaseNs
+ 			[androidgame::QUEST_VEHICLE_RENDER_PHASE_LIGHTING] +=
+@@ -458,7 +458,7 @@
+ #endif
+ 
+ 	POP_RENDERGROUP();
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(profileRenderEntity){
+ 		renderSample.totalNs =
+ 			androidgame::QuestProfilerNowNanoseconds()-
+@@ -485,7 +485,7 @@
+ 
+ inline bool IsRoad(CEntity *e) { return e->IsBuilding() && ((CBuilding*)e)->GetIsATreadable(); }
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ // Local remapping only: never mutate visibility or transparent submission lists.
+ static CEntity **OrderOpaqueBuildings(CEntity **source, int count, bool roads)
+ {
+@@ -516,7 +516,7 @@
+ #endif
+ 
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ static void PrepareVrWorldOcclusion(CEntity **entities,int count,const CVector &camera)
+ {
+     using namespace rw::vulkan;
+@@ -561,7 +561,7 @@
+ 	int i;
+ 	CTreadable *t;
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+     PrepareVrWorldOcclusion(ms_aVisibleEntityPtrs,ms_nNoOfVisibleEntities,ms_vecCameraPosition);
+ #endif
+ 	PUSH_RENDERGROUP("CRenderer::RenderRoads");
+@@ -570,7 +570,7 @@
+ 	DeActivateDirectional();
+ 	SetAmbientColours();
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+     CEntity **phaseEntities=OrderOpaqueBuildings(ms_aVisibleEntityPtrs,ms_nNoOfVisibleEntities,true);
+ #else
+     CEntity **phaseEntities=ms_aVisibleEntityPtrs;
+@@ -610,7 +610,7 @@
+ 	BACKFACE_CULLING_ON;
+ 	gSortedVehiclesAndPeds.Clear();
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+     CEntity **phaseEntities=OrderOpaqueBuildings(ms_aVisibleEntityPtrs,ms_nNoOfVisibleEntities,false);
+ #else
+     CEntity **phaseEntities=ms_aVisibleEntityPtrs;
+@@ -748,7 +748,7 @@
+ 	if(!ShouldRenderInCurrentView(ent))
+ 		return;
+ #endif
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	androidgame::QuestProfilerCountVisibleBuilding(ent);
+ #endif
+ 
+--- a/src/renderer/Sprite.cpp
++++ b/src/renderer/Sprite.cpp
+@@ -10,7 +10,7 @@
+ #include "Frontend.h"
+ #endif
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #include "QuestBillboard.h"
+ namespace androidgame { bool VrShouldUseTheaterMode(void); }
+ #endif
+@@ -18,7 +18,7 @@
+ static bool
+ QuestWorldBillboardsEnabled(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	return !androidgame::VrShouldUseTheaterMode();
+ #else
+ 	return false;
+@@ -28,7 +28,7 @@
+ static void
+ FaceQuestWorldSprite(RwIm2DVertex *vertices, int count, float x, float y)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(QuestWorldBillboardsEnabled()){
+ 		const RwV2d *window = RwCameraGetViewWindow(Scene.camera);
+ 		const RwMatrix *camera = RwFrameGetLTM(RwCameraGetFrame(Scene.camera));
+--- a/src/renderer/Sprite2d.cpp
++++ b/src/renderer/Sprite2d.cpp
+@@ -167,11 +167,11 @@
+ // |   |
+ // 0---1
+ void
+-CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3, uint32 far)
++CSprite2d::SetVertices(const CRect &r, const CRGBA &c0, const CRGBA &c1, const CRGBA &c2, const CRGBA &c3, uint32 farPlane)
+ {
+ 	float screenz, z, recipz;
+ 
+-	if(far){
++	if(farPlane){
+ 		screenz = RwIm2DGetFarScreenZ();
+ 		z = RwCameraGetFarClipPlane(Scene.camera);
+ 	}else{
+--- a/src/renderer/WaterLevel.cpp
++++ b/src/renderer/WaterLevel.cpp
+@@ -25,7 +25,7 @@
+ #include "MemoryHeap.h"
+ #include "GameRenderCommand.h"
+ 
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ namespace androidgame {
+ bool VrGetViewBasis(float position[3], float right[3], float up[3],
+                     float forward[3]);
+@@ -40,7 +40,7 @@
+ static CVector
+ WaterViewForward(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	float forward[3];
+ 	if(androidgame::VrGetViewBasis(nil, nil, nil, forward))
+ 		return CVector(forward[0], forward[1], forward[2]);
+--- a/src/renderer/Weather.cpp
++++ b/src/renderer/Weather.cpp
+@@ -287,7 +287,7 @@
+ 
+ void CWeather::AddRain()
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	static float rainDropCarry = 0.0f;
+ #endif
+ 	if (CCullZones::CamNoRain() || CCullZones::PlayerNoRain())
+@@ -301,7 +301,7 @@
+ 	}
+ 	if (Rain <= 0.1f)
+ 	{
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		rainDropCarry = 0.0f;
+ #endif
+ 		return;
+@@ -311,7 +311,7 @@
+ 	float screen_height = SCREEN_HEIGHT;
+ 	int cur_frame = (int)(3 * Rain) & 3;
+ 	int num_drops;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	const float frameScale30Hz = Min(Max(
+ 		CTimer::GetTimeStepInSeconds()*30.0f, 0.0f), 1.0f);
+ 	const float vrRainDensity = 0.65f;
+--- a/src/rw/VisibilityPlugins.cpp
++++ b/src/rw/VisibilityPlugins.cpp
+@@ -17,7 +17,7 @@
+ #ifdef RW_VULKAN
+ #include "vulkan/rwvk.h"
+ #include "GameRenderCommand.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "QuestProfiler.h"
+ #include "VrRagdoll.h"
+ #endif
+@@ -173,7 +173,7 @@
+ void
+ CVisibilityPlugins::Initialise(void)
+ {
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ #ifndef GTA_PS2
+     // This wrapper adds memory-ID bookkeeping only and delegates unchanged to
+     // AtomicDefaultRenderCallBack. Do not register the PS2 pre-instancer or
+@@ -394,7 +394,7 @@
+ #endif
+ 
+ 		if(e->bDistanceFade){
+-#if defined(RW_VULKAN) && defined(__ANDROID__)
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 			GameRender::ProfileEntity profile(e);
+ 			if(e->IsBuilding())
+ 				androidgame::QuestProfilerCountVisibleBuilding(e);
+@@ -875,7 +875,7 @@
+ 
+ 	RwV3dSub(&cam2atm, &RwFrameGetLTM(RpAtomicGetFrame(atomic))->pos, ms_pCameraPosn);
+ 	float lodDistanceSq = ms_pedLod1Dist;
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 	CVector centre;
+ 	float radius;
+ 	if(VrRagdoll::GetClumpBounds(RpAtomicGetClump(atomic), centre, radius)){
+--- a/src/save/GenericGameStorage.cpp
++++ b/src/save/GenericGameStorage.cpp
+@@ -38,8 +38,8 @@
+ #include "Weather.h"
+ #include "Zones.h"
+ 
+-#ifdef __ANDROID__
+-#include <android/log.h>
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
++#include "RuntimeLog.h"
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <sys/stat.h>
+@@ -524,7 +524,7 @@
+ 		destination[0] = '\0';
+ 		return false;
+ 	}
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	for(char *p = destination; *p; ++p)
+ 		if(*p == '\\') *p = '/';
+ #endif
+@@ -1265,7 +1265,7 @@
+ 	return true;
+ }
+ 
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ namespace {
+ struct AutosaveOperations {
+ 	bool Write(const char *path) {
+@@ -1315,9 +1315,18 @@
+ 		return copied && inputClosed && outputClosed;
+ 	}
+ 	bool Replace(const char *source, const char *destination) {
+-		return rename(source, destination) == 0;
++		#ifdef LIBERTYVR_WINDOWS
++        return MoveFileExA(source,destination,MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
++#else
++        return rename(source, destination) == 0;
++#endif
+ 	}
+ 	bool SyncDirectory(const char *path) {
++#ifdef LIBERTYVR_WINDOWS
++        // Files are committed before MoveFileEx WRITE_THROUGH; Win32 does not
++        // expose POSIX directory fsync through the CRT.
++        return true;
++#else
+ 		char directory[260];
+ 		const int length = snprintf(directory, sizeof(directory), "%s", path);
+ 		if(length < 0 || size_t(length) >= sizeof(directory)) return false;
+@@ -1336,6 +1345,7 @@
+ 			return true;
+ 		}
+ 		return result == 0;
++#endif
+ 	}
+ 	void Remove(const char *path) { unlink(path); }
+ };
+@@ -1388,7 +1398,7 @@
+ 	IsQuickSave = SAVE_TYPE_QUICKSAVE;
+ 	MakeValidSaveName(AUTOSAVE_SLOT);
+ 	PcSaveHelper.nErrorCode = SAVESTATUS_SUCCESSFUL;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	AutosaveOperations operations;
+ 	const bool res = ValidSaveName[0] != '\0' && AutosaveTransaction::Save(operations, ValidSaveName);
+ #else
+--- a/src/save/PCSave.cpp
++++ b/src/save/PCSave.cpp
+@@ -11,7 +11,7 @@
+ #include "Messages.h"
+ #include "PCSave.h"
+ #include "Text.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "QuestUpstate.h"
+ #include "QuestSaveCompatibility.h"
+ #endif
+@@ -115,7 +115,7 @@
+ 		sprintf(savename, "%s%i%s", DefaultPCSaveFileName, i + 1, ".b");
+ 		int file = CFileMgr::OpenFile(savename, "rb");
+ 		if (file != 0) {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 			const auto profile = questsave::Inspect([&](uint8_t *data, size_t count) {
+ 				return CFileMgr::Read(file, reinterpret_cast<char*>(data), count);
+ 			});
+--- a/src/vehicles/Automobile.cpp
++++ b/src/vehicles/Automobile.cpp
+@@ -1,6 +1,6 @@
+ #include "common.h"
+ #include "ModelSets.h"
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ #include "QuestSirenInput.h"
+ #endif
+ #include "SimulationReplay.h"
+@@ -60,7 +60,7 @@
+ #include "QuestWeaponTiming.h"
+ #include "QuestDualWield.h"
+ #endif
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ #include "PhysicsDirector.h"
+ #include "VehicleDeformation.h"
+ #endif
+@@ -92,7 +92,7 @@
+ 	bFixedColour = false;
+ 	bBigWheels = false;
+ 	bWaterTight = false;
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	m_bVrSteeringWheelNeutralValid = false;
+ 	m_fVrSteeringWheelAppliedAngle = 0.0f;
+ #endif
+@@ -233,7 +233,7 @@
+ void
+ CAutomobile::SetModelIndex(uint32 id)
+ {
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	if(VehicleDeformation::IsVehicleDeformationEnabled())
+ 		VehicleDeformation::Release(this);
+ 	m_bVrSteeringWheelNeutralValid = false;
+@@ -401,7 +401,7 @@
+ 
+ 	case STATUS_SIMPLE:
+ 	{
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 		const bool runVrRailAi =
+ 			androidgame::QuestPhysicsDirectorShouldRunRailAi(this);
+ 		const uint64 vrRailAiStarted = runVrRailAi ?
+@@ -409,7 +409,7 @@
+ 		if(runVrRailAi)
+ #endif
+ 			CCarAI::UpdateCarAI(this);
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 		if(runVrRailAi)
+ 			androidgame::QuestPhysicsDirectorEndRailAi(this,
+ 				vrRailAiStarted);
+@@ -506,7 +506,7 @@
+ 
+ 		if(m_vecMoveSpeedAvg.MagnitudeSqr() <= sq(QuestPhysicsSleep::SpeedLimit(moveSpeedLimit)) &&
+ 		   m_vecTurnSpeedAvg.MagnitudeSqr() <= sq(QuestPhysicsSleep::SpeedLimit(turnSpeedLimit)) &&
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 		   m_fSleepDistance < distanceLimit ||
+ #else
+ 		   m_fDistanceTravelled < distanceLimit ||
+@@ -614,7 +614,7 @@
+ 		// This has to be done if ProcessEntityCollision wasn't called
+ 		if(!bVehicleColProcessed){
+ 			CMatrix mat(GetMatrix());
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			bool vrCollisionFlatScope = false;
+ #endif
+ 			bIsStuck = false;
+@@ -623,7 +623,7 @@
+ 			bWasPostponed = false;
+ 			bHasHitWall = false;
+ 			m_fDistanceTravelled = 0.0f;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 			m_fSleepDistance = QuestPhysicsSleep::ReferenceDistance(m_fDistanceTravelled);
+ #endif
+ 			m_bIsVehicleBeingShifted = false;
+@@ -631,20 +631,20 @@
+ 			ApplyMoveSpeed();
+ 			ApplyTurnSpeed();
+ 			for(i = 0; CheckCollision() && i < 5; i++){
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 				androidgame::QuestPhysicsDirectorRecordRetry(this);
+ 				androidgame::VehicleCaptureRetry(this);
+ #endif
+ 				GetMatrix() = mat;
+ 				ApplyMoveSpeed();
+ 				ApplyTurnSpeed();
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 				if(!vrCollisionFlatScope){
+ 					vrCollisionFlatScope = BeginVrCollisionFlatCacheScope();
+ 				}
+ #endif
+ 			}
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 			if(vrCollisionFlatScope)
+ 				EndVrCollisionFlatCacheScope();
+ #endif
+@@ -1069,7 +1069,7 @@
+ 					printf("m_bSirenOrAlarm toggled to %d\n", m_bSirenOrAlarm);
+ 				}
+ 			}else if(UsesSiren(GetModelIndex())){
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 				// Pad and virtual wheel horn share a real-time double tap.
+ 				static QuestSirenInput sirenInput;
+ 				const bool horn = Pads[0].GetHorn();
+@@ -1105,7 +1105,7 @@
+ 		if(GetStatus() != STATUS_PLAYER && GetStatus() != STATUS_PLAYER_REMOTE && GetStatus() != STATUS_PHYSICS){
+ 			if(GetModelIndex() == MI_MIAMI_RCRAIDER || GetModelIndex() == MI_MIAMI_SPARROW)
+ 				m_aWheelSpeed[0] = Max(m_aWheelSpeed[0]-0.0005f, 0.0f);
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		}else if(GetModelIndex() == MI_DODO && CTimer::GetTimeStep() > 0.0f){
+ 			// Full fixed-wing flight, including propeller thrust at rest.
+ 			// The original Dodo model only supports speed-dependent hops.
+@@ -1197,7 +1197,7 @@
+ 
+ 	// Decrease car health if engine is damaged badly
+ 	if(engineStatus > ENGINE_STATUS_ON_FIRE && m_fHealth > 250.0f)
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		// Preserve the original two health per frame at 30 FPS.
+ 		m_fHealth -= 60.0f * CTimer::GetTimeStepInSeconds();
+ #else
+@@ -1336,7 +1336,7 @@
+ 	int i, j, n;
+ 	CVehicleModelInfo *mi = (CVehicleModelInfo*)CModelInfo::GetModelInfo(GetModelIndex());
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Do this before the clump is submitted. It is a no-op for the stock/baked
+ 	// cabin wheel and for every replacement model without a dedicated frame.
+ 	OculusVR::UpdateImmersiveCarModelSteeringWheel(this);
+@@ -2275,14 +2275,14 @@
+ 	for(i = 0; i < 4; i++)
+ 		prevRatios[i] = m_aSuspensionSpringRatio[i];
+ 
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	androidgame::QuestPhysicsDirectorBeginVehicleNarrowPhase(this);
+ #endif
+ 	int numCollisions = CCollision::ProcessColModels(GetMatrix(), *colModel,
+ 		ent->GetMatrix(), *ent->GetColModel(),
+ 		colpoints,
+ 		m_aWheelColPoints, m_aSuspensionSpringRatio);
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	androidgame::QuestPhysicsDirectorEndVehicleNarrowPhase(this);
+ 	androidgame::VehicleCaptureCollision(this, numCollisions);
+ #endif
+@@ -2342,7 +2342,7 @@
+ 			   ent->IsObject() && ((CPhysical*)ent)->bInfiniteMass)
+ 				bHasHitWall = true;
+ 	}
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	androidgame::QuestPhysicsDirectorRecordContactManifold(this,
+ 		numCollisions > 0);
+ #endif
+@@ -3177,7 +3177,7 @@
+ CAutomobile::DoDriveByShootings(void)
+ {
+ 	CAnimBlendAssociation *anim;
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	const int questButtonDirection = OculusVR::GetQuestVehicleButtonFireDirection(this);
+ #else
+ 	const int questButtonDirection = -1;
+@@ -4588,7 +4588,7 @@
+ {
+ 	int component;
+ 
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	if(VehicleDeformation::IsVehicleDeformationEnabled())
+ 		VehicleDeformation::Release(this);
+ #endif
+@@ -4605,7 +4605,7 @@
+ 	RpClumpForAllAtomics((RpClump*)m_rwObject, CVehicleModelInfo::HideAllComponentsAtomicCB, (void*)ATOMIC_FLAG_DAM);
+ 
+ 	for(component = CAR_BUMP_FRONT; component < NUM_CAR_NODES; component++){
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		// This optional Modern-model node has its own authored neutral basis.
+ 		// The generic repair reset is for detachable damage components and would
+ 		// flatten the steering wheel before the VR animator can restore it.
+@@ -4715,7 +4715,7 @@
+ 	matrix = RwFrameGetLTM(m_aCarNodes[component]);
+ 	frame = RwFrameCreate();
+ 	atomic = RpAtomicClone(atomic);
+-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+ 	// Detached debris uses native geometry, so OFF can release every dent copy
+ 	// without scanning the object pool or leaving subdivided debris behind.
+ 	if(VehicleDeformation::IsVehicleDeformationEnabled())
+@@ -4920,7 +4920,7 @@
+ 	for(i = 0; i < NUM_CAR_NODES; i++)
+ 		m_aCarNodes[i] = nil;
+ 	CClumpModelInfo::FillFrameArray(GetClump(), m_aCarNodes);
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// These are the independently-authored steering frames present in the
+ 	// current Modern model archive. Never fall back to interior/chassis frames:
+ 	// rotating either would turn the dashboard or the whole body with the wheel.
+--- a/src/vehicles/Automobile.h
++++ b/src/vehicles/Automobile.h
+@@ -28,7 +28,7 @@
+ 	CAR_BONNET,
+ 	CAR_BOOT,
+ 	CAR_WINDSCREEN,
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Optional interior steering-wheel frame. Stock models generally bake the
+ 	// wheel into chassis_hi; replacement DFFs may expose a dedicated node.
+ 	CAR_STEERING_WHEEL,
+@@ -191,7 +191,7 @@
+ 
+ 	static void SetAllTaxiLights(bool set);
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 	// Per-instance neutral pose for an optional, independently-authored cabin
+ 	// steering wheel. Keeping it on the vehicle avoids a stale global frame
+ 	// pointer when cars are deleted or pool slots are reused.
+@@ -201,7 +201,7 @@
+ #endif
+ };
+ 
+-#if !(defined(GTA_VR_WEAPONS) && defined(__ANDROID__))
++#if !(defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)))
+ VALIDATE_SIZE(CAutomobile, 0x5A8);
+ #endif
+ 
+--- a/src/vehicles/Boat.cpp
++++ b/src/vehicles/Boat.cpp
+@@ -291,7 +291,7 @@
+ 		if(!onLand && bBoatInWater && GetUp().z > 0.0f){
+ 			float impulse;
+ 			if(m_fGasPedal > 0.05f)
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 				// Buoyancy already contains the timestep. Preserve the extra
+ 				// lift at the original 30 FPS without multiplying elapsed time
+ 				// twice. The cap below remains an impulse scaled by this frame.
+@@ -569,7 +569,7 @@
+ 			m_fAccelerate = -m_fBrake*0.2f;
+ 	}
+ 
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	const float steeringResponse = 1.0f - Pow(0.8f, CTimer::GetTimeStepInSeconds()*30.0f);
+ #else
+ 	const float steeringResponse = 0.2f;
+--- a/src/vehicles/Door.cpp
++++ b/src/vehicles/Door.cpp
+@@ -29,7 +29,7 @@
+ void
+ CDoor::Process(CVehicle *vehicle)
+ {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	const float frames = CTimer::GetTimeStepInSeconds()*30.0f;
+ 	if(frames <= 0.0f) return;
+ #endif
+@@ -57,7 +57,7 @@
+ 			fSpeedDiff = vecSpeedDiff.y - vecSpeedDiff.x;
+ 		break;
+ 	}
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	// Velocity differences already contain elapsed time. Normalize their
+ 	// threshold/cap to the original 30 Hz update, then integrate that recurrence.
+ 	const double drive = Abs(fSpeedDiff/frames) > 0.002f ?
+@@ -93,7 +93,7 @@
+ 		m_fAngVel *= -0.8f;
+ 		m_nDoorState = DOORST_CLOSED;
+ 	}
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		remaining -= step;
+ 	}
+ #endif
+--- a/src/vehicles/Heli.cpp
++++ b/src/vehicles/Heli.cpp
+@@ -81,7 +81,7 @@
+ 	SetStatus(STATUS_HELI);
+ 	m_bTestRight = true;
+ 	m_fTargetOffset = 0.0f;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	m_fAvoidanceSideSpeed = 0.0f;
+ #endif
+ 	m_fSearchLightX = m_fSearchLightY = 0.0f;
+@@ -218,7 +218,7 @@
+ 		vTargetDist = target - GetPosition();
+ 		m_fTargetZ = target.z;
+ 		if(m_pathState == 6){
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 			const float blend = 1.0f - Pow(0.99f, CTimer::GetTimeStepInSeconds()*30.0f);
+ 			GetMatrix().GetPosition().x += (target.x - GetPosition().x)*blend;
+ 			GetMatrix().GetPosition().y += (target.y - GetPosition().y)*blend;
+@@ -522,7 +522,7 @@
+ void
+ CHeli::ProcessAvoidance(CVector2D &targetSpeed, const CVector2D &vTargetDist)
+ {
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	if(m_heliStatus != HELI_STATUS_HOVER2 && m_heliStatus != HELI_STATUS_SHOT_DOWN){
+ 		m_fAvoidanceSideSpeed = 0.0f;
+ 		// Preserve the legacy two-unit recovery and its terminal remainder.
+--- a/src/vehicles/Heli.h
++++ b/src/vehicles/Heli.h
+@@ -61,7 +61,7 @@
+ 	uint32 m_nPoliceShoutTimer;
+ 	float m_fTargetOffset;
+ 	bool m_bTestRight;
+-#if defined(__ANDROID__) && defined(FIX_BUGS)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+ 	float m_fAvoidanceSideSpeed; // Latest 30 Hz decision, held between ticks.
+ #endif
+ 
+--- a/src/vehicles/Plane.cpp
++++ b/src/vehicles/Plane.cpp
+@@ -80,7 +80,7 @@
+ 
+ 	bUsesCollision = false;
+ 	m_bHasBeenHit = false;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	m_nDestructionFrame = 0;
+ #endif
+ 	m_bIsDrugRunCesna = false;
+@@ -130,7 +130,7 @@
+ 
+ 	// Explosion
+ 	if(m_bHasBeenHit){
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		// Catch each crossed 30 Hz game-time event once, including after a
+ 		// cutscene-only interval. The finite sequence bounds catch-up work.
+ 		const uint32 age = CTimer::GetTimeInMilliseconds() - m_nFrameWhenHit;
+@@ -139,7 +139,7 @@
+ 			const int destructionFrame = ++m_nDestructionFrame;
+ #endif
+ 		if(GetModelIndex() == MI_AIRTRAIN){
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 			int frm = destructionFrame;
+ #else
+ 			int frm = CTimer::GetFrameCounter() - m_nFrameWhenHit;
+@@ -197,7 +197,7 @@
+ 				FlagToDestroyWhenNextProcessed();
+ 			}
+ 		}else{
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 			int frm = destructionFrame;
+ #else
+ 			int frm = CTimer::GetFrameCounter() - m_nFrameWhenHit;
+@@ -263,7 +263,7 @@
+ 				FlagToDestroyWhenNextProcessed();
+ 			}
+ 		}
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		}
+ #endif
+ 	}
+@@ -935,7 +935,7 @@
+ 		   plane->GetModelIndex() != MI_AIRTRAIN && plane->GetModelIndex() == MI_DEADDODO &&	// strange check
+ #endif
+ 		   !plane->m_bHasBeenHit && (*rocketPos - plane->GetPosition()).Magnitude() < 25.0f){
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 			plane->m_nFrameWhenHit = CTimer::GetTimeInMilliseconds();
+ 			plane->m_nDestructionFrame = 0;
+ #else
+--- a/src/vehicles/Plane.h
++++ b/src/vehicles/Plane.h
+@@ -39,7 +39,7 @@
+ 	bool m_bHasBeenHit;
+ 	bool m_bIsDrugRunCesna;
+ 	bool m_bIsDropOffCesna;
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 	uint32 m_nDestructionFrame;
+ #endif
+ 
+--- a/src/vehicles/Vehicle.cpp
++++ b/src/vehicles/Vehicle.cpp
+@@ -293,7 +293,7 @@
+ 	{
+ 		// Keep aerodynamics after bailing out, without borrowing the player's
+ 		// current pad or the seaplane's automatic cruise throttle.
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		const bool questDodo = GetModelIndex() == MI_DODO;
+ #else
+ 		const bool questDodo = false;
+--- a/src/vehicles/Vehicle.h
++++ b/src/vehicles/Vehicle.h
+@@ -237,7 +237,7 @@
+ 	bool IsBike(void) { return m_vehType == VEHICLE_TYPE_BIKE; }
+ 	bool IsRealHeli(void) { return m_vehType == VEHICLE_TYPE_HELI; }
+ 	bool IsRealPlane(void) {
+-#ifdef __ANDROID__
++#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+ 		// Stored as a car, but must not use VR car steering and interaction.
+ 		if(GetModelIndex() == MI_DODO) return true;
+ #endif
+--- a/src/weapons/Weapon.cpp
++++ b/src/weapons/Weapon.cpp
+@@ -1,6 +1,6 @@
+ #include "common.h"
+ #include "SimulationReplay.h"
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ #include "QuestProfiler.h"
+ #endif
+ 
+@@ -286,7 +286,7 @@
+ 
+ 		if (fired)
+ 		{
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 			if(shooter == FindPlayerPed()) androidgame::QuestProfilerCountPlayerWeaponUse();
+ #endif
+ 			bool isPlayer = false;
+@@ -364,7 +364,7 @@
+ 
+ 	if ( FireInstantHitFromCar(shooter, left, right) )
+ 	{
+-#if defined(__ANDROID__) && defined(RW_VULKAN)
++#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(RW_VULKAN)
+ 			if(shooter == FindPlayerVehicle()) androidgame::QuestProfilerCountPlayerWeaponUse();
+ #endif
+ 		DMAudio.PlayOneShot(shooter->m_audioEntityId, SOUND_WEAPON_SHOT_FIRED, 0.0f);
+@@ -2093,7 +2093,7 @@
+ 												modelInfo->GetFrontSeatPosn().z + 0.5f);
+ 		source += CTimer::GetTimeStep() * shooter->m_vecMoveSpeed;
+ 
+-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
++#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+ 		if(!right && OculusVR::GetQuestVehicleButtonFireDirection(shooter) == 0)
+ 			target = source + info->m_fRange * shooter->GetForward();
+ 		else

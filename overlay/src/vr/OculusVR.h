@@ -190,7 +190,7 @@ bool IsImmersiveCarDrivingActive();
 bool IsImmersiveBikeDrivingActive();
 bool IsVrCarDrivingActive();
 bool IsVrBikeDrivingActive();
-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
 // Current button shot: -1 inactive, 0 forward, 1 left, 2 right.
 int GetQuestVehicleButtonFireDirection(CVehicle *vehicle);
 bool IsQuestVehicleForwardFireEnabled();
@@ -215,7 +215,7 @@ bool GetQuestVehicleHandSteerRotation(int hand, CVector *axis,
 	float *angle);
 bool IsImmersiveSteeringHandleGrabbed(int hand);
 bool ShouldRenderImmersiveSteeringHandleMarker(int hand);
-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
 void UpdateImmersiveCarModelSteeringWheel(CVehicle *vehicle);
 #endif
 bool IsImmersiveBikeSidearm(int weaponType);

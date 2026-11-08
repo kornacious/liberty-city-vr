@@ -22,6 +22,8 @@ internal static class Program
                 Liberty City VR Manager (.NET 10 / Terminal.Gui 2.5.0)
                 Run with no arguments to open the TUI.
                 --run ACTION REQUEST.json   Run a configured action without the TUI.
+                --assemble RE3 OUTPUT       Assemble patched sources locally without building or accessing a device.
+                --prepare-windows-data GTA OUTPUT  Prepare an isolated local PCVR data copy; never overwrites a directory.
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
                          InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods.
                 ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
@@ -44,6 +46,28 @@ internal static class Program
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
         try
         {
+            if (args is ["--prepare-windows-data", var retailSource, var dataOutput])
+            {
+                Workflows.PrepareWindowsData(ManagerSettings.FindRepository(), Path.GetFullPath(retailSource),
+                    Path.GetFullPath(dataOutput), cancellation.Token);
+                Console.WriteLine("Windows game data prepared locally; original files and saves preserved.");
+                return 0;
+            }
+            if (args is ["--assemble", var re3Source, var outputDirectory])
+            {
+                using var log = new PrivateLog(); log.Line += Console.WriteLine;
+                var runner = new CommandRunner(log);
+                var git = Paths.FindExecutable("git") ?? throw new IOException("Git is required for source assembly.");
+                var source = Path.GetFullPath(re3Source);
+                var head = await runner.Run(git, ["-C", source, "rev-parse", "HEAD"], showOutput: false, token: cancellation.Token);
+                var changes = await runner.Run(git, ["-C", source, "status", "--porcelain"], showOutput: false, token: cancellation.Token);
+                if (head.Output.Trim() != Toolchain.Re3Commit || changes.Output.Trim().Length != 0)
+                    throw new IOException("Source assembly requires the clean pinned public re3 checkout. Existing sources were not changed.");
+                await Workflows.Assemble(ManagerSettings.FindRepository(), Path.GetFullPath(re3Source),
+                    Path.GetFullPath(outputDirectory), git, runner, log, cancellation.Token);
+                log.Write("Source assembly complete. No game data or device access.");
+                return 0;
+            }
             if (args is ["--list-tools"])
             {
                 foreach (var tool in AuxiliaryTools.Catalog) Console.WriteLine(tool.Category + "  " + tool.Path);

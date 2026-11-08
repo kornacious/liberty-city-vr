@@ -1,9 +1,13 @@
 #include "xr_vulkan_session.h"
+#include "XrMath.h"
+#include "VulkanPolicy.h"
 #include "platform_android.h"
 // For the game camera's view window, which the Im2D plane must match.
 #include "android.h"
 
+#ifdef __ANDROID__
 #include <android_native_app_glue.h>
+#endif
 #include <vulkan/vulkan.h>
 #include <openxr/openxr.h>
 #include <openxr/openxr_platform.h>
@@ -16,7 +20,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __ANDROID__
 #include <sys/syscall.h>
+#endif
 #include <time.h>
 #include <unistd.h>
 
@@ -62,144 +68,7 @@ static constexpr float kTargetDisplayRefreshRateHz = 72.0f;
 // so the uniform block needs no transpose on upload.
 // ---------------------------------------------------------------------------
 
-struct Mat4 { float m[16]; };
-
-Mat4
-identity(void)
-{
-	Mat4 r = {};
-	r.m[0] = r.m[5] = r.m[10] = r.m[15] = 1.0f;
-	return r;
-}
-
-Mat4
-multiply(const Mat4 &a, const Mat4 &b)
-{
-	Mat4 r;
-	for(int col = 0; col < 4; col++)
-		for(int row = 0; row < 4; row++){
-			float sum = 0.0f;
-			for(int k = 0; k < 4; k++)
-				sum += a.m[k*4 + row] * b.m[col*4 + k];
-			r.m[col*4 + row] = sum;
-		}
-	return r;
-}
-
-// Asymmetric off-axis projection for a Vulkan clip volume: depth 0..1 and a
-// downward Y axis. The four OpenXR angles are signed half-angles from the
-// view direction, so tangents cannot be assumed symmetric on Quest optics.
-Mat4
-projectionFromFov(const XrFovf &fov, float nearZ, float farZ)
-{
-	const float tanLeft = tanf(fov.angleLeft);
-	const float tanRight = tanf(fov.angleRight);
-	const float tanUp = tanf(fov.angleUp);
-	const float tanDown = tanf(fov.angleDown);
-
-	const float tanWidth = tanRight - tanLeft;
-	const float tanHeight = tanDown - tanUp;	// flipped for Vulkan
-
-	Mat4 r = {};
-	r.m[0]  = 2.0f / tanWidth;
-	r.m[5]  = 2.0f / tanHeight;
-	r.m[8]  = (tanRight + tanLeft) / tanWidth;
-	r.m[9]  = (tanUp + tanDown) / tanHeight;
-	if(farZ <= 0.0f || isinf(farZ)){
-		r.m[10] = -1.0f;
-		r.m[11] = -1.0f;
-		r.m[14] = -nearZ;
-	}else{
-		r.m[10] = -farZ / (farZ - nearZ);
-		r.m[11] = -1.0f;
-		r.m[14] = -(farZ * nearZ) / (farZ - nearZ);
-	}
-	return r;
-}
-
-// Rigid inverse of the view pose: transpose the rotation, then rotate the
-// negated translation by it.
-Mat4
-viewFromPose(const XrPosef &pose)
-{
-	const XrQuaternionf &q = pose.orientation;
-	const float x = q.x, y = q.y, z = q.z, w = q.w;
-
-	const float r00 = 1.0f - 2.0f*(y*y + z*z);
-	const float r01 = 2.0f*(x*y - z*w);
-	const float r02 = 2.0f*(x*z + y*w);
-	const float r10 = 2.0f*(x*y + z*w);
-	const float r11 = 1.0f - 2.0f*(x*x + z*z);
-	const float r12 = 2.0f*(y*z - x*w);
-	const float r20 = 2.0f*(x*z - y*w);
-	const float r21 = 2.0f*(y*z + x*w);
-	const float r22 = 1.0f - 2.0f*(x*x + y*y);
-
-	const float px = pose.position.x, py = pose.position.y, pz = pose.position.z;
-
-	Mat4 r = {};
-	// Transposed rotation, written column-major.
-	r.m[0] = r00; r.m[1] = r01; r.m[2] = r02;
-	r.m[4] = r10; r.m[5] = r11; r.m[6] = r12;
-	r.m[8] = r20; r.m[9] = r21; r.m[10] = r22;
-	r.m[12] = -(r00*px + r10*py + r20*pz);
-	r.m[13] = -(r01*px + r11*py + r21*pz);
-	r.m[14] = -(r02*px + r12*py + r22*pz);
-	r.m[15] = 1.0f;
-	return r;
-}
-
-// Rigid head transform from a pose: rotation, then translation.
-Mat4
-worldFromPose(const XrPosef &pose)
-{
-	const XrQuaternionf &q = pose.orientation;
-	const float x = q.x, y = q.y, z = q.z, w = q.w;
-
-	Mat4 r = {};
-	r.m[0] = 1.0f - 2.0f*(y*y + z*z);
-	r.m[1] = 2.0f*(x*y + z*w);
-	r.m[2] = 2.0f*(x*z - y*w);
-	r.m[4] = 2.0f*(x*y - z*w);
-	r.m[5] = 1.0f - 2.0f*(x*x + z*z);
-	r.m[6] = 2.0f*(y*z + x*w);
-	r.m[8] = 2.0f*(x*z + y*w);
-	r.m[9] = 2.0f*(y*z - x*w);
-	r.m[10] = 1.0f - 2.0f*(x*x + y*y);
-	r.m[12] = pose.position.x;
-	r.m[13] = pose.position.y;
-	r.m[14] = pose.position.z;
-	r.m[15] = 1.0f;
-	return r;
-}
-
-// Maps screen pixel coordinates onto a quad of the given size, centred a fixed
-// distance ahead of the head. Screen Y grows downward, hence the negative Y
-// scale; the plane sits at -Z because that is forward in OpenXR view space.
-Mat4
-im2dPlane(const XrPosef &headPose, float screenWidth, float screenHeight,
-          float distance, float planeWidth, float planeHeight)
-{
-	Mat4 plane = {};
-	plane.m[0] = screenWidth > 0.0f ? planeWidth / screenWidth : 0.0f;
-	plane.m[5] = screenHeight > 0.0f ? -planeHeight / screenHeight : 0.0f;
-	plane.m[10] = 1.0f;
-	plane.m[12] = -planeWidth * 0.5f;
-	plane.m[13] = planeHeight * 0.5f;
-	plane.m[14] = -distance;
-	plane.m[15] = 1.0f;
-
-	return multiply(worldFromPose(headPose), plane);
-}
-
-Mat4
-translationScale(float tx, float ty, float tz, float sx, float sy, float sz)
-{
-	Mat4 r = identity();
-	r.m[0] = sx; r.m[5] = sy; r.m[10] = sz;
-	r.m[12] = tx; r.m[13] = ty; r.m[14] = tz;
-	return r;
-}
+using namespace XrMath;
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -367,7 +236,9 @@ struct State
 	// XR_KHR_android_thread_settings lets the runtime identify that time-critical
 	// CPU thread without the application forcing a Linux scheduling policy.
 	bool hasAndroidThreadSettingsExt = false;
+#ifdef __ANDROID__
 	PFN_xrSetAndroidApplicationThreadKHR setAndroidApplicationThread = nullptr;
+#endif
 	uint32_t applicationMainThreadId = 0;
 	bool applicationMainThreadRegistered = false;
 
@@ -507,6 +378,7 @@ createShaderModule(const uint32_t *code, size_t byteSize)
 bool
 initialiseLoader(android_app *app)
 {
+#ifdef __ANDROID__
 	PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = nullptr;
 	XrResult result = xrGetInstanceProcAddr(
 		XR_NULL_HANDLE, "xrInitializeLoaderKHR",
@@ -522,11 +394,15 @@ initialiseLoader(android_app *app)
 	XR_CHECK(xrInitializeLoaderKHR((const XrLoaderInitInfoBaseHeaderKHR *)&loaderInfo),
 	         "xrInitializeLoaderKHR");
 	return true;
+#else
+    return true;
+#endif
 }
 
 bool
 applyAndroidThreadSettings(const char *reason)
 {
+#ifdef __ANDROID__
 	if(!g.hasAndroidThreadSettingsExt ||
 	   g.setAndroidApplicationThread == nullptr ||
 	   g.session == XR_NULL_HANDLE || g.applicationMainThreadId == 0)
@@ -543,6 +419,9 @@ applyAndroidThreadSettings(const char *reason)
 		LOGW("xrSetAndroidApplicationThreadKHR application-main tid=%u (%s) failed: %d",
 		     g.applicationMainThreadId, reason, (int)result);
 	return g.applicationMainThreadRegistered;
+#else
+    return false;
+#endif
 }
 
 bool
@@ -568,8 +447,10 @@ createInstance(android_app *app)
 		return false;
 	}
 	enabled.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+#ifdef __ANDROID__
 	if(has(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME))
 		enabled.push_back(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+#endif
 	// Standalone Quest applications choose their own display frequency. The
 	// Quest Link setting on the PC does not apply to this native process.
 	g.hasRefreshRateExt = has(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
@@ -583,6 +464,7 @@ createInstance(android_app *app)
 		has(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
 	if(g.hasPerformanceSettingsExt)
 		enabled.push_back(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
+#ifdef __ANDROID__
 	g.hasAndroidThreadSettingsExt =
 		has(XR_KHR_ANDROID_THREAD_SETTINGS_EXTENSION_NAME);
 	if(g.hasAndroidThreadSettingsExt)
@@ -591,15 +473,22 @@ createInstance(android_app *app)
 	androidInfo.applicationVM = app->activity->vm;
 	androidInfo.applicationActivity = app->activity->clazz;
 
+#endif
 	XrInstanceCreateInfo info = { XR_TYPE_INSTANCE_CREATE_INFO };
+#ifdef __ANDROID__
 	info.next = &androidInfo;
+#endif
 	info.enabledExtensionCount = (uint32_t)enabled.size();
 	info.enabledExtensionNames = enabled.data();
 	strcpy(info.applicationInfo.applicationName, "Liberty City VR");
 	info.applicationInfo.applicationVersion = 1;
 	strcpy(info.applicationInfo.engineName, "re3");
 	info.applicationInfo.engineVersion = 1;
+#ifdef LIBERTYVR_WINDOWS
+    info.applicationInfo.apiVersion = XR_MAKE_VERSION(1,0,0);
+#else
 	info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+#endif
 
 	XR_CHECK(xrCreateInstance(&info, &g.instance), "xrCreateInstance");
 	if(g.hasRefreshRateExt){
@@ -633,6 +522,7 @@ createInstance(android_app *app)
 			LOGI("XR_EXT_performance_settings supported");
 	}else
 		LOGI("XR_EXT_performance_settings not supported; runtime controls clocks");
+#ifdef __ANDROID__
 	if(g.hasAndroidThreadSettingsExt){
 		const XrResult result = xrGetInstanceProcAddr(
 			g.instance, "xrSetAndroidApplicationThreadKHR",
@@ -646,6 +536,7 @@ createInstance(android_app *app)
 			LOGI("XR_KHR_android_thread_settings supported");
 	}else
 		LOGI("XR_KHR_android_thread_settings not supported");
+#endif
 	if(g.hasPerformanceMetricsExt){
 		const XrResult enumerateResult = xrGetInstanceProcAddr(
 			g.instance,
@@ -732,6 +623,11 @@ createVulkan(void)
 		XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR };
 	XR_CHECK(getRequirements(g.instance, g.systemId, &requirements),
 	         "xrGetVulkanGraphicsRequirements2KHR");
+    if(!XrVulkanPolicy::supportsVulkan11(requirements.minApiVersionSupported,
+            requirements.maxApiVersionSupported,VK_API_VERSION_1_1)){
+        LOGE("runtime Vulkan API range does not include the required 1.1 baseline");
+        return false;
+    }
 
 	// The runtime creates the VkInstance on our behalf so it can inject the
 	// extensions it needs for swapchain sharing.
@@ -765,6 +661,9 @@ createVulkan(void)
 
 	VkPhysicalDeviceProperties physicalProperties;
 	vkGetPhysicalDeviceProperties(g.physicalDevice, &physicalProperties);
+    if(physicalProperties.apiVersion < VK_API_VERSION_1_1){
+        LOGE("runtime-selected GPU does not support Vulkan 1.1"); return false;
+    }
 	LOGI("Vulkan device: %s (API %u.%u.%u)", physicalProperties.deviceName,
 	     VK_VERSION_MAJOR(physicalProperties.apiVersion),
 	     VK_VERSION_MINOR(physicalProperties.apiVersion),
@@ -796,6 +695,12 @@ createVulkan(void)
 	// explicitly rather than relying on it being enabled by default.
 	VkPhysicalDeviceMultiviewFeatures multiviewFeatures = {
 		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES };
+    VkPhysicalDeviceFeatures2 supported = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    supported.pNext = &multiviewFeatures;
+    vkGetPhysicalDeviceFeatures2(g.physicalDevice,&supported);
+    if(!multiviewFeatures.multiview){ LOGE("stereo multiview is required by the shared renderer"); return false; }
+    multiviewFeatures.multiviewGeometryShader = VK_FALSE;
+    multiviewFeatures.multiviewTessellationShader = VK_FALSE;
 	multiviewFeatures.multiview = VK_TRUE;
 
 	VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -805,8 +710,7 @@ createVulkan(void)
 		availableFeatures.fragmentStoresAndAtomics;
 	g.fragmentStoresAndAtomicsEnabled =
 		deviceFeatures.fragmentStoresAndAtomics != VK_FALSE;
-	deviceFeatures.samplerAnisotropy = VK_TRUE;
-	deviceFeatures.textureCompressionASTC_LDR = VK_TRUE;
+	deviceFeatures = XrVulkanPolicy::optionalFeatures(availableFeatures);
 
 	VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 	deviceInfo.pNext = &multiviewFeatures;
@@ -2386,7 +2290,11 @@ create(android_app *app)
 	// create() is called by gameThreadMain, the single thread which performs
 	// both CGame::Step and render submission. gettid supplies the kernel TID
 	// required by XR_KHR_android_thread_settings (not pthread_t).
+#ifdef __ANDROID__
 	g.applicationMainThreadId = (uint32_t)syscall(SYS_gettid);
+#else
+    g.applicationMainThreadId = GetCurrentThreadId();
+#endif
 	LOGI("OpenXR application-main candidate tid=%u (game/render thread)",
 	     g.applicationMainThreadId);
 	if(!initialiseLoader(app)) return false;

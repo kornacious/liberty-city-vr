@@ -151,7 +151,7 @@ static unsigned lateAdmissions, blastEvents;
 
 static void AdmissionEvent(const char *event, unsigned count, CPed *ped, int reason)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	if(count <= 4 || (count & (count-1)) == 0)
 		__android_log_print(ANDROID_LOG_INFO,"QuestRagdoll",
 			"event=%s count=%u reason=%d active=%d taken=%d model=%d state=%d",
@@ -690,7 +690,7 @@ static void WakeSavedByVehicles(void)
 	VrRagdollMetrics::Scope vehicleTime(VrRagdollMetrics::VEHICLE);
 	CVehiclePool *pool = CPools::GetVehiclePool();
 	if(pool == nil) return;
-	bool near[MAX_POSES] = {};
+	bool nearbyVehicle[MAX_POSES] = {};
 	float bounds[MAX_POSES] = {};
 	for(int s = 0; s < MAX_POSES; s++){
 		if(slots[s].ped == nil || !slots[s].asleep) continue;
@@ -712,16 +712,16 @@ static void WakeSavedByVehicles(void)
 		const CVector center = car->GetMatrix()*col->boundingSphere.center;
 		const CVector travel = car->m_vecMoveSpeed*5.0f;
 		for(int s = 0; s < MAX_POSES; s++){
-			if(slots[s].ped == nil || !slots[s].asleep || near[s]) continue;
+			if(slots[s].ped == nil || !slots[s].asleep || nearbyVehicle[s]) continue;
 			const float r = bounds[s]+col->boundingSphere.radius;
-			near[s] = VrRagdollVehicle::SegmentDistanceSq(slots[s].pos[RD_PELVIS],center-travel,center+travel) <= r*r;
+			nearbyVehicle[s] = VrRagdollVehicle::SegmentDistanceSq(slots[s].pos[RD_PELVIS],center-travel,center+travel) <= r*r;
 		}
 	}
 	static int cursor;
 	int queries = 0;
 	for(int n = 0; n < MAX_POSES && queries < 2; n++){
 		const int s = (cursor+n)%MAX_POSES;
-		if(!near[s]) continue;
+		if(!nearbyVehicle[s]) continue;
 		queries++;
 		VrRagdollVehicle::Batch vehicles;
 		VrRagdollVehicle::Gather(slots[s].pos,SIM_BONES,JOINT_RADIUS,0.1f,vehicles);

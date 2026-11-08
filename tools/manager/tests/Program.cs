@@ -201,6 +201,26 @@ await XboxEffectChecks.Run(Test, Assert);
 
 await Test("Game data copy rejects incomplete retail folders", () =>
 { Throws<IOException>(() => Workflows.ValidateGameDirectory(root)); return Task.CompletedTask; });
+await Test("Windows data preparation isolates assets and refuses overwrites or overlapping paths", () =>
+{
+    var retail = Path.Combine(root,"windows-retail");
+    foreach(var directory in new[] {"data","TEXT","anim","models","movies","Audio"}) Directory.CreateDirectory(Path.Combine(retail,directory));
+    File.WriteAllText(Path.Combine(retail,"Audio/sfx.RAW"),"synthetic raw");
+    File.WriteAllText(Path.Combine(retail,"Audio/sfx.SDT"),"synthetic descriptors");
+    File.WriteAllText(Path.Combine(retail,"re3.ini"),"original preferences");
+    var publicFiles = Path.Combine(repository,"overlay/gamefiles/models"); Directory.CreateDirectory(publicFiles);
+    File.WriteAllText(Path.Combine(publicFiles,"test.txt"),"synthetic public overlay");
+    var output = Path.Combine(root,"windows-data");
+    Workflows.PrepareWindowsData(repository,retail,output,default);
+    Assert(File.Exists(Path.Combine(output,".libertyvr-pcvr-data")));
+    Assert(File.ReadAllText(Path.Combine(output,"models/test.txt"))=="synthetic public overlay");
+    Assert(!File.Exists(Path.Combine(output,"re3.ini")));
+    Assert(File.ReadAllText(Path.Combine(retail,"re3.ini"))=="original preferences");
+    Throws<IOException>(()=>Workflows.PrepareWindowsData(repository,retail,output,default));
+    Throws<IOException>(()=>Workflows.PrepareWindowsData(repository,retail,Path.Combine(retail,"child"),default));
+    Throws<IOException>(()=>Workflows.PrepareWindowsData(repository,retail,Path.Combine(repository,"data"),default));
+    return Task.CompletedTask;
+});
 await Test("Version parsing rejects missing and duplicate versionCode", () =>
 {
     Assert(Workflows.ReadVersion("versionCode = 600\n") == 600);

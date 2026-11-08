@@ -13,9 +13,13 @@ Copy game data or from the installed headset WAVs when Copy is off. Original PC
 files are preserved; headset WAVs are removed after verified replacement.
 Copy alone restores WAV playback. See [the build guide](../../BUILDING.md#build-and-install).
 
-The manager currently builds and deploys the Quest application. Windows PCVR
-target selection, desktop game installation/launch and runtime diagnostics are
-planned; they are not implemented in 0.8.5. Updates use
+The interactive manager builds and deploys the Quest application. Windows PCVR
+target selection, desktop installation/launch and runtime diagnostics remain
+planned. Developer CLI commands `--assemble RE3 OUTPUT` and
+`--prepare-windows-data GTA OUTPUT` prepare sources and an isolated local asset
+copy for the experimental [Windows CMake build](../../overlay/windows/README.md).
+Assembly requires the clean pinned public re3 commit; data preparation refuses
+existing or overlapping destinations and never accesses a headset. Updates use
 [the renamed official repository](https://github.com/kornacious/liberty-city-vr).
 Existing local checkout paths and saved settings remain valid after the rename.
 See [platform scope](../../PLATFORMS.md).

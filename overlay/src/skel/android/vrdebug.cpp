@@ -58,7 +58,7 @@
 #include "PlayerPed.h"
 #include "Timer.h"
 #include "crossplatform.h"
-#include <android/log.h>
+#include "RuntimeLog.h"
 
 template<typename T>
 static inline T clamp(T val, T low, T high) {
@@ -129,7 +129,7 @@ static const DebugGlyph gDebugGlyphs[] = {
 static bool gDebugVisible;
 static uint8 gDebugPixels[VR_DEBUG_WIDTH*VR_DEBUG_HEIGHT*4];
 static uint8 gVrMenuPixels[VR_MENU_WIDTH*VR_MENU_HEIGHT*4];
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 static QuestNativeSettings::Page *gNativeSettingsPage;
 #endif
 static int gDebugFps;
@@ -931,7 +931,7 @@ static void
 FillVrMenuRect(int left, int top, int right, int bottom,
                uint8 red, uint8 green, uint8 blue, uint8 alpha)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	if(gNativeSettingsPage) return;
 #endif
 	left = Max(0, left);
@@ -947,7 +947,7 @@ static void
 DrawVrMenuText(const char *value, int centreX, int y, int scale,
                uint8 red, uint8 green, uint8 blue)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	if(gNativeSettingsPage) {
 		if(y >= 160 && y < 700 && value[0]) gNativeSettingsPage->notes.emplace_back(value);
 		return;
@@ -4201,7 +4201,7 @@ VrDebugUpdate(const PadInput &in)
 static void
 BeginFullVrMenuPage(const char *heading, const char *subtitle = nil)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	if(gNativeSettingsPage) {
 		*gNativeSettingsPage = QuestNativeSettings::Page();
 		gNativeSettingsPage->heading = heading;
@@ -4226,7 +4226,7 @@ DrawFullVrMenuRow(const char *text, int y, int scale, bool selected,
                   bool available = true, bool warning = false,
                   bool positive = false, bool highlight = false)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	if(gNativeSettingsPage) {
 		gNativeSettingsPage->rows.emplace_back(text, selected, available);
 		return;
@@ -4257,7 +4257,7 @@ DrawQuestSettingsPage(void)
 		(int)QUEST_CPU_PERFORMANCE_COUNT-1);
 	BeginFullVrMenuPage("SETTINGS");
 	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 		if(!IsMenuItemVisible(VR_MENU_PAGE_SETTINGS, item)) continue;
 #endif
 		DrawFullVrMenuRow(QuestSettingsCategories[item].label, 152+item*36, 2,
@@ -4280,7 +4280,7 @@ DrawQuestGameSettingsPage(bool audio)
 		if(audio) QuestGameSettings::AudioText(row, text, sizeof(text));
 		else QuestGameSettings::LanguageText(row, text, sizeof(text));
 		DrawFullVrMenuRow(text, 180+row*52, 2, row == *CurrentMenuSelection(), true);
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 		if(gNativeSettingsPage && audio && (row == QuestGameSettings::Music || row == QuestGameSettings::Effects))
 			gNativeSettingsPage->rows.back().sliderProgress = (row == QuestGameSettings::Music ?
 				FrontEndMenuManager.m_PrefsMusicVolume : FrontEndMenuManager.m_PrefsSfxVolume)/127.0f;
@@ -4459,7 +4459,7 @@ DrawQuestGraphicsPage(void)
 	snprintf(rows[VR_GRAPHICS_DRAW_DISTANCE], sizeof(rows[0]), "DRAW DISTANCE  < %.2fX >", CMenuManager::m_PrefsLOD);
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++){
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 		if(!IsMenuItemVisible(VR_MENU_PAGE_GRAPHICS, item)) continue;
 #endif
 		// Compact rows leave room for the status footer.
@@ -4557,7 +4557,7 @@ DrawQuestWeaponsPage(void)
 	strcpy(rows[VR_WEAPONS_CALIBRATION], "WEAPON CALIBRATION  < OPEN >");
 	strcpy(rows[VR_WEAPONS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_WEAPONS_ITEM_COUNT; item++){
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 		if(!IsMenuItemVisible(VR_MENU_PAGE_WEAPONS, item)) continue;
 #endif
 		DrawFullVrMenuRow(rows[item], 170+item*49, 3,
@@ -5264,7 +5264,7 @@ DrawQuestLocomotionPage(void)
 	snprintf(rows[VR_LOCOMOTION_BORDERS], sizeof(rows[0]), "CINEMA SCREEN BORDERS  < %s >", CMenuManager::m_PrefsCutsceneBorders ? "ON" : "OFF");
 	strcpy(rows[VR_LOCOMOTION_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++){
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 		if(!IsMenuItemVisible(VR_MENU_PAGE_LOCOMOTION, item)) continue;
 #endif
 		DrawFullVrMenuRow(rows[item], 150+item*38, 3,

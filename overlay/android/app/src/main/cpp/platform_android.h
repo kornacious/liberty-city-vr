@@ -1,6 +1,6 @@
 #pragma once
 
-#include <android/log.h>
+#include "RuntimeLog.h"
 #include <stdint.h>
 #include <string>
 
@@ -77,6 +77,7 @@ bool audioIsStreamPlaying(int stream);
 // rewriting those call sites, and it keeps vr_settings.ini byte-compatible
 // with the desktop build so a calibration file can move between them.
 // ---------------------------------------------------------------------------
+#ifndef _WIN32
 extern "C" {
 
 int32_t GetPrivateProfileIntA(const char *section, const char *key,
@@ -90,3 +91,5 @@ int32_t WritePrivateProfileStringA(const char *section, const char *key,
                                    const char *value, const char *fileName);
 
 }
+
+#endif

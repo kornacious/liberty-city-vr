@@ -1,7 +1,7 @@
 #include "common.h"
 #include "VehicleDeformation.h"
 
-#if defined(GTA_VR_WEAPONS) && defined(__ANDROID__) && defined(LIBRW)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(LIBRW)
 #include "VehicleDeformationMesh.h"
 #include "Vehicle.h"
 #include "Camera.h"
@@ -13,7 +13,7 @@
 #include "VisibilityPlugins.h"
 #include <cstring>
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
-#include <android/log.h>
+#include "RuntimeLog.h"
 #endif
 
 namespace VehicleDeformation {

@@ -17,9 +17,7 @@
 
 #ifdef RW_VULKAN
 
-#include <android/log.h>
-#define VKLOG(...) __android_log_print(ANDROID_LOG_INFO, "librw-vk", __VA_ARGS__)
-#define VKERR(...) __android_log_print(ANDROID_LOG_ERROR, "librw-vk", __VA_ARGS__)
+#include "VulkanPlatform.h"
 
 #include <vector>
 #include <unordered_map>

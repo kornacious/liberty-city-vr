@@ -13,9 +13,11 @@
 #include "ModelSets.h"
 #include "platform_android.h"
 
-#include <aaudio/AAudio.h>
+#include "NativeAudioOutput.h"
 #include <fcntl.h>
+#ifndef _WIN32
 #include <sys/mman.h>
+#endif
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -65,7 +67,7 @@ static AndroidChannel gChannels[MAXCHANNELS + MAX2DCHANNELS];
 // copy it back or reset it while a burst is in flight.
 static QuestHrtf::History gHrtfHistory[MAXCHANNELS + MAX2DCHANNELS];
 static std::mutex gMixerMutex;
-static AAudioStream *gOutputStream = nullptr;
+static bool gOutputOpen = false;
 static uint8 *gRawSamples = nullptr;
 static size_t gRawSize = 0;
 static int gRawFd = -1;
@@ -118,8 +120,8 @@ updateSpatialization(AndroidChannel &channel)
 	QuestHrtf::Build(channel.filter, channel.x, channel.y, channel.z, channel.spatial);
 }
 
-static aaudio_data_callback_result_t
-audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
+static int32_t
+audioCallback(void *, void *audioData, int32_t numFrames)
 {
 	int16_t *output = static_cast<int16_t *>(audioData);
 	memset(output, 0, size_t(numFrames) * 2 * sizeof(int16_t));
@@ -228,58 +230,21 @@ audioCallback(AAudioStream *, void *, void *audioData, int32_t numFrames)
 			live.tailFrames = mixed.tailFrames;
 		}
 	}
-	return AAUDIO_CALLBACK_RESULT_CONTINUE;
+	return 0;
 }
 
 static bool
 openOutput()
 {
-	AAudioStreamBuilder *builder = nullptr;
-	if(AAudio_createStreamBuilder(&builder) != AAUDIO_OK)
-		return false;
-	AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
-	AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
-	AAudioStreamBuilder_setChannelCount(builder, 2);
-	// The embedded HRIRs are resampled to this output rate. Android handles
-	// conversion to the hardware rate; source effects retain their own rates.
-	AAudioStreamBuilder_setSampleRate(builder, 48000);
-	AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-	AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_SHARED);
-	AAudioStreamBuilder_setDataCallback(builder, audioCallback, nullptr);
-	aaudio_result_t result = AAudioStreamBuilder_openStream(builder, &gOutputStream);
-	AAudioStreamBuilder_delete(builder);
-	if(result != AAUDIO_OK || gOutputStream == nullptr){
-		LOGE("AAudio open failed: %s", AAudio_convertResultToText(result));
-		gOutputStream = nullptr;
-		return false;
-	}
-	gOutputRate = AAudioStream_getSampleRate(gOutputStream);
-	if(gOutputRate != 48000){
-		LOGE("AAudio returned an incompatible HRTF rate: %d", gOutputRate);
-		AAudioStream_close(gOutputStream);
-		gOutputStream = nullptr;
-		return false;
-	}
-	result = AAudioStream_requestStart(gOutputStream);
-	if(result != AAUDIO_OK){
-		LOGE("AAudio start failed: %s", AAudio_convertResultToText(result));
-		AAudioStream_close(gOutputStream);
-		gOutputStream = nullptr;
-		return false;
-	}
-	LOGI("AAudio SFX mixer: %d Hz, burst %d", gOutputRate,
-		AAudioStream_getFramesPerBurst(gOutputStream));
-	return true;
+    gOutputRate = 48000;
+    gOutputOpen = NativeAudioOutput::Open(audioCallback, nullptr);
+    return gOutputOpen;
 }
-
 static void
 closeOutput()
 {
-	if(gOutputStream != nullptr){
-		AAudioStream_requestStop(gOutputStream);
-		AAudioStream_close(gOutputStream);
-		gOutputStream = nullptr;
-	}
+    if(gOutputOpen) NativeAudioOutput::Close();
+    gOutputOpen = false;
 }
 
 static bool
@@ -384,7 +349,7 @@ uint32 cSampleManager::GetNum3DProvidersAvailable(void) { return 1; }
 void cSampleManager::SetNum3DProvidersAvailable(uint32) {}
 char *cSampleManager::Get3DProviderName(uint8)
 {
-	static char name[] = "Android AAudio";
+	static char name[] = "Native spatial mixer";
 	return name;
 }
 void cSampleManager::Set3DProviderName(uint8, char *) {}
@@ -407,7 +372,7 @@ cSampleManager::Initialise(void)
 		m_aSamples[i].nLoopEnd = -1;
 	}
 	if(!InitialiseSampleBanks()){
-		LOGE("Android audio: sfx.RAW/SDT could not be opened");
+		LOGE("Native audio: sfx.RAW/SDT could not be opened");
 		return false;
 	}
 
@@ -430,7 +395,7 @@ cSampleManager::Initialise(void)
 	m_bInitialised = true;
 	_bSampmanInitialised = true;
 	QuestMusic::Initialise();
-	LOGI("Android audio backend initialised");
+	LOGI("Native spatial audio backend initialised");
 	return true;
 }
 
@@ -445,7 +410,11 @@ cSampleManager::Terminate(void)
 		platform::audioStopStream(i);
 	closeOutput();
 	if(gRawSamples != nullptr){
+#ifdef _WIN32
+        free(gRawSamples);
+#else
 		munmap(gRawSamples, gRawSize);
+#endif
 		gRawSamples = nullptr;
 		gRawSize = 0;
 	}
@@ -736,15 +705,25 @@ cSampleManager::InitialiseSampleBanks(void)
 	fclose(desc);
 	if(read != TOTAL_AUDIO_SAMPLES) return false;
 
+#ifdef _WIN32
+    gRawFd = _open(rawPath, _O_RDONLY | _O_BINARY);
+#else
 	gRawFd = open(rawPath, O_RDONLY);
+#endif
 	if(gRawFd < 0) return false;
 	struct stat st{};
 	if(fstat(gRawFd, &st) != 0 || st.st_size <= 0){
 		close(gRawFd); gRawFd = -1; return false;
 	}
 	gRawSize = size_t(st.st_size);
-	void *mapping = mmap(nullptr, gRawSize, PROT_READ, MAP_SHARED, gRawFd, 0);
-	if(mapping == MAP_FAILED){
+#ifdef _WIN32
+    void *mapping = malloc(gRawSize);
+    if(!mapping || _read(gRawFd,mapping,unsigned(gRawSize)) != int(gRawSize)) {
+        free(mapping);
+#else
+    void *mapping = mmap(nullptr, gRawSize, PROT_READ, MAP_SHARED, gRawFd, 0);
+    if(mapping == MAP_FAILED){
+#endif
 		close(gRawFd); gRawFd = -1; gRawSize = 0; return false;
 	}
 	gRawSamples = static_cast<uint8 *>(mapping);

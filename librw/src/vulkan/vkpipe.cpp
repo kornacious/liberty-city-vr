@@ -26,8 +26,7 @@
 
 #ifdef RW_VULKAN
 
-#include <android/log.h>
-#define VKERR(...) __android_log_print(ANDROID_LOG_ERROR, "librw-vk", __VA_ARGS__)
+#include "VulkanPlatform.h"
 
 namespace rw {
 namespace vulkan {

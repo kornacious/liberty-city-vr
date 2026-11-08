@@ -19,7 +19,7 @@
 
 #ifdef RW_VULKAN
 
-#include <android/log.h>
+#include "VulkanPlatform.h"
 
 namespace rw {
 namespace vulkan {
@@ -326,7 +326,7 @@ logImStats(void)
 	if(gIm2DDropped == lastDropped)
 		return;
 	lastDropped = gIm2DDropped;
-	__android_log_print(ANDROID_LOG_INFO, "librw-vk",
+	VKLOG(
 	                    "im2d: %u calls, %u drawn, %u dropped",
 	                    gIm2DCalls, gIm2DDrawn, gIm2DDropped);
 }

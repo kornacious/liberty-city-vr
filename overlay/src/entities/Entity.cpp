@@ -25,7 +25,7 @@
 #include "SaveBuf.h"
 #include "Ped.h"
 #include "VrRagdoll.h"
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 #include "VehicleDeformation.h"
 #endif
 
@@ -170,7 +170,7 @@ AtomicRemoveAnimFromSkinCB(RpAtomic *atomic, void *data)
 void
 CEntity::DeleteRwObject(void)
 {
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 	if(IsVehicle() && VehicleDeformation::IsVehicleDeformationEnabled()) VehicleDeformation::Release(this);
 #endif
 	RwFrame *f;

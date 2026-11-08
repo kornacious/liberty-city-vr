@@ -12,8 +12,8 @@
 #include <vector>
 #include <cstdio>
 #include <unistd.h>
-#ifdef __ANDROID__
-#include <android/log.h>
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#include "RuntimeLog.h"
 #endif
 
 #ifdef LCVR_UPSTATE_ENGINE
@@ -61,7 +61,7 @@ bool Initialize(const char *root) {
         }
         fclose(f);
     }
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
     __android_log_print(ANDROID_LOG_INFO,"LibertyVR","Upstate overlay ready: %zu pinned files, %zu FXT entries; expanded save profile",sizeof(questpackage::UpstateFiles)/sizeof(questpackage::UpstateFiles[0]),text.size());
 #endif
     return true;

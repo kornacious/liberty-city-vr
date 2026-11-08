@@ -152,7 +152,11 @@ void Service() {
     if(clock-lastMarkerCheck>1000) {
         lastMarkerCheck=clock; struct stat st{};
         if(stat((root+"/.rescan").c_str(),&st)==0) {
+#ifdef _WIN32
+            int64_t stamp=int64_t(st.st_mtime)*1000000000;
+#else
             int64_t stamp=int64_t(st.st_mtim.tv_sec)*1000000000+st.st_mtim.tv_nsec;
+#endif
             if(stamp!=rescanStamp && !scanning && !ready) { rescanStamp=stamp; Rescan(); }
         }
     }

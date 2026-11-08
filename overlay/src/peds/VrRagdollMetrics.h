@@ -1,7 +1,7 @@
 #pragma once
 
-#ifdef __ANDROID__
-#include <android/log.h>
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#include "RuntimeLog.h"
 #include "QuestProfiler.h"
 #endif
 
@@ -31,7 +31,7 @@ static float brakeImpulse;
 inline unsigned long long
 Now(void)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	return androidgame::QuestProfilerNowNanoseconds();
 #else
 	return 0;
@@ -54,7 +54,7 @@ Reset(void)
 inline void
 BeginFrame(int active, int awake, int saved)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 	const bool on = androidgame::QuestProfilerIsEnabled();
 	if(!on){
 		sampling = false;

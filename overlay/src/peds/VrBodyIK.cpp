@@ -21,7 +21,7 @@
 extern bool gVrFirstPersonActive;
 extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 
-#include <android/log.h>
+#include "RuntimeLog.h"
 #include <math.h>
 #include "QuestHeadAttachment.h"
 #include "QuestBodyPosture.h"
@@ -1256,7 +1256,7 @@ bool
 GetSolvedHandWorldBasis(int hand, CVector *position, CVector *right,
 	CVector *up, CVector *forward)
 {
-#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
+#if !(defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) || !defined(GTA_VR_WEAPONS)
 	(void)hand;
 	(void)position;
 	(void)right;
@@ -1288,7 +1288,7 @@ GetSolvedHandWorldBasis(int hand, CVector *position, CVector *right,
 bool
 GetVehicleNeckWorld(CPed *ped, CVector *position)
 {
-#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
+#if !(defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) || !defined(GTA_VR_WEAPONS)
 	(void)ped;
 	(void)position;
 	return false;
@@ -1309,7 +1309,7 @@ bool
 GetRigidWeaponHandBasis(int hand, CVector *position, CVector *right,
 	CVector *up, CVector *forward)
 {
-#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
+#if !(defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) || !defined(GTA_VR_WEAPONS)
 	(void)hand;
 	(void)position;
 	(void)right;
@@ -1323,7 +1323,7 @@ GetRigidWeaponHandBasis(int hand, CVector *position, CVector *right,
 #endif
 }
 
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 // Transform complete branches so shoulders, skin attachments and fingers keep
 // their relationship to the torso before the existing controller arm solve.
 static void MovePostureJoint(RpHAnimHierarchy *hier, RwMatrix *mats,
@@ -2058,7 +2058,7 @@ static void ApplyNonSkinned(CPed *ped, bool onFootIK, bool vehicleIK)
 
 void Apply(CPed *ped)
 {
-#if !defined(__ANDROID__) || !defined(GTA_VR_WEAPONS)
+#if !(defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) || !defined(GTA_VR_WEAPONS)
 	(void)ped;
 	return;
 #else

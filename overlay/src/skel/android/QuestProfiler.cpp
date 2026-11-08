@@ -1,6 +1,6 @@
 #include "common.h"
 
-#include <android/log.h>
+#include "RuntimeLog.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -572,7 +572,7 @@ SampleDiagnostics(void)
 	gSnapshot.trafficPoolReserveBlocks = CCarCtrl::NumVrPoolReserveBlocks;
 	gSnapshot.trafficDirectorMs = CCarCtrl::VrDirectorLastUpdateMs;
 	gSnapshot.trafficDirectorMaxMs = CCarCtrl::VrDirectorMaxUpdateMs;
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 	const int32 trafficJobHits = CCarCtrl::NumVrTrafficJobHits;
 	const int32 trafficJobMisses = CCarCtrl::NumVrTrafficJobMisses;
 	const int32 trafficJobDispatches = CCarCtrl::NumVrTrafficJobDispatches;
@@ -1079,7 +1079,7 @@ QuestProfilerSetEnabled(bool enabled)
 		sizeof(gPreviousSpawnTrace));
 	gPreviousSpawnAttempts = CCarCtrl::NumVrSpawnAttempts;
 	gPreviousSpawnSuccess = CCarCtrl::NumVrSpawnSuccess;
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 	gPreviousTrafficJobHits = CCarCtrl::NumVrTrafficJobHits;
 	gPreviousTrafficJobMisses = CCarCtrl::NumVrTrafficJobMisses;
 	gPreviousTrafficJobDispatches = CCarCtrl::NumVrTrafficJobDispatches;
@@ -1098,7 +1098,7 @@ QuestProfilerSetEnabled(bool enabled)
 		CPhysical::NumVrCollisionFlatSavedNodeVisits;
 #endif
 #endif
-#if defined(__ANDROID__) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
 	gPreviousPhysicsDirector = QuestPhysicsDirectorGetSnapshot();
 	gPreviousVehicleVisualBudget = QuestVehicleVisualBudgetGetSnapshot();
 #endif
