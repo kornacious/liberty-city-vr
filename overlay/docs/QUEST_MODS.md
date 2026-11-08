@@ -43,7 +43,7 @@ mission (28,469 bytes) and mission count (82) fit the existing native VM limits.
 The adapter routes the package's map manifest, IMG/DIR, definitions, placements,
 collision, water, object data and SCM through read-only overlays on the selected
 Classic or Original Xbox source. Source changes save immediately and apply on a
-full process restart; Upstate keeps its separate save directory with either source.
+full process restart. Changing the asset source does not change the save format.
 
 Both loose files and streamed archive entries use the same precedence:
 Upstate, then the selected Original Xbox source, then the Classic base fallback.
@@ -62,11 +62,29 @@ The package has no `policeZoneSfx.dat`, CLEO ASI or external CLEO scripts; the
 base police-radio mappings remain in place. Windows ASIs are neither loaded nor
 executed. Generic Windows ASI/CLEO binary compatibility is outside this adapter.
 
-Upstate saves/settings are under the app's
-`files/userfiles/upstate-liberty-1.1.2/`. Classic/Xbox saves remain in
-`files/userfiles/`. Manager save transfers currently address Classic/Xbox slots;
-they do not import incompatible desktop Upstate saves into the mod directory.
-Disabling/deleting the mod preserves both save directories.
+The Quest frontend's numbered saves (`1.b` through `8.b`) and `autosave.b` are
+stored in `files/gamedata/`, shared across configurations. The native user-files
+directory is separate for Upstate settings, but does not relocate these slots.
+Disabling/deleting the mod preserves the saves. Manager save transfers validate
+the base format and reject expanded Upstate saves.
+
+The numbered slot list verifies the save's block structure, configuration
+identity and checksum before identifying a foreign configuration. With Upstate
+disabled, valid Upstate saves display `Slot X was saved with Upstate Liberty Mod`.
+With Upstate enabled, valid base saves display `Slot X was saved with base game.`
+These entries cannot enter load confirmation. Compatible saves retain their
+normal mission name and date; damaged/unrecognized saves retain the corruption
+label. Ordinary save overwrite confirmation remains available. No save is
+converted, moved or rewritten by this inspection.
+
+`test-save-compatibility.cpp`, included in `test-modelset-profiles.ps1`, covers
+both configurations, slot labels, replay flags, checksum failures, malformed
+subsystem/script blocks, truncation and trailing bytes without game assets.
+On 8 November 2026, the affected local slot passed Upstate format/checksum
+validation and remained byte-identical after APK installation and launch. With
+Upstate disabled on the personal Quest 3 device, the user confirmed that the
+new Upstate slot message displayed correctly. The reverse base-save message is
+covered by host regression tests.
 
 The shipped empty PC cull cache is not deserialized into the expanded tables.
 IPL attribute zones remain active; legacy precomputed visibility cull zones are

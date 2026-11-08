@@ -1,0 +1,67 @@
+--- a/src/save/PCSave.h
++++ b/src/save/PCSave.h
+@@ -22,7 +22,8 @@
+ {
+ 	SLOT_OK = 0,
+ 	SLOT_EMPTY,
+-	SLOT_CORRUPTED
++	SLOT_CORRUPTED,
++	SLOT_INCOMPATIBLE
+ };
+ 
+ class C_PcSave
+--- a/src/save/PCSave.cpp
++++ b/src/save/PCSave.cpp
+@@ -12,6 +12,10 @@
+ #include "Messages.h"
+ #include "PCSave.h"
+ #include "Text.h"
++#ifdef __ANDROID__
++#include "QuestUpstate.h"
++#include "QuestSaveCompatibility.h"
++#endif
+ 
+ const char* _psGetUserFilesFolder();
+ 
+@@ -108,10 +112,29 @@
+ 			wchar FileName[24];
+ 			SYSTEMTIME SaveDateTime;
+ 		} header;
+ 		sprintf(savename, "%s%i%s", DefaultPCSaveFileName, i + 1, ".b");
+ 		int file = CFileMgr::OpenFile(savename, "rb");
+ 		if (file != 0) {
+-			CFileMgr::Read(file, (char*)&header, sizeof(header));
++#ifdef __ANDROID__
++			const auto profile = questsave::Inspect([&](uint8_t *data, size_t count) {
++				return CFileMgr::Read(file, reinterpret_cast<char*>(data), count);
++			});
++			char description[96];
++			if(questsave::DescribeMismatch(profile, QuestUpstate::Active(), i + 1,
++			                              description, sizeof(description))){
++				AsciiToUnicode(description, SlotFileName[i]);
++				Slots[i + 1] = SLOT_INCOMPATIBLE;
++				CFileMgr::CloseFile(file);
++				continue;
++			}
++			CFileMgr::Seek(file, 0, SEEK_SET);
++#endif
++			if(CFileMgr::Read(file, (char*)&header, sizeof(header)) != sizeof(header)){
++				CMessages::InsertNumberInString(TheText.Get("FEC_SLC"), i + 1, -1, -1, -1, -1, -1, SlotFileName[i]);
++				Slots[i + 1] = SLOT_CORRUPTED;
++				CFileMgr::CloseFile(file);
++				continue;
++			}
+ 			if (strncmp((char*)&header, TopLineEmptyFile, sizeof(TopLineEmptyFile)-1) != 0) {
+ 				Slots[i + 1] = SLOT_OK;
+ 				memcpy(SlotFileName[i], &header.FileName, sizeof(header.FileName));
+--- a/src/core/Frontend.cpp
++++ b/src/core/Frontend.cpp
+@@ -5013,7 +5013,7 @@
+ 
+ 					if (saveSlot >= 2 && saveSlot <= 9) {
+ 						m_nCurrSaveSlot = saveSlot - 2;
+-						if (Slots[m_nCurrSaveSlot + 1] != SLOT_EMPTY && Slots[m_nCurrSaveSlot + 1] != SLOT_CORRUPTED) {
++						if (Slots[m_nCurrSaveSlot + 1] == SLOT_OK) {
+ 							ChangeScreen(aScreens[m_nCurrScreen].m_aEntries[m_nCurrOption].m_TargetMenu, 0, true, true);
+ 						}
+ 					}

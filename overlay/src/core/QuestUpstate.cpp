@@ -62,7 +62,7 @@ bool Initialize(const char *root) {
         fclose(f);
     }
 #ifdef __ANDROID__
-    __android_log_print(ANDROID_LOG_INFO,"LibertyVR","Upstate overlay ready: %zu pinned files, %zu FXT entries; isolated saves",sizeof(questpackage::UpstateFiles)/sizeof(questpackage::UpstateFiles[0]),text.size());
+    __android_log_print(ANDROID_LOG_INFO,"LibertyVR","Upstate overlay ready: %zu pinned files, %zu FXT entries; expanded save profile",sizeof(questpackage::UpstateFiles)/sizeof(questpackage::UpstateFiles[0]),text.size());
 #endif
     return true;
 }

@@ -4395,7 +4395,7 @@ $source=[regex]::Replace($source,'(?m)^#include .*\r?\n','')
 $source=$source.Replace('_WIN32','MODELSETS_TEST_WINDOWS')
 $routing=[IO.File]::ReadAllText((Join-Path $core 'QuestModelsetStreaming.h'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'modelsets-production.inc'),$header+"`n"+$source+"`n"+$routing,[Text.UTF8Encoding]::new($false))
-&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-modelset-profiles.cpp', 'test-upstate-source.cpp')
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-modelset-profiles.cpp', 'test-upstate-source.cpp', 'test-save-compatibility.cpp')
 if($LASTEXITCODE -ne 0){throw 'Modelset routing regression failed.'}
 </value>
   </data>
