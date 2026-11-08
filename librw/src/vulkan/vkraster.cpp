@@ -382,6 +382,7 @@ destroyNativeRaster(void *object, int32 offset, int32)
 	// A texture can be evicted while its chain is still being built.
 	cancelGeneratedMips(PLUGINOFFSET(VulkanRaster, object, offset));
 	VulkanRaster *native = PLUGINOFFSET(VulkanRaster, object, offset);
+	if(native->stagingCpu) rwFree(native->stagingCpu);
 	if(gvk.device != VK_NULL_HANDLE){
 		if(native->stagingMapped != nil)
 			vkUnmapMemory(gvk.device, native->stagingMemory);
@@ -1609,6 +1610,9 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 		native->stagingBuffer = VK_NULL_HANDLE;
 		native->stagingMemory = VK_NULL_HANDLE;
 		native->stagingMapped = nil;
+		if(native->stagingCpu) rwFree(native->stagingCpu);
+		native->stagingCpu = nil;
+		native->stagingBytes = 0;
 		native->lockedLevel = -1;
 	}
 
@@ -1623,10 +1627,12 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 			generatedMipBytes(native->numLevels, width, height,
 				bytesPerPixel) : 0);
 
+	VkMemoryPropertyFlags stagingProperties = 0;
 	if(!createBuffer(total, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 	                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 	                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-	                 &native->stagingBuffer, &native->stagingMemory))
+	                 &native->stagingBuffer, &native->stagingMemory,
+	                 &stagingProperties))
 		return nil;
 	if(vkMapMemory(gvk.device, native->stagingMemory, 0, total, 0,
 	               (void**)&native->stagingMapped) != VK_SUCCESS){
@@ -1636,18 +1642,38 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 		native->stagingMemory = VK_NULL_HANDLE;
 		return nil;
 	}
+	native->stagingBytes = total;
+	// HOST_COHERENT does not mean HOST_CACHED. Discrete GPU upload memory
+	// is commonly write-combined; repeatedly reading it while filtering mips
+	// can cost tens of milliseconds per texture. Build the chain in ordinary
+	// CPU memory and copy it once, while retaining direct writes on cached heaps.
+	if(native->generateMips && level == 0 && native->numLevels > 1 &&
+	   !(stagingProperties & VK_MEMORY_PROPERTY_HOST_CACHED_BIT)){
+		native->stagingCpu = (uint8*)rwMalloc((size_t)total, MEMDUR_EVENT | ID_IMAGE);
+		if(native->stagingCpu == nil){
+			vkUnmapMemory(gvk.device, native->stagingMemory);
+			vkDestroyBuffer(gvk.device, native->stagingBuffer, nil);
+			vkFreeMemory(gvk.device, native->stagingMemory, nil);
+			native->stagingBuffer = VK_NULL_HANDLE;
+			native->stagingMemory = VK_NULL_HANDLE;
+			native->stagingMapped = nil;
+			native->stagingBytes = 0;
+			return nil;
+		}
+	}
+	uint8 *pixels = native->stagingCpu ? native->stagingCpu : native->stagingMapped;
 	// LOCKREAD would need a device-to-host copy first. Nothing in the game
 	// reads a streamed texture back, so it is refused loudly rather than
 	// silently returning uninitialised staging memory.
 	if(lockMode & Raster::LOCKREAD)
-		memset(native->stagingMapped, 0, (size_t)size);
+		memset(pixels, 0, (size_t)size);
 
 	native->lockedLevel = level;
 	native->lockedFlags = (uint32)lockMode;
 	raster->stride = (int32)(width * bytesPerPixel);
 	raster->width = (int32)width;
 	raster->height = (int32)height;
-	return native->stagingMapped;
+	return pixels;
 }
 
 // Fills levels 1..n from the base the game just wrote, and queues each one
@@ -1663,13 +1689,14 @@ uploadGeneratedMips(VulkanRaster *native, uint32 baseWidth, uint32 baseHeight,
 
 	// Each level is filtered from the one above it, so the chain is walked in
 	// order and the previous result stays addressable.
-	const uint8 *source = native->stagingMapped;
+	uint8 *pixels = native->stagingCpu ? native->stagingCpu : native->stagingMapped;
+	const uint8 *source = pixels;
 	uint32 sourceWidth = baseWidth, sourceHeight = baseHeight;
 	VkDeviceSize offset = baseBytes;
 	for(int32 level = 1; level < native->numLevels; level++){
 		const uint32 width = levelDimension(baseWidth, level);
 		const uint32 height = levelDimension(baseHeight, level);
-		uint8 *destination = native->stagingMapped+offset;
+		uint8 *destination = pixels+offset;
 		downsampleLevel(source, sourceWidth, sourceHeight,
 			destination, width, height, native->format, bytesPerPixel);
 
@@ -1733,6 +1760,8 @@ rasterUnlock(Raster *raster, int32 level)
 		                      (uint32)native->numLevels,
 		                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		if(native->stagingCpu)
+			memcpy(native->stagingMapped, native->stagingCpu, (size_t)native->stagingBytes);
 		endOneShot(commandBuffer);
 		native->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	}
@@ -1743,6 +1772,9 @@ rasterUnlock(Raster *raster, int32 level)
 	native->stagingBuffer = VK_NULL_HANDLE;
 	native->stagingMemory = VK_NULL_HANDLE;
 	native->stagingMapped = nil;
+	if(native->stagingCpu) rwFree(native->stagingCpu);
+	native->stagingCpu = nil;
+	native->stagingBytes = 0;
 	native->lockedLevel = -1;
 }
 

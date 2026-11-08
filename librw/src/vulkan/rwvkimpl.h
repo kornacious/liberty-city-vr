@@ -30,6 +30,9 @@ struct VulkanRaster
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
 	uint8 *stagingMapped;
+	// CPU mip filtering must never read write-combined upload memory.
+	uint8 *stagingCpu;
+	VkDeviceSize stagingBytes;
 	int32 lockedLevel;
 	uint32 lockedFlags;
 
@@ -636,7 +639,8 @@ bool32 findMemoryType(uint32 typeBits, VkMemoryPropertyFlags properties,
                       uint32 *indexOut);
 bool32 createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
                     VkMemoryPropertyFlags properties, VkBuffer *bufferOut,
-                    VkDeviceMemory *memoryOut);
+                    VkDeviceMemory *memoryOut,
+                    VkMemoryPropertyFlags *actualPropertiesOut = nil);
 // Records and submits a one-shot command buffer. Live-frame uploads inherit
 // the active frame fence; startup uploads retain a synchronous fallback.
 VkCommandBuffer beginOneShot(void);

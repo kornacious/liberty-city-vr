@@ -5,6 +5,18 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Fixed a major discrete-GPU texture loading/streaming bottleneck: alpha-weighted
+  mip generation no longer reads uncached Vulkan staging memory. When the actual
+  upload allocation lacks HOST_CACHED, filtering uses temporary CPU memory and
+  copies the finished chain into staging once. Cached allocations retain their
+  existing path, and texture filtering/alpha behavior is preserved.
+- Added a synthetic texture upload benchmark with GPU sampling/readback of
+  alpha-weighted mip colors in both eyes. An initial matched local test of 80
+  256x256 RGBA uploads fell from 2,876 ms to 78 ms CPU time on the RX 6700 XT;
+  this measures that upload workload, not overall game or Quest performance.
+  The user confirmed much faster loading and streaming across the tested Windows
+  transitions. All seven Windows checks passed; the shared Quest APK also built
+  and updated successfully on the personal Quest 3 device.
 - Fixed washed-out Windows menus/gameplay and the incorrect color-space handoff
   contributing to dark-area banding. Windows now submits sRGB swapchains with
   mutable UNORM attachment views, preserving re3's display-encoded shading and

@@ -311,7 +311,7 @@ findMemoryType(uint32 typeBits, VkMemoryPropertyFlags properties, uint32 *indexO
 bool32
 createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
              VkMemoryPropertyFlags properties, VkBuffer *bufferOut,
-             VkDeviceMemory *memoryOut)
+             VkDeviceMemory *memoryOut, VkMemoryPropertyFlags *actualPropertiesOut)
 {
 	VkBufferCreateInfo bufferInfo = {};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -341,6 +341,8 @@ createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 		return 0;
 	}
 	vkBindBufferMemory(gvk.device, *bufferOut, *memoryOut, 0);
+	if(actualPropertiesOut)
+		*actualPropertiesOut = gvk.memoryProperties.memoryTypes[typeIndex].propertyFlags;
 	return 1;
 }
 

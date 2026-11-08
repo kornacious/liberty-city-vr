@@ -99,6 +99,10 @@ settings or runtime selection.
 - `--colour-probe`: render into a mutable sRGB image through an UNORM attachment
   and read back nine encoded gray levels in both eyes, also checking stereo geometry.
   This verifies byte preservation; headset testing still verifies runtime presentation.
+- `--texture-probe`: upload 80 synthetic 256x256 RGBA textures with generated mips
+  and report CPU upload time. Render the resulting alpha-weighted mips and read
+  back both eyes to reject missing textures or transparent-color bleeding. Run
+  timing comparisons with the game closed and comparable GPU load.
 - `--probe`: let OpenXR select the GPU, create its Vulkan device and an XR session,
   then exit. Failure to obtain a headset system is an environment/runtime result,
   not a successful rendering test.
@@ -124,6 +128,20 @@ encode the legacy colors twice; submitting the same bytes as linear UNORM lifts
 brightness and can introduce banding in the compositor. An advertised sRGB format
 is required for the Windows game. This changes no color-filter or brightness setting.
 See the [OpenXR color-space requirements](https://registry.khronos.org/OpenXR/specs/1.1/man/html/XrSwapchain.html).
+
+CPU mip filtering uses temporary ordinary memory when Vulkan selects uncached
+upload memory, then copies the completed chain to the mapped staging allocation.
+This avoids slow CPU reads from write-combined memory on discrete GPUs without
+changing the alpha-weighted filter or requiring a special memory type. Cached
+staging allocations retain direct filtering. The temporary copy lasts only for
+the raster lock/unlock operation; GPU staging still retires with the frame fence.
+An initial matched RX 6700 XT test reduced CPU time for 80 synthetic uploads from
+2,876 ms to 78 ms. This is an upload benchmark, not an overall loading speedup.
+The follow-up headset test confirmed much faster loading and streaming across
+the tested transitions. All seven Windows checks passed, including generated-mip
+GPU sampling/readback; the final synthetic texture run took 82 ms. The shared
+Quest APK built and updated successfully on the personal Quest 3 device. Quest
+gameplay/performance was not retested in this follow-up.
 
 The color-space follow-up through VirtualDesktopXR completed 3,802 game frames
 and exited cleanly. The user confirmed normal brightness and reduced banding.

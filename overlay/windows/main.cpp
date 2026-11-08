@@ -300,7 +300,7 @@ struct Application {
         if(result != XR_EVENT_UNAVAILABLE) xrCheck(result, "xrPollEvent");
     }
 
-    void triangle(const XrPosef &pose, float size, bool selected) {
+    void triangle(const XrPosef &pose, float size, bool selected, bool textured = false) {
         auto model = XrMath::worldFromPose(pose);
         rw::vulkan::Im3DVertex vertices[3]{};
         const float points[3][3] = {{-size,-size,0},{size,-size,0},{0,size,0}};
@@ -310,6 +310,11 @@ struct Application {
             p.y = model.m[1]*points[i][0] + model.m[5]*points[i][1] + model.m[13];
             p.z = model.m[2]*points[i][0] + model.m[6]*points[i][1] + model.m[14];
             vertices[i].setColor(selected ? 255 : 60, 200, selected ? 60 : 255, 255);
+            if(textured) {
+                vertices[i].setColor(255,255,255,255);
+                vertices[i].u=(points[i][0]/size+1)*8;
+                vertices[i].v=(points[i][1]/size+1)*8;
+            }
         }
         rw::vulkan::im3DTransform(vertices, 3, nullptr, 0);
         rw::vulkan::im3DRenderPrimitive(rw::PRIMTYPETRILIST); rw::vulkan::im3DEnd();
@@ -387,7 +392,7 @@ struct Application {
     }
 };
 
-void verifyProbePixels(Application &app, int grey = -1) {
+void verifyProbePixels(Application &app, int grey = -1, bool textured = false) {
     struct Readback {
         VkDevice device;
         VkBuffer buffer = VK_NULL_HANDLE;
@@ -446,6 +451,17 @@ void verifyProbePixels(Application &app, int grey = -1) {
     vkCheck(vkQueueWaitIdle(app.queue),"complete readback");
     void *mapped = nullptr; vkCheck(vkMapMemory(app.device,readback.memory,0,bytes,0,&mapped),"map pixels"); readback.mapped = true;
     auto pixels = static_cast<const uint8_t*>(mapped);
+    if(textured) {
+        // Every 2x2 source block has one transparent red and three opaque cyan
+        // texels. Alpha-weighted generated mips must stay cyan, without red bleed.
+        for(unsigned eye=0; eye<2; ++eye) {
+            const auto *center=pixels+((size_t(eye)*app.height+app.height/2)*app.width+app.width/2)*4;
+            const int expected[]={0,200,255};
+            for(unsigned channel=0; channel<3; ++channel)
+                if(std::abs(int(center[channel])-expected[channel])>2)
+                    throw std::runtime_error("Generated mip texture failed GPU sampling/readback.");
+        }
+    }
     if(grey >= 0) {
         for(unsigned eye=0; eye<2; ++eye) {
             const auto *corner=pixels+size_t(eye)*app.width*app.height*4;
@@ -467,7 +483,7 @@ void verifyProbePixels(Application &app, int grey = -1) {
         throw std::runtime_error("Expected stereo disparity is missing or reversed.");
 }
 
-int vulkanProbe(bool render = false, bool colour = false) {
+int vulkanProbe(bool render = false, bool colour = false, bool textures = false) {
     Application app;
     VkApplicationInfo info{VK_STRUCTURE_TYPE_APPLICATION_INFO}; info.apiVersion = VK_API_VERSION_1_1;
     VkInstanceCreateInfo create{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO}; create.pApplicationInfo = &info;
@@ -528,6 +544,8 @@ int vulkanProbe(bool render = false, bool colour = false) {
         view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,2}; VkImageView output = VK_NULL_HANDLE;
         vkCheck(vkCreateImageView(app.device, &view, nullptr, &output), "probe image view"); app.imageViews.push_back(output);
         app.openRenderer();
+        if(textures) rw::vulkan::setGenerateMipmaps(true);
+        double textureMs=0;
         XrFovf fov{-0.7f,0.7f,0.7f,-0.7f};
         XrPosef left{{0,0,0,1},{-0.032f,0,0}}, right{{0,0,0,1},{0.032f,0,0}};
         auto projection = XrMath::projectionFromFov(fov,0.05f,100);
@@ -535,16 +553,50 @@ int vulkanProbe(bool render = false, bool colour = false) {
         auto rightVP = XrMath::multiply(projection,XrMath::viewFromPose(right));
         const int greys[]={0,1,2,8,18,64,128,192,255};
         for(int i = 0; i < (colour ? 9 : 5); ++i) {
+            rw::Raster *sampleTexture=nullptr;
             rw::vulkan::setStereoViewProjection(leftVP.m,rightVP.m); rw::vulkan::setClearColour(18,24,38);
             if(colour) rw::vulkan::setClearColour(greys[i],greys[i],greys[i]);
             if(!rw::vulkan::beginFrame(app.probeImage,output)) throw std::runtime_error("Probe renderer frame failed.");
+            if(textures) {
+                auto image=rw::Image::create(256,256,32);
+                if(!image) throw std::runtime_error("Texture fixture allocation failed.");
+                image->allocate();
+                if(!image->pixels) throw std::runtime_error("Texture fixture pixels unavailable.");
+                for(int y=0; y<256; ++y) for(int x=0; x<256; ++x) {
+                    auto pixel=image->pixels+y*image->stride+x*4;
+                    const bool clear=(x%2==0 && y%2==0);
+                    pixel[0]=clear ? 255 : 0; pixel[1]=clear ? 0 : 200;
+                    pixel[2]=clear ? 0 : 255; pixel[3]=clear ? 0 : 255;
+                }
+                const auto before=std::chrono::steady_clock::now();
+                for(int texture=0; texture<16; ++texture) {
+                    auto raster=rw::Raster::create(256,256,32,rw::Raster::TEXTURE|rw::Raster::C8888);
+                    if(!raster || !raster->setFromImage(image)) throw std::runtime_error("Texture upload failed.");
+                    if(rw::vulkan::rasterNumLevels(raster)!=9) throw std::runtime_error("Generated texture mip chain missing.");
+                    if(texture==15) sampleTexture=raster;
+                    else raster->destroy();
+                }
+                textureMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-before).count();
+                image->destroy();
+            }
             rw::vulkan::renderdevice.setRenderState(rw::CULLMODE,reinterpret_cast<void*>(rw::CULLNONE));
-            XrPosef triangle{{0,0,0,1},{0,0,-2}}; app.triangle(triangle,0.35f,false);
+            if(textures) {
+                rw::vulkan::renderdevice.setRenderState(rw::TEXTURERASTER,sampleTexture);
+                rw::vulkan::renderdevice.setRenderState(rw::TEXTUREFILTER,reinterpret_cast<void*>(rw::Texture::LINEARMIPLINEAR));
+                rw::vulkan::renderdevice.setRenderState(rw::VERTEXALPHA,reinterpret_cast<void*>(0));
+            }
+            XrPosef triangle{{0,0,0,1},{0,0,-2}}; app.triangle(triangle,0.35f,false,textures);
             rw::vulkan::endFrame(); vkCheck(vkQueueWaitIdle(app.queue),"probe GPU completion");
             if(colour) verifyProbePixels(app,greys[i]);
+            if(textures) {
+                verifyProbePixels(app,-1,true);
+                rw::vulkan::renderdevice.setRenderState(rw::TEXTURERASTER,nullptr);
+                sampleTexture->destroy();
+            }
         }
-        if(!colour) verifyProbePixels(app);
-        else std::cout << "Colour probe passed: sRGB images with UNORM attachments preserve nine encoded greys in both eyes.\n";
+        if(!colour && !textures) verifyProbePixels(app);
+        if(textures) std::cout << "Texture probe: 80 RGBA 256x256 uploads with alpha-weighted mips: " << textureMs << " ms CPU.\n";
+        if(colour) std::cout << "Colour probe passed: sRGB images with UNORM attachments preserve nine encoded greys in both eyes.\n";
         if(!colour) std::cout << "Renderer probe passed: five stereo frames completed; triangle pixels and stereo disparity verified.\n";
     }
     return supported ? 0 : 1;
@@ -562,11 +614,13 @@ int main(int argc, char **argv) {
                     "--vulkan-probe   Check desktop Vulkan without a headset/runtime\n"
                     "--renderer-probe Render five offscreen stereo frames without OpenXR\n"
                     "--colour-probe   Verify legacy colour bytes through mutable sRGB images\n"
+                    "--texture-probe  Measure generated-mip texture streaming without game data\n"
                     "--frames N       Submit N stereo frames (default 300, maximum 10000)\n"
                     "Session readiness/rendering timeout: 60 seconds. Ctrl+C stops.\n"; return 0;
             } else if(argument == "--vulkan-probe" && argc == 2) return vulkanProbe();
             else if(argument == "--renderer-probe" && argc == 2) return vulkanProbe(true);
             else if(argument == "--colour-probe" && argc == 2) return vulkanProbe(true,true);
+            else if(argument == "--texture-probe" && argc == 2) return vulkanProbe(true,false,true);
             else if(argument == "--probe") probe = true;
             else if(argument == "--frames" && i+1 < argc) {
                 std::string value = argv[++i]; size_t end = 0; auto number = std::stoul(value, &end);
