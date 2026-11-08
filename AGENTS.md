@@ -1,5 +1,13 @@
 # Project Scope & Target Guidelines
 
+## Project Identity and Platform Scope
+- Project: **Liberty City VR**, official repository `https://github.com/kornacious/liberty-city-vr.git`, current source-kit version **0.8.5**.
+- Quest 3 / Android ARM64 is the implemented game target. Windows x64 PCVR with OpenXR and Vulkan is a planned target, not an available build in 0.8.5. Windows/Linux manager and desktop editor support do not imply a PCVR game build.
+- Keep shared re3 patches, VR gameplay, librw Vulkan rendering and shaders in this repository. Extract common OpenXR/build functionality and isolate Android/Quest and Windows platform services as PCVR is implemented; avoid duplicating the game or renderer into a separate port.
+- Planned manager support must distinguish game target from host OS and graphics/test profile, with separate build outputs, configuration and deployment workflows. Preserve existing application IDs, signing identities, game data and saves.
+- A future desktop Quest compatibility profile may match capabilities and rendering settings; desktop GPU timings are not measured Quest performance. Validate performance claims on the actual target.
+- Describe planned features as planned until implemented and validated. See `PLATFORMS.md` for target status and the roadmap.
+
 ## Cloud Tasks and Local-Only Game Data
 - Original game data files must remain local to the user's computer. Never upload, commit, transfer, or fetch them into a cloud environment, including private repositories or cloud environment snapshots.
 - At task start, identify whether execution is local or cloud and check whether the requested work requires actual game data. Recheck if a dependency on that data is discovered later.
@@ -14,6 +22,7 @@
 - Always specify the verified device serial for deployment. If multiple eligible headsets are connected and no target is specified, ask which one to use before installing.
 - Preserve existing game data and saves. Do not uninstall the application or erase its data to work around an installation failure; report the failure instead. Transfer game assets only when the requested task requires it and only through the local workflow.
 - Instruction-only or documentation-only tasks do not require an APK build or deployment. Explicit task-specific instructions to skip installation take precedence over this default deployment rule.
+- For future Windows PCVR implementation tasks, compile and run appropriate Windows checks separately; do not deploy a Quest APK unless the task also changes/builds that target. Keep host tool, desktop game and headset validation results distinct.
 
 ## Personal Quest 3 Device Privacy (Mandatory)
 - Before any commit or push in a new clone, run `dotnet run --project tools/manager -c Release -- --privacy install-hooks` using the .NET 10 SDK. Keep the privacy hooks enabled; run `dotnet run --project tools/manager -c Release -- --privacy history` before publishing and resolve any findings locally. See `tools/PRIVACY.md` for setup and the local-only denylist.

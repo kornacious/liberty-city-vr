@@ -1,5 +1,7 @@
 # Copy this file to release-signing.properties and replace every placeholder.
 # Paths are resolved relative to the android directory.
+# Legacy keystore names are independent of the repository name. Reuse your
+# existing signing identity when updating; renaming the repository needs no new key.
 storeFile=../_quest_signing/liberty-city-vr-quest-release.jks
 storePassword=REPLACE_WITH_A_STRONG_PASSWORD
 keyAlias=liberty-city-vr-quest

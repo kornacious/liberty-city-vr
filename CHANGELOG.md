@@ -3,6 +3,96 @@
 The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
 port from GTA Vice City to GTA III. Later entries describe Liberty City VR releases.
 
+## 0.8.5 — Release candidate
+
+Quest source-build release candidate. Changes since the 0.8.0 version commit
+`ad84866`, including the project identity, repository and platform-scope update.
+Windows PCVR is a planned target; this release does not include a PCVR game build.
+
+### Project scope, repository and version
+
+- Broadened the project identity to **Liberty City VR**, covering the implemented
+  standalone Quest 3 target and planned Windows x64 PCVR using OpenXR and Vulkan.
+  Keep shared re3 patches, VR gameplay, librw rendering and shaders in one repository.
+- Renamed the official repository to `kornacious/liberty-city-vr`. Updated the
+  manager's official update/clone URL and documentation examples. Existing local
+  checkout names, application IDs, storage paths and signing identities remain valid.
+- Added `PLATFORMS.md` with target status, platform separation, Windows bring-up,
+  future manager target selection and a planned desktop Quest compatibility profile.
+  Desktop estimates and synthetic timings are not measured Quest performance.
+- Updated scope instructions, README, build/release guidance, manager and Quest
+  documentation to distinguish host tools, implemented Quest support and planned PCVR.
+- Set Android `versionName` and native About/menu text to **0.8.5**, Android
+  `versionCode` to **805**, and current release references to 0.8.5. Historical
+  release numbers and third-party dependency versions retain their original meaning.
+
+### Original Xbox assets, body and camera
+
+- Replaced the downloaded Xbox HD pack importer with local Original Xbox retail
+  ISO conversion. Added native XDVDFS extraction and Xbox model/texture conversion;
+  removed the retired HD-pack manifest, texture compressor and associated tests.
+  Original game assets remain local and are not bundled or downloaded.
+- Added Original Xbox audio and particles to restart-based Asset Source selection,
+  plus Vulkan Neo material effects and optional rain droplets. Fixed explosion
+  particle frame selection and pedestrian head/body rim lighting.
+- Fixed Xbox Claude skin-hierarchy camera eligibility and head-bone axes. Attach
+  the first-person view to the native head, correct tilt and eye placement, honor
+  walking head bob and keep knockdown views attached to the head.
+- Added tracked crouching, leaning and physical stepping for Xbox body IK. Align
+  the body to the camera/head target, synchronize room-scale gameplay movement,
+  plant standing feet, and correct pelvis balance, crouched stance and knee/foot
+  targets. Stabilize body facing through physical turns and IK resets, and follow
+  native car-entry facing.
+- Corrected Xbox train window-facing passenger views and head following. Keep
+  exit views facing outward and preserve facing through boarding/exit handoffs.
+- Fixed jump launch direction after physical headset turns and physical-turn
+  alignment during jumps and sniper locomotion.
+
+### Gameplay, settings and menus
+
+- Added tracked hands-up surrender into the native police arrest flow and a
+  saved option controlling visibility of holstered weapons.
+- Unified native Main/Pause Options and the VR overlay around shared categorized
+  Quest settings. Restored original native menu typography, audio controls,
+  radio previews and menu feedback; settings remain available through both routes.
+- Moved Simulation Replay controls into live-game Graphics > Optimizations.
+- Explain save slots from a different game configuration rather than presenting
+  an unexplained incompatible slot. Existing saves and configuration are preserved.
+
+### Upstate Liberty and manager
+
+- Added curated Upstate Liberty v1.1.2 management: local archive validation or
+  pinned download, install/status, enable, disable and delete, with verified
+  staging, rollback, runtime capability gating and save preservation.
+- Added the native Upstate engine adapter with expanded engine capacities,
+  package/runtime validation and isolated mod saves. Windows ASI binaries are
+  excluded from headset packages; map assets remain locally managed.
+- Preserve the selected Original Xbox asset preference while Upstate is active
+  and support Xbox assets beneath the Upstate overlay.
+- Recorded local Upstate/Xbox gameplay acceptance in the relevant guides;
+  this does not establish Windows PCVR or universal mission compatibility.
+- Fixed manager updates to require and fetch official `main`, reject legacy
+  `master`, and preserve local changes. Updated the active version-floor fixture
+  for version code 805.
+
+### Rendering, diagnostics and maintenance
+
+- Adapted retained developer tools and culling diagnostics to Liberty's renderer.
+  Removed obsolete inherited test runners/fixtures targeting missing modules,
+  reVC-only behavior or private historical snapshots; documented coverage limits.
+- Added live visualization controls for mesh/wireframe views, hidden-edge
+  removal, diagnostic shading, xray/depth-tested mesh overdraw, category visibility,
+  collision bounds/shapes and velocity vectors. Reset restores normal rendering;
+  diagnostics do not change saved graphics preferences or simulation.
+- Added live geometry/draw counters to the full profiler and host coverage for
+  visualization topology, Vulkan pipeline isolation, deferred edge rendering
+  and graphics-menu layouts. These diagnostics are not hardware invocation counts.
+- Fixed sniper overlay coverage, per-eye alignment and depth, with host
+  regression coverage for mask geometry, stereo projection and depth behavior.
+- Clarified project licensing and toolchain attribution, and retired inherited
+  Vice City workflows including the incompatible save converter. Historical
+  credits and compatibility identifiers retain their context.
+
 ## 0.8.0 — Release candidate
 
 Ready for public testing and playing, with finishable main missions. This is a

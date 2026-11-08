@@ -1,15 +1,17 @@
 # Source-only release checklist
 
-Current release: **0.8.0 — release candidate**, ready for public testing and
-playing with finishable main missions. Release notes cover changes after
-`171c58921b5ddb9b442cc595edda703e08122bd4`; see [CHANGELOG.md](CHANGELOG.md).
-Keep Android `versionName` at `0.8.0`, `versionCode` at `800`, and the shared native
-version string in `overlay/src/vr/OculusVR.h` at `0.8.0`. The release candidate
+Current release: **0.8.5 — release candidate**, ready for public testing and
+playing on Quest with finishable main missions. The 0.8.5 notes cover changes
+since the 0.8.0 release-candidate commit `ad84866` and the project scope/URL update;
+see [CHANGELOG.md](CHANGELOG.md). Windows PCVR is planned, not a releasable target.
+See [PLATFORMS.md](PLATFORMS.md) for target status and validation boundaries.
+Keep Android `versionName` at `0.8.5`, `versionCode` at `805`, and the shared native
+version string in `overlay/src/vr/OculusVR.h` at `0.8.5`. The release candidate
 status is documented separately from the numeric version used by build tools.
 
 The local `liberty-city-vr-build` directory is a private development/build tree containing a
 complete re3 checkout. **Never publish or archive that directory.** The public
-release root is this `liberty-city-vr-quest` repository only.
+release root is this `liberty-city-vr` repository only.
 
 Before a tag or GitHub release:
 

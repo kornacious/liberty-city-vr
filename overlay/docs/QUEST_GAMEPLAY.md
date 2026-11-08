@@ -1,6 +1,6 @@
 # Quest gameplay
 
-## 0.8.0 release candidate
+## 0.8.5 release candidate
 
 Ready for public testing and playing, with finishable main missions. Report
 mission progression, comfort and compatibility issues with the mission name,
@@ -22,7 +22,7 @@ placement. See the [weapon guide](QUEST_WEAPON_CALIBRATION.md) for calibration.
 
 Flight/Noclip, weather/time, mission countdown and paginated vehicle spawn
 controls are in the cheat menus. See the
-[changelog](../../CHANGELOG.md#080--release-candidate) for the release changes.
+[changelog](../../CHANGELOG.md#085--release-candidate) for the release changes.
 
 ## Controls and behavior
 

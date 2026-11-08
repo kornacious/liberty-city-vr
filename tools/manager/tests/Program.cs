@@ -300,14 +300,14 @@ await Test("Update dry run accepts clean main and rejects legacy master without 
     var lines = new List<string>(); log.Line += lines.Add;
     async Task<string> Git(params string[] arguments) => (await runner.Run("git", new[] { "-C", path }.Concat(arguments), showOutput: false)).Output.Trim();
     await Git("init", "-q", "--initial-branch=main");
-    File.WriteAllText(Path.Combine(path, "overlay/android/app/build.gradle.kts"), "versionCode = 800\n");
+    File.WriteAllText(Path.Combine(path, "overlay/android/app/build.gradle.kts"), "versionCode = 805\n");
     await Git("add", ".");
     await Git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Update fixture");
     var before = await Git("rev-parse", "HEAD");
     var workflows = new Workflows(config with { Repository = path }, runner, log);
     var options = new ActionOptions { UpdateDryRun = true };
     await workflows.Perform(ManagerAction.Update, options, default);
-    Assert(lines.Any(line => line.Contains("Dry run: clean main; version floor 800")));
+    Assert(lines.Any(line => line.Contains("Dry run: clean main; version floor 805")));
     Assert(await Git("rev-parse", "HEAD") == before);
     Assert(!File.Exists(Path.Combine(path, ".git/FETCH_HEAD")));
     File.AppendAllText(Path.Combine(path, "overlay/android/app/build.gradle.kts"), "// local change\n");

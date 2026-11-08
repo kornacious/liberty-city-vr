@@ -1,4 +1,4 @@
-# Liberty City VR for Meta Quest — source build kit
+# Liberty City VR — source build kit
 
 > **NO APK IS PROVIDED. THIS IS A SOURCE-BUILD RELEASE.**
 >
@@ -22,9 +22,19 @@
 > **Join the Flat2VR Discord!** Development updates, player feedback, testing,
 > and discussion of the mod take place in the Flat2VR community.
 
-This repository contains the original Quest/OpenXR port layer, Vulkan backend
-changes, the project manager and re3 patch files needed to build Liberty City VR for a
-Meta Quest headset.
+Liberty City VR brings GTA III to VR using re3, OpenXR and the bundled librw
+Vulkan renderer. The project covers **standalone Meta Quest 3** and a **planned
+Windows PCVR variant** in one source repository:
+[github.com/kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
+
+| Target | Status in 0.8.5 |
+| --- | --- |
+| Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
+| Windows PCVR / x64 / OpenXR + Vulkan | Planned; no game build, installer or manager target yet. |
+
+Windows/Linux manager support and the desktop vehicle editor are host tools;
+they do not constitute a PCVR game build. See [platform scope and roadmap](PLATFORMS.md)
+for the shared architecture, target boundaries and planned Quest compatibility profile.
 
 Android positional sound effects use the full listener-relative 3D position
 for distance attenuation. Gain stays full inside the supplied minimum range,
@@ -37,22 +47,27 @@ population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version: **v0.8.0 — release candidate**.
+Current source-kit version: **v0.8.5 — release candidate**.
 
-**Ready for public testing and playing, with finishable main missions.** Please
+**The Quest build is ready for public testing and playing, with finishable main missions.** Please
 report mission progression issues, VR comfort problems and compatibility bugs
-in the Flat2VR community. See [the changelog](CHANGELOG.md#080--release-candidate)
-for changes since the 0.7.0 version commit.
+in the Flat2VR community. See [the changelog](CHANGELOG.md#085--release-candidate)
+for changes since 0.8.0; earlier release changes remain documented below it.
 
 The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
 foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
 added to Liberty City VR after the 0.6.0 port baseline, including full-body IK
 and weapon calibration improvements, physical scopes, custom music and the
 vehicle radio board, safer autosaves, and rendering, audio and gameplay fixes.
-**v0.8.0** adds the cross-platform manager, bidirectional save transfer,
+**v0.8.0** introduced the cross-platform manager, bidirectional save transfer,
 headset playlist management, tracked spatial audio, the vehicle placement editor
 and calibrated defaults, Classic/Original Xbox models, dual wielding, immersive
 speedometers, train/camera/mission fixes, and expanded graphics/profiling tools.
+**v0.8.5** adds local Original Xbox ISO import, tracked Xbox body/camera improvements,
+hands-up surrender, shared native/VR settings, curated Upstate Liberty management
+and engine integration, Neo materials/particles/audio, rendering debug views and
+sniper overlay fixes. It also establishes the planned Windows PCVR scope and
+updates the official repository URL. PCVR remains future work.
 See the [gameplay guide](overlay/docs/QUEST_GAMEPLAY.md),
 [spatial audio notes](overlay/docs/SPATIAL_AUDIO.md),
 [model guide](overlay/docs/QUEST_MODELSETS.md),
@@ -82,7 +97,7 @@ manual slots, calibration, retail data and optional model overlays stay in place
 
 | Path | Contents |
 |---|---|
-| `overlay/` | New Android, OpenXR, Quest VR and tooling files |
+| `overlay/` | Current Android/OpenXR, VR integration and tooling files; common/platform separation planned |
 | `patches/` | Changes applied to a user-supplied re3 checkout |
 | `librw/` | MIT-licensed librw fork with the Quest Vulkan backend |
 | `tools/` | Cross-platform .NET manager, embedded auxiliary tools and native fixtures |
@@ -242,19 +257,22 @@ removed; active build compatibility aliases remain where required.
 - **re3 and reVC teams** — Huge thanks for their amazing effort and groundbreaking reverse-engineering work.
 - **Gemini 4 Argon and Gemini 3.8 Flash** — Huge thanks for porting GeT_RiCh and whachuvr's work from reVC / Vice City to re3 / GTA 3.
 - Their collective work offered a huge contribution for a solid starting point for the GTA III VR for standalone Quest porting efforts.
-- **OpenAI Codex** — Assisted with ongoing Liberty City VR Quest development,
+- **OpenAI Codex** — Assisted with ongoing Liberty City VR development,
   including implementation, debugging, regression testing and documentation.
 
 ## Planned development with Codex
 
 Codex is planned to take over the ongoing coding-assistance role for Liberty
-City VR Quest, with priorities and changes directed and reviewed by the project
-maintainer. Planned work includes:
+City VR across its Quest and planned PCVR targets, with priorities and changes
+directed and reviewed by the project maintainer. Planned work includes:
 
 - Fixing reported gameplay, audio, save-system and VR interaction issues.
 - Refining tracked controls, vehicle interactions and cutscene comfort.
 - Improving Quest rendering performance and stability, including Vulkan resource
   handling and visual correctness.
+- Extracting shared platform services and bringing up Windows OpenXR/Vulkan
+  PCVR, followed by manager target selection and a Quest compatibility profile;
+  see [platform scope](PLATFORMS.md). These capabilities are not implemented yet.
 - Maintaining regression coverage, source assembly, build/update tooling and
   contributor documentation as features evolve.
 

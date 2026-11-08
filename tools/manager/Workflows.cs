@@ -244,7 +244,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
 
     private async Task Update(ActionOptions options, CancellationToken token)
     {
-        const string official = "https://github.com/kornacious/liberty-city-vr-quest.git";
+        const string official = "https://github.com/kornacious/liberty-city-vr.git";
         var git = await tools.Git(token);
         var source = File.Exists(Path.Combine(settings.Repository, ".git")) || Directory.Exists(Path.Combine(settings.Repository, ".git"))
             ? settings.Repository : Path.Combine(settings.Workplace, "source-kit");

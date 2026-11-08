@@ -2,7 +2,7 @@
 
 This is the historical Vice City VR 0.5.5.1 maintenance record. Its optimizations
 were inherited through Vice City VR 0.5.6 into the Liberty City VR 0.6.0 port
-baseline and are retained in 0.8.0; current player defaults are documented in
+baseline and are retained in 0.8.5; current player defaults are documented in
 [QUEST_PORT.md](overlay/docs/QUEST_PORT.md).
 
 For 0.8.0 graphics changes and experimental benchmark controls, see the
@@ -15,6 +15,9 @@ This release addresses costs introduced after 0.5.2 that could remain even with
 new visual effects disabled. It does not include the separate ragdoll or culling
 visualizer work, lower the player's saved quality settings, or promise a fixed
 frame rate on every headset.
+
+For subsequent changes and the planned PCVR scope, see [0.8.5](CHANGELOG.md#085--release-candidate)
+and [platform guidance](PLATFORMS.md).
 
 ## Fixed unnecessary work
 

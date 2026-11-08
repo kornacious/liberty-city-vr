@@ -156,7 +156,7 @@ Headless local validation example:
 ```json
 {
   "Settings": {
-    "Repository": "D:/Projects/GTAVR/liberty-city-vr-quest",
+    "Repository": "D:/Projects/GTAVR/liberty-city-vr",
     "Workplace": "D:/Projects/LCVRBuild"
   },
   "Options": {

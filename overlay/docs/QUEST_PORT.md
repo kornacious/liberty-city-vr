@@ -1,8 +1,8 @@
 # Quest runtime and data layout
 
-Liberty City VR is a native arm64 Android/OpenXR application. The Meta runtime
-creates the Vulkan instance/device and the renderer submits both eyes in one
-multiview pass to a two-layer OpenXR swapchain.
+The Quest variant of Liberty City VR is a native arm64 Android/OpenXR application.
+The Meta runtime creates the Vulkan instance/device and the renderer submits
+both eyes in one multiview pass to a two-layer OpenXR swapchain.
 
 ## Runtime layout
 

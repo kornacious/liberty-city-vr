@@ -1,10 +1,10 @@
 # Liberty City VR Manager
 
-Included with **Liberty City VR 0.8.0 — release candidate**, ready for public
+Included with **Liberty City VR 0.8.5 — release candidate**, ready for public
 testing and playing with finishable main missions. Build/install and update
-read the Android version code (**800**) from the source kit. See the
-[release changelog](../../CHANGELOG.md#080--release-candidate) for manager, music,
-save-transfer and game changes since 0.7.0.
+read the Android version code (**805**) from the source kit. See the
+[release changelog](../../CHANGELOG.md#085--release-candidate) for manager, music,
+save-transfer and game changes since 0.8.0; earlier changes have their own entries.
 
 Build and install includes an optional **Convert and compress radio stations**
 checkbox. Configure FFmpeg and ffprobe in Settings. It converts locally to
@@ -12,6 +12,13 @@ AAC-LC/M4A for direct Quest playback, either from your PC game folder alongside
 Copy game data or from the installed headset WAVs when Copy is off. Original PC
 files are preserved; headset WAVs are removed after verified replacement.
 Copy alone restores WAV playback. See [the build guide](../../BUILDING.md#build-and-install).
+
+The manager currently builds and deploys the Quest application. Windows PCVR
+target selection, desktop game installation/launch and runtime diagnostics are
+planned; they are not implemented in 0.8.5. Updates use
+[the renamed official repository](https://github.com/kornacious/liberty-city-vr).
+Existing local checkout paths and saved settings remain valid after the rename.
+See [platform scope](../../PLATFORMS.md).
 
 The Windows/Linux project manager is a .NET 10 console application using
 Terminal.Gui **2.5.0**. Its GTA III inspired palette uses midnight blue,
@@ -153,7 +160,7 @@ For example, build only with an already installed SDK:
 ```json
 {
   "Settings": {
-    "Repository": "D:\\Projects\\GTAVR\\liberty-city-vr-quest",
+    "Repository": "D:\\Projects\\GTAVR\\liberty-city-vr",
     "Workplace": "C:\\LCVRBuild"
   },
   "Options": { "BuildOnly": true }

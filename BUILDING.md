@@ -1,9 +1,13 @@
 # Build and manage Liberty City VR
 
-This guide builds **0.8.0**, the release candidate ready for public testing and
-playing with finishable main missions. Android uses version code **800**; the
-APK and native About/menu version strings are **0.8.0**. See the
-[changelog](CHANGELOG.md#080--release-candidate) for the release changes.
+This guide builds **0.8.5**, the release candidate ready for public testing and
+playing with finishable main missions. Android uses version code **805**; the
+APK and native About/menu version strings are **0.8.5**. See the
+[changelog](CHANGELOG.md#085--release-candidate) for the release changes.
+
+These instructions build the **Quest Android application**. Windows and Linux
+are build-host platforms here. Windows PCVR is planned and has no build target
+or launch workflow in 0.8.5; see [platform scope](PLATFORMS.md).
 
 The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 
