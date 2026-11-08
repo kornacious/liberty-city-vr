@@ -96,6 +96,9 @@ settings or runtime selection.
   stereo frames through librw, including shader/pipeline setup and GPU completion.
   Read back both eye layers and require visible triangle pixels with the expected
   stereo disparity. This does not test OpenXR/compositor presentation.
+- `--colour-probe`: render into a mutable sRGB image through an UNORM attachment
+  and read back nine encoded gray levels in both eyes, also checking stereo geometry.
+  This verifies byte preservation; headset testing still verifies runtime presentation.
 - `--probe`: let OpenXR select the GPU, create its Vulkan device and an XR session,
   then exit. Failure to obtain a headset system is an environment/runtime result,
   not a successful rendering test.
@@ -111,6 +114,23 @@ requested visible-frame count. Focus loss suppresses controller data, invalid
 view poses submit an empty frame, and `shouldRender=false` does not acquire images.
 The initial renderer uses 1x MSAA and waits for queue completion each frame;
 these timings are not representative PCVR or Quest performance.
+
+The game retains re3's display-encoded shading/blending. Windows game swapchains
+are sRGB, with `XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT` and matching UNORM render
+attachment views. This preserves legacy color bytes without another encoding on
+write, while telling the compositor to decode sRGB on sampling. CPU-uploaded overlays
+also use sRGB swapchains. Rendering directly into a normal sRGB attachment would
+encode the legacy colors twice; submitting the same bytes as linear UNORM lifts
+brightness and can introduce banding in the compositor. An advertised sRGB format
+is required for the Windows game. This changes no color-filter or brightness setting.
+See the [OpenXR color-space requirements](https://registry.khronos.org/OpenXR/specs/1.1/man/html/XrSwapchain.html).
+
+The color-space follow-up through VirtualDesktopXR completed 3,802 game frames
+and exited cleanly. The user confirmed normal brightness and reduced banding.
+All six Windows checks passed, including the new color readback test. The shared
+Quest build also compiled and updated on the personal Quest 3 device; its visual
+output was not retested in this follow-up. This does not establish that all remaining
+texture or streamed-video banding has been eliminated.
 
 Run `ctest` for CPU/CLI checks. Enable `LIBERTYVR_GPU_TESTS=ON` to include the
 offscreen renderer smoke test; this requires a working Vulkan GPU and driver.

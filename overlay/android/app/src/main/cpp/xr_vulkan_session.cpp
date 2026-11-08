@@ -1,6 +1,7 @@
 #include "xr_vulkan_session.h"
 #include "XrMath.h"
 #include "VulkanPolicy.h"
+#include "LegacyColour.h"
 #include "platform_android.h"
 // For the game camera's view window, which the Im2D plane must match.
 #include "android.h"
@@ -156,6 +157,7 @@ struct State
 	XrTime lastCompactDebugUploadTime = 0;
 	XrSwapchain swapchain = XR_NULL_HANDLE;
 	int64_t swapchainFormat = 0;
+	VkFormat attachmentFormat = VK_FORMAT_UNDEFINED;
 	uint32_t renderWidth = 0;
 	uint32_t renderHeight = 0;
 	int renderScaleRequestedPercent = 100;
@@ -1187,6 +1189,13 @@ createSwapchain(void)
 	std::vector<int64_t> formats(formatCount);
 	xrEnumerateSwapchainFormats(g.session, formatCount, &formatCount, formats.data());
 
+	// Preserve the established Android path. Windows runtimes interpret UNORM
+	// swapchains as linear, so encoded game colours need an sRGB swapchain
+	// with a mutable UNORM attachment view (no second encoding on write).
+#ifdef LIBERTYVR_WINDOWS
+	g.swapchainFormat = LegacyColour::selectSrgb(formats.data(), formats.size());
+	g.attachmentFormat = LegacyColour::attachmentFormat((VkFormat)g.swapchainFormat);
+#else
 	// UNORM before SRGB on purpose. The game writes colours that are already
 	// sRGB-encoded, so an sRGB attachment would encode them a second time and
 	// wash the whole image out. With UNORM the bytes reach the compositor
@@ -1207,6 +1216,8 @@ createSwapchain(void)
 		if(g.swapchainFormat != 0)
 			break;
 	}
+	g.attachmentFormat = (VkFormat)g.swapchainFormat;
+#endif
 	if(g.swapchainFormat == 0){
 		LOGE("no supported swapchain format");
 		return false;
@@ -1217,6 +1228,8 @@ createSwapchain(void)
 	XrSwapchainCreateInfo info = { XR_TYPE_SWAPCHAIN_CREATE_INFO };
 	info.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT |
 	                  XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+	if(g.attachmentFormat != g.swapchainFormat)
+		info.usageFlags |= XR_SWAPCHAIN_USAGE_MUTABLE_FORMAT_BIT;
 	info.format = g.swapchainFormat;
 	info.sampleCount = 1;
 	info.faceCount = 1;
@@ -1363,6 +1376,8 @@ createSwapchain(void)
 	for(uint32_t i = 0; i < imageCount; i++)
 		g.images[i].image = xrImages[i].image;
 	LOGI("swapchain: %u images, format %lld", imageCount, (long long)g.swapchainFormat);
+	LOGI("colour output: swapchain format %lld, attachment format %d",
+	     (long long)g.swapchainFormat, (int)g.attachmentFormat);
 
 	// UI overlay swapchain. It accommodates both the compact 512x128 debug
 	// strip and the desktop-sized 1024x768 menu without recreating an OpenXR
@@ -1469,7 +1484,7 @@ bool
 createRenderPass(void)
 {
 	VkAttachmentDescription attachments[2] = {};
-	attachments[0].format = (VkFormat)g.swapchainFormat;
+	attachments[0].format = g.attachmentFormat;
 	attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
 	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1673,7 +1688,7 @@ createSwapchainImageViews(void)
 		VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 		viewInfo.image = image.image;
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-		viewInfo.format = (VkFormat)g.swapchainFormat;
+		viewInfo.format = g.attachmentFormat;
 		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		viewInfo.subresourceRange.levelCount = 1;
 		viewInfo.subresourceRange.layerCount = 2;
@@ -2349,7 +2364,7 @@ getContext(GraphicsContext *out)
 	out->height = g.renderHeight;
 	out->renderScaleEffectivePercent = g.renderScaleEffectivePercent;
 	out->viewCount = 2;
-	out->colourFormat = (VkFormat)g.swapchainFormat;
+	out->colourFormat = g.attachmentFormat;
 	return true;
 }
 

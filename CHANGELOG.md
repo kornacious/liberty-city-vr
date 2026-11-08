@@ -5,6 +5,16 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Fixed washed-out Windows menus/gameplay and the incorrect color-space handoff
+  contributing to dark-area banding. Windows now submits sRGB swapchains with
+  mutable UNORM attachment views, preserving re3's display-encoded shading and
+  blending while identifying the image correctly to the compositor. The CPU-uploaded
+  overlay uses the same sRGB interpretation. Android retains its existing format policy.
+  The user confirmed normal brightness and reduced banding through VirtualDesktopXR.
+- Added a Vulkan GPU regression test that reads back nine encoded gray levels
+  in both eye layers through the mutable sRGB/UNORM path, alongside stereo geometry
+  checks. Windows now requires an advertised sRGB format instead of silently using
+  the incorrect linear UNORM handoff.
 - Added an experimental Windows x64 game executable using the shared re3 loop,
   OpenXR session/actions, tracked VR gameplay, wrist/theatre menus and renderer.
   Shared game-source definitions and Windows portability adapters preserve the

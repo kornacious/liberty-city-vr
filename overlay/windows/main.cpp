@@ -5,6 +5,7 @@
 #include <openxr/openxr_platform.h>
 #include "XrMath.h"
 #include "VulkanPolicy.h"
+#include "LegacyColour.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -386,7 +387,7 @@ struct Application {
     }
 };
 
-void verifyProbePixels(Application &app) {
+void verifyProbePixels(Application &app, int grey = -1) {
     struct Readback {
         VkDevice device;
         VkBuffer buffer = VK_NULL_HANDLE;
@@ -434,12 +435,25 @@ void verifyProbePixels(Application &app) {
     host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
     host.srcQueueFamilyIndex = host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; host.buffer = readback.buffer; host.size = VK_WHOLE_SIZE;
     vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
+    image.srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    image.dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    image.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    image.newLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,0,0,nullptr,0,nullptr,1,&image);
     vkCheck(vkEndCommandBuffer(command),"end readback");
     VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO}; submit.commandBufferCount = 1; submit.pCommandBuffers = &command;
     vkCheck(vkQueueSubmit(app.queue,1,&submit,VK_NULL_HANDLE),"submit readback");
     vkCheck(vkQueueWaitIdle(app.queue),"complete readback");
     void *mapped = nullptr; vkCheck(vkMapMemory(app.device,readback.memory,0,bytes,0,&mapped),"map pixels"); readback.mapped = true;
     auto pixels = static_cast<const uint8_t*>(mapped);
+    if(grey >= 0) {
+        for(unsigned eye=0; eye<2; ++eye) {
+            const auto *corner=pixels+size_t(eye)*app.width*app.height*4;
+            for(unsigned channel=0; channel<3; ++channel)
+                if(std::abs(int(corner[channel])-grey)>1)
+                    throw std::runtime_error("Encoded colour changed at the sRGB/UNORM attachment boundary.");
+        }
+    }
     uint64_t count[2]{}, sumX[2]{};
     for(uint32_t eye = 0; eye < 2; ++eye)
         for(uint32_t y = 0; y < app.height; ++y)
@@ -453,7 +467,7 @@ void verifyProbePixels(Application &app) {
         throw std::runtime_error("Expected stereo disparity is missing or reversed.");
 }
 
-int vulkanProbe(bool render = false) {
+int vulkanProbe(bool render = false, bool colour = false) {
     Application app;
     VkApplicationInfo info{VK_STRUCTURE_TYPE_APPLICATION_INFO}; info.apiVersion = VK_API_VERSION_1_1;
     VkInstanceCreateInfo create{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO}; create.pApplicationInfo = &info;
@@ -490,6 +504,12 @@ int vulkanProbe(bool render = false) {
         app.width = 640; app.height = 480; app.format = VK_FORMAT_R8G8B8A8_UNORM;
         VkImageCreateInfo image{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         image.imageType = VK_IMAGE_TYPE_2D; image.format = app.format; image.extent = {app.width,app.height,1};
+        if(colour) {
+            const int64_t formats[]={VK_FORMAT_R8G8B8A8_SRGB};
+            image.format=LegacyColour::selectSrgb(formats,1);
+            image.flags=VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+            app.format=LegacyColour::attachmentFormat(image.format);
+        }
         image.mipLevels = 1; image.arrayLayers = 2; image.samples = VK_SAMPLE_COUNT_1_BIT;
         image.tiling = VK_IMAGE_TILING_OPTIMAL; image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         vkCheck(vkCreateImage(app.device, &image, nullptr, &app.probeImage), "probe image");
@@ -513,15 +533,19 @@ int vulkanProbe(bool render = false) {
         auto projection = XrMath::projectionFromFov(fov,0.05f,100);
         auto leftVP = XrMath::multiply(projection,XrMath::viewFromPose(left));
         auto rightVP = XrMath::multiply(projection,XrMath::viewFromPose(right));
-        for(int i = 0; i < 5; ++i) {
+        const int greys[]={0,1,2,8,18,64,128,192,255};
+        for(int i = 0; i < (colour ? 9 : 5); ++i) {
             rw::vulkan::setStereoViewProjection(leftVP.m,rightVP.m); rw::vulkan::setClearColour(18,24,38);
+            if(colour) rw::vulkan::setClearColour(greys[i],greys[i],greys[i]);
             if(!rw::vulkan::beginFrame(app.probeImage,output)) throw std::runtime_error("Probe renderer frame failed.");
             rw::vulkan::renderdevice.setRenderState(rw::CULLMODE,reinterpret_cast<void*>(rw::CULLNONE));
             XrPosef triangle{{0,0,0,1},{0,0,-2}}; app.triangle(triangle,0.35f,false);
             rw::vulkan::endFrame(); vkCheck(vkQueueWaitIdle(app.queue),"probe GPU completion");
+            if(colour) verifyProbePixels(app,greys[i]);
         }
-        verifyProbePixels(app);
-        std::cout << "Renderer probe passed: five stereo frames completed; triangle pixels and stereo disparity verified.\n";
+        if(!colour) verifyProbePixels(app);
+        else std::cout << "Colour probe passed: sRGB images with UNORM attachments preserve nine encoded greys in both eyes.\n";
+        if(!colour) std::cout << "Renderer probe passed: five stereo frames completed; triangle pixels and stereo disparity verified.\n";
     }
     return supported ? 0 : 1;
 }
@@ -537,10 +561,12 @@ int main(int argc, char **argv) {
                     "--probe          Negotiate OpenXR GPU/device/session, then exit\n"
                     "--vulkan-probe   Check desktop Vulkan without a headset/runtime\n"
                     "--renderer-probe Render five offscreen stereo frames without OpenXR\n"
+                    "--colour-probe   Verify legacy colour bytes through mutable sRGB images\n"
                     "--frames N       Submit N stereo frames (default 300, maximum 10000)\n"
                     "Session readiness/rendering timeout: 60 seconds. Ctrl+C stops.\n"; return 0;
             } else if(argument == "--vulkan-probe" && argc == 2) return vulkanProbe();
             else if(argument == "--renderer-probe" && argc == 2) return vulkanProbe(true);
+            else if(argument == "--colour-probe" && argc == 2) return vulkanProbe(true,true);
             else if(argument == "--probe") probe = true;
             else if(argument == "--frames" && i+1 < argc) {
                 std::string value = argv[++i]; size_t end = 0; auto number = std::stoul(value, &end);
