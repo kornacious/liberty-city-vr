@@ -344,6 +344,8 @@ void setIm2DTransform(const float32 transform[16], float32 planeDistance,
 // enables this only while drawing the immersive gameplay interface, keeping
 // world-space sprites and theater/menu frames on their exact projection.
 void setIm2DSafeAreaScale(float32 scale);
+// Scope-only plane converging at a game-world target. Null restores normal UI.
+void setImmediate2DScopeTarget(const float32 *target, float32 x, float32 y);
 
 // Wrist panels.
 //

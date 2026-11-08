@@ -2983,7 +2983,7 @@ CycleQuestScopeAimMode(int direction)
 }
 
 bool
-GetTrackedScopeReticlePos(float *screenX, float *screenY)
+GetTrackedScopeReticlePos(float *screenX, float *screenY, float *worldTarget)
 {
 	if(!screenX || !screenY)
 		return false;
@@ -2992,10 +2992,23 @@ GetTrackedScopeReticlePos(float *screenX, float *screenY)
 	if(gScopeHand < 0 || gScopeWeaponType < 0)
 		return false;
 	CVector source, direction;
-	if(!BuildAim(gScopeHand, gScopeWeaponType, &source, &direction))
+	if(!GetTrackedWeaponAim(gScopeHand, gScopeWeaponType, &source, &direction))
 		return false;
 	direction.Normalise();
-	const CVector targetPoint = source + direction * 100.0f;
+	CVector targetPoint = source + direction * CWeaponInfo::GetWeaponInfo((eWeaponType)gScopeWeaponType)->m_fRange;
+	CColPoint point;
+	CEntity *hitEntity = nil;
+	CEntity *savedIgnoreEntity = CWorld::pIgnoreEntity;
+	CWorld::pIgnoreEntity = FindPlayerPed();
+	if(CWorld::ProcessLineOfSight(source, targetPoint, point, hitEntity,
+	   true, true, true, true, true, true, false))
+		targetPoint = point.point;
+	CWorld::pIgnoreEntity = savedIgnoreEntity;
+	if(worldTarget){
+		worldTarget[0] = targetPoint.x;
+		worldTarget[1] = targetPoint.y;
+		worldTarget[2] = targetPoint.z;
+	}
 	RwV3d targetRw = { targetPoint.x, targetPoint.y, targetPoint.z };
 	RwV3d screenPos;
 	float szx, szy;

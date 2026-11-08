@@ -76,7 +76,7 @@ int GetTrackedScopeWeaponType();
 int GetQuestScopeAimMode();
 void CycleQuestScopeAimMode(int direction);
 const char *GetQuestScopeAimModeName();
-bool GetTrackedScopeReticlePos(float *screenX, float *screenY);
+bool GetTrackedScopeReticlePos(float *screenX, float *screenY, float *worldTarget = nullptr);
 bool ShouldUseTrackedWeapon(int hand);
 bool IsTrackedWeaponTriggerPressed(int hand);
 bool IsTrackedWeaponTriggerJustPressed(int hand);

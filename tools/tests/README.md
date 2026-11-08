@@ -6,6 +6,28 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-scope-overlay-depth.cpp` compiles as C++17 with three extracted production
+includes from `librw/src/vulkan/vkim.cpp`: `scope-overlay-depth-production.inc`
+contains `const bool32 scopeOverlay` through `gstate.zWriteEnabled = savedZWrite;`;
+`scope-overlay-strict-production.inc` contains the complete
+`getImmediate2DStrictDepth` function; `scope-overlay-surface-production.inc`
+contains the `push.surfaceProps[0]` assignment. It exercises 64 combinations of
+scope/Im2D/Im3D, inherited depth states, radar masking and pipeline failure,
+checking overlay depth selection and state restoration. No game data is used.
+
+`test-scope-overlay-stereo.cpp` compiles directly as C++17 and exercises the
+production scope plane math. It checks 216 per-eye projections over target
+distances, moving reticles, head rotations, asymmetric frustums and zoom levels,
+plus angular size and targets behind the viewer. No game data is used.
+
+`test-scope-overlay-mask.cpp` executes the sniper mask rectangle submissions.
+Extract the block from `const float maskLeft` through the last `DrawRect` before
+`rect.left = rLeft` in the assembled `src/renderer/Hud.cpp` into
+`scope-overlay-mask-production.inc` on the include path and compile as C++17.
+It checks opaque black coverage beyond all four HUD edges, a clear moving
+aperture, square/wide displays and desktop coverage across 72 layouts. No game
+data is used; final stereo appearance still requires headset QA.
+
 `test-particle-frame.cpp` compiles as C++17 with `overlay/src/renderer` on the
 include path. It executes the production particle frame resolver over Xbox
 fireball/flame ranges, six-texture explosions, native Classic sequences,

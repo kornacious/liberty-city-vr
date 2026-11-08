@@ -13,6 +13,7 @@
 #include "rwvk.h"
 #include "rwvkimpl.h"
 #include "vkloading.h"
+#include "ScopeOverlayMath.h"
 
 #define PLUGIN_ID ID_DRIVER
 
@@ -40,6 +41,8 @@ struct Im3DState
 } gim3d;
 
 static bool32 gImmediate2DStrictDepth;
+static bool32 gImmediate2DScope;
+static float32 gScopeOverlayPlane[16];
 static bool32 gImmediate2DFullscreen;
 static float32 gFullscreenWidth, gFullscreenHeight;
 static bool32 gImmediate2DLoadingArtwork;
@@ -107,7 +110,19 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
                  VkPrimitiveTopology topology, const float32 *model)
 {
 	flushStaticInstances();
+	// Sprite2d::DrawRect restores depth testing after each black mask quad.
+	// Scope textures must still composite over the world, even though their
+	// XY projection converges at the rifle target rather than the HUD plane.
+	const bool32 scopeOverlay = shader == SHADER_IM2D && gImmediate2DScope;
+	const bool32 savedZTest = gstate.zTestEnabled;
+	const bool32 savedZWrite = gstate.zWriteEnabled;
+	if(scopeOverlay){
+		gstate.zTestEnabled = 0;
+		gstate.zWriteEnabled = 0;
+	}
 	VkPipeline pipeline = getPipeline(shader, topology);
+	gstate.zTestEnabled = savedZTest;
+	gstate.zWriteEnabled = savedZWrite;
 	if(pipeline == VK_NULL_HANDLE)
 		return 0;
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -138,6 +153,8 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 		multiplyMatrix(push.model, gvk.worldToPlay, model);
 	if(shader == SHADER_IM2D && gImmediate2DLoadingArtwork)
 		memcpy(push.model, gLoadingScreenPlane, sizeof(push.model));
+	if(shader == SHADER_IM2D && gImmediate2DScope)
+		memcpy(push.model, gScopeOverlayPlane, sizeof(push.model));
 	if(shader == SHADER_IM2D && gImmediate2DFullscreen){
 		identity(push.model);
 		push.model[0] = 2.0f/gFullscreenWidth;
@@ -153,10 +170,10 @@ setupCommonState(VkCommandBuffer commandBuffer, uint32 shader,
 	}
 	push.materialColour[0] = push.materialColour[1] =
 	push.materialColour[2] = push.materialColour[3] = 1.0f;
-	// Flat targets/backdrops use clip coordinates. Loading artwork is a shared
-	// plane projected by each eye, with a near-depth override in the shader.
+	// Scope and loading artwork retain their per-eye XY projection but use
+	// overlay depth. Flat targets/backdrops use clip coordinates.
 	push.surfaceProps[0] =
-		shader == SHADER_IM2D && gImmediate2DLoadingArtwork ? 3.0f :
+		shader == SHADER_IM2D && (gImmediate2DLoadingArtwork || gImmediate2DScope) ? 3.0f :
 		shader == SHADER_IM2D &&
 		(gvk.wristPanelOffscreen || gImmediate2DFullscreen) ? 2.0f : 1.0f;
 	push.surfaceProps[1] = 0.0f;	// immediate geometry is never lit
@@ -274,7 +291,7 @@ uploadIm2DVertices(const Im2DVertex *source, int32 count,
 	// The wrist minimap is exempt in both directions: its own target has no
 	// safe area, and the quad on the arm carries a transform of its own that
 	// a remap around the panel centre would drag off the wrist.
-	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended || gImmediate2DFullscreen || gImmediate2DLoadingArtwork ||
+	if(gvk.wristPanelOffscreen || gIm2DSafeAreaSuspended || gImmediate2DScope || gImmediate2DFullscreen || gImmediate2DLoadingArtwork ||
 	   (fabsf(gIm2DSafeAreaScaleX-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaScaleY-1.0f) < 0.0001f &&
 	    fabsf(gIm2DSafeAreaOffsetX) < 0.0001f &&
@@ -410,6 +427,19 @@ setIm2DSafeAreaScale(float32 scale)
 }
 
 void
+setImmediate2DScopeTarget(const float32 *target, float32 x, float32 y)
+{
+	gImmediate2DScope = false;
+	if(!target) return;
+	float32 play[3];
+	for(int i = 0; i < 3; ++i)
+		play[i] = gvk.worldToPlay[i]*target[0]+gvk.worldToPlay[4+i]*target[1]+
+			gvk.worldToPlay[8+i]*target[2]+gvk.worldToPlay[12+i];
+	gImmediate2DScope = ScopeOverlayMath::targetPlane(gScopeOverlayPlane,
+		gvk.im2dTransformActive, getSceneData()->im2dParams+1, play, x, y);
+}
+
+void
 setIm2DSafeAreaTransform(float32 scaleX, float32 scaleY,
                          float32 offsetX, float32 offsetY)
 {
@@ -456,7 +486,7 @@ setImmediate2DLoadingArtwork(bool32 enabled)
 bool32
 getImmediate2DStrictDepth(void)
 {
-	return gImmediate2DStrictDepth;
+	return gImmediate2DStrictDepth && !gImmediate2DScope;
 }
 
 void

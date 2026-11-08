@@ -53,8 +53,8 @@ void main()
 	// flat image, independent of the HUD plane or camera projection.
 	if(push.surfaceProps.x > 1.5 && push.surfaceProps.x < 2.5)
 		gl_Position = vec4(plane.xy, 0.5, 1.0);
-	// Loading artwork retains the common plane and each eye's projection.
-	// Override depth only, so scene geometry cannot occlude this overlay.
+	// Loading artwork and scopes retain their plane and each eye's projection.
+	// Override depth only, so overlays cannot be clipped at the world near plane.
 	if(push.surfaceProps.x > 2.5)
 		gl_Position.z = 0.00001 * gl_Position.w;
 	// Radar-only depth masking must sit in front of the already-rendered

@@ -1418,7 +1418,7 @@ index 3446f620..f1ac9c9c 100644
  		if ( DrawCrossHair 
  #ifdef GTA_PC
  			|| DrawCrossHairPC  
-@@ -451,31 +987,52 @@ void CHud::Draw()
+@@ -451,31 +987,68 @@ void CHud::Draw()
  				}
  				else {
  					// Sniper
@@ -1429,8 +1429,14 @@ index 3446f620..f1ac9c9c 100644
 +					float reticleX = SCREEN_WIDTH * 0.5f;
 +					float reticleY = SCREEN_HEIGHT * 0.5f;
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
-+					if (vrTrackedScope)
-+						OculusVR::GetTrackedScopeReticlePos(&reticleX, &reticleY);
++					if (vrTrackedScope){
++						float target[3];
++						if (OculusVR::GetTrackedScopeReticlePos(&reticleX, &reticleY, target)) {
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++							rw::vulkan::setImmediate2DScopeTarget(target, reticleX, reticleY);
++#endif
++						}
++					}
 +#endif
 +					float scopeRadius = SCREEN_SCALE_Y(210.0f);
 +					float rLeft = reticleX - scopeRadius;
@@ -1438,14 +1444,21 @@ index 3446f620..f1ac9c9c 100644
 +					float rTop = reticleY - scopeRadius;
 +					float rBottom = reticleY + scopeRadius;
 +
-+					if (rLeft > 0.0f)
-+						CSprite2d::DrawRect(CRect(0.0f, 0.0f, rLeft, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
-+					if (rRight < SCREEN_WIDTH)
-+						CSprite2d::DrawRect(CRect(rRight, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
-+					if (rTop > 0.0f)
-+						CSprite2d::DrawRect(CRect(Max(0.0f, rLeft), 0.0f, Min((float)SCREEN_WIDTH, rRight), rTop), CRGBA(0, 0, 0, 255));
-+					if (rBottom < SCREEN_HEIGHT)
-+						CSprite2d::DrawRect(CRect(Max(0.0f, rLeft), rBottom, Min((float)SCREEN_WIDTH, rRight), SCREEN_HEIGHT), CRGBA(0, 0, 0, 255));
++					// The VR HUD is a finite plane inside the eye frustums, not the
++					// whole display. Extend the mask beyond that plane's visible
++					// edges, keeping the aperture on the same stereo projection.
++					const float maskLeft = vrTrackedScope ? -16.0f * SCREEN_WIDTH : 0.0f;
++					const float maskRight = vrTrackedScope ? 17.0f * SCREEN_WIDTH : SCREEN_WIDTH;
++					const float maskTop = vrTrackedScope ? -16.0f * SCREEN_HEIGHT : 0.0f;
++					const float maskBottom = vrTrackedScope ? 17.0f * SCREEN_HEIGHT : SCREEN_HEIGHT;
++					if (rLeft > maskLeft)
++						CSprite2d::DrawRect(CRect(maskLeft, maskTop, rLeft, maskBottom), CRGBA(0, 0, 0, 255));
++					if (rRight < maskRight)
++						CSprite2d::DrawRect(CRect(rRight, maskTop, maskRight, maskBottom), CRGBA(0, 0, 0, 255));
++					if (rTop > maskTop)
++						CSprite2d::DrawRect(CRect(Max(maskLeft, rLeft), maskTop, Min(maskRight, rRight), rTop), CRGBA(0, 0, 0, 255));
++					if (rBottom < maskBottom)
++						CSprite2d::DrawRect(CRect(Max(maskLeft, rLeft), rBottom, Min(maskRight, rRight), maskBottom), CRGBA(0, 0, 0, 255));
 +
 +					rect.left = rLeft;
 +					rect.top = rTop;
@@ -1486,8 +1499,11 @@ index 3446f620..f1ac9c9c 100644
 +					rect.bottom = rBottom;
  					Sprites[HUD_SITESNIPER].Draw(CRect(rect), CRGBA(255, 255, 255, 255),
  						0.99f, 0.99f,  0.01f, 0.99f,  0.99f, 0.01f,  0.01f, 0.01f);
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++					rw::vulkan::setImmediate2DScopeTarget(nil, 0.0f, 0.0f);
++#endif
  				}
-@@ -488,189 +1045,85 @@ void CHud::Draw()
+@@ -488,189 +1061,85 @@ void CHud::Draw()
  			SpriteBrightness = 0;
  		}
  
@@ -1742,7 +1758,7 @@ index 3446f620..f1ac9c9c 100644
  
  		/*
  			DrawZoneName
-@@ -870,6 +1323,17 @@ void CHud::Draw()
+@@ -870,6 +1339,17 @@ void CHud::Draw()
  		/*
  			DrawClock
  		*/
@@ -1760,7 +1776,7 @@ index 3446f620..f1ac9c9c 100644
  		CFont::SetJustifyOff();
  		CFont::SetCentreOff();
  		CFont::SetBackgroundOff();
-@@ -887,6 +1351,7 @@ void CHud::Draw()
+@@ -887,6 +1367,7 @@ void CHud::Draw()
  		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(22.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
  		CFont::SetColor(CLOCK_COLOR);
  		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X), SCREEN_SCALE_Y(22.0f), sPrint);
@@ -1768,7 +1784,7 @@ index 3446f620..f1ac9c9c 100644
  
  		/*
  			DrawOnScreenTimer
-@@ -1060,25 +1525,13 @@ void CHud::Draw()
+@@ -1060,25 +1541,13 @@ void CHud::Draw()
  			DrawRadar
  		*/
  		if (m_ItemToFlash == ITEM_RADAR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_RADAR) {
