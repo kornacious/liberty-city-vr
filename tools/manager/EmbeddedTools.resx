@@ -7830,6 +7830,8 @@ if($LASTEXITCODE -ne 0){throw 'Native head attachment regression failed.'}
  [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-shared-settings-'+[Guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference='Stop'
+$patch=[IO.File]::ReadAllText((Join-Path $KitRoot 'patches/78-re3-quest-shared-settings.patch'))
+if($patch -notmatch 'QuestGameSettings::ServiceFrontendAudioFrame\(\)'){throw 'Shared frontend must service audio before returning'}
 $source=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestGameSettings.cpp'))
 $source=[regex]::Replace($source,'(?m)^#include [^\r\n]+\r?\n','')
 $menu=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/skel/android/vrdebug.cpp'))
@@ -7876,6 +7878,9 @@ $pieces.Add($policy.Value)
 $normalize=[regex]::Match($source,'(?ms)^static void\r?\nNormalizeMenuSelection\(.*?^\}')
 if(-not $normalize.Success){throw 'Missing production selection guard'}
 $pieces.Add($normalize.Value)
+$feedback=[regex]::Match($source,'(?ms)^static void\r?\nPlaySharedSettingsFeedback\(.*?^\}')
+if(-not $feedback.Success){throw 'Missing production Settings sound feedback'}
+$pieces.Add($feedback.Value)
 $renderer=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestNativeSettings.cpp'))
 $renderer=[regex]::Replace($renderer,'(?m)^#include [^\r\n]+\r?\n','')
 $pieces.Add($renderer)

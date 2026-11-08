@@ -55,25 +55,42 @@ void VrDrawNativeSettings()
     // near the bottom. Keep black headings there and the rows above it.
     NativeText(page.heading, 600, 355, MENUHEADER_WIDTH, MENUHEADER_HEIGHT, CRGBA(0,0,0,255), true);
     CFont::SetFontStyle(FONT_BANK);
-    NativeText(page.subtitle, 40, 32, SMALLESTTEXT_X_SCALE, SMALLESTTEXT_Y_SCALE, CRGBA(210,190,145,255));
+    NativeText(page.subtitle, 110, 32, SMALLESTTEXT_X_SCALE, SMALLESTTEXT_Y_SCALE, CRGBA(210,190,145,255));
     CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
     const int first = page.First();
     for(int i=first;i<(int)page.rows.size() && i<first+QuestNativeSettings::Page::RowsPerPage;++i) {
         const auto &row = page.rows[i];
-        const float y = 64.0f+(i-first)*26.0f;
-        if(row.selected) CSprite2d::DrawRect(CRect(X(10),Y(y-4),X(630),Y(y+23)),CRGBA(100,200,50,50));
+        const float y = 64.0f+(i-first)*(page.categories ? 26.0f : 20.0f)+
+            (page.radioStation >= 0 && first == 0 && i >= 3 ? 65.0f : 0.0f);
+        if(row.selected) CSprite2d::DrawRect(CRect(X(10),Y(y-(page.categories ? 4 : 2)),X(630),Y(y+(page.categories ? 23 : 18))),CRGBA(100,200,50,50));
         const CRGBA colour = !row.available ? CRGBA(160,146,114,255) :
             row.selected ? CRGBA(255,217,106,255) : CRGBA(235,170,50,255);
         if(page.categories) {
             NativeText(row.label, 320, y, BIGTEXT_X_SCALE, BIGTEXT_Y_SCALE, colour, false, true);
         } else {
-            NativeText(row.label, 42, y, MEDIUMTEXT_X_SCALE, MEDIUMTEXT_Y_SCALE, colour);
+            NativeText(row.label, 110, y, MEDIUMTEXT_X_SCALE, MEDIUMTEXT_Y_SCALE, colour);
             if(row.sliderProgress >= 0.0f) {
                 const float progress = row.sliderProgress > 1.0f ? 1.0f : row.sliderProgress;
                 FrontEndMenuManager.DisplaySlider(X(330),Y(y),Y(2),Y(16),X(190),progress);
             } else if(!row.value.empty()) {
-                NativeText(row.value, 598, y, MEDIUMTEXT_X_SCALE, MEDIUMTEXT_Y_SCALE, colour, true);
+                NativeText(row.value, 530, y, MEDIUMTEXT_X_SCALE, MEDIUMTEXT_Y_SCALE, colour, true);
             }
+        }
+    }
+    if(page.radioStation >= 0 && first == 0) {
+        // Preserve the original station-to-sprite mapping: texture order does
+        // not match radio tuning order. Untuned stations use the original red.
+        static const int sprites[] = { FE_RADIO1, FE_RADIO2, FE_RADIO5, FE_RADIO7,
+            FE_RADIO8, FE_RADIO3, FE_RADIO4, FE_RADIO6, FE_RADIO9 };
+        const int count = page.customRadioAvailable ? 10 : 9;
+        const float size = page.customRadioAvailable ? 36.0f : 40.0f;
+        const float start = (640.0f-(count*size+(count-1)*5.0f))*0.5f;
+        for(int station=0;station<count;++station) {
+            const float x = start+station*(size+5.0f);
+            const CRGBA tint = station == page.radioStation ? CRGBA(255,255,255,255) : CRGBA(225,0,0,170);
+            auto &sprite = station == 9 ? FrontEndMenuManager.m_aMenuSprites[MENUSPRITE_MP3LOGO] :
+                FrontEndMenuManager.m_aFrontEndSprites[sprites[station]];
+            sprite.Draw(CRect(X(x),Y(130),X(x+size),Y(130+size)),tint);
         }
     }
     CFont::SetFontStyle(FONT_BANK);
@@ -85,7 +102,7 @@ void VrDrawNativeSettings()
         snprintf(number,sizeof(number),"%d / %d",page.Selected()+1,(int)page.rows.size());
         NativeText(number,598,333,SMALLESTTEXT_X_SCALE,SMALLESTTEXT_Y_SCALE,CRGBA(210,190,145,255),true);
     }
-    NativeText("STICK SELECT / ADJUST   L2 / R2 ADJUST   A SELECT   B BACK",40,420,SMALLESTTEXT_X_SCALE,SMALLESTTEXT_Y_SCALE,CRGBA(210,190,145,255));
+    NativeText("STICK SELECT / ADJUST   L2 / R2 ADJUST   A SELECT   B BACK",(page.categories ? 40.0f : 110.0f),420,SMALLESTTEXT_X_SCALE,SMALLESTTEXT_Y_SCALE,CRGBA(210,190,145,255));
     CFont::DrawFonts();
     CFont::SetRightJustifyOff();
 }

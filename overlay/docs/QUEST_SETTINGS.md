@@ -6,7 +6,8 @@ shared rows through GTA III's native fonts, textured background and selection
 bar on the game's cinema screen. The gameplay shortcut retains the VR overlay.
 Native pages paginate automatically as the selection moves. Main categories are
 centered without OPEN labels or an item-position counter. Entry typography uses
-the original GTA III heading font and frontend scales. The standard menu
+the original GTA III heading font and frontend scales. Submenu rows use compact
+spacing and balanced left/right insets. The standard menu
 keeps ownership of pause and returns to its Settings entry when the shared menu
 closes; the gameplay shortcut closes back to play. Held opening/closing inputs
 are consumed so they cannot change a setting or immediately leave the parent.
@@ -31,7 +32,8 @@ settings, including traffic density and Vulkan PS2 alpha rendering.
 The shared menu adds:
 
 - Audio and Radio: native segmented music/SFX volume sliders, station playback
-  previews, board/custom-music setup and audio-volume defaults. Previews follow
+  previews with the original radio logo strip and selected-station highlight,
+  board/custom-music setup and audio-volume defaults. Previews follow
   station changes and stop when leaving Audio or selecting Radio Off. The
   gameplay overlay retains its normal radio behaviour. Defaults affect volumes only.
 - Language and Subtitles: installed game languages and subtitle visibility.
@@ -56,6 +58,13 @@ builds, but are unreachable through the Quest Options page. In particular, the
 PC graphics reset cannot disable the game's PS2 alpha capability or lower full
 island residency during a Quest session. The Vulkan toggle is the single
 user-facing alpha control.
+
+Shared Settings input emits the original navigation, setting-change, new-page
+and Back sounds once per input pulse or transition. The frontend Options hook
+retains the original pre-game `DMAudio.Service` call through
+`QuestGameSettings::ServiceFrontendAudioFrame`. Preview and feedback APIs queue
+requests; that service is required to turn them into audible playback. Loaded
+games keep their existing audio service path, avoiding a duplicate update.
 
 Regression adapter: `tools/tests/test-shared-settings.ps1` through the manager.
 It extracts the production backend and frontend bridge for host tests covering

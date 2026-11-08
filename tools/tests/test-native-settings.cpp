@@ -14,7 +14,9 @@
 using wchar=char16_t;
 enum {FALSE=0,TRUE=1,FONT_HEADING=0,FONT_BANK=1,rwRENDERSTATEZTESTENABLE,
  rwRENDERSTATEZWRITEENABLE,rwRENDERSTATETEXTUREFILTER,rwRENDERSTATESRCBLEND,
- rwRENDERSTATEDESTBLEND,rwFILTERLINEAR,rwBLENDSRCALPHA,rwBLENDINVSRCALPHA,MENUSPRITE_PLAYERSET};
+ rwRENDERSTATEDESTBLEND,rwFILTERLINEAR,rwBLENDSRCALPHA,rwBLENDINVSRCALPHA,MENUSPRITE_PLAYERSET,MENUSPRITE_MP3LOGO};
+enum { FE_RADIO1,FE_RADIO2,FE_RADIO3,FE_RADIO4,FE_RADIO5,FE_RADIO6,FE_RADIO7,FE_RADIO8,FE_RADIO9 };
+enum { SOUND_FRONTEND_MENU_BACK=1000,SOUND_FRONTEND_MENU_NEW_PAGE,SOUND_FRONTEND_MENU_SETTING_CHANGE,SOUND_FRONTEND_MENU_NAVIGATION };
 constexpr float SCREEN_WIDTH=640,SCREEN_HEIGHT=448;
 constexpr float BIGTEXT_X_SCALE=.75f,BIGTEXT_Y_SCALE=.9f,MEDIUMTEXT_X_SCALE=.55f,MEDIUMTEXT_Y_SCALE=.8f;
 constexpr float SMALLESTTEXT_X_SCALE=.4f,SMALLESTTEXT_Y_SCALE=.6f,MENUHEADER_WIDTH=.84f,MENUHEADER_HEIGHT=1.6f;
@@ -22,9 +24,13 @@ constexpr float SMALLESTTEXT_X_SCALE=.4f,SMALLESTTEXT_Y_SCALE=.6f,MENUHEADER_WID
 struct CRGBA {int r,g,b,a;CRGBA(int R,int G,int B,int A):r(R),g(G),b(B),a(A){}};
 struct CRect {float l,t,r,b;CRect(float L,float T,float R,float B):l(L),t(T),r(R),b(B){}};
 static std::vector<CRect> highlights;
-struct Sprite {void Draw(const CRect&,const CRGBA&){}};
+struct SpriteDraw {int id;CRect rect;CRGBA colour;};
+static std::vector<SpriteDraw> spriteDraws;
+struct Sprite {int id=0;void Draw(const CRect&r,const CRGBA&c){spriteDraws.push_back({id,r,c});}};
+static std::vector<int> menuSounds;
+static struct {void PlayFrontEndSound(int sound,int){menuSounds.push_back(sound);}} DMAudio;
 static std::vector<float> sliders;
-static struct {Sprite m_aMenuSprites[32];int m_nMenuFadeAlpha=0;int DisplaySlider(float,float,float,float,float,float progress){sliders.push_back(progress);return 0;}} FrontEndMenuManager;
+static struct {Sprite m_aMenuSprites[32],m_aFrontEndSprites[32];int m_nMenuFadeAlpha=0;int DisplaySlider(float,float,float,float,float,float progress){sliders.push_back(progress);return 0;}} FrontEndMenuManager;
 struct Text {std::u16string value;float x,y,width;int font;float sx,sy;};
 static std::vector<Text> texts;
 namespace CSprite2d {void InitPerFrame(){} void DrawRect(const CRect&r,const CRGBA&){highlights.push_back(r);}}
@@ -42,6 +48,7 @@ static void AsciiToUnicode(const char *text,wchar*out){while(*text)*out++=(unsig
 static void RwRenderStateSet(int,void*){}
 static QuestNativeSettings::Page suppliedPage;
 namespace androidgame {bool VrCollectNativeSettings(QuestNativeSettings::Page &page){page=suppliedPage;return true;}}
+static bool gVrMenuVisible=true;
 static int gVrMenuPage=VR_MENU_PAGE_SETTINGS,gVrMenuSelection=0,menuCount=32;
 static int *CurrentMenuSelection(){return &gVrMenuSelection;}
 static int CurrentMenuItemCount(){return menuCount;}
@@ -82,13 +89,15 @@ int main(){
   for(int i=0;i<27;++i)suppliedPage.rows.emplace_back("LONG SETTING DESCRIPTION FOR FITTING  < ON - RESTART REQUIRED >",i==selected,true);
   texts.clear();highlights.clear();androidgame::VrDrawNativeSettings();
   Check(highlights.size()==1,"native page has one actual selection bar");
-  Check(highlights[0].t==60+(selected%10)*26,"selected logical row tracks native pagination");
+  Check(highlights[0].t==62+(selected%10)*20,"selected logical row tracks compact native pagination");
   Check(highlights[0].b<333,"rows remain above the original native title strip");
   Check(suppliedPage.First()==selected/10*10,"scroll window follows selected row");
   for(const auto&t:texts){
    Check(t.x>=29&&t.x+t.width<=611&&t.y>=0&&t.y<448,"native text stays inside menu margins");
    if(t.value.find(u"LONG SETTING")==0 || t.value==u"ON - RESTART REQUIRED")
     Check(t.font==FONT_HEADING&&t.sx==MEDIUMTEXT_X_SCALE&&t.sy==MEDIUMTEXT_Y_SCALE,"all setting labels and values retain original frontend font and size");
+   if(t.value.find(u"LONG SETTING")==0)Check(t.x==110,"submenu labels use original inset left margin");
+   if(t.value==u"ON - RESTART REQUIRED")Check(t.x+t.width==530,"submenu values use balanced inset right margin");
   }
  }
  suppliedPage=Page();suppliedPage.heading="SETTINGS";suppliedPage.categories=true;
@@ -111,5 +120,44 @@ int main(){
  Check(FrontEndMenuManager.m_nMenuFadeAlpha==255,"legacy sliders receive visible alpha after bypassing old menu fades");
  Check(sliders==std::vector<float>({0,1}),"both volumes use the original native slider renderer with exact bounds");
  for(const auto&t:texts)Check(t.value!=u"0%"&&t.value!=u"100%","native volume sliders replace percentage text");
+ for(int i=0;i<32;++i){FrontEndMenuManager.m_aFrontEndSprites[i].id=100+i;FrontEndMenuManager.m_aMenuSprites[i].id=200+i;}
+ static const int radioOrder[]={FE_RADIO1,FE_RADIO2,FE_RADIO5,FE_RADIO7,FE_RADIO8,FE_RADIO3,FE_RADIO4,FE_RADIO6,FE_RADIO9};
+ for(int station=0;station<12;++station)for(bool custom:{false,true}){
+  suppliedPage=Page();suppliedPage.heading="AUDIO AND RADIO";suppliedPage.radioStation=station;suppliedPage.customRadioAvailable=custom;
+  for(int row=0;row<6;++row)suppliedPage.rows.emplace_back("AUDIO CONTROL",row==0,true);
+  spriteDraws.clear();texts.clear();highlights.clear();androidgame::VrDrawNativeSettings();
+  Check(spriteDraws.size()==size_t(custom?11:10),"audio draws background and original nine station icons plus available custom tracks");
+  int audioRow=0;
+  for(const auto&t:texts)if(t.value==u"AUDIO CONTROL"){
+   const float expectedY=64.0f+audioRow*20.0f+(audioRow>=3?65.0f:0.0f);
+   Check(t.y==expectedY,"compact audio controls reserve space for the station logo strip");++audioRow;
+  }
+  Check(audioRow==6,"radio logos do not replace or duplicate audio controls");
+  int bright=0;
+  for(int i=0;i<(custom?10:9);++i){
+   const auto&draw=spriteDraws[i+1];
+   Check(draw.id==(i==9?200+MENUSPRITE_MP3LOGO:100+radioOrder[i]),"native station logos retain correct tuning-to-texture mapping");
+   bool selected=draw.colour.r==255&&draw.colour.g==255&&draw.colour.b==255&&draw.colour.a==255;
+   Check(selected==(station==i),"selected station is fully highlighted; every other icon is dimmed");
+   if(selected)++bright;
+   Check(draw.rect.l>=110&&draw.rect.r<=530&&draw.rect.t==130&&draw.rect.b<=170,"logo strip fits between station selection and remaining audio controls");
+  }
+  Check(bright==(station<(custom?10:9)?1:0),"Radio Off and unavailable stations do not highlight another logo");
+ }
+ menuSounds.clear();gVrMenuPage=VR_MENU_PAGE_GRAPHICS;gVrMenuVisible=true;
+ PlaySharedSettingsFeedback(VR_MENU_PAGE_SETTINGS,0,13,true,false,false);
+ Check(menuSounds==std::vector<int>({SOUND_FRONTEND_MENU_NEW_PAGE}),"entering Settings subpages uses native page sound");
+ PlaySharedSettingsFeedback(VR_MENU_PAGE_GRAPHICS,1,19,false,false,true);
+ Check(menuSounds.back()==SOUND_FRONTEND_MENU_NAVIGATION,"selection movement uses native navigation sound");
+ PlaySharedSettingsFeedback(VR_MENU_PAGE_GRAPHICS,1,19,true,false,true);
+ Check(menuSounds.back()==SOUND_FRONTEND_MENU_SETTING_CHANGE&&menuSounds.size()==3,"adjustment wins over simultaneous navigation without duplicate sounds");
+ gVrMenuPage=VR_MENU_PAGE_SETTINGS;
+ PlaySharedSettingsFeedback(VR_MENU_PAGE_GRAPHICS,18,19,true,false,false);
+ Check(menuSounds.back()==SOUND_FRONTEND_MENU_BACK,"explicit Back row has the native back sound");
+ gVrMenuVisible=false;PlaySharedSettingsFeedback(VR_MENU_PAGE_SETTINGS,0,13,false,true,false);
+ Check(menuSounds.back()==SOUND_FRONTEND_MENU_BACK&&menuSounds.size()==5,"closing Settings with B has back feedback");
+ gVrMenuVisible=true;
+ for(int frame=0;frame<30;++frame)PlaySharedSettingsFeedback(VR_MENU_PAGE_SETTINGS,0,13,false,false,false);
+ Check(menuSounds.size()==5,"idle and held inputs without pulses emit no repeated sounds");
  std::printf("Native settings: %u policy, column, pagination and renderer checks PASS.\n",checks);
 }

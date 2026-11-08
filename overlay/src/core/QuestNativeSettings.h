@@ -26,6 +26,8 @@ struct Row {
 };
 struct Page {
     bool categories = false;
+    int radioStation = -1;
+    bool customRadioAvailable = false;
     std::string heading, subtitle;
     std::vector<Row> rows;
     std::vector<std::string> notes;

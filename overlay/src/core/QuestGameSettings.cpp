@@ -24,13 +24,25 @@ static int Volume(int value) { return value < 0 ? 0 : value > 127 ? 127 : value;
 static const char *const stations[] = { "HEAD RADIO", "DOUBLE CLEF", "K-JAH", "RISE FM",
     "LIPS 106", "GAME FM", "MSX FM", "FLASHBACK", "CHATTERBOX", "CUSTOM SOUNDTRACKS", "POLICE RADIO", "RADIO OFF" };
 
+int RadioStation() { return DMAudio.GetRadioInCar(); }
+bool CustomRadioAvailable() { return DMAudio.IsMP3RadioChannelAvailable(); }
+
+void ServiceFrontendAudioFrame()
+{
+    // The original CMenuManager::Process services audio before game load.
+    // Its shared-settings early return must retain that work. Once loaded,
+    // the ordinary game idle path already services audio exactly once.
+    if(FrontEndMenuManager.m_bGameNotLoaded && !FrontEndMenuManager.m_bWantToRestart)
+        DMAudio.Service();
+}
+
 void AudioText(int row, char *text, int size)
 {
     const CMenuManager &menu = FrontEndMenuManager;
     if(row == Music) snprintf(text, size, "MUSIC VOLUME  < %d%% >", menu.m_PrefsMusicVolume*100/127);
     else if(row == Effects) snprintf(text, size, "SFX VOLUME  < %d%% >", menu.m_PrefsSfxVolume*100/127);
     else if(row == Station) {
-        const int station = DMAudio.GetRadioInCar();
+        const int station = RadioStation();
         snprintf(text, size, "RADIO STATION  < %s >", stations[station >= 0 && station < 12 ? station : 11]);
     } else snprintf(text, size, "%s", row == RadioBoard ? "RADIO BOARD AND CUSTOM MUSIC  < OPEN >" :
         row == AudioDefaults ? "RESTORE AUDIO DEFAULTS" : "BACK TO SETTINGS");
@@ -56,7 +68,7 @@ void AudioAction(int row, int direction)
 void ServiceFrontendAudioPreview(bool active)
 {
     gFrontendPreviewActive = active;
-    const int station = FrontEndMenuManager.m_PrefsRadioStation;
+    const int station = RadioStation();
     const bool playable = active && station >= 0 && station < 10 &&
         (station != 9 || DMAudio.IsMP3RadioChannelAvailable());
     if(!playable) {

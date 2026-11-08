@@ -36,6 +36,7 @@
 #include "Pools.h"
 #include "Game.h"
 #include "Frontend.h"
+#include "DMAudio.h"
 #include "Renderer.h"
 #include "RwHelper.h"
 #include "Shadows.h"
@@ -2764,6 +2765,22 @@ ServiceFrontendSettings(const PadInput &in)
 // Runs once per rendered frame from the pad path. All menu state changes are
 // edge/repeat driven so a tap remains one exact step while a held trigger can
 // traverse large calibration ranges without hundreds of clicks.
+static void
+PlaySharedSettingsFeedback(int previousPage, int selectedItem, int itemCount,
+                           bool activated, bool back, bool navigated)
+{
+	const bool changedPage = previousPage != gVrMenuPage || !gVrMenuVisible;
+	const bool backItem = activated && previousPage != VR_MENU_PAGE_SETTINGS && selectedItem == itemCount-1;
+	if(back || (changedPage && backItem))
+		DMAudio.PlayFrontEndSound(SOUND_FRONTEND_MENU_BACK, 0);
+	else if(changedPage)
+		DMAudio.PlayFrontEndSound(SOUND_FRONTEND_MENU_NEW_PAGE, 0);
+	else if(activated)
+		DMAudio.PlayFrontEndSound(SOUND_FRONTEND_MENU_SETTING_CHANGE, 0);
+	else if(navigated)
+		DMAudio.PlayFrontEndSound(SOUND_FRONTEND_MENU_NAVIGATION, 0);
+}
+
 void
 VrDebugUpdate(const PadInput &in)
 {
@@ -2842,6 +2859,7 @@ VrDebugUpdate(const PadInput &in)
 	const bool menuShortcut =
 		(bothGrips && in.menu) || alternateMenuShortcut;
 	if(menuShortcut && !gVrMenuShortcutDown){
+		DMAudio.PlayFrontEndSound(gVrMenuVisible ? SOUND_FRONTEND_MENU_BACK : SOUND_FRONTEND_MENU_NEW_PAGE, 0);
 		if(gVrMenuVisible &&
 		   gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION)
 			OculusVR::SetQuestVehicleCalibrationPreview(false);
@@ -3031,6 +3049,8 @@ VrDebugUpdate(const PadInput &in)
 		}
 		NormalizeMenuSelection();
 		const int itemCount = CurrentMenuItemCount();
+		const int previousPage = gVrMenuPage;
+		const int previousSelection = *CurrentMenuSelection();
 		const int navigationPulse = MenuNavigationPulse(in.leftStickY, now);
 		if(navigationPulse != 0 && itemCount > 0){
 			int *selection = CurrentMenuSelection();
@@ -3048,6 +3068,7 @@ VrDebugUpdate(const PadInput &in)
 			CycleQuestCheatMenuSelection(direction);
 		}
 		gVrCheatCycleDown = cheatCycle;
+		const int actionSelection = *CurrentMenuSelection();
 
 		const bool select = in.a || in.rightStickClick;
 		const bool selectPulse = select && !gVrMenuSelectDown;
@@ -4124,8 +4145,11 @@ VrDebugUpdate(const PadInput &in)
 		}
 
 		const bool back = in.b || in.leftStickClick;
-		if(back && !gVrMenuBackDown)
+		const bool backPulse = back && !gVrMenuBackDown;
+		if(backPulse)
 			ReturnFromCurrentMenuPage();
+		PlaySharedSettingsFeedback(previousPage, actionSelection, itemCount,
+			positivePulse || decreasePulse, backPulse, actionSelection != previousSelection);
 		gVrMenuBackDown = back;
 		if(gVrCheatStatusFrames > 0)
 			gVrCheatStatusFrames--;
@@ -5709,6 +5733,10 @@ VrCollectNativeSettings(QuestNativeSettings::Page &page)
 	gNativeSettingsPage = &page;
 	DrawSharedSettingsPage();
 	page.categories = gVrMenuPage == VR_MENU_PAGE_SETTINGS;
+	if(gVrMenuPage == VR_MENU_PAGE_AUDIO) {
+		page.radioStation = QuestGameSettings::RadioStation();
+		page.customRadioAvailable = QuestGameSettings::CustomRadioAvailable();
+	}
 	gNativeSettingsPage = nil;
 	return true;
 }

@@ -14,7 +14,7 @@ struct CMenuManager {
     int m_PrefsMusicVolume=102, m_PrefsSfxVolume=102, m_PrefsRadioStation=0, m_PrefsLanguage=0;
     float m_PrefsLOD=1.2f;
     bool m_PrefsShowSubtitles=true, m_PrefsCutsceneBorders=true, m_bGameNotLoaded=true;
-    bool m_bFrontEnd_ReloadObrTxtGxt=false, m_bMenuActive=false;
+    bool m_bFrontEnd_ReloadObrTxtGxt=false, m_bMenuActive=false, m_bWantToRestart=false;
     int m_nCurrScreen=0, m_nPrevScreen=0, m_nCurrOption=0, saves=0, reloads=0;
     char m_PrefsSkinFile[256]=DEFAULT_SKIN_NAME;
     void SaveSettings(){++saves;}
@@ -22,8 +22,10 @@ struct CMenuManager {
 } FrontEndMenuManager;
 struct Audio {
     int music=-1,effects=-1,station=0,previewStarts=0,previewStops=0,previewStation=-1; bool custom=false;
-    void PlayFrontEndTrack(int stationValue,bool){++previewStarts;previewStation=stationValue;}
-    void StopFrontEndTrack(){++previewStops;}
+    int services=0;bool queued=false,audible=false;
+    void PlayFrontEndTrack(int stationValue,bool){++previewStarts;previewStation=stationValue;queued=true;}
+    void Service(){++services;if(queued){audible=true;queued=false;}}
+    void StopFrontEndTrack(){++previewStops;audible=false;queued=false;}
     void SetMusicMasterVolume(int v){music=v;}
     void SetEffectsMasterVolume(int v){effects=v;}
     int GetRadioInCar(){return station;}
@@ -123,15 +125,23 @@ int main()
     }
     FrontEndMenuManager.m_bMenuActive=false;gVrMenuVisible=true;
     Check(!ServiceFrontendSettings(PadInput{})&&gVrMenuVisible&&!gSettingsFromFrontend,"shortcut overlay retains its own exit ownership");
+    FrontEndMenuManager.m_bGameNotLoaded=true;
     DMAudio.station=FrontEndMenuManager.m_PrefsRadioStation=0;
     ServiceFrontendAudioPreview(true);
-    Check(DMAudio.previewStarts==1&&DMAudio.previewStation==0,"Audio entry starts station preview");
+    Check(DMAudio.previewStarts==1&&DMAudio.previewStation==0,"Audio entry queues station preview");
+    Check(!DMAudio.audible,"a queued preview requires the frontend audio service to start playback");
+    ServiceFrontendAudioFrame();Check(DMAudio.audible&&DMAudio.services==1,"unloaded Settings frame services queued preview and menu sounds");
+    FrontEndMenuManager.m_bGameNotLoaded=false;ServiceFrontendAudioFrame();
+    Check(DMAudio.services==1,"loaded game retains its ordinary single audio service");
+    FrontEndMenuManager.m_bGameNotLoaded=true;FrontEndMenuManager.m_bWantToRestart=true;ServiceFrontendAudioFrame();
+    Check(DMAudio.services==1,"pending game restart does not service frontend audio");
+    FrontEndMenuManager.m_bWantToRestart=false;
     ServiceFrontendAudioPreview(true);Check(DMAudio.previewStarts==1,"preview does not restart every frame");
     AudioAction(Station,1);Check(DMAudio.previewStarts==2&&DMAudio.previewStation==1,"station adjustment switches preview immediately");
     AudioAction(Music,1);Check(DMAudio.previewStarts==2,"volume adjustment does not restart station preview");
-    FrontEndMenuManager.m_PrefsRadioStation=11;ServiceFrontendAudioPreview(true);
+    DMAudio.station=FrontEndMenuManager.m_PrefsRadioStation=11;ServiceFrontendAudioPreview(true);
     Check(DMAudio.previewStops==1,"Radio Off stops the preview");
-    FrontEndMenuManager.m_PrefsRadioStation=2;ServiceFrontendAudioPreview(true);
+    DMAudio.station=FrontEndMenuManager.m_PrefsRadioStation=2;ServiceFrontendAudioPreview(true);
     ServiceFrontendAudioPreview(false);ServiceFrontendAudioPreview(false);
     Check(DMAudio.previewStops==2,"leaving Audio stops its preview exactly once");
     AudioAction(Station,1);Check(DMAudio.previewStarts==3,"gameplay station actions do not start frontend previews");
