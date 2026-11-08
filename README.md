@@ -68,7 +68,7 @@ own APK and supplies data from a legally owned PC copy of GTA III.
 
 ## Updating an existing installation
 
-Choose **Update** in the manager. It fetches official master, requires a clean
+Choose **Update** in the manager. It fetches official main, requires a clean
 fast-forward, checks the version floor, reuses cached tools, rebuilds the updated
 manager and replaces only the APK. Local changes, divergent history, asset-update
 requirements and incompatible signatures stop the update. Use **Dry run** for

@@ -158,7 +158,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("Port gamefiles folder (blank: pinned source cache)", options.GameFiles, v => options.GameFiles = v, OpenMode.Directory);
                 Note("Retail game data is not a source for these replacement files."); break;
             case 5:
-                Note("Fast-forward official master, build and update the APK.");
+                Note("Fast-forward official main, build and update the APK.");
                 Toggle("Dry run (local checks only)", options.UpdateDryRun, v => options.UpdateDryRun = v);
                 Toggle("Build only (skip installation)", options.BuildOnly, v => options.BuildOnly = v);
                 Toggle("Release (requires signing configuration)", options.Release, v => options.Release = v);

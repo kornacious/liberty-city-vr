@@ -143,7 +143,7 @@ TXD files when menu entries show missing labels. It requires existing game data
 and takes assets from the pinned re3 `gamefiles` folder or the folder you select.
 It does not replace retail IMG archives, optional model overlays or saves.
 
-**Update** requires clean master and a fast-forward from official master. It
+**Update** requires clean main and a fast-forward from official main. It
 checks the version floor and asset-update marker, rebuilds the fetched manager,
 then builds and updates only the APK. Dry run performs local checks without
 network/build/device access. Build only produces the APK without installing.

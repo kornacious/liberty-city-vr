@@ -256,19 +256,19 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         var floor = Math.Max(520, ReadVersion(File.ReadAllText(Path.Combine(settings.Repository, "overlay/android/app/build.gradle.kts"))));
         if (!Directory.Exists(source))
         {
-            if (options.UpdateDryRun) { log.Write("Dry run: would clone official master into the workplace. No network, build or installation."); return; }
-            await runner.Run(git, ["clone", "--single-branch", "--branch", "master", official, source], token: token);
+            if (options.UpdateDryRun) { log.Write("Dry run: would clone official main into the workplace. No network, build or installation."); return; }
+            await runner.Run(git, ["clone", "--single-branch", "--branch", "main", official, source], token: token);
         }
         if (!Path.GetFullPath(await Git("rev-parse", "--show-toplevel")).Equals(Path.GetFullPath(source), Paths.Comparison)) throw new IOException("Update source must be the root of its own Git checkout.");
-        if (await Git("symbolic-ref", "--short", "HEAD") != "master") throw new IOException("Update requires the master branch. Your branch was left untouched.");
+        if (await Git("symbolic-ref", "--short", "HEAD") != "main") throw new IOException("Update requires the main branch. Your branch was left untouched.");
         await RequireClean();
         var before = await Git("rev-parse", "HEAD");
         floor = Math.Max(floor, ReadVersion(await Git("show", before + ":overlay/android/app/build.gradle.kts")));
-        if (options.UpdateDryRun) { log.Write($"Dry run: clean master; version floor {floor}. No network, build or installation."); return; }
-        await Git("fetch", "--no-tags", official, "refs/heads/master");
+        if (options.UpdateDryRun) { log.Write($"Dry run: clean main; version floor {floor}. No network, build or installation."); return; }
+        await Git("fetch", "--no-tags", official, "refs/heads/main");
         var fetched = await Git("rev-parse", "FETCH_HEAD");
         var version = ReadVersion(await Git("show", fetched + ":overlay/android/app/build.gradle.kts"));
-        if (version < floor) throw new IOException("Official master is older than your source kit. Update stopped.");
+        if (version < floor) throw new IOException("Official main is older than your source kit. Update stopped.");
         var assetMarker = await runner.Run(git, ["-C", source, "cat-file", "-e", fetched + ":tools/update-required-assets.txt"], showOutput: false, check: false, token: token);
         if (assetMarker.ExitCode == 0) throw new IOException("This update requires bundled assets. Use Build and install for that version.");
         await Git("merge-base", "--is-ancestor", before, fetched);

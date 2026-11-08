@@ -292,6 +292,37 @@ await Test("Music validation-only never applies pending deletion or contacts a h
     await new Workflows(config, new CommandRunner(log), log).Perform(ManagerAction.ManageMusic,
         new() { ValidateMusicOnly = true, MusicRevision = new string('a',64), MusicDeleted = ["synthetic.mp3"] }, default);
 });
+await Test("Update dry run accepts clean main and rejects legacy master without changing HEAD", async () =>
+{
+    var path = Path.Combine(root, "update-repo"); Directory.CreateDirectory(Path.Combine(path, "overlay/android/app"));
+    Directory.CreateDirectory(Path.Combine(path, "patches"));
+    using var log = new PrivateLog(); var runner = new CommandRunner(log);
+    var lines = new List<string>(); log.Line += lines.Add;
+    async Task<string> Git(params string[] arguments) => (await runner.Run("git", new[] { "-C", path }.Concat(arguments), showOutput: false)).Output.Trim();
+    await Git("init", "-q", "--initial-branch=main");
+    File.WriteAllText(Path.Combine(path, "overlay/android/app/build.gradle.kts"), "versionCode = 800\n");
+    await Git("add", ".");
+    await Git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "core.hooksPath=/dev/null", "commit", "-q", "-m", "Update fixture");
+    var before = await Git("rev-parse", "HEAD");
+    var workflows = new Workflows(config with { Repository = path }, runner, log);
+    var options = new ActionOptions { UpdateDryRun = true };
+    await workflows.Perform(ManagerAction.Update, options, default);
+    Assert(lines.Any(line => line.Contains("Dry run: clean main; version floor 800")));
+    Assert(await Git("rev-parse", "HEAD") == before);
+    Assert(!File.Exists(Path.Combine(path, ".git/FETCH_HEAD")));
+    File.AppendAllText(Path.Combine(path, "overlay/android/app/build.gradle.kts"), "// local change\n");
+    await ThrowsAsync<IOException>(() => workflows.Perform(ManagerAction.Update, options, default));
+    await Git("checkout", "--", "overlay/android/app/build.gradle.kts");
+    await Git("checkout", "-q", "-b", "master");
+    try
+    {
+        await workflows.Perform(ManagerAction.Update, options, default);
+        throw new Exception("Expected master to be rejected");
+    }
+    catch (IOException error) { Assert(error.Message.Contains("requires the main branch")); }
+    Assert(await Git("symbolic-ref", "--short", "HEAD") == "master");
+    Assert(await Git("rev-parse", "HEAD") == before);
+});
 await MusicChecks.Run(root, Test);
 await RadioChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
