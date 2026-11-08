@@ -104,7 +104,11 @@ calibration behavior. These checks do not establish visual/collision correctness
 or headset performance for the combined configuration; those require playtesting.
 The compatibility APK was installed on the personal Quest 3 device on 8 November
 2026; startup logs confirmed the Upstate overlay and Original Xbox source active
-together. Combined gameplay acceptance is pending.
+together. The user then confirmed that gameplay looked correct when asked to
+check the new area and an original island with the combined configuration.
+No crashes, missing textures, misplaced objects or collision problems were
+reported in that check. This establishes initial manual gameplay acceptance;
+extended playtesting and measured performance comparisons remain outstanding.
 
 Launch an updated APK once to publish runtime capabilities, then install/enable
 Upstate through the Manager and fully restart. Older APKs remain gated. Do not
