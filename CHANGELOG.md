@@ -5,6 +5,48 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Added a Windows desktop eye preview with an ImGui controls panel and F1–F12
+  shortcuts: eye selection, square/cropped framing, windowed/borderless/fullscreen
+  modes, mouse capture, input toggles, statistics and reset. Pictures downscale
+  without upscaling, with black borders around unused space; theatre menus retain
+  their full aspect ratio. Preview preferences use the isolated PCVR user directory.
+- Added focused desktop keyboard/mouse and XInput gamepad control of menus and
+  movement/driving alongside tracked VR input. ImGui captures its own input;
+  focus loss clears held controls and releases the cursor. The console stays open.
+- Added same-device Vulkan preview rendering with nonblocking frame acquisition,
+  resize handling, desktop-only UI and correct eye color interpretation. Included
+  ImGui notices in installed packages and validated them before publication.
+- Added preview sizing/input policy checks and a synthetic desktop GPU test for
+  presentation, eye/framing/window shortcuts and focus recovery. All nine Windows
+  checks passed; the user confirmed preview options and desktop controls work.
+- Integrated Windows PCVR into the manager: Build and install now selects Quest
+  or Windows, with separate options and output/data/save directories. Old settings
+  retain Quest defaults; switching targets preserves draft options and Cancel
+  discards edits. Existing Quest actions and Android identifiers are unchanged.
+- Added Windows x64 MSVC/CMake/Ninja/Vulkan tool checks, clean pinned re3 assembly,
+  Release compilation and CTest. GPU/audio checks are explicit options. The pinned
+  OpenXR source loader supports local/offline sources and the existing download
+  preference; Windows builds do not invoke Android tools or ADB.
+- Added CMake local installation of the game, diagnostic, loader and notices.
+  Manager installs are versioned and publish their current pointer only after
+  required files pass validation. Previous builds, prepared assets and saves remain
+  intact. First-time data preparation is explicit and requires locally owned assets.
+- Added Launch PCVR and PCVR diagnostics pages and CLI actions. They validate the
+  active x64 runtime without changing runtime selection and run bounded Vulkan/XR
+  probes, with actionable missing-headset errors. Launch monitors the game until
+  exit, uses isolated data/saves, and supports cancellation without a playtime limit.
+- Added regression coverage for installation publication failures, path isolation,
+  old settings, exact launch arguments, runtime manifests and probe cancellation.
+  Added terminal UI checks for target switching, Cancel and PCVR action pages.
+- Fixed compiler-header quoting for Ninja/MSVC builds and case-insensitive Windows
+  compiler-environment lookup discovered while validating the manager workflow.
+- Fixed black world textures after loading a save: large load/restart upload bursts
+  could make desktop Vulkan drivers reject a frame submission with host-memory
+  exhaustion. Submissions now contain at most 64 command buffers, preserving queue
+  ordering and a final frame fence without per-batch GPU waits. Added a 4,096-upload
+  stress test that reproduced the failure before the fix and verifies texture colors
+  in both eye layers after it. The user confirmed normal world rendering after
+  loading the same save through the manager-installed corrected build.
 - Fixed a major discrete-GPU texture loading/streaming bottleneck: alpha-weighted
   mip generation no longer reads uncached Vulkan staging memory. When the actual
   upload allocation lacks HOST_CACHED, filtering uses temporary CPU memory and

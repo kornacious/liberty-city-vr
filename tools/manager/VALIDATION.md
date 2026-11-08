@@ -1,5 +1,61 @@
 # Manager migration verification
 
+## Windows desktop preview and input — 2026-11-09
+
+Local Windows execution; original assets remained in the existing isolated PCVR
+data directory. No assets were uploaded or added to the source kit.
+
+- Fresh manager-assembled Windows x64 Release compilation and versioned local
+  installation passed, including all nine CTest checks. The new synthetic mirror
+  test exercised presentation, eye/framing/window shortcuts and focus loss; its
+  GPU-generated BMP showed the expected picture, black borders and ImGui panel.
+  CPU checks cover downscaling, cropping, theatre aspect ratio and gamepad deadzones.
+- 109/109 manager checks passed with installed ImGui/librw notice validation.
+- With the personal Quest 3 device and a PC gamepad connected through the local
+  PCVR setup, the user confirmed preview options and desktop controls work.
+  The gameplay run exited cleanly; the mirror reported 16,323 presented frames
+  and nine skipped frames. This is a presentation count, not a performance benchmark.
+- The shared-source Quest ARM64 debug APK compiled successfully. The desktop
+  preview/input code is Windows-only. The APK updated the personal Quest 3 device
+  with existing data/saves preserved; standalone gameplay was not retested.
+- Windows and Linux self-contained manager packages were refreshed successfully
+  using locked cached dependencies with offline NuGet audit disabled. Linux was
+  cross-published on Windows and was not executed.
+
+## Windows PCVR manager integration
+
+Local Windows execution. Original game files stayed on this computer. Validation
+used the existing isolated PCVR data and save directories; no game data was
+uploaded, bundled in the desktop install or committed.
+
+- 109/109 manager checks passed, covering legacy Quest defaults, target routing,
+  isolated PCVR paths, failed-install publication, launch argument preservation,
+  malformed runtime manifests, missing-headset errors, cancellation and linked
+  destination rejection. The Windows link fixture uses an unprivileged junction.
+- Both terminal UI suites passed: existing settings/music/save/mod navigation and
+  the PCVR target-switch/draft/Cancel/launch/diagnostic pages.
+- The manager assembled clean pinned public re3, built Windows x64 Release with
+  MSVC/Ninja and locally cached Vulkan/OpenXR tools, passed all eight Windows
+  CTest checks, and installed executables, loader and license notices. A subsequent
+  versioned installation preserved the previous version and published a new current
+  record only after validation. No Android tools were required for these actions.
+- Real diagnostics identified the RX 6700 XT and VirtualDesktopXR, reported an
+  unavailable headset clearly, and passed device/session negotiation after connection.
+  The manager-launched installed game completed a 6,000-frame follow-up and exited
+  successfully. The user confirmed menus/gameplay and normal world rendering after
+  loading the same save used to reproduce the submission failure below.
+- The save-load smoke test exposed a renderer upload-burst failure: one enormous
+  Vulkan submission returned host-memory exhaustion and discarded texture uploads.
+  A synthetic 4,096-upload frame reproduced the failure. Batches of at most 64
+  command buffers passed GPU texture-color readback in both eyes without adding
+  per-batch GPU waits. The shared Quest APK compiled and updated successfully on
+  the personal Quest 3 device; standalone gameplay was not retested in this task.
+- Windows and Linux self-contained manager publishes passed with locked cached
+  dependencies. The Windows launcher package was refreshed and empty local PCVR
+  tool/path settings were filled without replacing Quest preferences. Linux was
+  cross-published on Windows, not executed. NuGet audit was disabled for offline
+  publishing; no new online vulnerability audit is claimed.
+
 ## Dependency and inherited-tool audit (2026-11-06)
 
 Local Windows execution; no original game data was read or transferred. Added

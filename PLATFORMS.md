@@ -7,7 +7,7 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 | Game target | Status | Current workflow |
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Implemented; release candidate | Manager source assembly, APK build and local headset installation. |
-| Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Direct CMake game/diagnostic builds; CLI source/data preparation, no packaged installer or interactive manager target. |
+| Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
@@ -44,8 +44,13 @@ OpenXR game lifecycle/input and Windows diagnostic/game entry points are impleme
 Windows services provide local data/save paths, WASAPI effects output, Media
 Foundation music and local ACM ADPCM conversion. Menus, New Game, tracking and
 music and clean engine/siren playback have been confirmed through VirtualDesktopXR.
-Interactive manager target selection, packaging and the
-Quest profile remain future work. Runtime/controller
+Manager target selection, Windows toolchain checks, versioned local installation,
+launch and runtime diagnostics are implemented. Windows builds never invoke APK
+installation or ADB. A desktop eye preview provides ImGui/F1–F12 display options
+and focused keyboard/mouse/XInput input alongside VR controls; the user confirmed
+the preview options and desktop controls work through VirtualDesktopXR. Public desktop
+binary packaging and the Quest profile remain
+future work. Runtime/controller
 compatibility and any fallback for unavailable Vulkan features need validation;
 OpenXR alone does not establish support for every headset/runtime combination.
 

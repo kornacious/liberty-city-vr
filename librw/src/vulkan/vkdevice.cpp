@@ -2965,17 +2965,26 @@ endFrame(void)
 
 	VkSubmitInfo submit = {};
 	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	// Copies must be available before this frame consumes newly streamed
-	// textures and geometry. Put every upload before the render command buffer
-	// in one queue batch; this also reduces vkQueueSubmit traffic to once/frame.
+	// Copies precede the render work on the same queue. A load/restart can
+	// produce thousands of upload command buffers: handing all of them to one
+	// vkQueueSubmit exhausts host-side submission storage on desktop drivers.
+	// Bound each batch without adding GPU waits; the fence on the final batch
+	// still covers every preceding upload and owns their staging lifetimes.
 	std::vector<VkCommandBuffer> &uploads =
 		frameUploadCommands[gvk.activeFrame];
 	uploads.push_back(gvk.frameCommands);
-	submit.commandBufferCount = (uint32)uploads.size();
-	submit.pCommandBuffers = uploads.data();
 	VkResult submitted = vkResetFences(gvk.device, 1, &frame.fence);
-	if(submitted == VK_SUCCESS)
-		submitted = vkQueueSubmit(gvk.queue, 1, &submit, frame.fence);
+	static const size_t maxSubmitCommands = 64;
+	for(size_t first = 0; submitted == VK_SUCCESS && first < uploads.size();){
+		const size_t count = uploads.size()-first < maxSubmitCommands ?
+			uploads.size()-first : maxSubmitCommands;
+		submit.commandBufferCount = (uint32)count;
+		submit.pCommandBuffers = uploads.data()+first;
+		const bool last = first+count == uploads.size();
+		submitted = vkQueueSubmit(gvk.queue, 1, &submit,
+			last ? frame.fence : VK_NULL_HANDLE);
+		first += count;
+	}
 	// Keep only the upload buffers in the retirement list. The persistent main
 	// frame command buffer belongs to FrameContext and is reset on slot reuse.
 	uploads.pop_back();
@@ -2986,7 +2995,8 @@ endFrame(void)
 		gvk.hasSubmittedFrame = 1;
 		gvk.nextFrame = (gvk.activeFrame + 1) % NUM_FRAME_CONTEXTS;
 	}else{
-		VKERR("frame submit failed: %d", (int)submitted);
+		VKERR("frame submit failed: %d (%zu upload command buffers)",
+		      (int)submitted, uploads.size());
 		// The fence was reset but no work owns it. Draining the queue makes
 		// every previously submitted slot and every retirement queue safe.
 		vkQueueWaitIdle(gvk.queue);

@@ -52,6 +52,11 @@ TUI navigation/Cancel, settings persistence and integrated file-browser checks.
 They write terminal snapshots and isolated settings only; no action or device
 transfer is performed.
 
+Use `-- --ui-pcvr PATH_TO_ARTIFACT_DIRECTORY` for Windows target switching,
+draft preservation, Cancel, launch and diagnostic page checks. PCVR service
+fixtures also cover legacy settings, isolated paths, failed installation publication,
+runtime manifests, exact launch arguments and probe cancellation without game data.
+
 `tools/tests/test-upstate-package.cpp` checks the production native SHA256,
 activation-marker and overlay-path helpers against synthetic fixtures. It also
 accepts an optional local prepared-package directory to check the pinned release

@@ -7,6 +7,9 @@
 #include <unistd.h>
 
 #include "platform_android.h"
+#ifdef LIBERTYVR_WINDOWS
+#include "DesktopMirror.h"
+#endif
 
 #include "common.h"
 #include "crossplatform.h"
@@ -2510,6 +2513,9 @@ CapturePad(RwInt32 padID)
 		state.DPadUp    = moveStickY >=  mirror ? 255 : 0;
 		state.DPadDown  = moveStickY <= -mirror ? 255 : 0;
 	}
+#ifdef LIBERTYVR_WINDOWS
+    Desktop::MergeGamepad(&state);
+#endif
 }
 
 // GetLocalTime_CP comes from src/skel/crossplatform.cpp, which is already in
@@ -2559,6 +2565,9 @@ psInitialize(void)
 	     physical / (1024*1024), _dwMemAvailPhys / (1024*1024));
 
 	CFileMgr::Initialise();
+#ifdef LIBERTYVR_WINDOWS
+    Desktop::InitializeGameInput();
+#endif
 	InitialiseLanguage();
 	// Every other skeleton reads the saved options here (win.cpp and
 	// glfw.cpp both call it from psInitialize); this one never did, so the

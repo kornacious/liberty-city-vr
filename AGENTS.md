@@ -2,9 +2,9 @@
 
 ## Project Identity and Platform Scope
 - Project: **Liberty City VR**, official repository `https://github.com/kornacious/liberty-city-vr.git`, current source-kit version **0.8.5**.
-- Quest 3 / Android ARM64 is the release-candidate game target. Windows x64 PCVR has an experimental OpenXR/Vulkan game executable and a separate renderer diagnostic in `overlay/windows`. Interactive manager target selection and desktop packaging remain planned.
+- Quest 3 / Android ARM64 is the release-candidate game target. Windows x64 PCVR has an experimental OpenXR/Vulkan game executable and a separate renderer diagnostic in `overlay/windows`. The manager provides target selection, Windows build/checks, versioned local installation, isolated data preparation, launch and runtime diagnostics. Public desktop binary packaging and broader runtime validation remain future work.
 - Keep shared re3 patches, VR gameplay, librw Vulkan rendering and shaders in this repository. Extract common OpenXR/build functionality and isolate Android/Quest and Windows platform services as PCVR is implemented; avoid duplicating the game or renderer into a separate port.
-- Planned manager support must distinguish game target from host OS and graphics/test profile, with separate build outputs, configuration and deployment workflows. Preserve existing application IDs, signing identities, game data and saves.
+- Manager support must distinguish game target from host OS and graphics/test profile, with separate build outputs, configuration and deployment workflows. Preserve existing application IDs, signing identities, game data and saves.
 - A future desktop Quest compatibility profile may match capabilities and rendering settings; desktop GPU timings are not measured Quest performance. Validate performance claims on the actual target.
 - Describe planned features as planned until implemented and validated. See `PLATFORMS.md` for target status and the roadmap.
 

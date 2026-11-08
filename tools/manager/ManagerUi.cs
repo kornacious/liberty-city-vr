@@ -12,6 +12,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 {
     public const int SettingsPage = 8;
     public const int ToolsPage = 9;
+    public const int LastPage = 11;
+    private static bool IsActionPage(int page) => page < SettingsPage || page > ToolsPage;
     // GTA III menu cyan, amber HUD, cream lettering and the dark blue of its cover art.
     public static readonly Color Midnight = new(16, 24, 32);
     public static readonly Color Cyan = new(112, 190, 202);
@@ -64,7 +66,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Mods", "Settings", "Tools and tests"];
+        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Mods", "Settings", "Tools and tests", "Launch PCVR", "PCVR diagnostics"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
@@ -110,11 +112,15 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         else app.RequestStop();
     }
 
-    private void Render(int page)
+    private void Render(int page, bool preserveDraft = false)
     {
         if (running is { IsCompleted: false }) return;
-        selected = page; draft = settings with { Actions = new(settings.Actions) };
-        options = page < SettingsPage && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
+        selected = page;
+        if (!preserveDraft)
+        {
+            draft = settings with { Actions = new(settings.Actions) };
+            options = IsActionPage(page) && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
+        }
         auxiliary = null; music = null; musicRefresh = false; readFields.Clear(); row = 0;
         if (form is not null) { configuration.Remove(form); form.Dispose(); }
         form = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(2), CanFocus = true,
@@ -122,11 +128,32 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
         perform.Text = page == SettingsPage ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS"];
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS", "LAUNCH WINDOWS PCVR", "PCVR DIAGNOSTICS"];
         configuration.Title = titles[page];
         switch (page)
         {
             case 0:
+                var target = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)"],
+                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 2 };
+                target.SetScheme(Theme()); form.Add(target); row += 3;
+                readFields.Add(() => options.Target = (GameTarget)(target.Value ?? 0));
+                target.ValueChanged += (_, _) =>
+                {
+                    foreach (var read in readFields.ToArray()) read();
+                    app.Invoke(() => { if (!disposed && selected == 0) Render(0, preserveDraft: true); });
+                };
+                if (options.Target == GameTarget.WindowsPcvr)
+                {
+                    Note("Windows x64 Release build, checks and local install. No Android tools.");
+                    Toggle("Build only (skip install and data copy)", options.PcvrBuildOnly, v => options.PcvrBuildOnly = v);
+                    Toggle("Prepare local PCVR data (first installation)", options.PcvrPrepareData, v => options.PcvrPrepareData = v);
+                    Toggle("Run Vulkan GPU tests (requires an active GPU)", options.PcvrGpuTests, v => options.PcvrGpuTests = v);
+                    Toggle("Run audio tests (requires an audio endpoint)", options.PcvrAudioTests, v => options.PcvrAudioTests = v);
+                    Field("Owned GTA III PC installation", draft.GameDirectory, v => draft.GameDirectory = v, OpenMode.Directory);
+                    PcvrDirectories();
+                    Note("Existing prepared data and saves are preserved. Use Launch PCVR after installation.");
+                    break;
+                }
                 Note("Build a personal Quest APK from the pinned source.");
                 Toggle("Build only (skip installation)", options.BuildOnly, v => options.BuildOnly = v);
                 Toggle("Release (requires your signing configuration)", options.Release, v => options.Release = v);
@@ -208,6 +235,11 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("PowerShell 7 executable (auxiliary tests)", draft.PowerShell, v => draft.PowerShell = v, OpenMode.File);
                 Field("Bash executable (auxiliary tools)", draft.Bash, v => draft.Bash = v, OpenMode.File);
                 Field("7-Zip executable (blank: installed 7zz/7z)", draft.SevenZip, v => draft.SevenZip = v, OpenMode.File);
+                Note("Windows PCVR build tools. These are separate from the Android toolchain.");
+                Field("Vulkan SDK directory", draft.VulkanSdk, v => draft.VulkanSdk = v, OpenMode.Directory);
+                Field("PCVR glslc executable (blank: Vulkan SDK/Bin)", draft.PcvrShaderCompiler, v => draft.PcvrShaderCompiler = v, OpenMode.File);
+                Field("OpenXR-SDK 1.1.58 sources (blank: pinned download/cache)", draft.PcvrOpenXrSource, v => draft.PcvrOpenXrSource = v, OpenMode.Directory);
+                PcvrDirectories();
                 Toggle("Allow pinned build-tool downloads", draft.AllowToolDownloads, v => draft.AllowToolDownloads = v);
                 Note("Saved to " + store.FilePath); break;
             case ToolsPage:
@@ -220,6 +252,17 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                     form.Add(button); row += 2;
                 }
                 break;
+            case (int)ManagerAction.LaunchPcvr:
+                Note("Launch the installed Windows PCVR game with separate local game data and saves.");
+                PcvrDirectories();
+                Note("Connect the headset to your PC OpenXR runtime. Quit in-game to return here.");
+                Note("Cancel stops the game process; use in-game Quit for a normal exit.");
+                break;
+            case (int)ManagerAction.DiagnosePcvr:
+                Note("Check the active OpenXR runtime, Vulkan GPU and headset session.");
+                PcvrDirectories();
+                Note("Requires a PCVR install. No game assets or ADB. Each probe times out after 60 seconds.");
+                break;
         }
         if (page != 2) form.SetContentHeight(row + 1);
     }
@@ -228,6 +271,12 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
     {
         var label = new Label { Text = text, X = 1, Y = row, Width = Dim.Fill(2), Height = 2 };
         form!.Add(label); row += 3;
+    }
+    private void PcvrDirectories()
+    {
+        Field("PCVR app (blank: workplace/windows-pcvr/app)", draft.PcvrInstallDirectory, v => draft.PcvrInstallDirectory = v, OpenMode.Directory, false);
+        Field("PCVR data (blank: workplace/windows-pcvr/data)", draft.PcvrDataDirectory, v => draft.PcvrDataDirectory = v, OpenMode.Directory, false);
+        Field("PCVR saves (blank: workplace/windows-pcvr/user)", draft.PcvrUserDirectory, v => draft.PcvrUserDirectory = v, OpenMode.Directory, false);
     }
     private void Field(string label, string value, Action<string> set, OpenMode mode, bool mustExist = true)
     {
@@ -298,7 +347,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             if (selected == SettingsPage)
             { store.Save(draft); settings = draft with { }; pending.Enqueue("Settings saved to " + store.FilePath); navigationButtons[SettingsPage].SetFocus(); return; }
             if (selected == ToolsPage && auxiliary is null) { pending.Enqueue("Select a tool first."); return; }
-            if (selected < SettingsPage && !musicRefresh)
+            if (IsActionPage(selected) && !musicRefresh)
             {
                 // License consent is explicit for each run rather than inferred from a saved checkbox.
                 draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [], ModOperation = ModOperation.Status };

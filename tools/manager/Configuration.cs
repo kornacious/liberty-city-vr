@@ -18,6 +18,12 @@ public sealed record ManagerSettings
     public string PowerShell { get; set; } = "";
     public string Bash { get; set; } = "";
     public string SevenZip { get; set; } = "";
+    public string VulkanSdk { get; set; } = Environment.GetEnvironmentVariable("VULKAN_SDK") ?? "";
+    public string PcvrShaderCompiler { get; set; } = "";
+    public string PcvrOpenXrSource { get; set; } = "";
+    public string PcvrInstallDirectory { get; set; } = "";
+    public string PcvrDataDirectory { get; set; } = "";
+    public string PcvrUserDirectory { get; set; } = "";
     public bool AllowToolDownloads { get; set; } = true;
     public Dictionary<ManagerAction, ActionOptions> Actions { get; set; } = [];
     public static string DefaultWorkplace(bool windows) => windows ? @"C:\LCVRBuild" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "LCVRBuild");
@@ -67,7 +73,8 @@ public sealed class SettingsStore(string? directory = null)
     }
 }
 
-public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, ImportMusic = ManageMusic }
+public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, LaunchPcvr = 10, DiagnosePcvr = 11, ImportMusic = ManageMusic }
+public enum GameTarget { Quest, WindowsPcvr }
 
 public enum ModOperation { Status, Install, Enable, Disable, Delete, Validate }
 
@@ -75,6 +82,12 @@ public enum SaveTransferDirection { QuestToPc, PcToQuest }
 
 public sealed record ActionOptions
 {
+    public GameTarget Target { get; set; }
+    public bool PcvrBuildOnly { get; set; }
+    public bool PcvrPrepareData { get; set; }
+    public bool PcvrGpuTests { get; set; }
+    public bool PcvrAudioTests { get; set; }
+    public int PcvrFrameLimit { get; set; }
     public string ModId { get; set; } = "upstate-liberty";
     public string ModArchive { get; set; } = "";
     public ModOperation ModOperation { get; set; }
@@ -157,6 +170,7 @@ public static class Paths
     public static void CopyTree(string source, string destination, CancellationToken token)
     {
         NoLinks(source);
+        NoLinks(destination);
         Directory.CreateDirectory(destination);
         foreach (var entry in Directory.EnumerateFileSystemEntries(source))
         {
@@ -164,6 +178,7 @@ public static class Paths
             if (Path.GetFileName(entry) == ".git") continue;
             NoLinks(entry);
             var target = Path.Combine(destination, Path.GetFileName(entry));
+            NoLinks(target);
             if (Directory.Exists(entry)) CopyTree(entry, target, token);
             else File.Copy(entry, target, true);
         }

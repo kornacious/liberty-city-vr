@@ -1,5 +1,6 @@
 #include "RuntimeCompat.h"
 #include "platform_windows.h"
+#include "DesktopMirror.h"
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -18,6 +19,7 @@ int main(int argc,char **argv) {
         }
         if(data.empty() || user.empty()) throw std::runtime_error("Explicit --game-data and --user-data directories are required.");
         if(!platform::configureWindows(data,user)) throw std::runtime_error("Local data or Windows media services unavailable.");
-        int result=RunWindowsGame(frames); platform::shutdownWindows(); return result;
-    } catch(const std::exception &error) { std::cerr<<"Windows game startup: "<<error.what()<<'\n'; return 1; }
+        if(!Desktop::Open(user)) throw std::runtime_error("Cannot create the desktop preview window.");
+        int result=RunWindowsGame(frames); Desktop::Close(); platform::shutdownWindows(); return result;
+    } catch(const std::exception &error) { Desktop::Close();std::cerr<<"Windows game startup: "<<error.what()<<'\n'; return 1; }
 }

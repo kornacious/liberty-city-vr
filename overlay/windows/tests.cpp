@@ -1,6 +1,7 @@
 #include "XrMath.h"
 #include "VulkanPolicy.h"
 #include "VulkanPlatform.h"
+#include "MirrorPolicy.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -9,6 +10,16 @@ void require(bool value, const char *message) { if(!value) throw std::runtime_er
 bool near(float a, float b) { return std::abs(a-b) < 0.0001f; }
 int main() {
     try {
+        auto square=Desktop::FitPicture(2496,2688,1920,1080,Desktop::Framing::Square);
+        require(square.width==1080 && square.height==1080 && square.x==420 && square.y==0,"square preview letterboxing");
+        auto small=Desktop::FitPicture(640,480,1920,1080,Desktop::Framing::Cropped);
+        require(small.width==640 && small.height==360 && small.x==640 && small.y==360,"preview never upscales");
+        auto crop=Desktop::FitPicture(2496,2688,1920,1080,Desktop::Framing::Cropped);
+        require(crop.width==1920 && crop.height==1080 && crop.dv<1 && crop.du==1,"crop covers larger target");
+        require(Desktop::FitPicture(1,1,0,0,Desktop::Framing::Square).width==0,"minimized mirror");
+        auto theater=Desktop::FitTheater(1872,2016,960,960,16.f/9,Desktop::Framing::Square);
+        require(theater.width==960 && theater.height==540 && theater.y==210 && theater.du==1,"theater menus retain aspect and complete contents");
+        require(Desktop::Deadzone(100,7849)==0 && Desktop::Deadzone(-32768,7849)==-1,"desktop gamepad deadzone and saturation");
         XrPosef pose{{0, std::sin(0.4f), 0, std::cos(0.4f)}, {1,2,-3}};
         auto inverse = XrMath::multiply(XrMath::viewFromPose(pose), XrMath::worldFromPose(pose));
         for(int i = 0; i < 16; ++i) require(near(inverse.m[i], i%5 == 0 ? 1.0f : 0.0f), "pose/view inverse");

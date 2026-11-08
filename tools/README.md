@@ -3,10 +3,11 @@
 Use `MANAGE.bat` or `./MANAGE.sh` from the source-kit root. The manager builds
 Liberty City VR against the pinned GTA III **re3** source, not reVC. Original
 Vice City VR/reVC credits describe the port's ancestry; they are not build inputs.
-The interactive build/install target is Quest. The experimental [Windows game and
-renderer diagnostic](../overlay/windows/README.md) use direct CMake, with manager
-CLI source assembly and isolated local data preparation. Interactive target selection
-and desktop packaging remain in [the platform roadmap](../PLATFORMS.md).
+The interactive build/install page selects Quest or experimental Windows PCVR.
+Windows uses MSVC, Ninja, CMake and Vulkan tools, with versioned local installation,
+isolated game data/saves, launch and OpenXR diagnostics. Direct [Windows CMake
+builds](../overlay/windows/README.md) and CLI source/data preparation remain available.
+Public desktop binary packaging remains in [the platform roadmap](../PLATFORMS.md).
 See [BUILDING](../BUILDING.md), [RELEASING](../RELEASING.md) and the
 [third-party inventory](../NOTICE.md).
 

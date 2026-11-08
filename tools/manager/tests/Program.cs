@@ -5,6 +5,7 @@ using System.Text.Json;
 using LibertyManager;
 
 if (args is ["--ui", var uiDirectory]) return UiChecks.Run(uiDirectory);
+if (args is ["--ui-pcvr", var pcvrUiDirectory]) return PcvrUiChecks.Run(pcvrUiDirectory);
 
 if (args is ["--probe-noise"])
 {
@@ -347,6 +348,7 @@ await MusicChecks.Run(root, Test);
 await RadioChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
 await ModChecks.Run(root, Test);
+await PcvrChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");
 return failures == 0 ? 0 : 1;
 

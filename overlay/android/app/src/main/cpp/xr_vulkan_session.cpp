@@ -2,6 +2,9 @@
 #include "XrMath.h"
 #include "VulkanPolicy.h"
 #include "LegacyColour.h"
+#ifdef LIBERTYVR_WINDOWS
+#include "DesktopMirror.h"
+#endif
 #include "platform_android.h"
 // For the game camera's view window, which the Im2D plane must match.
 #include "android.h"
@@ -642,6 +645,10 @@ createVulkan(void)
 
 	VkInstanceCreateInfo vkInstanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 	vkInstanceInfo.pApplicationInfo = &appInfo;
+#ifdef LIBERTYVR_WINDOWS
+    const char *surfaceExtensions[]={VK_KHR_SURFACE_EXTENSION_NAME,"VK_KHR_win32_surface"};
+    vkInstanceInfo.enabledExtensionCount=2;vkInstanceInfo.ppEnabledExtensionNames=surfaceExtensions;
+#endif
 
 	XrVulkanInstanceCreateInfoKHR xrVkInstanceInfo = {
 		XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR };
@@ -719,6 +726,10 @@ createVulkan(void)
 	deviceInfo.queueCreateInfoCount = 1;
 	deviceInfo.pQueueCreateInfos = &queueInfo;
 	deviceInfo.pEnabledFeatures = &deviceFeatures;
+#ifdef LIBERTYVR_WINDOWS
+    const char *desktopExtensions[]={VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    deviceInfo.enabledExtensionCount=1;deviceInfo.ppEnabledExtensionNames=desktopExtensions;
+#endif
 
 	XrVulkanDeviceCreateInfoKHR xrDeviceInfo = { XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR };
 	xrDeviceInfo.systemId = g.systemId;
@@ -1931,6 +1942,9 @@ renderLayer(const XrView trackedViews[2])
 		g.frameRenderer(image.image, image.view, matrices, im2dWorld.m,
 		                im2dDistance, headPos, headYaw, headQuat, eyeFovDeg,
 		                eyePos, eyeQuat);
+#ifdef LIBERTYVR_WINDOWS
+        Desktop::Present(image.image,image.view,g.renderWidth,g.renderHeight,g.theaterMode ? androidgame::VrTheaterAspectRatio() : 0.f);
+#endif
 
 		XrSwapchainImageReleaseInfo releaseInfo = { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
 		xrReleaseSwapchainImage(g.swapchain, &releaseInfo);

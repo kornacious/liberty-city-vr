@@ -1,0 +1,60 @@
+using LibertyManager;
+using Terminal.Gui.App;
+using Terminal.Gui.Input;
+using Terminal.Gui.ViewBase;
+using Terminal.Gui.Views;
+
+internal static class PcvrUiChecks
+{
+    static IEnumerable<View> All(View parent)
+    {
+        foreach(var view in parent.SubViews) { yield return view; foreach(var child in All(view)) yield return child; }
+    }
+    public static int Run(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        var initial=new ManagerSettings();
+        initial.Actions[ManagerAction.BuildAndInstall]=new ActionOptions { Target=GameTarget.WindowsPcvr };
+        using var app=Application.Create().Init();
+        using var ui=new ManagerUi(app,new SettingsStore(Path.Combine(directory,"settings")),initial,loadMusicOnOpen:false);
+        ui.Initialize(); Exception? failure=null; var phase=0;
+        CheckBox Prepare()=>All(ui.Window).OfType<CheckBox>().Single(c=>c.Text.Contains("Prepare local PCVR data"));
+        Button Button(string name)=>All(ui.Window).OfType<Button>().Single(b=>b.Text==name);
+        void Check(bool value,string message) { if(!value) throw new Exception(message); }
+        app.AddTimeout(TimeSpan.FromMilliseconds(250),()=>
+        {
+            try
+            {
+                switch(phase++)
+                {
+                    case 0:
+                        Check(!All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Windows page contains Quest radio controls.");
+                        Prepare().Value=CheckState.Checked;
+                        All(ui.Window).OfType<OptionSelector>().Single().Value=0;
+                        break;
+                    case 1:
+                        Check(All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Quest controls did not return after switching target.");
+                        All(ui.Window).OfType<OptionSelector>().Single().Value=1;
+                        break;
+                    case 2:
+                        Check(Prepare().Value==CheckState.Checked,"Target switching lost unsaved PCVR options.");
+                        Button("_Cancel").InvokeCommand(Command.Accept);
+                        Check(Prepare().Value==CheckState.UnChecked,"Cancel did not discard PCVR option edits.");
+                        File.WriteAllText(Path.Combine(directory,"pcvr-build.txt"),app.ToString());
+                        Button("Launch PCVR").InvokeCommand(Command.Accept);
+                        Check(All(ui.Window).OfType<TextField>().Count()==3,"Launch page lacks isolated PCVR directories.");
+                        Button("_Cancel").InvokeCommand(Command.Accept);
+                        Check(ui.Window.MostFocused?.Text=="Launch PCVR","Launch Cancel did not return navigation focus.");
+                        Button("PCVR diagnostics").InvokeCommand(Command.Accept);
+                        File.WriteAllText(Path.Combine(directory,"pcvr-diagnostics.txt"),app.ToString());
+                        app.RequestStop(); return false;
+                }
+            }
+            catch(Exception error) { failure=error; app.RequestStop(); return false; }
+            return true;
+        });
+        app.Run(ui.Window);
+        Console.WriteLine(failure is null ? "PASS PCVR UI: target switching, draft preservation, Cancel, launch and diagnostics" : "FAIL PCVR UI: "+failure.Message);
+        return failure is null ? 0 : 1;
+    }
+}

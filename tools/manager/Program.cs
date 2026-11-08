@@ -25,7 +25,10 @@ internal static class Program
                 --assemble RE3 OUTPUT       Assemble patched sources locally without building or accessing a device.
                 --prepare-windows-data GTA OUTPUT  Prepare an isolated local PCVR data copy; never overwrites a directory.
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
-                         InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods.
+                         InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods,
+                         LaunchPcvr, DiagnosePcvr.
+                BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr.
+                PCVR options: PcvrBuildOnly, PcvrPrepareData, PcvrGpuTests, PcvrAudioTests.
                 ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
                                     ModOperation 0 Status, 1 Install, 2 Enable, 3 Disable,
                                                  4 Delete, 5 Validate locally (no device access).
@@ -99,7 +102,7 @@ internal static class Program
             }
             var page = 0;
             SaveTransferDirection? saveDirection = null;
-            if (args is ["--ui-check", _, var checkPage] && (!int.TryParse(checkPage, out page) || page is < 0 or > ManagerUi.ToolsPage)) throw new ArgumentException("Invalid check page.");
+            if (args is ["--ui-check", _, var checkPage] && (!int.TryParse(checkPage, out page) || page is < 0 or > ManagerUi.LastPage)) throw new ArgumentException("Invalid check page.");
             if (args is ["--page", var pageName])
             {
                 if ((pageName.Equals(nameof(SaveTransferDirection.PcToQuest), StringComparison.OrdinalIgnoreCase) || pageName.Equals(nameof(SaveTransferDirection.QuestToPc), StringComparison.OrdinalIgnoreCase)) && Enum.TryParse<SaveTransferDirection>(pageName, true, out var direction))

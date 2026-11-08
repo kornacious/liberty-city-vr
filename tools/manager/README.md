@@ -1,7 +1,7 @@
 # Liberty City VR Manager
 
 Included with **Liberty City VR 0.8.5 — release candidate**, ready for public
-testing and playing with finishable main missions. Build/install and update
+testing and playing with finishable main missions. Quest build/install and update
 read the Android version code (**805**) from the source kit. See the
 [release changelog](../../CHANGELOG.md#085--release-candidate) for manager, music,
 save-transfer and game changes since 0.8.0; earlier changes have their own entries.
@@ -13,9 +13,9 @@ Copy game data or from the installed headset WAVs when Copy is off. Original PC
 files are preserved; headset WAVs are removed after verified replacement.
 Copy alone restores WAV playback. See [the build guide](../../BUILDING.md#build-and-install).
 
-The interactive manager builds and deploys the Quest application. Windows PCVR
-target selection, desktop installation/launch and runtime diagnostics remain
-planned. Developer CLI commands `--assemble RE3 OUTPUT` and
+The interactive manager builds Quest or experimental Windows PCVR. Windows has
+versioned local installation, isolated data preparation, launch and runtime diagnostics.
+Developer CLI commands `--assemble RE3 OUTPUT` and
 `--prepare-windows-data GTA OUTPUT` prepare sources and an isolated local asset
 copy for the experimental [Windows CMake build](../../overlay/windows/README.md).
 Assembly requires the clean pinned public re3 commit; data preparation refuses
@@ -49,18 +49,90 @@ Only one action runs at a time. Tab, Shift+Tab, arrows, Enter and the mouse
 work throughout the interface; Ctrl+Q quits after cancelling active work.
 Forms scroll and every path field has a terminal file/directory browser.
 
+## Windows PCVR
+
+On a Windows x64 host, select **Windows PCVR (experimental)** on **Build and
+install**. Quest remains the default for existing settings. Changing targets
+preserves unsaved options; Cancel discards them. The other headset asset/music,
+repair and update actions remain Quest workflows. Update PCVR by building and
+installing its target again; the **Update** page still updates official main and Quest.
+
+Configure Visual Studio Desktop C++ x64 tools, CMake (with CTest), Ninja and a
+Vulkan SDK in **Settings**. The SDK must provide `Include/vulkan/vulkan.h`, x64
+`Lib/vulkan-1.lib` and `Bin/glslc.exe`; a separate glslc path is optional. The
+manager reads the Visual Studio compiler environment automatically. OpenXR uses
+the pinned, SHA256-checked 1.1.58 source loader and includes its license notices.
+Choose a local complete OpenXR-SDK source directory for offline builds, or allow
+the existing pinned download/cache workflow. MSVC, CMake/Ninja and Vulkan SDK
+installation are prerequisites; the manager does not download those tools for PCVR.
+
+The Windows build assembles fresh sources, compiles Release and always runs
+CPU/CLI checks. GPU and audio checks are opt-in because they require an active
+Vulkan GPU/audio endpoint. Build only skips installation and data preparation.
+It does not request Android licenses, build an APK, or invoke ADB.
+
+For the first playable install, enable **Prepare local PCVR data** and select
+your owned GTA III PC installation. Alternatively select an existing copy made
+with `--prepare-windows-data`. The default directories are separate:
+
+| Contents | Default under workplace |
+| --- | --- |
+| Versioned executables, loader and notices | `windows-pcvr/app/versions/<build-id>` |
+| Current installation record | `windows-pcvr/app/current.json` |
+| Local prepared game data and preferences | `windows-pcvr/data` |
+| Saves, audio cache and game diagnostics | `windows-pcvr/user` |
+| Private assembled sources and build outputs | `windows-pcvr-builds/<build-id>` |
+
+Custom app, data and save directories must be absolute, separate from each other,
+retail data and source/build trees, and contain no linked paths. Data preparation
+requires a new destination and writes its readiness marker last. If interrupted,
+inspect the partial copy locally and select a new destination; nothing is erased
+automatically. Routine installs reuse prepared data and refresh only authored port
+assets. They preserve preferences, saves and previous versions. The current install
+record changes only after the new binaries and notices are validated. These
+folders are local builds; no public binary package or Windows system installer is provided.
+
+**PCVR diagnostics** checks the environment override (`XR_RUNTIME_JSON`) or active
+x64 OpenXR registry runtime and its library, then runs Vulkan and XR session probes.
+It never selects or changes the runtime. Connect through your PCVR software; an
+ADB cable alone is insufficient. Missing headset, missing runtime/library, Vulkan
+failure and probe timeout are reported separately. Probes time out after 60 seconds
+and do not require game data. Passing them does not verify stereo presentation.
+
+**Launch PCVR** checks the installed build, prepared data and runtime before
+launching with the isolated data/save paths. The manager captures sanitized logs
+and waits until the game exits. Quit in-game for a normal exit; Cancel forcibly
+stops the game process. There is no manager-imposed playtime limit. The manager
+can also run without build tools once the local package is installed.
+
+The game opens a desktop eye preview with ImGui controls and F1–F12 shortcuts,
+plus focused keyboard/mouse and XInput gamepad input. See the
+[preview controls](../../overlay/windows/README.md#desktop-preview-and-input).
+Preview preferences are separate from Quest settings and stored in the PCVR user directory.
+
+CLI callers use `--run BuildAndInstall REQUEST.json` with `Options.Target: 1` and
+PCVR-specific flags `PcvrBuildOnly`, `PcvrPrepareData`, `PcvrGpuTests` and
+`PcvrAudioTests`. `BuildOnly`, `Release`, `CopyGameData` and radio flags remain
+Quest options. Use the same Settings object with `--run DiagnosePcvr REQUEST.json`
+or `--run LaunchPcvr REQUEST.json`; launch optionally accepts `PcvrFrameLimit`
+(0 means unlimited). Relevant settings are `VulkanSdk`, `PcvrShaderCompiler`,
+`PcvrOpenXrSource`, `PcvrInstallDirectory`, `PcvrDataDirectory` and `PcvrUserDirectory`.
+Old JSON requests without Target continue to build Quest.
+
 ## Actions
 
 | Page | Configuration and behavior |
 | --- | --- |
-| Build and install | Debug/release, build only, optional retail data copy, explicit SDK license consent. Downloads verified tools, checks the pinned re3 checkout, applies all patches, assembles in a fresh directory, builds the signed APK and updates an eligible Quest 3. |
+| Build and install | Select Quest or Windows PCVR. Quest retains debug/release APK builds, optional data/radio conversion and SDK consent. Windows builds Release with local MSVC/CMake/Ninja/Vulkan, runs checks, optionally prepares local data, and installs a versioned desktop build. |
+| Launch PCVR | Validate installed files, prepared data and active runtime, probe Vulkan/OpenXR, then run the game with isolated saves. Quit in-game to return; Cancel stops the process. |
+| PCVR diagnostics | Check the active x64 runtime manifest/library and run Vulkan and OpenXR session probes. Does not change runtime selection or require game assets. Each probe has a 60-second timeout. |
 | Vehicle editor | Output folder and ZIP packaging. Configures CMake, builds the editor and three native test targets, runs CTest, installs and optionally packages. Includes the manager runtime for its device bridge. |
 | Manage music | Browse headset music and file details. Ctrl-click selects an inclusive range; Range end then an ordinary click also selects a range. Shift-click is supported where the terminal forwards it; Windows Terminal consumes it for text selection. Plain click selects one. Drag or Up/Down moves the selected group; Delete queues selected files for removal. Perform applies order/deletion and Cancel discards them. The import browser supports multiple files/folders with Ctrl-click or Space (Alt-click for ranges), plus validation only and radio board export. Imports use ffprobe validation, duplicate hashes and verified atomic commits. |
 | Original Xbox assets | User-provided GTA III US 1.0 `.iso`/`.xiso.iso` only; no asset downloads. Verifies retail fingerprints and converts visuals, particles, Neo effect textures/tuning and audio locally using CMake/Ninja/C++ and FFmpeg/ffprobe. Sound banks become PCM with rebuilt loop/offset metadata; speech and radio become lossless FLAC at authored rates. Installs the checksummed `modern` collection with staging/rollback. Select Classic / Original Xbox under Appearance > Asset Source and fully restart. Neo materials and optional rain droplets have live controls on the same page. Reimport older collections to add the new effects. Build only skips headset access. See [asset guide](../../overlay/docs/QUEST_MODELSETS.md). |
 | Repair game files | Optional port `gamefiles` folder; otherwise obtains the pinned source. Requires an existing game installation and repairs the allowlisted replacement text/frontend files. |
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean main, fetches official main, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
 | Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
-| Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake and optional auxiliary runtimes; pinned tool download preference. |
+| Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake, Vulkan SDK, PCVR tools/directories and optional auxiliary runtimes; pinned tool download preference. |
 | Mods | Curated Upstate Liberty v1.1.2: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete device mod files. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
 

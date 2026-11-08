@@ -1,4 +1,7 @@
 #include "platform_android.h"
+#ifdef LIBERTYVR_WINDOWS
+#include "DesktopMirror.h"
+#endif
 #include "xr_vulkan_session.h"
 
 #ifdef __ANDROID__
@@ -347,6 +350,9 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		pad.gripPose[hand].valid = controllers.gripPose[hand].valid;
 		pad.aimPose[hand].valid = controllers.aimPose[hand].valid;
 	}
+#ifdef LIBERTYVR_WINDOWS
+    Desktop::MergeVrInput(&pad);
+#endif
 	androidgame::SetPadInput(pad);
 
 	// Debug overlay: the game side owns the chord and the pixels (its port of
@@ -358,6 +364,9 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		const unsigned char *pixels =
 			androidgame::VrDebugPixels(&width, &height);
 		xrvk::setDebugOverlay(pixels, width, height, recordingPixels);
+#ifdef LIBERTYVR_WINDOWS
+        Desktop::SetGameOverlay(pixels,width,height,androidgame::VrMenuConsumesInput());
+#endif
 	}
 
 	// Loading keeps the immersive projection for the world revealed by its
@@ -1039,12 +1048,16 @@ EndVrWristPanel(void)
 
 #ifdef LIBERTYVR_WINDOWS
 #include "platform_windows.h"
+#include "DesktopMirror.h"
 int RunWindowsGame(unsigned frameLimit)
 {
     VehiclePlacement::configureRuntime(platform::gameDataRoot());
     if(!xrvk::create(nullptr)) { xrvk::destroy(); return 1; }
     xrvk::GraphicsContext graphics{};
     if(!xrvk::getContext(&graphics)) { xrvk::destroy(); return 1; }
+    if(!Desktop::InitializeGpu(graphics.instance,graphics.physicalDevice,graphics.device,graphics.queue,graphics.queueFamilyIndex)) {
+        Desktop::Close(); xrvk::destroy(); return 1;
+    }
     androidgame::VulkanContext context{};
     context.instance=graphics.instance; context.physicalDevice=graphics.physicalDevice;
     context.device=graphics.device; context.fragmentStoresAndAtomicsEnabled=graphics.fragmentStoresAndAtomicsEnabled;
@@ -1056,10 +1069,12 @@ int RunWindowsGame(unsigned frameLimit)
     if(!androidgame::PrepareFrontendBeforeFrames()) { androidgame::Shutdown(); xrvk::destroy(); return 1; }
     xrvk::confirmRenderScaleRendererReady(); xrvk::setFrameRenderer(renderGameFrame);
     unsigned frames=0;
-    while(!platform::exitRequested() && !androidgame::WantsToQuit() && (!frameLimit || frames<frameLimit)) {
+    while(!platform::exitRequested() && !Desktop::QuitRequested() && !androidgame::WantsToQuit() && (!frameLimit || frames<frameLimit)) {
+        Desktop::Pump(); Desktop::BeginUi(); Desktop::UpdateGameInput();
         if(!xrvk::pollEvents()) break;
         if(xrvk::shouldRender()) { xrvk::renderFrame(); ++frames; }
         else { androidgame::SetPadInput(androidgame::PadInput{}); std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+        Desktop::EndUi();
     }
     LOGI("Windows game frames completed: %u",frames);
     xrvk::setFrameRenderer(nullptr);
@@ -1067,7 +1082,7 @@ int RunWindowsGame(unsigned frameLimit)
     // still exists, before the Windows CRT runs their destructors at process exit.
     FrontEndMenuManager.UnloadTextures();
     if(gGameState==GS_PLAYING_GAME) CGame::ShutDown();
-    androidgame::Shutdown(); xrvk::destroy(); return 0;
+    Desktop::Close(); androidgame::Shutdown(); xrvk::destroy(); return 0;
 }
 #endif
 

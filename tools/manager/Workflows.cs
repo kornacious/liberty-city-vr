@@ -15,7 +15,13 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         Directory.CreateDirectory(settings.Workplace);
         switch (action)
         {
-            case ManagerAction.BuildAndInstall: await Build(options, false, token); break;
+            case ManagerAction.BuildAndInstall:
+                if (!Enum.IsDefined(options.Target)) throw new InvalidDataException("Select a valid game target.");
+                if (options.Target == GameTarget.WindowsPcvr) await new PcvrWorkflow(settings, runner, log).Build(options, token);
+                else await Build(options, false, token);
+                break;
+            case ManagerAction.LaunchPcvr: await new PcvrWorkflow(settings, runner, log).Launch(options, token); break;
+            case ManagerAction.DiagnosePcvr: await new PcvrWorkflow(settings, runner, log).Diagnose(token); break;
             case ManagerAction.BuildVehicleEditor: await Editor(options, token); break;
             case ManagerAction.ManageMusic:
                 if (!options.ValidateMusicOnly && options.MusicRevision.Length > 0)
@@ -52,7 +58,9 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 };
                 log.Write(mod.Name + " v" + mod.Version + ": " + modStatus);
                 break;
-            case ManagerAction.Update: await Update(options, token); break;
+            case ManagerAction.Update:
+                if (options.Target != GameTarget.Quest) throw new InvalidDataException("The updater targets Quest. Rebuild Windows PCVR under Build and install; no repository changes were made.");
+                await Update(options, token); break;
             case ManagerAction.TransferSave:
                 await new SaveTransfer(settings, log, async (temporary, cancellation) =>
                 {
@@ -75,6 +83,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
 
     public async Task Build(ActionOptions options, bool updateOnly, CancellationToken token)
     {
+        if (options.Target != GameTarget.Quest) throw new InvalidDataException("The updater builds Quest only. Select Windows PCVR under Build and install for desktop updates.");
         if (updateOnly && File.Exists(Path.Combine(settings.Repository, "tools/update-required-assets.txt")))
             throw new IOException("This version needs updated bundled assets. Use Build and install instead of Update.");
         // Validate requested retail inputs before changing anything on a device.

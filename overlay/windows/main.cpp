@@ -6,6 +6,7 @@
 #include "XrMath.h"
 #include "VulkanPolicy.h"
 #include "LegacyColour.h"
+#include "DesktopMirror.h"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -16,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <filesystem>
 
 // librw's application-owned stall checkpoint hook. Keep diagnostics cheap;
 // unlike Android, this initial desktop target has no background watchdog.
@@ -483,10 +485,14 @@ void verifyProbePixels(Application &app, int grey = -1, bool textured = false) {
         throw std::runtime_error("Expected stereo disparity is missing or reversed.");
 }
 
-int vulkanProbe(bool render = false, bool colour = false, bool textures = false) {
+int vulkanProbe(bool render = false, bool colour = false, bool textures = false, bool burst = false, bool mirror = false) {
     Application app;
+    struct DesktopScope { bool active; ~DesktopScope(){if(active)Desktop::Close();} } desktop{mirror};
+    if(mirror && !Desktop::Open("")) throw std::runtime_error("Cannot create mirror probe window.");
     VkApplicationInfo info{VK_STRUCTURE_TYPE_APPLICATION_INFO}; info.apiVersion = VK_API_VERSION_1_1;
     VkInstanceCreateInfo create{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO}; create.pApplicationInfo = &info;
+    const char *windowExtensions[]={VK_KHR_SURFACE_EXTENSION_NAME,"VK_KHR_win32_surface"};
+    if(mirror){create.enabledExtensionCount=2;create.ppEnabledExtensionNames=windowExtensions;}
     vkCheck(vkCreateInstance(&create, nullptr, &app.vkInstance), "Vulkan loader probe");
     uint32_t count = 0; vkCheck(vkEnumeratePhysicalDevices(app.vkInstance, &count, nullptr), "Vulkan GPU enumeration");
     std::vector<VkPhysicalDevice> devices(count); vkCheck(vkEnumeratePhysicalDevices(app.vkInstance, &count, devices.data()), "Vulkan GPU enumeration");
@@ -515,6 +521,8 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
         VkPhysicalDeviceMultiviewFeatures multiview{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES}; multiview.multiview = VK_TRUE;
         VkDeviceCreateInfo createDevice{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO}; createDevice.pNext = &multiview;
         createDevice.pEnabledFeatures = &app.enabled; createDevice.queueCreateInfoCount = 1; createDevice.pQueueCreateInfos = &queueInfo;
+        const char *presentExtensions[]={VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        if(mirror){createDevice.enabledExtensionCount=1;createDevice.ppEnabledExtensionNames=presentExtensions;}
         vkCheck(vkCreateDevice(app.physical, &createDevice, nullptr, &app.device), "probe device");
         vkGetDeviceQueue(app.device, app.queueFamily, 0, &app.queue);
         app.width = 640; app.height = 480; app.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -527,7 +535,7 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
             app.format=LegacyColour::attachmentFormat(image.format);
         }
         image.mipLevels = 1; image.arrayLayers = 2; image.samples = VK_SAMPLE_COUNT_1_BIT;
-        image.tiling = VK_IMAGE_TILING_OPTIMAL; image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        image.tiling = VK_IMAGE_TILING_OPTIMAL; image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         vkCheck(vkCreateImage(app.device, &image, nullptr, &app.probeImage), "probe image");
         VkMemoryRequirements requirements{}; vkGetImageMemoryRequirements(app.device, app.probeImage, &requirements);
         VkPhysicalDeviceMemoryProperties memory{}; vkGetPhysicalDeviceMemoryProperties(app.physical, &memory);
@@ -544,6 +552,7 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
         view.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,2}; VkImageView output = VK_NULL_HANDLE;
         vkCheck(vkCreateImageView(app.device, &view, nullptr, &output), "probe image view"); app.imageViews.push_back(output);
         app.openRenderer();
+        if(mirror) Desktop::InitializeGpu(app.vkInstance,app.physical,app.device,app.queue,app.queueFamily);
         if(textures) rw::vulkan::setGenerateMipmaps(true);
         double textureMs=0;
         XrFovf fov{-0.7f,0.7f,0.7f,-0.7f};
@@ -552,28 +561,42 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
         auto leftVP = XrMath::multiply(projection,XrMath::viewFromPose(left));
         auto rightVP = XrMath::multiply(projection,XrMath::viewFromPose(right));
         const int greys[]={0,1,2,8,18,64,128,192,255};
-        for(int i = 0; i < (colour ? 9 : 5); ++i) {
+        for(int i = 0; i < (mirror ? 60 : burst ? 1 : colour ? 9 : 5); ++i) {
+            if(mirror){
+                Desktop::Pump();
+                auto key=[](unsigned code){SendMessageW(HWND(Desktop::WindowHandle()),WM_KEYDOWN,code,0);SendMessageW(HWND(Desktop::WindowHandle()),WM_KEYUP,code,0);};
+                if(i==1)key(VK_F1);
+                if(i==5){SendMessageW(HWND(Desktop::WindowHandle()),WM_KEYDOWN,'W',0);SendMessageW(HWND(Desktop::WindowHandle()),WM_ACTIVATE,WA_INACTIVE,0);if(Desktop::Input().keys['W'])throw std::runtime_error("Desktop focus loss left a held key.");SendMessageW(HWND(Desktop::WindowHandle()),WM_ACTIVATE,WA_ACTIVE,0);}
+                if(i==10){key(VK_F2);if(Desktop::Settings().eye!=1)throw std::runtime_error("Desktop eye shortcut failed.");}
+                if(i==20)key(VK_F3);
+                if(i==25)key(VK_F5);
+                if(i==30)key(VK_F6);
+                if(i==35)key(VK_F4);
+                if(i==45){std::filesystem::create_directories(".cache");Desktop::RequestSnapshot(".cache/desktop-preview-probe.bmp");}
+                Desktop::BeginUi();
+            }
             rw::Raster *sampleTexture=nullptr;
             rw::vulkan::setStereoViewProjection(leftVP.m,rightVP.m); rw::vulkan::setClearColour(18,24,38);
             if(colour) rw::vulkan::setClearColour(greys[i],greys[i],greys[i]);
             if(!rw::vulkan::beginFrame(app.probeImage,output)) throw std::runtime_error("Probe renderer frame failed.");
             if(textures) {
-                auto image=rw::Image::create(256,256,32);
+                const int dimension=burst ? 32 : 256;
+                auto image=rw::Image::create(dimension,dimension,32);
                 if(!image) throw std::runtime_error("Texture fixture allocation failed.");
                 image->allocate();
                 if(!image->pixels) throw std::runtime_error("Texture fixture pixels unavailable.");
-                for(int y=0; y<256; ++y) for(int x=0; x<256; ++x) {
+                for(int y=0; y<dimension; ++y) for(int x=0; x<dimension; ++x) {
                     auto pixel=image->pixels+y*image->stride+x*4;
                     const bool clear=(x%2==0 && y%2==0);
                     pixel[0]=clear ? 255 : 0; pixel[1]=clear ? 0 : 200;
                     pixel[2]=clear ? 0 : 255; pixel[3]=clear ? 0 : 255;
                 }
                 const auto before=std::chrono::steady_clock::now();
-                for(int texture=0; texture<16; ++texture) {
-                    auto raster=rw::Raster::create(256,256,32,rw::Raster::TEXTURE|rw::Raster::C8888);
+                for(int texture=0; texture<(burst ? 4096 : 16); ++texture) {
+                    auto raster=burst && sampleTexture ? sampleTexture : rw::Raster::create(dimension,dimension,32,rw::Raster::TEXTURE|rw::Raster::C8888);
                     if(!raster || !raster->setFromImage(image)) throw std::runtime_error("Texture upload failed.");
-                    if(rw::vulkan::rasterNumLevels(raster)!=9) throw std::runtime_error("Generated texture mip chain missing.");
-                    if(texture==15) sampleTexture=raster;
+                    if(rw::vulkan::rasterNumLevels(raster)!=(burst ? 6 : 9)) throw std::runtime_error("Generated texture mip chain missing.");
+                    if(burst || texture==15) sampleTexture=raster;
                     else raster->destroy();
                 }
                 textureMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-before).count();
@@ -587,6 +610,7 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
             }
             XrPosef triangle{{0,0,0,1},{0,0,-2}}; app.triangle(triangle,0.35f,false,textures);
             rw::vulkan::endFrame(); vkCheck(vkQueueWaitIdle(app.queue),"probe GPU completion");
+            if(mirror){Desktop::Present(app.probeImage,output,app.width,app.height);Desktop::EndUi();}
             if(colour) verifyProbePixels(app,greys[i]);
             if(textures) {
                 verifyProbePixels(app,-1,true);
@@ -595,9 +619,10 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false)
             }
         }
         if(!colour && !textures) verifyProbePixels(app);
-        if(textures) std::cout << "Texture probe: 80 RGBA 256x256 uploads with alpha-weighted mips: " << textureMs << " ms CPU.\n";
+        if(mirror && Desktop::PresentedFrames()==0)throw std::runtime_error("Desktop mirror presented no frames.");
+        if(textures) std::cout << (burst ? "Upload burst probe: 4096 ordered 32x32 updates in one frame: " : "Texture probe: 80 RGBA 256x256 uploads with alpha-weighted mips: ") << textureMs << " ms CPU.\n";
         if(colour) std::cout << "Colour probe passed: sRGB images with UNORM attachments preserve nine encoded greys in both eyes.\n";
-        if(!colour) std::cout << "Renderer probe passed: five stereo frames completed; triangle pixels and stereo disparity verified.\n";
+        if(!colour) std::cout << "Renderer probe passed: " << (burst ? "one upload-burst frame" : "five stereo frames") << " completed; triangle pixels and stereo disparity verified.\n";
     }
     return supported ? 0 : 1;
 }
@@ -615,12 +640,16 @@ int main(int argc, char **argv) {
                     "--renderer-probe Render five offscreen stereo frames without OpenXR\n"
                     "--colour-probe   Verify legacy colour bytes through mutable sRGB images\n"
                     "--texture-probe  Measure generated-mip texture streaming without game data\n"
+                    "--upload-burst-probe Verify a large load-time upload batch in one frame\n"
+                    "--mirror-probe   Exercise the Win32 desktop mirror without a headset\n"
                     "--frames N       Submit N stereo frames (default 300, maximum 10000)\n"
                     "Session readiness/rendering timeout: 60 seconds. Ctrl+C stops.\n"; return 0;
             } else if(argument == "--vulkan-probe" && argc == 2) return vulkanProbe();
             else if(argument == "--renderer-probe" && argc == 2) return vulkanProbe(true);
             else if(argument == "--colour-probe" && argc == 2) return vulkanProbe(true,true);
             else if(argument == "--texture-probe" && argc == 2) return vulkanProbe(true,false,true);
+            else if(argument == "--upload-burst-probe" && argc == 2) return vulkanProbe(true,false,true,true);
+            else if(argument == "--mirror-probe" && argc == 2) return vulkanProbe(true,false,false,false,true);
             else if(argument == "--probe") probe = true;
             else if(argument == "--frames" && i+1 < argc) {
                 std::string value = argv[++i]; size_t end = 0; auto number = std::stoul(value, &end);

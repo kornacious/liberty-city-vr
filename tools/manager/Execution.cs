@@ -53,7 +53,8 @@ public interface ICommandRunner
 
 public sealed class CommandRunner(PrivateLog log) : ICommandRunner
 {
-    public Dictionary<string, string> EnvironmentOverrides { get; } = [];
+    public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromHours(2);
+    public Dictionary<string, string> EnvironmentOverrides { get; } = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     public async Task<CommandResult> Run(string executable, IEnumerable<string> args, string? workingDirectory = null,
         bool showOutput = true, bool check = true, CancellationToken token = default, string? input = null)
     {
@@ -65,7 +66,7 @@ public sealed class CommandRunner(PrivateLog log) : ICommandRunner
         foreach (var arg in args) start.ArgumentList.Add(arg);
         foreach (var (name, value) in EnvironmentOverrides) start.Environment[name] = value;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromHours(2));
+        timeout.CancelAfter(CommandTimeout);
         using var process = new Process { StartInfo = start };
         if (!process.Start()) throw new IOException("Could not start the required tool.");
         using var registration = timeout.Token.Register(() => { try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } });

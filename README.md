@@ -30,13 +30,17 @@ Windows PCVR variant** in one source repository:
 | Target | Status in 0.8.5 |
 | --- | --- |
 | Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
-| Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable development build; installer and interactive manager target remain planned. |
+| Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable build; manager builds, installs locally, launches and diagnoses the PC runtime. |
 
 Windows/Linux manager support and the desktop vehicle editor are host tools;
 they do not constitute a PCVR game build. See [platform scope and roadmap](PLATFORMS.md)
 for the shared architecture, target boundaries and planned Quest compatibility profile.
 Developers can build the [Windows game and renderer diagnostic](overlay/windows/README.md).
 The game uses separate local data/save directories; the diagnostic requires no game data.
+In the manager, select **Windows PCVR** under **Build and install**, then use
+**Launch PCVR** or **PCVR diagnostics**. See the [PCVR manager workflow](tools/manager/README.md#windows-pcvr).
+The game also opens a [desktop eye preview](overlay/windows/README.md#desktop-preview-and-input)
+with ImGui/F1–F12 display controls and keyboard/mouse/PC gamepad input.
 
 Android positional sound effects use the full listener-relative 3D position
 for distance attenuation. Gain stays full inside the supplied minimum range,

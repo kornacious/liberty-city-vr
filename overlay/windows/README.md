@@ -3,8 +3,50 @@
 Two developer executables use the same librw Vulkan backend and shaders as Quest:
 `libertyvr-pcvr` renders a diagnostic scene without game data; `libertyvr-game`
 is an experimental playable GTA III port using the shared re3/VR integration.
-Desktop packaging, interactive manager target selection and the Quest compatibility
-profile remain in the [roadmap](../../PLATFORMS.md).
+The [manager](../../tools/manager/README.md#windows-pcvr) now provides Windows target
+selection, build/checks, versioned local installation, launch and runtime diagnostics.
+Public binary packaging and the Quest compatibility profile remain in the [roadmap](../../PLATFORMS.md).
+
+## Desktop preview and input
+
+The game opens a desktop eye preview alongside its console. It requires the active
+OpenXR headset/session. Select the left or right application eye; runtime dashboards
+and lens distortion are not mirrored. An ImGui panel controls the preview independently
+of the VR view. These shortcuts work while the preview has focus:
+
+| Key | Action |
+| --- | --- |
+| F1 | Show/hide controls; opening the panel releases captured mouse input |
+| F2 | Switch left/right eye |
+| F3 | Switch square/cropped framing |
+| F4 | Windowed |
+| F5 | Borderless window |
+| F6 | Fullscreen on the current monitor, without changing its display mode |
+| F7 | Restore a centered default window size |
+| F8 | Capture/release the mouse for gameplay |
+| F9 | Toggle desktop keyboard/mouse controls |
+| F10 | Toggle PC gamepad controls |
+| F11 | Toggle preview statistics |
+| F12 | Reset preview options |
+
+Square framing selects a centered square from the eye. Cropped framing selects a
+centered region matching the window aspect ratio. Both downscale only; smaller
+pictures have black borders. Theatre menus/cutscenes retain the entire picture and
+its aspect ratio. Resizing does not change headset resolution. Preferences are saved
+as `desktop-preview.cfg` in the isolated user directory.
+
+With the preview focused, native re3 keyboard/mouse bindings and an XInput PC gamepad
+can navigate menus and control movement/driving. VR head and tracked weapon poses
+still come from the headset/controllers. The panel consumes its own clicks/keys;
+focus loss clears held controls and releases the cursor. F1 closes the panel before
+using game controls; F8 enables relative mouse capture. Use in-game Quit, close the
+preview or press Alt+F4 to exit. The console remains available for logs.
+
+The preview uses the existing Vulkan device and skips unavailable desktop frames.
+`libertyvr-pcvr --mirror-probe` tests synthetic eye presentation, framing/window
+shortcuts and focus recovery on an active Windows desktop without game assets or a
+headset. GPU-enabled CTest includes this check; it writes a synthetic preview BMP
+under its working directory's `.cache` for inspection.
 
 ## Build
 
@@ -103,6 +145,10 @@ settings or runtime selection.
   and report CPU upload time. Render the resulting alpha-weighted mips and read
   back both eyes to reject missing textures or transparent-color bleeding. Run
   timing comparisons with the game closed and comparable GPU load.
+- `--upload-burst-probe`: issue 4,096 ordered texture updates in a single frame
+  and verify the final alpha-weighted texture colors in both eyes. CTest applies
+  a 60-second timeout. This covers load/save bursts that exceeded desktop driver
+  submission storage and left world textures black after a rejected submission.
 - `--probe`: let OpenXR select the GPU, create its Vulkan device and an XR session,
   then exit. Failure to obtain a headset system is an environment/runtime result,
   not a successful rendering test.
@@ -142,6 +188,10 @@ the tested transitions. All seven Windows checks passed, including generated-mip
 GPU sampling/readback; the final synthetic texture run took 82 ms. The shared
 Quest APK built and updated successfully on the personal Quest 3 device. Quest
 gameplay/performance was not retested in this follow-up.
+
+Large upload bursts are split into queue submissions of at most 64 command buffers.
+Their order is preserved, and the fence on the final submission covers preceding
+uploads. This adds no per-batch GPU waits. Normal small frames still use one submit.
 
 The color-space follow-up through VirtualDesktopXR completed 3,802 game frames
 and exited cleanly. The user confirmed normal brightness and reduced banding.
