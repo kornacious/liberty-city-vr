@@ -187,7 +187,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 readFields.Add(() => options.ModOperation = (ModOperation)(modOperation.Value ?? 0));
                 Field("UL.7z package (blank: download v1.1.2)", options.ModArchive, v => options.ModArchive = v, OpenMode.File);
                 Note("Install: choose UL.7z or leave blank to download v1.1.2. SHA256 verified.");
-                Note("Current APK: Upstate is not playable yet; its engine adapter is still required.");
+                Note("Upstate uses a separate native engine and save folder. Headset acceptance is experimental.");
                 Note("Install auto-enables only when the APK reports Upstate runtime support.");
                 Note("Status reads the headset. Validate locally never accesses a device.");
                 Note("Disable keeps files. Enable verifies files. Delete keeps saves and the PC archive.");

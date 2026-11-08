@@ -2,6 +2,7 @@
 #include "common.h"
 
 #include "ModelSets.h"
+#include "QuestUpstate.h"
 #include "crossplatform.h"
 
 #ifdef __ANDROID__
@@ -292,6 +293,9 @@ void InitializeStartup(const char *gameRoot)
 		MODEL_SET_MODERN, gSettingsPath);
 	const bool legacyXbox = requested == MODEL_SET_XBOX;
 	if(legacyXbox) requested = MODEL_SET_MODERN;
+#ifdef LCVR_UPSTATE_ENGINE
+	requested = MODEL_SET_CLASSIC;
+#endif
 	if(requested < MODEL_SET_CLASSIC || requested > MODEL_SET_MODERN ||
 	   !IsAvailable((eModelSet)requested)) requested = MODEL_SET_CLASSIC;
 	gRequestedModelSet = gActiveModelSet = (eModelSet)requested;
@@ -480,6 +484,10 @@ bool IsXboxAssetPath(const char *) { return false; }
 const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	size_t resolvedPathSize)
 {
+#ifdef LCVR_UPSTATE_ENGINE
+	const char *modPath = QuestUpstate::Resolve(originalPath, resolvedPath, resolvedPathSize);
+	if(modPath != originalPath) return modPath;
+#endif
 	if(!originalPath || !resolvedPath || resolvedPathSize == 0 ||
 	   !gInitialized || (!IsModernActive() && !IsXboxActive()))
 		return originalPath;

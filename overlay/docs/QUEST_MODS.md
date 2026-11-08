@@ -24,22 +24,58 @@ Install 7-Zip (`7zz` or `7z`) or select its executable in **Settings**.
 The archive and prepared payload remain under `<workplace>/mods`, outside Git.
 Windows ASI executables are never executed or transferred to the headset.
 
-## Runtime compatibility is still required
+## Native engine adapter
 
-**The current APK does not yet implement the Upstate engine adapter.** Installing
-the package therefore leaves it **disabled** and reports that runtime support is
-required. Enabling is refused until a compatible APK advertises that support.
-This Manager feature does not itself implement Upstate gameplay, extended engine
-limits, mission-script compatibility, FXT text loading or mod-specific save routing.
-It does not provide Windows ASI binary compatibility.
+The APK includes separate Classic/Xbox and Upstate engine libraries. A small
+NativeActivity startup selector loads exactly one. Upstate is selected only when
+the enable marker is correct and all 44 payload files match the pinned v1.1.2
+sizes and SHA256 fingerprints. Incomplete, modified or linked packages select
+Classic/Xbox instead. The Upstate engine repeats validation before initialization
+and stops startup if the package changed after selection.
 
-A compatible runtime must activate Upstate against Classic, provide separate saves,
-and finish the Upstate capacity/behavior/script adaptations before advertising the
-capability described below. Do not create the capability file manually to bypass
-the check. Base game files and saves must remain intact. Fully restart the game
-after changing mod activation. The Manager stops the game before device changes.
+The normal engine retains its existing fixed tables and save serialization.
+Upstate has its own expanded model/entity/path/zone/garage/phone/pickup/particle
+tables and fourfold save working buffer/storage size. Path indices retain signed
+16-bit limits. Portable pickup, phone, zone and garage save-block sizes follow
+the expanded counts; the legacy fixed-layout PC save converter is disabled only
+in the isolated Upstate engine. The supplied main SCM's main segment (88,719 bytes), largest
+mission (28,469 bytes) and mission count (82) fit the existing native VM limits.
+The adapter routes the package's map manifest, IMG/DIR, definitions, placements,
+collision, water, object data and SCM through read-only overlays on Classic.
+The requested Xbox source is preserved for subsequent unmodded launches.
 
-## Device protocol for the future engine adapter
+Model-name traits provide garage doors, animated trees/banners and breakable
+glass. Rotating garage doors clamp/update their initial position. Parked cars
+are excluded from traffic-cap totals, persistent script debug state is retained,
+FXT text overrides supplement the base GXT, and rural zones use leaf rubbish.
+The package has no `policeZoneSfx.dat`, CLEO ASI or external CLEO scripts; the
+base police-radio mappings remain in place. Windows ASIs are neither loaded nor
+executed. Generic Windows ASI/CLEO binary compatibility is outside this adapter.
+
+Upstate saves/settings are under the app's
+`files/userfiles/upstate-liberty-1.1.2/`. Classic/Xbox saves remain in
+`files/userfiles/`. Manager save transfers currently address Classic/Xbox slots;
+they do not import incompatible desktop Upstate saves into the mod directory.
+Disabling/deleting the mod preserves both save directories.
+
+The shipped empty PC cull cache is not deserialized into the expanded tables.
+IPL attribute zones remain active; legacy precomputed visibility cull zones are
+skipped, using the Quest renderer's ordinary visibility paths. Sustained frame
+time, all districts/LODs, traffic, missions, garages, save/load and transitions
+still require manual headset acceptance. Compilation and package checks alone
+do not establish full mission completion or performance parity.
+
+Initial local acceptance: New Game reached gameplay on the personal Quest 3 device
+and the user confirmed it on 8 November 2026. The DAT overlay lookup trims the
+terminal whitespace produced by the native line reader; this has a regression
+check. The shipped APK uses the normal frontend, without the private automatic
+New Game driver used during diagnosis.
+
+Launch an updated APK once to publish runtime capabilities, then install/enable
+Upstate through the Manager and fully restart. Older APKs remain gated. Do not
+create the capability file manually. Base game files and saves stay intact.
+
+## Device protocol
 
 All paths below are relative to the app's `files/gamedata` directory:
 
@@ -49,9 +85,9 @@ All paths below are relative to the app's `files/gamedata` directory:
 - Runtime capabilities: `mods/.runtime-capabilities`, written by the game, with
   one versioned adapter token per line. Upstate's token is `upstate-liberty/1`.
 
-The Manager never writes the runtime-capabilities file. A future game build must
-refresh it to reflect its actual adapters, clear obsolete capabilities, and reject
-invalid/incomplete package state. Missing support allows verified installation but
+The Manager never writes the runtime-capabilities file. The startup selector
+refreshes it to reflect the built adapters and rejects invalid/incomplete package
+state. Missing support allows verified installation but
 keeps the package disabled. Supported runtimes automatically enable on install.
 Status describes desired activation for the next game launch, not proof of current
 gameplay compatibility. Device updates use unique staging/backup directories;

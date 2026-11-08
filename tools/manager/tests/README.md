@@ -51,3 +51,11 @@ In an interactive terminal, add `-- --ui PATH_TO_ARTIFACT_DIRECTORY` to run the
 TUI navigation/Cancel, settings persistence and integrated file-browser checks.
 They write terminal snapshots and isolated settings only; no action or device
 transfer is performed.
+
+`tools/tests/test-upstate-package.cpp` checks the production native SHA256,
+activation-marker and overlay-path helpers against synthetic fixtures. It also
+accepts an optional local prepared-package directory to check the pinned release
+fingerprints without uploading or copying assets. Run through the existing C++
+host adapter with `--tool tools/tests/test-ragdoll.ps1 -- -Sources test-upstate-package.cpp`.
+The engine build additionally asserts that its expanded entity, save-table, zone
+and signed-path capacities are present before the Upstate library can compile.

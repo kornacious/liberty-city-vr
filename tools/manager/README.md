@@ -54,9 +54,10 @@ Forms scroll and every path field has a terminal file/directory browser.
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
 
 The [curated mod guide](../../overlay/docs/QUEST_MODS.md) documents package handling
-and the runtime protocol. **Current APKs do not yet support Upstate gameplay:**
-the Manager can prepare/install its files, but keeps them disabled until a compatible
-runtime advertises support. Automatic enablement and re-enabling are gated by that
+and the runtime protocol. Current APKs include a native Upstate engine adapter with
+isolated engine limits and saves; headset gameplay/performance acceptance remains
+experimental. Older APKs keep the package disabled until a compatible runtime
+advertises support. Automatic enablement and re-enabling are gated by that
 capability; Windows ASI binaries are excluded from device packages.
 
 Saved configuration lives in `%APPDATA%\LibertyCityVR\settings.json` on Windows

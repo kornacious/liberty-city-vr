@@ -16,6 +16,7 @@
 #include "VrVehicleSeatRecenter.h"
 #include "VrBodyIK.h"
 #include "QuestMovementDirection.h"
+#include "QuestUpstate.h"
 #include "xr_vulkan_session.h"
 
 #include "main.h"
@@ -411,6 +412,10 @@ _psGetUserFilesFolder(void)
 		snprintf(path, sizeof(path), "%s/userfiles",
 		         root != nil && root[0] != '\0' ? root : ".");
 		mkdir(path, 0770);
+		if(QuestUpstate::Active()){
+			strncat(path, "/upstate-liberty-1.1.2", sizeof(path)-strlen(path)-1);
+			mkdir(path, 0770);
+		}
 	}
 	return path;
 }
@@ -2593,6 +2598,10 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 
 	// Select the base/optional overlay before RenderWare or streaming opens any
 	// asset. Category changes are next-launch requests by design.
+	if(!QuestUpstate::Initialize(dataRoot)){
+		ALOGE("Upstate package changed after engine selection; startup stopped");
+		return false;
+	}
 	ModelSets::InitializeStartup(dataRoot);
 
 	if(RsEventHandler(rsINITIALIZE, nil) == rsEVENTERROR){

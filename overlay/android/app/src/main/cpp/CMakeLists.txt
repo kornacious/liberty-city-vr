@@ -298,16 +298,22 @@ if(NOT LIBERTYVR_BRINGUP)
 	list(APPEND GAME_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
-add_library(libertyvr SHARED ${LIBERTYVR_SOURCES})
-add_dependencies(libertyvr libertyvr_shaders)
+if(LIBERTYVR_BRINGUP)
+    set(QUEST_ENGINE_TARGETS libertyvr)
+else()
+    set(QUEST_ENGINE_TARGETS libertyvr_classic libertyvr_upstate)
+endif()
+foreach(QUEST_ENGINE ${QUEST_ENGINE_TARGETS})
+add_library(${QUEST_ENGINE} SHARED ${LIBERTYVR_SOURCES})
+add_dependencies(${QUEST_ENGINE} libertyvr_shaders)
 
-target_include_directories(libertyvr PRIVATE
+target_include_directories(${QUEST_ENGINE} PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}"
 	"${SPIRV_OUT_DIR}"
 	"${LIBRW_DIR}"
 	${GAME_INCLUDES})
 
-target_compile_definitions(libertyvr PRIVATE
+target_compile_definitions(${QUEST_ENGINE} PRIVATE
 	LIBERTYVR_VEHICLE_CAPTURE=$<BOOL:${LIBERTYVR_VEHICLE_CAPTURE}>
 	LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
 	XR_USE_PLATFORM_ANDROID
@@ -315,11 +321,11 @@ target_compile_definitions(libertyvr PRIVATE
 	VK_USE_PLATFORM_ANDROID_KHR)
 
 if(NOT LIBERTYVR_BRINGUP)
-	target_compile_definitions(libertyvr PRIVATE
+	target_compile_definitions(${QUEST_ENGINE} PRIVATE
 		LIBRW RW_VULKAN AUDIO_ANDROID GTA_VR_WEAPONS)
 	# 2003-era C++ read by a 2024 clang. These are style diagnostics, not
 	# defects, and at this volume they bury the errors that matter.
-	target_compile_options(libertyvr PRIVATE
+	target_compile_options(${QUEST_ENGINE} PRIVATE
 		-Wno-invalid-offsetof
 		-Wno-writable-strings
 		-Wno-unused-value
@@ -329,10 +335,10 @@ if(NOT LIBERTYVR_BRINGUP)
 endif()
 
 if(LIBERTYVR_BRINGUP)
-	target_compile_definitions(libertyvr PRIVATE LIBERTYVR_BRINGUP=1 MIAMIVR_BRINGUP=1)
+	target_compile_definitions(${QUEST_ENGINE} PRIVATE LIBERTYVR_BRINGUP=1 MIAMIVR_BRINGUP=1)
 endif()
 
-target_link_libraries(libertyvr
+target_link_libraries(${QUEST_ENGINE}
 	native_app_glue
 	librw
 	OpenXR::openxr_loader
@@ -344,4 +350,16 @@ target_link_libraries(libertyvr
 
 # NativeActivity resolves ANativeActivity_onCreate from the glue; without this
 # the linker drops it as unreferenced and the app dies at startup.
-target_link_options(libertyvr PRIVATE "-u" "ANativeActivity_onCreate")
+target_link_options(${QUEST_ENGINE} PRIVATE "-u" "ANativeActivity_onCreate")
+if(QUEST_ENGINE STREQUAL "libertyvr_upstate")
+    target_compile_definitions(${QUEST_ENGINE} PRIVATE LCVR_UPSTATE_ENGINE=1)
+endif()
+endforeach()
+
+if(NOT LIBERTYVR_BRINGUP)
+    add_library(libertyvr SHARED quest_engine_selector.cpp)
+    target_include_directories(libertyvr PRIVATE "${RE3_ROOT}/src")
+    target_compile_definitions(libertyvr PRIVATE LCVR_UPSTATE_ADAPTER_READY=1)
+    target_link_libraries(libertyvr android dl log)
+    add_dependencies(libertyvr libertyvr_classic libertyvr_upstate)
+endif()
