@@ -12,6 +12,7 @@ inline bool Active() {
 }
 bool Initialize(const char *gameRoot);
 const char *Resolve(const char *path, char *out, size_t capacity);
+bool IsAssetPath(const char *path);
 bool HasTrait(int id, const char *trait);
 bool HasNameTrait(const char *name, const char *trait);
 uint16_t *Text(const char *key);

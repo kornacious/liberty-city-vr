@@ -9,6 +9,13 @@ inline std::string Normalized(std::string value) {
     for(char &c:value) { if(c=='\\') c='/'; if(c>='A'&&c<='Z') c+=32; }
     return value;
 }
+inline bool IsPackageAssetPath(const std::string &root, const char *path) {
+    if(root.empty() || !path || !*path) return false;
+    std::string base=Normalized(root), candidate=Normalized(path);
+    while(!base.empty() && base.back()=='/') base.pop_back();
+    base+="/mods/upstate-liberty/";
+    return candidate.find("..") == std::string::npos && candidate.compare(0,base.size(),base)==0;
+}
 inline const char *RelativeFile(const std::string &root,const std::string &cwd,const char *input) {
     if(!input||!*input) return nullptr;
     std::string relative=Normalized(input),base=Normalized(root);

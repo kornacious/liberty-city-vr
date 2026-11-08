@@ -29,6 +29,7 @@
 #include "IniFile.h"
 #include "Population.h"
 #include "ModelSets.h"
+#include "QuestUpstate.h"
 #include "QuestNeoEffects.h"
 #include "VehiclePlacement.h"
 #include "CarCtrl.h"
@@ -4791,12 +4792,9 @@ DrawQuestModelAssetsPage(void)
 {
 	BeginFullVrMenuPage("APPEARANCE", "ASSET SOURCE AND PLAYER SKIN");
 	char row[112];
-	if(ModelSets::IsSourceLocked())
-		snprintf(row, sizeof(row), "ASSET SOURCE  < CLASSIC - UPSTATE >");
-	else
-		snprintf(row, sizeof(row), "ASSET SOURCE  < %s >%s",
-			ModelSets::GetSourceName(ModelSets::GetRequested()),
-			ModelSets::IsRestartRequired() ? "  RESTART" : "");
+	snprintf(row, sizeof(row), "ASSET SOURCE  < %s >%s",
+		ModelSets::GetSourceName(ModelSets::GetRequested()),
+		ModelSets::IsRestartRequired() ? "  RESTART" : "");
 	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
 	snprintf(row,sizeof(row),"XBOX NEO MATERIALS  < %s >",gNeoEffects?"ON":"OFF");
 	DrawFullVrMenuRow(row,252,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_NEO,true);
@@ -4808,12 +4806,9 @@ DrawQuestModelAssetsPage(void)
 	DrawVrMenuText(ModelSets::IsOriginalXboxAudioActive() ? "ACTIVE AUDIO: ORIGINAL XBOX - SPEECH, SFX AND RADIO" :
 		ModelSets::IsModernActive() ? "ACTIVE AUDIO: CLASSIC - REIMPORT XBOX ISO TO ADD AUDIO" : "ACTIVE AUDIO: CLASSIC PC",
 		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
-	if(ModelSets::IsSourceLocked()){
-		snprintf(row,sizeof(row),"SAVED UNMODDED SOURCE: %s",ModelSets::GetSourceName(ModelSets::GetRequested()));
-		DrawVrMenuText(row, VR_MENU_WIDTH/2, 570, 2, 245, 205, 90);
-	}
-	DrawVrMenuText(ModelSets::IsSourceLocked() ? "UPSTATE REQUIRES CLASSIC - DISABLE MOD TO USE XBOX" :
-		"ASSET SOURCE CHANGES REQUIRE A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+	if(QuestUpstate::Active())
+		DrawVrMenuText("UPSTATE OVERRIDES THE SELECTED BASE ASSETS", VR_MENU_WIDTH/2, 570, 2, 245, 205, 90);
+	DrawVrMenuText("ASSET SOURCE CHANGES REQUIRE A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
 }
 
 static void

@@ -1,6 +1,17 @@
 #ifndef QUEST_MODELSET_STREAMING_H
 #define QUEST_MODELSET_STREAMING_H
 
+// The native streaming table and extra-object directory keep the first entry.
+// Keep mod overrides above the selected source even if image registration order
+// changes. Within a layer retain the engine's reverse image order.
+template<typename Priority, typename Visit>
+static void QuestVisitStreamingImages(int count, Priority priority, Visit visit)
+{
+    for(int layer = 2; layer >= 0; --layer)
+        for(int image = count-1; image >= 0; --image)
+            if(priority(image) == layer) visit(image);
+}
+
 // Included by Streaming.cpp after ModelInfo/TxdStore/ModelIndices. GTA III
 // weapon models are simple objects, so their IDs matter more than model type.
 static ModelSets::eModelCategory

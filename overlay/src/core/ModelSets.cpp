@@ -296,7 +296,7 @@ void InitializeStartup(const char *gameRoot)
 	if(requested < MODEL_SET_CLASSIC || requested > MODEL_SET_MODERN ||
 	   !IsAvailable((eModelSet)requested)) requested = MODEL_SET_CLASSIC;
 	gRequestedModelSet = (eModelSet)requested;
-	gActiveModelSet = IsSourceLocked() ? MODEL_SET_CLASSIC : gRequestedModelSet;
+	gActiveModelSet = gRequestedModelSet;
 	if(legacyXbox)
 		WritePrivateProfileStringA("VR", "ModelSet", "1", gSettingsPath);
 	gInitialized = true;
@@ -317,7 +317,6 @@ eModelSet GetRequested() { return gRequestedModelSet; }
 
 void SetRequested(eModelSet modelSet)
 {
-	if(IsSourceLocked()) return;
 	if(!IsAvailable(modelSet))
 		modelSet = MODEL_SET_CLASSIC;
 	gRequestedModelSet = modelSet;
@@ -373,15 +372,7 @@ bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size
 	return FileExists(resolvedPath);
 }
 
-bool IsSourceLocked()
-{
-#ifdef LCVR_UPSTATE_ENGINE
-	return true;
-#else
-	return false;
-#endif
-}
-bool IsRestartRequired() { return !IsSourceLocked() && gRequestedModelSet != gActiveModelSet; }
+bool IsRestartRequired() { return gRequestedModelSet != gActiveModelSet; }
 
 bool IsAvailable(eModelSet modelSet)
 {
@@ -488,6 +479,14 @@ static bool IsOverlayPath(eModelSet modelSet, const char *path)
 bool IsModernAssetPath(const char *path) { return IsOverlayPath(MODEL_SET_MODERN, path); }
 bool IsXboxAssetPath(const char *) { return false; }
 
+int GetArchivePriority(const char *path)
+{
+#ifdef LCVR_UPSTATE_ENGINE
+	if(QuestUpstate::IsAssetPath(path)) return 2;
+#endif
+	return IsModernAssetPath(path) || IsXboxAssetPath(path) ? 1 : 0;
+}
+
 const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	size_t resolvedPathSize)
 {
@@ -499,6 +498,17 @@ const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	   !gInitialized || (!IsModernActive() && !IsXboxActive()))
 		return originalPath;
 	const char *relative = originalPath;
+	// DAT LoadLine converts line endings to spaces. Apply the same trimming
+	// as fcaseopen before checking the Xbox overlay, just as Upstate does.
+	while(*relative == ' ' || *relative == '\t' || *relative == '\r' || *relative == '\n') ++relative;
+	size_t length = strlen(relative);
+	while(length && (relative[length-1] == ' ' || relative[length-1] == '\t' ||
+	      relative[length-1] == '\r' || relative[length-1] == '\n')) --length;
+	char normalized[1024];
+	if(!length || length >= sizeof(normalized)) return originalPath;
+	memcpy(normalized, relative, length);
+	normalized[length] = '\0';
+	relative = normalized;
 	while(relative[0] == '.' &&
 	      (relative[1] == '\\' || relative[1] == '/'))
 		relative += 2;

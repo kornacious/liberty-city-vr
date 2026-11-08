@@ -41,8 +41,18 @@ the expanded counts; the legacy fixed-layout PC save converter is disabled only
 in the isolated Upstate engine. The supplied main SCM's main segment (88,719 bytes), largest
 mission (28,469 bytes) and mission count (82) fit the existing native VM limits.
 The adapter routes the package's map manifest, IMG/DIR, definitions, placements,
-collision, water, object data and SCM through read-only overlays on Classic.
-The requested Xbox source is preserved for subsequent unmodded launches.
+collision, water, object data and SCM through read-only overlays on the selected
+Classic or Original Xbox source. Source changes save immediately and apply on a
+full process restart; Upstate keeps its separate save directory with either source.
+
+Both loose files and streamed archive entries use the same precedence:
+Upstate, then the selected Original Xbox source, then the Classic base fallback.
+Archive directories are visited by layer before registering their first-wins
+model, texture and cutscene-extra entries; registration order cannot let Xbox
+overwrite Upstate. Within a layer the native reverse archive order is preserved.
+Xbox definitions, world collisions, audio, particles and VR model calibration
+remain active for assets not replaced by Upstate. DAT filename whitespace is
+trimmed before both mod and Xbox lookups.
 
 Model-name traits provide garage doors, animated trees/banners and breakable
 glass. Rotating garage doors clamp/update their initial position. Parked cars
@@ -61,8 +71,8 @@ Disabling/deleting the mod preserves both save directories.
 The shipped empty PC cull cache is not deserialized into the expanded tables.
 IPL attribute zones remain active; legacy precomputed visibility cull zones are
 skipped, using the Quest renderer's ordinary visibility paths. Sustained frame
-time, all districts/LODs, traffic, missions, garages, save/load and transitions
-still require manual headset acceptance. Compilation and package checks alone
+time, all districts/LODs, traffic, garages, transitions and full mission completion
+still require broader manual headset acceptance. Compilation and package checks alone
 do not establish full mission completion or performance parity.
 
 Initial local acceptance: New Game reached gameplay on the personal Quest 3 device
@@ -71,10 +81,30 @@ terminal whitespace produced by the native line reader; this has a regression
 check. The shipped APK uses the normal frontend, without the private automatic
 New Game driver used during diagnosis.
 
-The Appearance menu labels the active source `CLASSIC - UPSTATE` and locks
-source switching while Upstate is enabled. The saved unmodded source remains
-visible and is preserved; disabling Upstate restores that source on the next
-launch. Combining Upstate with Original Xbox assets remains unvalidated.
+Follow-up manual acceptance of Classic-based Upstate on the personal Quest 3 device, reported by the user
+on 8 November 2026: normal menu startup is restored; saving and loading with
+Upstate enabled works; original missions work; side missions can be activated
+both in the new area and on the original islands. The user did not observe
+missions specific to the new area; this is not a complete content audit.
+Performance appeared comparable to the base game, with perceived dips of a few
+frames per second in busier areas. These are subjective observations, without
+instrumented frame-time measurements or an exhaustive mission playthrough.
+
+The Appearance menu offers Classic and Original Xbox while Upstate is enabled,
+with a note explaining that Upstate overrides the selected base assets.
+
+Local compatibility audit of the pinned v1.1.2 package and prepared Original
+Xbox US profile: 2,033 Upstate model IDs have no overlap with the 3,084 Xbox
+definitions, and all 13,926 Upstate placement records resolve to matching model
+IDs/names in their combined definitions. The archives share 32 entry names
+(two models and 30 texture dictionaries); the loose layouts share two IPLs.
+Upstate takes precedence for these overlaps. Host regression checks cover both
+registration orders, source switching/restart, base fallback and Xbox audio/
+calibration behavior. These checks do not establish visual/collision correctness
+or headset performance for the combined configuration; those require playtesting.
+The compatibility APK was installed on the personal Quest 3 device on 8 November
+2026; startup logs confirmed the Upstate overlay and Original Xbox source active
+together. Combined gameplay acceptance is pending.
 
 Launch an updated APK once to publish runtime capabilities, then install/enable
 Upstate through the Manager and fully restart. Older APKs remain gated. Do not

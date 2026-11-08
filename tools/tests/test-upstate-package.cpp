@@ -25,6 +25,12 @@ int main(int argc,char **argv) {
     require(std::string(RelativeFile("/game","/game","DATA\\MAPS\\UL\\ul_generic\\ul_generic.IDE "))=="data/maps/UL/ul_generic/ul_generic.ide","DAT LoadLine terminal whitespace matches package entry");
     require(std::string(RelativeFile("/game","/game"," \tDATA\\MAIN.SCM\r\n"))=="data/main.scm","native file-open whitespace semantics preserved");
     require(!RelativeFile("/game","/game"," \r\n"),"empty whitespace request rejected");
+    require(IsPackageAssetPath("/game/","/GAME/mods/UPSTATE-LIBERTY/data/maps/UL/ul.img"),"mod archive classification ignores case and trailing root separators");
+    require(IsPackageAssetPath("/game","\\game\\mods\\upstate-liberty\\data\\maps\\UL\\ul.dir"),"mod archive classification normalizes backslashes");
+    require(!IsPackageAssetPath("/game","/game/mods/upstate-liberty-other/ul.img"),"mod archive classification enforces package boundary");
+    require(!IsPackageAssetPath("/game","/game/mods/upstate-liberty/../other/ul.img"),"mod archive classification rejects traversal");
+    require(!IsPackageAssetPath("", "/game/mods/upstate-liberty/ul.img"),"uninitialized package has no archive priority");
+    require(!IsPackageAssetPath("/game", nullptr),"null package path rejected");
     namespace fs=std::filesystem;
     fs::path root=fs::temp_directory_path()/("lcvr-upstate-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::path package=root/"mods/upstate-liberty";

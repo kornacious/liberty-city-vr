@@ -76,6 +76,9 @@ const char *Resolve(const char *path,char *out,size_t capacity) {
     }
     return path;
 }
+bool IsAssetPath(const char *path) {
+    return Active() && questpackage::IsPackageAssetPath(gameRoot,path);
+}
 bool HasTrait(int id,const char *trait) {
     if(!Active()||id<0||id>=MODELINFOSIZE) return false;
     CBaseModelInfo *info=CModelInfo::GetModelInfo(id); if(!info) return false;

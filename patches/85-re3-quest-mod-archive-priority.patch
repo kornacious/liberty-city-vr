@@ -1,0 +1,36 @@
+--- a/src/core/Streaming.cpp
++++ b/src/core/Streaming.cpp
+@@ -372,9 +372,6 @@
+ void
+ CStreaming::LoadCdDirectory(void)
+ {
+-	char dirname[132];
+-	int i;
+-
+ #ifdef GTA_PC
+ 	ms_imageOffsets[0] = 0;
+ 	ms_imageOffsets[1] = -1;
+@@ -388,13 +385,17 @@
+ 	ms_imageSize = GetGTA3ImgSize();
+ 	// PS2 uses CFileMgr::GetCdFile on all IMG files to fill the array
+ #endif
+ 
+-	i = CdStreamGetNumImages();
+-	while(i-- >= 1){
+-		strcpy(dirname, CdStreamGetImageName(i));
+-		strncpy(strrchr(dirname, '.') + 1, "DIR", 3);
+-		LoadCdDirectory(dirname, i);
+-	}
++	QuestVisitStreamingImages(CdStreamGetNumImages(),
++		[](int image) {
++			return ModelSets::GetArchivePriority(CdStreamGetImageName(image));
++		},
++		[](int image) {
++			char directory[1024];
++			strcpy(directory, CdStreamGetImageName(image));
++			strncpy(strrchr(directory, '.') + 1, "DIR", 3);
++			CStreaming::LoadCdDirectory(directory, image);
++		});
+ 
+ 	ms_lastImageRead = 0;
+ 	ms_imageSize /= CDSTREAM_SECTOR_SIZE;
