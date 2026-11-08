@@ -14,6 +14,7 @@
 #include "../rwengine.h"
 #include "rwvk.h"
 #include "rwvkimpl.h"
+#include "DebugVisualization.h"
 #include "NeoRim.h"
 #include "PhysicalScopeMath.h"
 #include "PostFxPolicy.h"
@@ -2284,7 +2285,7 @@ renderWristPanelTarget(int32 index, VkDescriptorSet scopeScene = VK_NULL_HANDLE,
 	memset(clears, 0, sizeof(clears));
 	if(scopeScene){
 		for(int i = 0; i < 3; i++)
-			clears[0].color.float32[i] = gvk.clearColour[i];
+			clears[0].color.float32[i] = (!DebugVisualization::Show(DebugVisualization::Sky) || DebugVisualization::IsOverdraw()) ? 0.0f : gvk.clearColour[i];
 		clears[0].color.float32[3] = 1.0f;
 	}
 	clears[1].depthStencil.depth = 1.0f;
@@ -2608,6 +2609,7 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 
 	// Safe to rewind the immediate-mode allocator here: the fence wait above
 	// already guarantees the previous frame finished reading it.
+	discardDebugWires();
 	resetDynamic();
 	gvk.motionFrameSerial++;
 	SceneData *scene = getSceneData();
@@ -2675,6 +2677,9 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 #endif
 	if(!reflectionHistoryValid)
 		scene->waterParams1[3] = 0.0f;
+	scene->debugVisualization[0] = (float)DebugVisualization::Get().shading;
+	scene->debugVisualization[1] = (float)DebugVisualization::Get().range;
+	scene->debugVisualization[2] = scene->debugVisualization[3] = 0.0f;
 	// Under the previous frame's camera fold for now; the first beginUpdate of
 	// this frame re-derives them under the real one.
 	refreshScenePointLights();
@@ -2704,9 +2709,9 @@ beginFrame(VkImage colourImage, VkImageView colourView)
 	// and clears the whole view to the timecycle colour instead.
 	VkClearValue clears[3];
 	memset(clears, 0, sizeof(clears));
-	clears[0].color.float32[0] = gvk.clearColour[0];
-	clears[0].color.float32[1] = gvk.clearColour[1];
-	clears[0].color.float32[2] = gvk.clearColour[2];
+	clears[0].color.float32[0] = !DebugVisualization::Show(DebugVisualization::Sky) || DebugVisualization::IsOverdraw() ? 0.0f : gvk.clearColour[0];
+	clears[0].color.float32[1] = !DebugVisualization::Show(DebugVisualization::Sky) || DebugVisualization::IsOverdraw() ? 0.0f : gvk.clearColour[1];
+	clears[0].color.float32[2] = !DebugVisualization::Show(DebugVisualization::Sky) || DebugVisualization::IsOverdraw() ? 0.0f : gvk.clearColour[2];
 	clears[0].color.float32[3] = 1.0f;
 	clears[1].depthStencil.depth = 1.0f;
 	clears[2].color.float32[0] = 0.0f;
@@ -2800,6 +2805,7 @@ endFrame(void)
 	// full-image dependency rather than BY_REGION because FXAA reads adjacent
 	// pixels.
 	flushStaticInstances();
+	flushDebugWires();
 	vkCmdEndRenderPass(gvk.frameCommands);
 	endGpuProfilePass(GpuPassProfile::Scene);
 	beginGpuProfilePass(GpuPassProfile::Postprocess);
@@ -2928,11 +2934,16 @@ endFrame(void)
 		gvk.postFxNativePipeline!=VK_NULL_HANDLE,gvk.postFxNativeFilteredPipeline!=VK_NULL_HANDLE);
 	const VkPipeline nativePipeline=variant==NativePostFxVariant::Integer?gvk.postFxNativePipeline:
 		variant==NativePostFxVariant::Filtered?gvk.postFxNativeFilteredPipeline:VK_NULL_HANDLE;
+    auto diagnosticPostFx=gvk.postFxConstants;
+    if(DebugVisualization::MeshDebug()){
+        diagnosticPostFx.mode[0]=0;
+        diagnosticPostFx.blurColour[3]=0.0f;
+    }
 	const bool nativePostFx = useNativePostFx(gvk.width, gvk.height,
-		gvk.sceneWidth, gvk.sceneHeight, gvk.postFxConstants.mode,
-		gvk.postFxConstants.upscale, gvk.sgsrMode,
+		gvk.sceneWidth, gvk.sceneHeight, diagnosticPostFx.mode,
+		diagnosticPostFx.upscale, gvk.sgsrMode,
 		nativePipeline != VK_NULL_HANDLE,
-		gvk.postFxConstants.blurColour);
+		diagnosticPostFx.blurColour);
 	gFxaaIntegerStencilActive=nativePostFx && variant==NativePostFxVariant::Integer;
 	vkCmdBindPipeline(gvk.frameCommands, VK_PIPELINE_BIND_POINT_GRAPHICS,
 		nativePostFx ? nativePipeline : gvk.postFxPipeline);
@@ -2942,7 +2953,7 @@ endFrame(void)
 	                        &frame.postFxDescriptor, 0, nil);
 	vkCmdPushConstants(gvk.frameCommands, gvk.postFxPipelineLayout,
 	                   VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-	                   sizeof(gvk.postFxConstants), &gvk.postFxConstants);
+	                   sizeof(diagnosticPostFx), &diagnosticPostFx);
 	countGpuProfileDraw(3,3,0);
 	vkCmdDraw(gvk.frameCommands, 3, 1, 0, 0);
 	flushStaticInstances();

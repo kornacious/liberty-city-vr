@@ -1,3 +1,4 @@
+#include "DebugVisualization.h"
 #include "VehicleAlphaPolicy.h"
 #include "UniformAlphaPolicy.h"
 #include "NeoRim.h"
@@ -378,6 +379,8 @@ instanceMesh(rw::ObjPipeline *, Geometry *geo)
 	header->vboMemory = VK_NULL_HANDLE;
 	header->ibo = VK_NULL_HANDLE;
 	header->iboMemory = VK_NULL_HANDLE;
+	header->wireIbo = VK_NULL_HANDLE;
+	header->wireMemory = VK_NULL_HANDLE;
 
 	if(header->totalNumIndex > 0)
 		uploadStaticBuffer(header->indexBuffer, header->totalNumIndex*2,
@@ -442,6 +445,7 @@ freeInstanceData(Geometry *geometry)
 	if(gvk.device != VK_NULL_HANDLE){
 		destroyStaticBuffer(header->vbo, header->vboMemory);
 		destroyStaticBuffer(header->ibo, header->iboMemory);
+		destroyStaticBuffer(header->wireIbo, header->wireMemory);
 	}
 	rwFree(header->indexBuffer);
 	rwFree(header->vertexBuffer);
@@ -776,6 +780,87 @@ worldBackfaceAtomic(Atomic *atomic,Geometry *geometry,InstanceDataHeader *header
     return true;
 }
 
+struct DebugWireDraw {
+    VkPipeline pipeline;
+    VkBuffer vertices,indices;
+    VkDescriptorSet texture,neo[2];
+    PushConstants push;
+    uint32 first,count,bone,flags;
+    bool skinned;
+};
+static std::vector<DebugWireDraw> debugWireDraws;
+void discardDebugWires(void) { debugWireDraws.clear(); }
+void flushDebugWires(void)
+{
+    if(debugWireDraws.empty()) return;
+    flushStaticInstances();
+    const auto commandBuffer=gvk.frameCommands;
+    const auto layout=getPipelineLayout();
+    const auto scene=getSceneDescriptor();
+    vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&scene,0,nil);
+    for(const auto &draw:debugWireDraws){
+        const VkDeviceSize offset=0;
+        vkCmdBindPipeline(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,draw.pipeline);
+        vkCmdBindVertexBuffers(commandBuffer,0,1,&draw.vertices,&offset);
+        vkCmdBindIndexBuffer(commandBuffer,draw.indices,0,VK_INDEX_TYPE_UINT16);
+        vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,1,1,&draw.texture,0,nil);
+        if(draw.skinned){
+            const auto bones=getBoneDescriptor();
+            vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,2,1,&bones,1,&draw.bone);
+        }
+        if(draw.neo[0] && draw.neo[1])
+            vkCmdBindDescriptorSets(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,4,2,draw.neo,0,nil);
+        vkCmdPushConstants(commandBuffer,layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(draw.push),&draw.push);
+        countGpuProfileDraw(draw.count,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,draw.flags);
+        vkCmdDrawIndexed(commandBuffer,draw.count,1,draw.first,0,0);
+    }
+    debugWireDraws.clear();
+}
+
+// Reuse the original vertex stream and bone descriptor for animated wires.
+static void DrawDebugEdges(VkCommandBuffer commandBuffer, InstanceDataHeader *header,
+    InstanceData *inst, uint32 shader, const PushConstants &push,
+    VkDescriptorSet texture, const uint32 *boneOffset, const VkDescriptorSet *neo, uint32 flags)
+{
+    if(header->wireIbo == VK_NULL_HANDLE){
+        std::vector<uint16_t> edges;
+        for(uint32 i=0; i<header->numMeshes; ++i){
+            auto &mesh=header->inst[i];
+            mesh.wireOffset=(uint32)edges.size();
+            DebugVisualization::AppendEdges(header->indexBuffer+mesh.offset/2,
+                mesh.numIndex, header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, edges);
+            mesh.wireCount=(uint32)edges.size()-mesh.wireOffset;
+        }
+        if(edges.empty() || !uploadStaticBuffer(edges.data(), edges.size()*sizeof(uint16),
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT, &header->wireIbo, &header->wireMemory)) return;
+    }
+    if(!inst->wireCount) return;
+    const auto saved=gstate;
+    gstate.vertexAlphaEnabled=0;
+    gstate.alphaTestFunction=ALPHAALWAYS;
+    gstate.zWriteEnabled=0;
+    if(DebugVisualization::IsHiddenWire()) gstate.zTestEnabled=1;
+    const VkPipeline pipeline=getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+    gstate=saved;
+    if(!pipeline) return;
+    PushConstants wire=push;
+    wire.surfaceProps[0]=-999.0f; // fragment wire marker; keep the 128-byte layout
+    if(DebugVisualization::IsHiddenWire()){
+        // Save values, not entity/geometry pointers: streaming can retire an object
+        // before the frame ends. GPU buffers already have fence-based retirement.
+        debugWireDraws.push_back({pipeline,header->vbo,header->wireIbo,texture,{neo[0],neo[1]},
+            wire,inst->wireOffset,inst->wireCount,boneOffset?*boneOffset:0,flags,boneOffset!=nil});
+        return;
+    }
+    vkCmdBindPipeline(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+    vkCmdBindIndexBuffer(commandBuffer,header->wireIbo,0,VK_INDEX_TYPE_UINT16);
+    vkCmdPushConstants(commandBuffer,getPipelineLayout(),
+        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(wire),&wire);
+    countGpuProfileDraw(inst->wireCount,VK_PRIMITIVE_TOPOLOGY_LINE_LIST,flags);
+    vkCmdDrawIndexed(commandBuffer,inst->wireCount,1,inst->wireOffset,0,0);
+    vkCmdBindIndexBuffer(commandBuffer,header->ibo,0,VK_INDEX_TYPE_UINT16);
+}
+
 void
 drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
                  const uint32 *boneOffset)
@@ -915,7 +1000,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
         atomic,geometry,header,shader,boneOffset,push.model,objectToWorld);
 	const bool cacheBindings = shader == SHADER_WORLD && boneOffset == nil &&
 		!dynamicObjectPass && !vehicleAlphaPass;
-	bool instanceSubmission=!gvk.neoEnabled && gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
+	bool instanceSubmission=!DebugVisualization::MeshDebug() && !gvk.neoEnabled && gStaticInstancesEnabled && gvk.sgsrMode==SGSR_OFF &&
 		!gvk.wristPanelOffscreen && !physicalScopeCaptureActive() && !worldEffectsActive() && !gvk.im3dWaterDraw;
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	if(gvk.debugVizActive)instanceSubmission=false;
@@ -931,7 +1016,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		((ObjPipeline*)atomic->getPipeline())->renderCB==defaultRenderCB &&
 		!(geometry->flags & Geometry::NATIVE) &&
 		header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	const bool batchAtomic = gOpaqueMeshBatchEnabled && staticAtomic;
+	const bool batchAtomic = !DebugVisualization::MeshDebug() && gOpaqueMeshBatchEnabled && staticAtomic;
 	const bool measureBatch = gOpaqueMeshBatchEnabled && gvk.frameTimestampEnabled;
 	bool bufferStatic=instanceSubmission && staticAtomic && gInstanceOwner.entityClass==0 && gInstanceOwner.model>=0;
 	StaticInstances::Bounds instanceBounds;
@@ -1048,6 +1133,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		// Resolve lazily, after a pipeline succeeds, and never reuse over a mesh.
 		VkDescriptorSet textureSet = VK_NULL_HANDLE;
 		bool textureResolved = false;
+		bool emittedEdges=false;
 		for(int gsPass = 0; gsPass < (gsSplit ? 2 : 1); gsPass++){
 		// Skip before state changes/binds: the complementary shader test is
 		// guaranteed to discard every fragment, including motion outputs.
@@ -1300,9 +1386,15 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 
 		capturePhysicalScopeDraw(pipeline, textureSet, push, header->vbo, 0,
 			header->ibo, 0, drawIndices, inst->offset / 2, boneOffset, atomic, neoSets);
-		countGpuProfileDraw(drawIndices, header->primType,profileFlags);
-		vkCmdDrawIndexed(commandBuffer, drawIndices, 1,
-		                 inst->offset / 2, 0, 0);
+        if(DebugVisualization::Get().mesh != DebugVisualization::Wire || DebugVisualization::IsOverdraw()){
+            countGpuProfileDraw(drawIndices, header->primType,profileFlags);
+            vkCmdDrawIndexed(commandBuffer, drawIndices, 1, inst->offset / 2, 0, 0);
+        }
+        if(!emittedEdges && DebugVisualization::Get().mesh != DebugVisualization::Solid && !DebugVisualization::IsOverdraw()){
+            DrawDebugEdges(commandBuffer,header,inst,shader,push,textureSet,boneOffset,neoSets,profileFlags);
+            emittedEdges=true;
+            vkCmdBindPipeline(commandBuffer,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+        }
 		i+=batchMeshes-1;
 		inst+=batchMeshes-1;
 		}

@@ -3729,6 +3729,9 @@ $pieces.Add('#define LIBERTYVR_DEV_TOOLS '+[int][bool]$DevTools)
 $enum=[regex]::Match($source,'(?ms)^enum eVrGraphicsMenuItem \{.*?^\};')
 if(-not $enum.Success){throw 'Graphics item enum missing'}
 $pieces.Add($enum.Value)
+$visualizationEnum=[regex]::Match($source,'(?ms)^enum eVrVisualizationMenuItem \{.*?^\};')
+if(-not $visualizationEnum.Success){throw 'Visualization item enum missing'}
+$pieces.Add($visualizationEnum.Value)
 $optimizationEnum=[regex]::Match($source,'(?ms)^enum eVrOptimizationMenuItem \{.*?^\};')
 if(-not $optimizationEnum.Success){throw 'Optimization item enum missing'}
 $pieces.Add($optimizationEnum.Value)
@@ -3737,6 +3740,7 @@ $pieces.Add((Definition $source 'BeginFullVrMenuPage'))
 $pieces.Add((Definition $source 'DrawFullVrMenuRow').Replace('DrawFullVrMenuRow(','DrawFullVrMenuRowNative('))
 $page=Definition $source 'DrawQuestGraphicsPage'
 $pieces.Add($page)
+$pieces.Add((Definition $source 'DrawQuestVisualizationPage'))
 $pieces.Add((Definition $source 'IsSimulationReplayAvailable'))
 $pieces.Add((Definition $source 'DrawQuestOptimizationsPage'))
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'graphics-menu-layout-production.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
@@ -6831,7 +6835,12 @@ $code += "`n" + (Extract $device '(?m)^void resetFrameBeginStats\(.*$')
 $code += "`n" + (Extract $device '(?ms)^bool32 getFrameBeginStats\(.*?^\}')
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vulkan-pipelines-types.inc'), $types)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vulkan-pipelines-production.inc'), $code)
-&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-vulkan-pipelines.cpp')
+$pipe = [IO.File]::ReadAllText((Join-Path $KitRoot 'librw/src/vulkan/vkpipe.cpp'))
+$wires = Extract $pipe '(?ms)^struct DebugWireDraw \{.*?(?=^void\r?\ndrawAtomicMeshes)'
+$policy = Extract $state '(?ms)^\tif\(key &amp; \(uint64\(1\)&lt;&lt;25\)\)\{.*?(?=^    VkPipelineColorBlendStateCreateInfo)'
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'visualization-render-production.inc'), $wires)
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'visualization-policy-production.inc'), $policy)
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-vulkan-pipelines.cpp','test-visualization-render.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Vulkan pipeline regression failed.' }
 </value>
   </data>

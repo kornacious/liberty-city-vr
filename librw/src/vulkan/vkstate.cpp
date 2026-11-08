@@ -11,6 +11,7 @@
 #include "../rwengine.h"
 #include "rwvk.h"
 #include "rwvkimpl.h"
+#include "DebugVisualization.h"
 
 #define PLUGIN_ID ID_DRIVER
 
@@ -352,6 +353,11 @@ makePipelineKey(uint32 shader, VkPrimitiveTopology topology)
 	key |= (uint64)(shader != SHADER_IM2D && worldEffectsActive() ? 1 : 0) << 22;
 	key |= (uint64)(shader == SHADER_IM2D && reflectionCoverageActive() ? 1 : 0) << 23;
 	key |= uint64(gvk.neoEnabled && (shader==SHADER_WORLD || shader==SHADER_SKIN || shader==SHADER_WORLD_INSTANCED))<<24;
+    const bool meshShader=shader==SHADER_WORLD || shader==SHADER_SKIN || shader==SHADER_WORLD_INSTANCED;
+    key |= uint64(DebugVisualization::IsOverdraw() && meshShader)<<25;
+    key |= uint64(DebugVisualization::MeshDebug() && meshShader)<<26;
+    key |= uint64(DebugVisualization::Get().shading==DebugVisualization::DepthOverdraw && meshShader)<<27;
+    key |= uint64(DebugVisualization::IsHiddenWire() && meshShader && topology!=VK_PRIMITIVE_TOPOLOGY_LINE_LIST)<<28;
 	return key;
 }
 
@@ -1274,13 +1280,15 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	      (unsigned long long)key);
 
 	const bool32 alphaTest = gstate.alphaTestFunction != ALPHAALWAYS;
-	const int32 constants[2] = { alphaTest ? 1 : 0,
-		(key & (uint64(1) << 22)) != 0 ? 1 : 0 };
-	VkSpecializationMapEntry specEntries[2] = {
-		{ 0, 0, sizeof(int32) }, { 1, sizeof(int32), sizeof(int32) }
+	const int32 constants[3] = { alphaTest ? 1 : 0,
+        (key & (uint64(1) << 22)) != 0 ? 1 : 0,
+        (key & (uint64(1) << 26)) != 0 ? 1 : 0 };
+	VkSpecializationMapEntry specEntries[3] = {
+		{ 0, 0, sizeof(int32) }, { 1, sizeof(int32), sizeof(int32) },
+        { 2, 2*sizeof(int32), sizeof(int32) }
 	};
 	VkSpecializationInfo specInfo = {};
-	specInfo.mapEntryCount = 2;
+	specInfo.mapEntryCount = 3;
 	specInfo.pMapEntries = specEntries;
 	specInfo.dataSize = sizeof(constants);
 	specInfo.pData = constants;
@@ -1396,6 +1404,10 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	// projection.
 	rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasteriser.lineWidth = 1.0f;
+    if((key & (uint64(1)<<26)) && topology==VK_PRIMITIVE_TOPOLOGY_LINE_LIST){
+        rasteriser.depthBiasEnable=VK_TRUE;
+        rasteriser.depthBiasConstantFactor=-1.0f;
+    }
 
 	VkPipelineMultisampleStateCreateInfo multisample = {};
 	multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1457,7 +1469,22 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	blendAttachments[1].colorWriteMask = shader == SHADER_IM2D ? 0 :
 		(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT);
 
-	VkPipelineColorBlendStateCreateInfo colourBlend = {};
+	if(key & (uint64(1)<<25)){
+        // Tested accumulation preserves the normal opaque/transparent depth rules.
+        if(!(key & (uint64(1)<<27))){
+            depthStencil.depthTestEnable=VK_FALSE;
+            depthStencil.depthWriteEnable=VK_FALSE;
+        }
+        blendAttachment.blendEnable=VK_TRUE;
+        blendAttachment.srcColorBlendFactor=VK_BLEND_FACTOR_ONE;
+        blendAttachment.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;
+        blendAttachments[1].colorWriteMask=0;
+    }
+    if(key & (uint64(1)<<28)){
+        blendAttachment.colorWriteMask=0;
+        blendAttachments[1].colorWriteMask=0;
+    }
+    VkPipelineColorBlendStateCreateInfo colourBlend = {};
 	colourBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	colourBlend.attachmentCount =
 		gvk.sgsrMode != SGSR_OFF ? 2 : 1;

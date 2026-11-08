@@ -242,7 +242,10 @@ if(NOT LIBERTYVR_BRINGUP)
 	list(APPEND GAME_SOURCES "${VEHICLE_DEFORMATION_SOURCE}")
 	# Exclude the tool translation unit entirely in player builds. The header
 	# still provides constant-false/no-op entry points for defensive callers.
-	set(VR_CULL_VIZ_SOURCE "${RE3_ROOT}/src/renderer/VrCullViz.cpp")
+	set(QUEST_VISUALIZATION_SOURCE "${RE3_ROOT}/src/renderer/QuestVisualization.cpp")
+    list(REMOVE_ITEM GAME_SOURCES "${QUEST_VISUALIZATION_SOURCE}")
+    list(APPEND GAME_SOURCES "${QUEST_VISUALIZATION_SOURCE}")
+    set(VR_CULL_VIZ_SOURCE "${RE3_ROOT}/src/renderer/VrCullViz.cpp")
 	list(REMOVE_ITEM GAME_SOURCES "${VR_CULL_VIZ_SOURCE}")
 	if(LIBERTYVR_DEV_TOOLS)
 		list(APPEND GAME_SOURCES "${VR_CULL_VIZ_SOURCE}")

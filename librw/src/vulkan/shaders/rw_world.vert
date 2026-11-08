@@ -58,11 +58,13 @@ void main()
 		colour+=RwNeoRimLight(normal);
 	}
 	fragColour = vec4(clamp(colour, 0.0, 1.0), inColour.a) * push.materialColour;
+    if(RW_VISUALIZATION != 0 && scene.debugVisualization.x==4.0) fragColour.rgb=inColour.rgb;
+    if(RW_VISUALIZATION != 0 && scene.debugVisualization.x==6.0) fragColour.rgb=clamp(colour,0.0,1.0);
 	fragTexCoord = inTexCoord;
 	fragTexCoord1 = inTexCoord1;
 	// For the per-pixel dynamic lights. Prelit world sectors carry a dummy
 	// normal; surfaceProps.z tells the fragment stage whether this one is real.
-	if(RW_WORLD_EFFECTS != 0 || scene.neoControl.x > 0.5){
+	if(RW_WORLD_EFFECTS != 0 || scene.neoControl.x > 0.5 || RW_VISUALIZATION != 0){
 		fragWorldPos = world.xyz;
 		fragNormal = normal;
 	}

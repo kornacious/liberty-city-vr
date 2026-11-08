@@ -1,0 +1,222 @@
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -1,4 +1,10 @@
+ #include "common.h"
++#ifdef RW_VULKAN
++#include "vulkan/DebugVisualization.h"
++#define QUEST_VIZ_SHOW(layer) (rw::vulkan::DebugVisualization::Show(rw::vulkan::DebugVisualization::layer) && !rw::vulkan::DebugVisualization::IsOverdraw())
++#else
++#define QUEST_VIZ_SHOW(layer) true
++#endif
+ #include <time.h>
+ #include "rpmatfx.h"
+ #include "rphanim.h"
+@@ -303,7 +309,7 @@
+ 	rw::vulkan::setClearColour((uint8)TopRed, (uint8)TopGreen, (uint8)TopBlue);
+ 	(void)BottomRed; (void)BottomGreen; (void)BottomBlue; (void)Alpha;
+ #else
+-	CClouds::RenderBackground(TopRed, TopGreen, TopBlue, BottomRed, BottomGreen, BottomBlue, Alpha);
++	if(QUEST_VIZ_SHOW(Sky)) CClouds::RenderBackground(TopRed, TopGreen, TopBlue, BottomRed, BottomGreen, BottomBlue, Alpha);
+ #endif
+ 
+ 	return true;
+@@ -314,7 +320,7 @@
+ DoRWRenderHorizon(void)
+ {
+ #ifndef RW_VULKAN
+-	CClouds::RenderHorizon();
++	if(QUEST_VIZ_SHOW(Sky)) CClouds::RenderHorizon();
+ #endif
+ }
+ 
+@@ -1478,7 +1484,7 @@
+ 	CRenderer::RenderWorld(0);	// roads
+ 	// CMattRenderer::ResetRenderStates
+ 	/// CRenderer::PreRender();	// has to be called before BeginUpdate because of cutscene shadows
+-	CCoronas::RenderReflections();
++	if(QUEST_VIZ_SHOW(Particles)) CCoronas::RenderReflections();
+ if(gbRenderWorld1)
+ 	CRenderer::RenderWorld(1);	// opaque
+ if(gbRenderRoads)
+@@ -1502,7 +1508,7 @@
+ RenderScene_new(void)
+ {
+ 	PUSH_RENDERGROUP("RenderScene_new");
+-	CClouds::Render();
++	if(QUEST_VIZ_SHOW(Sky)) CClouds::Render();
+ 	DoRWRenderHorizon();
+ 
+ 	MattRenderScene();
+@@ -1519,11 +1525,11 @@
+ {
+ 	PUSH_RENDERGROUP("RenderEffects_new");
+ /*	// stupid to do this before the whole world is drawn!
+-	CShadows::RenderStaticShadows();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStaticShadows();
+ 	// CRenderer::GenerateEnvironmentMap
+-	CShadows::RenderStoredShadows();
+-	CSkidmarks::Render();
+-	CRubbish::Render();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStoredShadows();
++	if(QUEST_VIZ_SHOW(Particles)) CSkidmarks::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CRubbish::Render();
+ */
+ 
+ 	// these aren't really effects
+@@ -1549,25 +1555,25 @@
+ 	// actual effects here
+ 
+ 	// from above
+-	CShadows::RenderStaticShadows();
+-	CShadows::RenderStoredShadows();
+-	CSkidmarks::Render();
+-	CRubbish::Render();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStaticShadows();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStoredShadows();
++	if(QUEST_VIZ_SHOW(Particles)) CSkidmarks::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CRubbish::Render();
+ 
+ 	CGlass::Render();
+ 	// CMattRenderer::ResetRenderStates
+ 	DefinedState();
+-	CWeather::RenderRainStreaks();
++	if(QUEST_VIZ_SHOW(Particles)) CWeather::RenderRainStreaks();
+ 	// CWeather::AddSnow
+ 	CWaterCannons::Render();
+ 	CAntennas::Render();
+-	CSpecialFX::Render();
+-	CCoronas::Render();
+-	CParticle::Render();
+-	CPacManPickups::Render();
+-	CWeaponEffects::Render();
+-	CPointLights::RenderFogEffect();
+-	CMovingThings::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CSpecialFX::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CCoronas::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CParticle::Render();
++	if(QUEST_VIZ_SHOW(Objects)) CPacManPickups::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CWeaponEffects::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CPointLights::RenderFogEffect();
++	if(QUEST_VIZ_SHOW(Objects)) CMovingThings::Render();
+ 	CRenderer::RenderFirstPersonVehicle();
+ 	POP_RENDERGROUP();
+ }
+@@ -1594,7 +1600,7 @@
+ #endif
+ 	PUSH_RENDERGROUP("RenderScene");
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_SKY);
+-	CClouds::Render();
++	if(QUEST_VIZ_SHOW(Sky)) CClouds::Render();
+ 	DoRWRenderHorizon();
+ 	QUEST_RENDER_PROFILE_END(androidgame::QUEST_PROFILER_PHASE_RENDER_SKY);
+ #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
+@@ -1610,7 +1616,7 @@
+ 	CRenderer::RenderRoads();
+ 	QUEST_RENDER_PROFILE_END(androidgame::QUEST_PROFILER_PHASE_RENDER_ROADS);
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_REFLECTIONS);
+-	CCoronas::RenderReflections();
++	if(QUEST_VIZ_SHOW(Particles)) CCoronas::RenderReflections();
+ 	QUEST_RENDER_PROFILE_END(androidgame::QUEST_PROFILER_PHASE_RENDER_REFLECTIONS);
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_WORLD);
+ 	RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)TRUE);
+@@ -1619,7 +1625,7 @@
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_WATER);
+ 	CRenderer::RenderBoats();
+ 	DefinedState();
+-	CWaterLevel::RenderWater();
++	if(QUEST_VIZ_SHOW(Water)) CWaterLevel::RenderWater();
+ 	QUEST_RENDER_PROFILE_END(androidgame::QUEST_PROFILER_PHASE_RENDER_WATER);
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_FADING);
+ 	CRenderer::RenderFadingInEntities();
+@@ -1628,7 +1634,7 @@
+ 	CRenderer::RenderVehiclesButNotBoats();
+ #endif
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_WEATHER);
+-	CWeather::RenderRainStreaks();
++	if(QUEST_VIZ_SHOW(Particles)) CWeather::RenderRainStreaks();
+ 	QUEST_RENDER_PROFILE_END(androidgame::QUEST_PROFILER_PHASE_RENDER_WEATHER);
+ 	POP_RENDERGROUP();
+ }
+@@ -2581,9 +2587,9 @@
+ 
+ 		TheCamera.m_viewMatrix.Update();
+ 		if(CWeather::LightningFlash && !CCullZones::CamNoRain()){
+-			CClouds::RenderBackground(255, 255, 255, 255, 255, 255, 255);
++			if(QUEST_VIZ_SHOW(Sky)) CClouds::RenderBackground(255, 255, 255, 255, 255, 255, 255);
+ 		}else{
+-			CClouds::RenderBackground(CTimeCycle::GetSkyTopRed(), CTimeCycle::GetSkyTopGreen(),
++			if(QUEST_VIZ_SHOW(Sky)) CClouds::RenderBackground(CTimeCycle::GetSkyTopRed(), CTimeCycle::GetSkyTopGreen(),
+ 				CTimeCycle::GetSkyTopBlue(), CTimeCycle::GetSkyBottomRed(),
+ 				CTimeCycle::GetSkyBottomGreen(), CTimeCycle::GetSkyBottomBlue(), 255);
+ 		}
+@@ -2646,26 +2652,26 @@
+ 	QUEST_RENDER_PROFILE_BEGIN(androidgame::QUEST_PROFILER_PHASE_RENDER_EFFECTS);
+ 	CGlass::Render();
+ 	CWaterCannons::Render();
+-	CSpecialFX::Render();
+-	CShadows::RenderStaticShadows();
+-	CShadows::RenderStoredShadows();
+-	CSkidmarks::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CSpecialFX::Render();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStaticShadows();
++	if(QUEST_VIZ_SHOW(Shadows)) CShadows::RenderStoredShadows();
++	if(QUEST_VIZ_SHOW(Particles)) CSkidmarks::Render();
+ 	CAntennas::Render();
+-	CRubbish::Render();
+-	CCoronas::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CRubbish::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CCoronas::Render();
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ 	androidgame::QuestProfilerBeginPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_PARTICLE_RENDER);
+ #endif
+-	CParticle::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CParticle::Render();
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ 	androidgame::QuestProfilerEndPhase(
+ 		androidgame::QUEST_PROFILER_PHASE_PARTICLE_RENDER);
+ #endif
+-	CPacManPickups::Render();
+-	CWeaponEffects::Render();
+-	CPointLights::RenderFogEffect();
+-	CMovingThings::Render();
++	if(QUEST_VIZ_SHOW(Objects)) CPacManPickups::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CWeaponEffects::Render();
++	if(QUEST_VIZ_SHOW(Particles)) CPointLights::RenderFogEffect();
++	if(QUEST_VIZ_SHOW(Objects)) CMovingThings::Render();
+ 	CRenderer::RenderFirstPersonVehicle();
+ #if defined(RW_VULKAN) && defined(__ANDROID__)
+ #ifdef GTA_VR_WEAPONS
+--- a/src/renderer/Renderer.cpp
++++ b/src/renderer/Renderer.cpp
+@@ -1,5 +1,6 @@
+ #define WITHD3D
+ #include "common.h"
++#include "QuestVisualization.h"
+ #include "VrWorldLod.h"
+ 
+ #include "main.h"
+@@ -186,6 +187,7 @@
+ void
+ CRenderer::RenderOneRoad(CEntity *e)
+ {
++	if(!QuestVisualization::Visible(e)) return;
+ 	if(e == nil || e->m_rwObject == nil)
+ 		return;
+ #if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)
+@@ -226,6 +228,7 @@
+ void
+ CRenderer::RenderOneNonRoad(CEntity *e, bool fadingPath)
+ {
++	if(!QuestVisualization::Visible(e)) return;
+ 	// Stereo reuses a render list for multiple passes. A transition can remove
+ 	// an entity's RenderWare object after the list was constructed.
+ 	if(e == nil || e->m_rwObject == nil)
+@@ -735,6 +738,7 @@
+ void
+ CRenderer::RenderOneBuilding(CEntity *ent, float camdist)
+ {
++	if(!QuestVisualization::Visible(ent)) return;
+ 	if(ent->m_rwObject == nil)
+ 		return;
+ #if defined(GTA_VR_OCULUS) || defined(RW_VULKAN)

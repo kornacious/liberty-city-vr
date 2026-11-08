@@ -59,11 +59,13 @@ void main()
 		colour+=RwNeoRimLight(normal);
 	}
 	fragColour = vec4(clamp(colour, 0.0, 1.0), inColour.a) * push.materialColour;
+    if(RW_VISUALIZATION != 0 && scene.debugVisualization.x==4.0) fragColour.rgb=inColour.rgb;
+    if(RW_VISUALIZATION != 0 && scene.debugVisualization.x==6.0) fragColour.rgb=clamp(colour,0.0,1.0);
 	fragTexCoord = inTexCoord;
 	fragTexCoord1 = vec2(0.0);
 	// For the per-pixel dynamic lights; skinned meshes always carry real
 	// normals, so the fragment stage uses this one as it is.
-	if(RW_WORLD_EFFECTS != 0 || scene.neoControl.x > 0.5){
+	if(RW_WORLD_EFFECTS != 0 || scene.neoControl.x > 0.5 || RW_VISUALIZATION != 0){
 		fragWorldPos = world.xyz;
 		fragNormal = normal;
 	}

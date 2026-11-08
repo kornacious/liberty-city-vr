@@ -34,6 +34,7 @@
 #include "VehiclePlacement.h"
 #include "CarCtrl.h"
 #include "vulkan/rwvk.h"
+#include "vulkan/DebugVisualization.h"
 #include "Pools.h"
 #include "Game.h"
 #include "Frontend.h"
@@ -83,7 +84,7 @@ extern const char *GetVrWeaponName(int weaponType);
 
 enum {
 	VR_DEBUG_WIDTH = 512,
-	VR_DEBUG_HEIGHT = 437,
+	VR_DEBUG_HEIGHT = 482,
 	VR_FPS_HEIGHT = 128,
 	VR_MINIMAL_HEIGHT = 64,
 	VR_MENU_WIDTH = 1024,
@@ -499,6 +500,7 @@ static int gVrPadBinding[androidgame::VR_PAD_SOURCE_COUNT];
 static int gVrMenuPage;
 static int gVrMenuSelection;
 static int gVrGraphicsSelection;
+static int gVrVisualizationSelection;
 static int gVrOptimizationSelection;
 static int gVrLightingSelection;
 static int gVrWaterSelection;
@@ -708,6 +710,12 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_ITEM_COUNT
 };
 
+enum eVrVisualizationMenuItem {
+    VR_VIZ_MESH, VR_VIZ_SHADING, VR_VIZ_BOUNDS, VR_VIZ_COLLISION, VR_VIZ_VELOCITY,
+    VR_VIZ_RANGE, VR_VIZ_FIRST_LAYER, VR_VIZ_RESET=VR_VIZ_FIRST_LAYER+rw::vulkan::DebugVisualization::LayerCount,
+    VR_VIZ_BACK, VR_VIZ_ITEM_COUNT
+};
+
 enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_RENDER_SCALE = 0,
 	VR_GRAPHICS_MSAA,
@@ -715,6 +723,7 @@ enum eVrGraphicsMenuItem {
 	VR_GRAPHICS_MIPMAPS,
 	VR_GRAPHICS_PS2_ALPHA,
 	VR_GRAPHICS_OPTIMIZATIONS,
+	VR_GRAPHICS_VISUALIZATION,
 	VR_GRAPHICS_FOLIAGE,
 	VR_GRAPHICS_DIAGNOSTICS,
 	VR_GRAPHICS_COLOR,
@@ -2324,6 +2333,7 @@ CurrentMenuSelection(void)
 	case VR_MENU_PAGE_AUDIO: return &audioSelection;
 	case VR_MENU_PAGE_LANGUAGE: return &languageSelection;
 	case VR_MENU_PAGE_GRAPHICS: return &gVrGraphicsSelection;
+	case VR_MENU_PAGE_VISUALIZATION: return &gVrVisualizationSelection;
 	case VR_MENU_PAGE_OPTIMIZATIONS: return &gVrOptimizationSelection;
 	case VR_MENU_PAGE_LIGHTING: return &gVrLightingSelection;
 	case VR_MENU_PAGE_WATER: return &gVrWaterSelection;
@@ -2363,6 +2373,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_LANGUAGE: return QuestGameSettings::LanguageCount;
 	case VR_MENU_PAGE_SETTINGS: return VR_MAIN_ITEM_COUNT;
 	case VR_MENU_PAGE_GRAPHICS: return VR_GRAPHICS_ITEM_COUNT;
+	case VR_MENU_PAGE_VISUALIZATION: return VR_VIZ_ITEM_COUNT;
 	case VR_MENU_PAGE_OPTIMIZATIONS: return VR_OPT_ITEM_COUNT;
 	case VR_MENU_PAGE_LIGHTING: return VR_LIGHTING_ITEM_COUNT;
 	case VR_MENU_PAGE_WATER: return VR_WATER_ITEM_COUNT;
@@ -2419,7 +2430,7 @@ IsFrontendMenuItemVisible(int page, int item)
 	case VR_MENU_PAGE_SETTINGS:
 		return item != VR_MAIN_HOLSTERS && item != VR_MAIN_CHEATS && item != VR_MAIN_ABOUT;
 	case VR_MENU_PAGE_GRAPHICS:
-		return item != VR_GRAPHICS_PROFILER && item != VR_GRAPHICS_DIAGNOSTICS
+		return item != VR_GRAPHICS_PROFILER && item != VR_GRAPHICS_DIAGNOSTICS && item != VR_GRAPHICS_VISUALIZATION
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 			&& item != VR_GRAPHICS_CULL_VIZ && item != VR_GRAPHICS_QUICK_START
 #endif
@@ -2681,7 +2692,7 @@ ReturnFromCurrentMenuPage(void)
 		gVrMenuPage = VR_MENU_PAGE_HUD;
 		return;
 	}
-	if(gVrMenuPage == VR_MENU_PAGE_LIGHTING || gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS){
+	if(gVrMenuPage == VR_MENU_PAGE_LIGHTING || gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS || gVrMenuPage == VR_MENU_PAGE_VISUALIZATION){
 		gVrMenuPage = VR_MENU_PAGE_GRAPHICS;
 		return;
 	}
@@ -3120,7 +3131,20 @@ VrDebugUpdate(const PadInput &in)
 			const int row = *CurrentMenuSelection();
 			if(row == SimulationReplayMenuRows-1) ReturnFromCurrentMenuPage();
 			else if(SimulationReplayMenuAction(row, decreasePulse ? -1 : 1)) gVrMenuVisible = false;
-		}else if(gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS && (positivePulse || decreasePulse)){
+		}else if(gVrMenuPage == VR_MENU_PAGE_VISUALIZATION && (positivePulse || decreasePulse)){
+            using namespace rw::vulkan::DebugVisualization;
+            auto &s=Get();
+            const int row=gVrVisualizationSelection, direction=decreasePulse?-1:1;
+            if(row==VR_VIZ_BACK) ReturnFromCurrentMenuPage();
+            else if(row==VR_VIZ_RESET) Reset();
+            else if(row==VR_VIZ_MESH) s.mesh=(s.mesh+MeshCount+direction)%MeshCount;
+            else if(row==VR_VIZ_SHADING) s.shading=(s.shading+ShadingCount+direction)%ShadingCount;
+            else if(row==VR_VIZ_BOUNDS) s.bounds=!s.bounds;
+            else if(row==VR_VIZ_COLLISION) s.collision=!s.collision;
+            else if(row==VR_VIZ_VELOCITY) s.velocity=!s.velocity;
+            else if(row==VR_VIZ_RANGE) s.range=s.range==25?(direction>0?50:100):s.range==50?(direction>0?100:25):(direction>0?25:50);
+            else if(row>=VR_VIZ_FIRST_LAYER && row<VR_VIZ_RESET) s.visible[row-VR_VIZ_FIRST_LAYER]=!s.visible[row-VR_VIZ_FIRST_LAYER];
+        }else if(gVrMenuPage == VR_MENU_PAGE_OPTIMIZATIONS && (positivePulse || decreasePulse)){
 			if(gVrOptimizationSelection == VR_OPT_WORLD_LOD){
 				gWorldLodMode = (gWorldLodMode+(positivePulse?1:WorldLodPolicy::Count-1))%WorldLodPolicy::Count;
 				SaveVrInteger("WorldLodMode",gWorldLodMode);
@@ -3178,7 +3202,9 @@ VrDebugUpdate(const PadInput &in)
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_GRAPHICS &&
 		         (positivePulse || decreasePulse)){
-			if(gVrGraphicsSelection == VR_GRAPHICS_OPTIMIZATIONS){
+			if(gVrGraphicsSelection == VR_GRAPHICS_VISUALIZATION){
+                gVrMenuPage=VR_MENU_PAGE_VISUALIZATION;
+            }else if(gVrGraphicsSelection == VR_GRAPHICS_OPTIMIZATIONS){
 				gVrMenuPage = VR_MENU_PAGE_OPTIMIZATIONS;
 				gVrOptimizationSelection = 0;
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_RENDER_SCALE){
@@ -4318,6 +4344,36 @@ DrawQuestOptimizationsPage(void)
 }
 
 static void
+DrawQuestVisualizationPage(void)
+{
+    using namespace rw::vulkan::DebugVisualization;
+    const auto &s=Get();
+    const char *meshNames[]={"MESHES ONLY","WIREFRAME ONLY (XRAY)","MESHES + WIREFRAME","WIREFRAME - HIDDEN EDGES REMOVED"};
+    const char *shadingNames[]={"NORMAL LIT","UNLIT ALBEDO","SOLID GREY","FACE NORMALS (VIEW SPACE)",
+        "VERTEX COLOR","UV CHECKER","VERTEX LIGHTING","LINEAR DEPTH","MESH OVERDRAW (XRAY)","OVERDRAW - DEPTH TESTED"};
+    const char *layerNames[]={"SKY / CLOUDS","BUILDINGS","ROADS / TERRAIN","PEDESTRIANS","VEHICLES",
+        "OBJECTS / PROPS","WATER","PARTICLES / EFFECTS","SHADOWS"};
+    BeginFullVrMenuPage("VISUALIZATION DEBUG","LIVE VIEWS - SESSION ONLY - SIMULATION CONTINUES");
+    char rows[VR_VIZ_ITEM_COUNT][112];
+    snprintf(rows[VR_VIZ_MESH],sizeof(rows[0]),"GEOMETRY < %s >",meshNames[s.mesh]);
+    snprintf(rows[VR_VIZ_SHADING],sizeof(rows[0]),"SHADING < %s >",shadingNames[s.shading]);
+    snprintf(rows[VR_VIZ_BOUNDS],sizeof(rows[0]),"COLLISION BOUNDS (CYAN) < %s >",s.bounds?"ON":"OFF");
+    snprintf(rows[VR_VIZ_COLLISION],sizeof(rows[0]),"PHYSICS COLLISION SHAPES < %s >",s.collision?"ON":"OFF");
+    snprintf(rows[VR_VIZ_VELOCITY],sizeof(rows[0]),"VELOCITY - ONE SECOND (YELLOW) < %s >",s.velocity?"ON":"OFF");
+    snprintf(rows[VR_VIZ_RANGE],sizeof(rows[0]),"OVERLAY / DEPTH RANGE < %d M >",s.range);
+    for(int i=0;i<LayerCount;++i) snprintf(rows[VR_VIZ_FIRST_LAYER+i],sizeof(rows[0]),"SHOW %s < %s >",layerNames[i],s.visible[i]?"ON":"OFF");
+    strcpy(rows[VR_VIZ_RESET],"RESET ALL VISUALIZATION DEBUG");
+    strcpy(rows[VR_VIZ_BACK],"BACK TO GRAPHICS");
+    for(int i=0;i<VR_VIZ_ITEM_COUNT;++i)
+        DrawFullVrMenuRow(rows[i],170+i*25,2,i==gVrVisualizationSelection);
+    DrawVrMenuText(IsOverdraw()?"OVERDRAW: DARK TO ORANGE/WHITE = MORE SUBMITTED MESH LAYERS":
+        "OVERLAYS: VISIBLE ENTITIES WITHIN RANGE - LIMIT 256",VR_MENU_WIDTH/2,625,2,240,178,48);
+    DrawVrMenuText(s.shading==DepthOverdraw?"DEPTH TEST ON; DRAW-ORDER PASSES; WIREFRAME OVERRIDDEN":
+        s.shading==Overdraw?"DEPTH TEST OFF; CPU CULLING KEPT; WIREFRAME OVERRIDDEN":
+        "TERRAIN EMBEDDED IN BUILDING MESHES FOLLOWS BUILDINGS",VR_MENU_WIDTH/2,650,2,240,178,48);
+}
+
+static void
 DrawQuestGraphicsPage(void)
 {
 	BeginFullVrMenuPage("GRAPHICS", "QUEST RENDERING AND PERFORMANCE");
@@ -4399,6 +4455,7 @@ DrawQuestGraphicsPage(void)
 		gQuestQuickTestStart ? "ON" : "OFF");
 #endif
 	snprintf(rows[VR_GRAPHICS_OPTIMIZATIONS],sizeof(rows[0]),"OPTIMIZATIONS  < OPEN >");
+	snprintf(rows[VR_GRAPHICS_VISUALIZATION],sizeof(rows[0]),"VISUALIZATION DEBUG  < OPEN >");
 	snprintf(rows[VR_GRAPHICS_DRAW_DISTANCE], sizeof(rows[0]), "DRAW DISTANCE  < %.2fX >", CMenuManager::m_PrefsLOD);
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
 	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++){
@@ -4415,7 +4472,7 @@ DrawQuestGraphicsPage(void)
 				item == VR_GRAPHICS_DIAGNOSTICS ||
 				item == VR_GRAPHICS_FOLIAGE,
 			// Highlight the lighting submenu.
-			item == VR_GRAPHICS_DYNAMIC_LIGHTS || item == VR_GRAPHICS_OPTIMIZATIONS);
+			item == VR_GRAPHICS_DYNAMIC_LIGHTS || item == VR_GRAPHICS_OPTIMIZATIONS || item == VR_GRAPHICS_VISUALIZATION);
 	}
 	if(scaleStatusValid){
 		char activeScale[192];
@@ -5604,7 +5661,7 @@ DrawCutsceneCameraAnchorNotice(void)
 
 // Fills the same 1024x768 menu surface as desktop. Compact diagnostics use
 // 512x64 for minimal FPS/frame time, 512x128 for the legacy FPS line,
-// and 512x437 for the full profiler.
+// and 512x482 for the full profiler.
 const unsigned char *
 VrSimulationRecordingPixels(void)
 {
@@ -5644,6 +5701,9 @@ DrawSharedSettingsPage()
 			break;
 		case VR_MENU_PAGE_OPTIMIZATIONS:
 			DrawQuestOptimizationsPage();
+			break;
+		case VR_MENU_PAGE_VISUALIZATION:
+			DrawQuestVisualizationPage();
 			break;
 		case VR_MENU_PAGE_GRAPHICS:
 			DrawQuestGraphicsPage();
@@ -6044,6 +6104,24 @@ VrDebugPixels(int *width, int *height)
 		perf.physicsRetryPassesPerSecond);
 	DrawDebugText(value, VR_DEBUG_WIDTH/2, 421, 2,
 		120, 230, 185);
+    GpuPassProfile::Result geometrySample;
+    if(rw::vulkan::getGpuPassProfile(&geometrySample) && geometrySample.status==GpuPassProfile::Complete && geometrySample.geometry){
+        uint64 draws=0,triangles=0,alpha=0;
+        for(unsigned pass=0;pass<DrawProfile::PassCount;++pass){
+            const auto *counts=geometrySample.geometry->passes[pass];
+            draws+=counts[DrawProfile::Draws];
+            triangles+=counts[DrawProfile::Triangles];
+            alpha+=counts[DrawProfile::Alpha];
+        }
+        snprintf(value,sizeof(value),"GPU DRAWS:%llu TRI:%.1fK",(unsigned long long)draws,(double)triangles/1000.0);
+        DrawDebugText(value,VR_DEBUG_WIDTH/2,436,2,140,215,255);
+        snprintf(value,sizeof(value),"GPU ALPHA:%llu SAMPLE:1/%u",(unsigned long long)alpha,GpuPassProfile::SampleInterval);
+    }else{
+        DrawDebugText("GPU GEOMETRY:N/A",VR_DEBUG_WIDTH/2,436,2,140,215,255);
+        snprintf(value,sizeof(value),"WAITING FOR A COMPLETE GPU SAMPLE");
+    }
+    DrawDebugText(value,VR_DEBUG_WIDTH/2,451,2,140,215,255);
+    DrawDebugText("DEBUG VIEWS CHANGE RENDER COST",VR_DEBUG_WIDTH/2,466,2,240,178,48);
 	(void)bottleneck;
 	/* LIMIT remains available in the CSV through CPU/GPU/budget columns; the
 	 * compact screen spends its last lines on actionable traffic diagnostics. */

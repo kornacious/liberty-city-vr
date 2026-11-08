@@ -1,0 +1,21 @@
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -1,6 +1,8 @@
+ #include "common.h"
+ #ifdef RW_VULKAN
+ #include "vulkan/DebugVisualization.h"
++#include "vulkan/rwvk.h"
++struct QuestDebugWiresEnd { ~QuestDebugWiresEnd() { rw::vulkan::flushDebugWires(); } };
+ #define QUEST_VIZ_SHOW(layer) (rw::vulkan::DebugVisualization::Show(rw::vulkan::DebugVisualization::layer) && !rw::vulkan::DebugVisualization::IsOverdraw())
+ #else
+ #define QUEST_VIZ_SHOW(layer) true
+@@ -2642,6 +2644,9 @@
+ void
+ RenderEffects(void)
+ {
++#ifdef RW_VULKAN
++	QuestDebugWiresEnd debugWires;
++#endif
+ #ifdef NEW_RENDERER
+ 	if(gbNewRenderer){
+ 		RenderEffects_new();

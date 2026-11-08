@@ -29,6 +29,7 @@ enum eQuestSettingsPage {
 	VR_MENU_PAGE_SIMULATION,
 	VR_MENU_PAGE_AUDIO,
 	VR_MENU_PAGE_LANGUAGE,
+	VR_MENU_PAGE_VISUALIZATION,
 };
 
 enum eVrMainMenuItem {

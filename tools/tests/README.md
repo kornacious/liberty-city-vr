@@ -569,3 +569,21 @@ map-building bounds, accessor bounds and camera snapshot copies. The visualizer
 reports view rejection and unlisted entities; Vulkan geometry occlusion has no
 per-entity classification in this tool. No game data is read. Frozen-frame colors
 and head-turn behavior still require headset QA.
+
+`test-visualization-debug.cpp` compiles directly as C++17 and executes the
+production debug-view defaults/reset, all mesh/shading combinations, and line
+index generation for lists, strips, degenerate connectors, material boundaries,
+short inputs and the largest 16-bit vertex index. No game data is read.
+`test-vulkan-pipelines.cpp` also verifies that overdraw gets a separate pipeline
+key for meshes while preserving HUD and immediate-line keys. The graphics menu
+layout adapter renders every visualization selection and shading view in both
+shipping and developer configurations and checks labels/highlights/footer bounds.
+See `overlay/docs/QUEST_VISUALIZATION_DEBUG.md` for semantics and headset QA.
+
+The Vulkan pipeline adapter also runs `test-visualization-render.cpp` against
+extracted production edge queue/replay and depth/blend policy code. It checks
+that hidden edges are deferred until depth completion; skinned/material state
+is captured by value; cold pipelines and aborted frames are safe; ordinary
+wireframes draw immediately; and tested overdraw preserves depth while xray
+overdraw disables it. Pipeline-key tests isolate depth-only fills, tested
+accumulation, wire lines and UI. Menu layout covers all geometry/shading pairs.

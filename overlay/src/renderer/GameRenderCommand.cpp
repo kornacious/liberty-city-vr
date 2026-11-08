@@ -1,10 +1,12 @@
 #include "common.h"
 
 #include "Entity.h"
+#include "QuestVisualization.h"
 #include "GameRenderCommand.h"
 #ifdef RW_VULKAN
 #include "ModelInfo.h"
 #include "vulkan/rwvk.h"
+#include "vulkan/DebugVisualization.h"
 #endif
 
 #ifdef RW_D3D12
@@ -52,14 +54,22 @@ class RenderWareBackend : public IBackend
 public:
 	void DrawEntity(const EntityDrawCommand &command)
 	{
-		if(command.entity == nil || command.entity->m_rwObject == nil)
+		if(command.entity == nil || command.entity->m_rwObject == nil || !QuestVisualization::Visible(command.entity))
 			return;
 		ProfileEntity profile(command.entity);
 		command.entity->Render();
+		QuestVisualization::Overlay(command.entity);
 	}
 
 	void DrawAtomic(const AtomicDrawCommand &command)
 	{
+#ifdef RW_VULKAN
+        using namespace rw::vulkan::DebugVisualization;
+        if((command.role==OBJECT_DRAW_WATER && (!Show(Water)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_SHADOW && (!Show(Shadows)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_SPECIAL_FX && (!Show(Particles)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_PED_LIMB && !Show(Pedestrians))) return;
+#endif
 		if(command.atomic){
 #ifdef RW_VULKAN
 			const bool32 previousRim=rw::vulkan::setPedestrianRimPass(command.role==OBJECT_DRAW_PED_LIMB);
@@ -84,6 +94,13 @@ public:
 	void DrawClump(const ClumpDrawCommand &command)
 	{
 #ifdef RW_VULKAN
+        using namespace rw::vulkan::DebugVisualization;
+        if((command.role==OBJECT_DRAW_WATER && (!Show(Water)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_SHADOW && (!Show(Shadows)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_SPECIAL_FX && (!Show(Particles)||IsOverdraw())) ||
+           (command.role==OBJECT_DRAW_PED_LIMB && !Show(Pedestrians))) return;
+#endif
+#ifdef RW_VULKAN
 		const int32 savedScopeRole = rw::vulkan::setPhysicalScopeDrawRole(
 			command.role == OBJECT_DRAW_VR_WEAPON ||
 			command.role == OBJECT_DRAW_PLAYER_PREVIEW ? 1 : 0);
@@ -98,6 +115,12 @@ public:
 	bool BeginImmediate3D(const Immediate3DBeginCommand &command)
 	{
 #ifdef RW_VULKAN
+        using namespace rw::vulkan::DebugVisualization;
+        const bool interfaceDraw=command.role>=IMMEDIATE3D_DRAW_VR_HAND;
+        if((IsOverdraw() && !interfaceDraw) ||
+           (command.role==IMMEDIATE3D_DRAW_WATER && !Show(Water)) ||
+           ((command.role==IMMEDIATE3D_DRAW_EFFECT || command.role==IMMEDIATE3D_DRAW_WEATHER) && !Show(Particles)) ||
+           (command.role==IMMEDIATE3D_DRAW_VEHICLE && !Show(Vehicles))) return false;
 		// The backend's modern-water path needs to know which immediate
 		// draws ARE the water; the role already says so.
 		rw::vulkan::setIm3DWater(

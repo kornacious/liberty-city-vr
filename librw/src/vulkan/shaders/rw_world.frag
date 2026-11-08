@@ -39,10 +39,8 @@ layout(location = 0) in vec4 fragColour;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec2 fragFog;
 layout(location = 3) flat in vec2 fragDynamicMotion;
-#if RW_WORLD_EFFECTS_RESOURCES || RW_NEO_RESOURCES
 layout(location = 4) in vec3 fragWorldPos;
 layout(location = 5) in vec3 fragNormal;
-#endif
 
 layout(location = 0) out vec4 outColour;
 layout(location = 1) out vec2 outDynamicMotion;
@@ -99,6 +97,33 @@ void main()
 		}else if(colour.a >= -reference)
 			discard;
 	}
+
+    // Preserve alpha coverage, then bypass effects and fog for diagnostics.
+    int view=RW_VISUALIZATION != 0 ? int(scene.debugVisualization.x) : 0;
+    if(RW_VISUALIZATION != 0 && push.surfaceProps.x == -999.0){
+        outColour=vec4(0.05,1.0,0.15,1.0);
+        outDynamicMotion=vec2(0.0); return;
+    }
+    if(view != 0){
+        vec3 rgb=colour.rgb;
+        if(view==1) rgb=texColour.rgb*push.materialColour.rgb;
+        if(view==2) rgb=vec3(0.65);
+        if(view==3){
+            vec3 n=cross(dFdx(fragWorldPos),dFdy(fragWorldPos));
+            float len=length(n);
+            rgb=(len>0.000001?n/len:vec3(0.0))*0.5+0.5;
+        }
+        if(view==4) rgb=fragColour.rgb;
+        if(view==5){
+            vec2 cell=floor(fragTexCoord*16.0);
+            rgb=mix(vec3(0.15),vec3(0.85),mod(cell.x+cell.y,2.0));
+        }
+        if(view==6) rgb=fragColour.rgb;
+        if(view==7) rgb=vec3(clamp(length(fragWorldPos-scene.im2dParams.yzw)/max(scene.debugVisualization.y,1.0),0.0,1.0));
+        if(view==8 || view==9) rgb=vec3(0.04,0.015,0.005);
+        outColour=vec4(rgb,colour.a);
+        outDynamicMotion=vec2(0.0); return;
+    }
 
 	// The game's dynamic lights, per pixel. The original fixed function turned
 	// these into extra directionals and only for peds and vehicles; evaluating

@@ -11,6 +11,8 @@
 #define RW_MAX_BONES 64
 
 layout(constant_id = 1) const int RW_WORLD_EFFECTS = 0;
+// Off pipelines compile diagnostics out; immediate geometry always uses zero.
+layout(constant_id = 2) const int RW_VISUALIZATION = 0;
 
 layout(set = 0, binding = 0) uniform SceneData {
 	// Indexed by gl_ViewIndex. Both entries hold the same matrix in mono.
@@ -80,6 +82,8 @@ layout(set = 0, binding = 0) uniform SceneData {
 	vec4 waterParams2;
 	vec4 neoRimStart, neoRimEnd, neoParams, neoVehicle, neoDiffuse, neoSpec, neoControl;
 	vec4 neoRimView;
+	// x = shading view, y = depth range (metres)
+	vec4 debugVisualization;
 	// x != 0 = culling visualizer active; the draw's flat colour index then
 	// arrives in surfaceProps.z instead of the packed light mask.
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS

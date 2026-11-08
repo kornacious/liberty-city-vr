@@ -118,6 +118,7 @@ struct InstanceData
 	Material *material;
 	bool32 vertexAlpha;
 	uint32 offset;		// byte offset into the index buffer
+	uint32 wireOffset, wireCount;
 };
 
 struct InstanceDataHeader : rw::InstanceDataHeader
@@ -136,6 +137,8 @@ struct InstanceDataHeader : rw::InstanceDataHeader
 	VkDeviceMemory vboMemory;
 	VkBuffer ibo;
 	VkDeviceMemory iboMemory;
+	VkBuffer wireIbo;
+	VkDeviceMemory wireMemory;
 #else
 	void *vbo, *vboMemory, *ibo, *iboMemory;
 #endif
@@ -301,6 +304,9 @@ void setStaticInstancesEnabled(bool32 enabled);
 bool32 getStaticInstancesEnabled(void);
 StaticInstances::Stats getStaticInstancesStats(void);
 void flushStaticInstances(void);
+// Hidden-line geometry fills depth first; edges replay after world/effects.
+void flushDebugWires(void);
+void discardDebugWires(void);
 bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags);
 void endStaticInstanceEntity(void);
 void resetStaticReuseSample(bool32 sampled,uint64 sourceFrame);

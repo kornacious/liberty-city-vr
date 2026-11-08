@@ -1,4 +1,6 @@
 // Executes production key/warm-up/pending-compile code with driver calls mocked.
+#include "../../librw/src/vulkan/DebugVisualization.h"
+namespace DebugVisualization=rw::vulkan::DebugVisualization;
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
@@ -12,7 +14,7 @@ using bool32 = int;
 using VkPipeline = uint64;
 using VkPrimitiveTopology = uint32;
 #define nil nullptr
-enum { VK_NULL_HANDLE = 0, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 3,
+enum { VK_NULL_HANDLE = 0, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 3, VK_PRIMITIVE_TOPOLOGY_LINE_LIST = 1,
     SHADER_WORLD = 0, SHADER_IM2D, SHADER_IM3D, SHADER_SKIN, SHADER_WORLD_INSTANCED, SHADER_COUNT,
     BLENDZERO = 1, BLENDONE = 2, BLENDSRCALPHA = 5, BLENDINVSRCALPHA = 6,
     CULLNONE = 1, CULLBACK = 2, ALPHAALWAYS = 1, ALPHAGREATEREQUAL = 2 };
@@ -49,6 +51,31 @@ static VkPipeline getPipelineForKey(uint32, VkPrimitiveTopology, uint64 key)
 
 int main()
 {
+    DebugVisualization::Reset();
+    const uint64 litWorld=makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    const uint64 litHud=makePipelineKey(SHADER_IM2D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    const uint64 litLines=makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+    DebugVisualization::Get().shading=DebugVisualization::Overdraw;
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==(litWorld|(uint64(1)<<25)|(uint64(1)<<26)));
+    assert(makePipelineKey(SHADER_IM2D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litHud);
+    assert(makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litLines);
+    DebugVisualization::Get().shading=DebugVisualization::DepthOverdraw;
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==(litWorld|(uint64(1)<<25)|(uint64(1)<<26)|(uint64(1)<<27)));
+    assert(makePipelineKey(SHADER_IM2D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litHud);
+    assert(makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litLines);
+    DebugVisualization::Get().shading=DebugVisualization::Lit;
+    DebugVisualization::Get().mesh=DebugVisualization::HiddenWire;
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==(litWorld|(uint64(1)<<26)|(uint64(1)<<28)));
+    assert(!(makePipelineKey(SHADER_SKIN,VK_PRIMITIVE_TOPOLOGY_LINE_LIST)&(uint64(1)<<28)));
+    assert(makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litLines);
+    DebugVisualization::Get().mesh=DebugVisualization::Solid;
+    DebugVisualization::Get().shading=DebugVisualization::Albedo;
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==(litWorld|(uint64(1)<<26)));
+    assert(makePipelineKey(SHADER_IM2D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litHud);
+    assert(makePipelineKey(SHADER_IM3D,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litLines);
+    DebugVisualization::Reset();
+    assert(makePipelineKey(SHADER_WORLD,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)==litWorld);
+
     gstate = {0, BLENDSRCALPHA, BLENDINVSRCALPHA, 1, 1, CULLBACK, ALPHAALWAYS, 91};
     const auto opaque = makePipelineKey(SHADER_WORLD, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     gstate.srcBlend = BLENDONE; gstate.dstBlend = BLENDONE;
