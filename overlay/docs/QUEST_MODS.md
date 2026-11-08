@@ -71,6 +71,11 @@ terminal whitespace produced by the native line reader; this has a regression
 check. The shipped APK uses the normal frontend, without the private automatic
 New Game driver used during diagnosis.
 
+The Appearance menu labels the active source `CLASSIC - UPSTATE` and locks
+source switching while Upstate is enabled. The saved unmodded source remains
+visible and is preserved; disabling Upstate restores that source on the next
+launch. Combining Upstate with Original Xbox assets remains unvalidated.
+
 Launch an updated APK once to publish runtime capabilities, then install/enable
 Upstate through the Manager and fully restart. Older APKs remain gated. Do not
 create the capability file manually. Base game files and saves stay intact.

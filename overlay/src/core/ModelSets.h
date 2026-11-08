@@ -40,6 +40,8 @@ bool UseXboxParticles();
 // Legacy visual-only profiles keep all audio on the base PC installation.
 bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size);
 bool IsRestartRequired();
+// Upstate requires Classic at runtime; retain the preference for unmodded launches.
+bool IsSourceLocked();
 bool IsAvailable(eModelSet modelSet);
 const char *GetName(eModelSet modelSet);
 // Describes where files are actually read from. "Classic" is a promise made

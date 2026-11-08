@@ -104,4 +104,5 @@ int main(){
  settings={{"ModelSet",999}};reset(root);require(GetActive()==MODEL_SET_CLASSIC,"invalid preset falls back");
  std::filesystem::remove_all(root);
  printf("PASS %d production modelset routing/calibration/startup checks\n",checks);
+ return 0;
 }

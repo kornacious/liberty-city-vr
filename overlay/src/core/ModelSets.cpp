@@ -293,12 +293,10 @@ void InitializeStartup(const char *gameRoot)
 		MODEL_SET_MODERN, gSettingsPath);
 	const bool legacyXbox = requested == MODEL_SET_XBOX;
 	if(legacyXbox) requested = MODEL_SET_MODERN;
-#ifdef LCVR_UPSTATE_ENGINE
-	requested = MODEL_SET_CLASSIC;
-#endif
 	if(requested < MODEL_SET_CLASSIC || requested > MODEL_SET_MODERN ||
 	   !IsAvailable((eModelSet)requested)) requested = MODEL_SET_CLASSIC;
-	gRequestedModelSet = gActiveModelSet = (eModelSet)requested;
+	gRequestedModelSet = (eModelSet)requested;
+	gActiveModelSet = IsSourceLocked() ? MODEL_SET_CLASSIC : gRequestedModelSet;
 	if(legacyXbox)
 		WritePrivateProfileStringA("VR", "ModelSet", "1", gSettingsPath);
 	gInitialized = true;
@@ -319,6 +317,7 @@ eModelSet GetRequested() { return gRequestedModelSet; }
 
 void SetRequested(eModelSet modelSet)
 {
+	if(IsSourceLocked()) return;
 	if(!IsAvailable(modelSet))
 		modelSet = MODEL_SET_CLASSIC;
 	gRequestedModelSet = modelSet;
@@ -374,7 +373,15 @@ bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size
 	return FileExists(resolvedPath);
 }
 
-bool IsRestartRequired() { return gRequestedModelSet != gActiveModelSet; }
+bool IsSourceLocked()
+{
+#ifdef LCVR_UPSTATE_ENGINE
+	return true;
+#else
+	return false;
+#endif
+}
+bool IsRestartRequired() { return !IsSourceLocked() && gRequestedModelSet != gActiveModelSet; }
 
 bool IsAvailable(eModelSet modelSet)
 {
