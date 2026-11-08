@@ -7861,4 +7861,27 @@ if(-not $accessors.Success -or -not $count.Success){throw &apos;Missing producti
 &amp; (Join-Path $PSScriptRoot &apos;test-ragdoll.ps1&apos;) -KitRoot $StageRoot -OutDir $OutDir -Sources @(&apos;test-culling-visualizer-api.cpp&apos;)
 if($LASTEXITCODE -ne 0){throw &apos;Culling visualizer API regression failed&apos;}</value>
   </data>
+  <data name="tools/tests/test-native-settings.ps1" xml:space="preserve">
+    <value>param(
+ [string]$KitRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+ [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-native-settings-'+[guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference='Stop'
+$source=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/skel/android/vrdebug.cpp'))
+$pieces=[Collections.Generic.List[string]]::new()
+foreach($match in [regex]::Matches($source,'(?ms)^enum eVr\w*MenuItem \{.*?^\};')){$pieces.Add($match.Value)}
+$policy=[regex]::Match($source,'(?ms)^static bool\r?\nIsFrontendMenuItemVisible\(.*?^\}')
+if(-not $policy.Success){throw 'Missing frontend visibility policy'}
+$pieces.Add($policy.Value)
+$normalize=[regex]::Match($source,'(?ms)^static void\r?\nNormalizeMenuSelection\(.*?^\}')
+if(-not $normalize.Success){throw 'Missing production selection guard'}
+$pieces.Add($normalize.Value)
+$renderer=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestNativeSettings.cpp'))
+$renderer=[regex]::Replace($renderer,'(?m)^#include [^\r\n]+\r?\n','')
+$pieces.Add($renderer)
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'native-settings-production.inc'),($pieces -join "`n"),[Text.UTF8Encoding]::new($false))
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $KitRoot -OutDir $OutDir -Sources @('test-native-settings.cpp')
+if($LASTEXITCODE -ne 0){throw 'Native settings checks failed'}
+</value>
+  </data>
 </root>

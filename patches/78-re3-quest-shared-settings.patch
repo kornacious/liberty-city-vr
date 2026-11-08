@@ -1,12 +1,22 @@
 --- a/src/core/Frontend.cpp
 +++ b/src/core/Frontend.cpp
+@@ -34,6 +34,9 @@
+ #include "Messages.h"
+ #include "FileLoader.h"
+ #include "frontendoption.h"
++#if defined(RW_VULKAN) && defined(__ANDROID__)
++#include "QuestNativeSettings.h"
++#endif
+ #if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
+ #include "OculusVR.h"
+ #endif
 @@ -2540,6 +2540,10 @@
  void
  CMenuManager::DrawFrontEnd()
  {
 +#if defined(RW_VULKAN) && defined(__ANDROID__)
-+	// Shared Quest settings are composited by OpenXR, without PC rows underneath.
-+	if(m_nCurrScreen == MENUPAGE_OPTIONS) return;
++	// Use the native frontend presenter with the shared Quest settings model.
++	if(m_nCurrScreen == MENUPAGE_OPTIONS) { androidgame::VrDrawNativeSettings(); return; }
 +#endif
  	CFont::SetAlphaFade(255.0f);
  

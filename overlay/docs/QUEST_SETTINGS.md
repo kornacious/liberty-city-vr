@@ -1,13 +1,25 @@
 # Shared Quest settings
 
 Main menu / Pause menu → Options and the VR settings shortcut open the same
-category catalog, page state, painters and input handlers. The standard menu
+category catalog, page state and input handlers. Frontend Options renders those
+shared rows through GTA III's native fonts, textured background and selection
+bar on the game's cinema screen. The gameplay shortcut retains the VR overlay.
+Native pages paginate automatically as the selection moves. The standard menu
 keeps ownership of pause and returns to its Settings entry when the shared menu
 closes; the gameplay shortcut closes back to play. Held opening/closing inputs
 are consumed so they cannot change a setting or immediately leave the parent.
 
 `src/skel/android/QuestSettingsMenu.h` defines category order and destinations.
-`vrdebug.cpp` supplies the common pages and controller interaction.
+`vrdebug.cpp` supplies the common page definitions and controller interaction.
+`QuestNativeSettings` collects their rows and renders native label/value columns;
+it owns no copies of the settings or action handlers.
+
+Frontend settings hide weapon/hand and head/body calibration, HUD placement,
+vehicle seat/wheel calibration, radio and speedometer placement, recenter,
+holster loadout, cheats, spawning, missions, replay, profiler and renderer
+diagnostics. Drawing, navigation and activation use the same availability rules.
+Persistent preferences such as HUD visibility, speedometer style/units, weapon
+behaviour, traffic and graphics quality remain editable before loading a game.
 `src/core/QuestGameSettings.cpp` edits inherited engine preferences directly and
 saves through `CMenuManager::SaveSettings`; it does not duplicate preferences in
 `vr_settings.ini`. The in-car radio board uses the same music-volume and station

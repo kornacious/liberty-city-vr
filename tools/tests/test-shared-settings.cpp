@@ -50,7 +50,7 @@ void FindClose(HANDLE){}
 enum {MENUPAGE_OPTIONS=1,MENUPAGE_START_MENU=2,MENUPAGE_PAUSE_MENU=3,NUM_MENUROWS=18};
 struct CMenuScreen {struct Entry {int m_TargetMenu=0;} m_aEntries[NUM_MENUROWS];};
 static CMenuScreen aScreens[4];
-struct PadInput {bool a=false,b=false,leftStickClick=false,rightStickClick=false;float rightTrigger=0,leftTrigger=0;};
+struct PadInput {bool a=false,b=false,leftStickClick=false,rightStickClick=false;float rightTrigger=0,leftTrigger=0,leftStickX=0;};
 static bool gSettingsFromFrontend=false,gVrMenuVisible=false,gSettingsReleaseGate=false;
 static bool gVrMenuSelectDown,gVrMenuBackDown,gVrMenuIncreaseDown,gVrMenuDecreaseDown;
 static int gVrMenuPage,gVrMenuSelection;

@@ -153,7 +153,7 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   power for landing. Car motion/physical-wheel modes do not affect aircraft.
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
   graphics and model-set menus.
-- Main/Pause menu Options and the VR shortcut share one categorized settings
+- Native Main/Pause menu Options and the in-game VR overlay share categorized settings
   implementation, including audio volume, subtitles, language and player skins.
   See [Quest settings](overlay/docs/QUEST_SETTINGS.md).
 - Player cheats include Flight and Noclip. In Flight, move with the left stick,

@@ -15,6 +15,7 @@
 #include "OculusVR.h"
 #include "QuestRadio.h"
 #include "QuestGameSettings.h"
+#include "QuestNativeSettings.h"
 #include "QuestSettingsMenu.h"
 #include "QuestSpeedometer.h"
 #include "QuestMusic.h"
@@ -125,6 +126,9 @@ static const DebugGlyph gDebugGlyphs[] = {
 static bool gDebugVisible;
 static uint8 gDebugPixels[VR_DEBUG_WIDTH*VR_DEBUG_HEIGHT*4];
 static uint8 gVrMenuPixels[VR_MENU_WIDTH*VR_MENU_HEIGHT*4];
+#ifdef __ANDROID__
+static QuestNativeSettings::Page *gNativeSettingsPage;
+#endif
 static int gDebugFps;
 // Keep legacy ShowProfiler=1 as the full diagnostic view.
 static int gProfilerDisplayMode; // 0: off, 1: full, 2: minimal
@@ -916,6 +920,9 @@ static void
 FillVrMenuRect(int left, int top, int right, int bottom,
                uint8 red, uint8 green, uint8 blue, uint8 alpha)
 {
+#ifdef __ANDROID__
+	if(gNativeSettingsPage) return;
+#endif
 	left = Max(0, left);
 	top = Max(0, top);
 	right = Min(VR_MENU_WIDTH, right);
@@ -929,6 +936,12 @@ static void
 DrawVrMenuText(const char *value, int centreX, int y, int scale,
                uint8 red, uint8 green, uint8 blue)
 {
+#ifdef __ANDROID__
+	if(gNativeSettingsPage) {
+		if(y >= 160 && y < 700 && value[0]) gNativeSettingsPage->notes.emplace_back(value);
+		return;
+	}
+#endif
 	const int advance = scale*6;
 	int x = centreX-(int)strlen(value)*advance/2;
 	for(const char *ch = value; *ch; ch++, x += advance){
@@ -2394,8 +2407,45 @@ IsSimulationReplayAvailable(void)
 }
 
 static bool
+IsFrontendMenuItemVisible(int page, int item)
+{
+	switch(page) {
+	case VR_MENU_PAGE_CALIBRATION: case VR_MENU_PAGE_HEAD_CALIBRATION:
+	case VR_MENU_PAGE_WRIST_RADAR: case VR_MENU_PAGE_VEHICLE_CALIBRATION:
+	case VR_MENU_PAGE_HOLSTERS: case VR_MENU_PAGE_CHEATS:
+	case VR_MENU_PAGE_MISSIONS: case VR_MENU_PAGE_SIMULATION: return false;
+	case VR_MENU_PAGE_SETTINGS:
+		return item != VR_MAIN_HOLSTERS && item != VR_MAIN_CHEATS;
+	case VR_MENU_PAGE_GRAPHICS:
+		return item != VR_GRAPHICS_PROFILER && item != VR_GRAPHICS_DIAGNOSTICS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
+			&& item != VR_GRAPHICS_CULL_VIZ && item != VR_GRAPHICS_QUICK_START
+#endif
+			;
+	case VR_MENU_PAGE_OPTIMIZATIONS: return item != VR_OPT_SIMULATION;
+	case VR_MENU_PAGE_WEAPONS: return item != VR_WEAPONS_CALIBRATION;
+	case VR_MENU_PAGE_HUD:
+		return !(item >= VR_HUD_HORIZONTAL_SCALE && item <= VR_HUD_OFFSET_Y) &&
+			item != VR_HUD_PANEL_HAND && item != VR_HUD_PANEL_SIDE && item != VR_HUD_PANEL_CALIBRATE;
+	case VR_MENU_PAGE_LOCOMOTION:
+		return item != VR_LOCOMOTION_HEAD_CALIBRATION && item != VR_LOCOMOTION_RECENTER;
+	case VR_MENU_PAGE_VEHICLE:
+		return !(item >= VR_VEHICLE_DEFAULT_SEAT_HEIGHT && item <= VR_VEHICLE_MODEL_SEAT_FORWARD) &&
+			item != VR_VEHICLE_WHEEL_HAND_PULL_BACK && item != VR_VEHICLE_MODEL_WHEEL_VISIBLE &&
+			item != VR_VEHICLE_CALIBRATION;
+	case VR_MENU_PAGE_RADIO:
+		return item == 0 || item == 1 || item == QuestRadio::BackRow-1 || item == QuestRadio::BackRow;
+	case VR_MENU_PAGE_SPEEDOMETER:
+		return item < QuestSpeedometer::FirstPlacementRow || item == QuestSpeedometer::BackRow;
+	default: return true;
+	}
+}
+
+static bool
 IsMenuItemVisible(int page, int item)
 {
+	if((FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bGameNotLoaded) &&
+	   !IsFrontendMenuItemVisible(page, item)) return false;
 	if(page == VR_MENU_PAGE_OPTIMIZATIONS && item == VR_OPT_SIMULATION)
 		return IsSimulationReplayAvailable();
 	if(page == VR_MENU_PAGE_HUD){
@@ -2495,6 +2545,20 @@ IsMenuItemVisible(int page, int item)
 		return true;
 	}
 	return true;
+}
+
+static void
+NormalizeMenuSelection(void)
+{
+	int *selection = CurrentMenuSelection();
+	const int count = CurrentMenuItemCount();
+	for(int attempt = 0; attempt < count; ++attempt) {
+		if(*selection >= 0 && *selection < count && IsMenuItemVisible(gVrMenuPage, *selection)) return;
+		*selection = (*selection+1+count)%count;
+	}
+	// A saved/live page can lose its context when the frontend takes ownership.
+	gVrMenuPage = VR_MENU_PAGE_SETTINGS;
+	gVrMenuSelection = 0;
 }
 
 static bool
@@ -2687,8 +2751,8 @@ ServiceFrontendSettings(const PadInput &in)
 		gVrMenuSelection = 0;
 		gVrMenuSelectDown = in.a || in.rightStickClick;
 		gVrMenuBackDown = in.b || in.leftStickClick;
-		gVrMenuIncreaseDown = in.rightTrigger >= 0.55f;
-		gVrMenuDecreaseDown = in.leftTrigger >= 0.55f;
+		gVrMenuIncreaseDown = in.rightTrigger >= 0.55f || in.leftStickX >= 0.65f;
+		gVrMenuDecreaseDown = in.leftTrigger >= 0.55f || in.leftStickX <= -0.65f;
 		gVrMenuIncreaseRepeatAt = gVrMenuDecreaseRepeatAt = 0.0;
 		ResetMenuNavigationRepeat();
 		return true;
@@ -2759,7 +2823,8 @@ VrDebugUpdate(const PadInput &in)
 		in.leftGrip >= 0.75f && in.rightGrip >= 0.75f;
 	// As on desktop, service shortcuts other than the settings panel must not
 	// steal B/A while the player is holding a physical gun or detonator.
-	const bool modifier = bothGrips &&
+	const bool modifier = bothGrips && !FrontEndMenuManager.m_bMenuActive &&
+		!FrontEndMenuManager.m_bGameNotLoaded &&
 		OculusVR::GetHeldWeaponSlot(0) < 0 &&
 		OculusVR::GetHeldWeaponSlot(1) < 0 &&
 		!OculusVR::IsTrackedDetonatorActive(0) &&
@@ -2791,6 +2856,8 @@ VrDebugUpdate(const PadInput &in)
 		gVrMenuIncreaseRepeatAt = 0.0;
 		gVrMenuDecreaseRepeatAt = 0.0;
 	}
+	if(menuShortcut && !gVrMenuShortcutDown && FrontEndMenuManager.m_bMenuActive && !gSettingsFromFrontend)
+		FrontEndMenuManager.m_nCurrScreen = MENUPAGE_OPTIONS;
 	gVrMenuShortcutDown = menuShortcut;
 
 	// Keep B available for drive-by shooting; latch the chord during driving.
@@ -2958,6 +3025,7 @@ VrDebugUpdate(const PadInput &in)
 			OculusVR::SetQuestVehicleCalibrationPreview(false);
 			gVrMenuPage = VR_MENU_PAGE_VEHICLE;
 		}
+		NormalizeMenuSelection();
 		const int itemCount = CurrentMenuItemCount();
 		const int navigationPulse = MenuNavigationPulse(in.leftStickY, now);
 		if(navigationPulse != 0 && itemCount > 0){
@@ -2981,18 +3049,20 @@ VrDebugUpdate(const PadInput &in)
 		const bool selectPulse = select && !gVrMenuSelectDown;
 		gVrMenuSelectDown = select;
 		const bool repeatValue = CurrentMenuValueRepeats();
+		const bool increaseHeld = in.rightTrigger >= 0.55f || (gSettingsFromFrontend && in.leftStickX >= 0.65f);
+		const bool decreaseHeld = in.leftTrigger >= 0.55f || (gSettingsFromFrontend && in.leftStickX <= -0.65f);
 		const bool increasePulse = MenuRepeatPulse(
-			in.rightTrigger >= 0.55f, gVrMenuIncreaseDown,
+			increaseHeld, gVrMenuIncreaseDown,
 			gVrMenuIncreaseRepeatAt, gVrMenuIncreaseHoldStart,
 			now, repeatValue);
 		const bool decreasePulse = MenuRepeatPulse(
-			in.leftTrigger >= 0.55f, gVrMenuDecreaseDown,
+			decreaseHeld, gVrMenuDecreaseDown,
 			gVrMenuDecreaseRepeatAt, gVrMenuDecreaseHoldStart,
 			now, repeatValue);
 		const int repeatMagnitude = decreasePulse ?
-			MenuRepeatMagnitude(in.leftTrigger >= 0.55f,
+			MenuRepeatMagnitude(decreaseHeld,
 				gVrMenuDecreaseHoldStart, now) :
-			MenuRepeatMagnitude(in.rightTrigger >= 0.55f,
+			MenuRepeatMagnitude(increaseHeld,
 				gVrMenuIncreaseHoldStart, now);
 		const bool positivePulse = selectPulse || increasePulse;
 
@@ -4076,6 +4146,14 @@ VrDebugUpdate(const PadInput &in)
 static void
 BeginFullVrMenuPage(const char *heading, const char *subtitle = nil)
 {
+#ifdef __ANDROID__
+	if(gNativeSettingsPage) {
+		*gNativeSettingsPage = QuestNativeSettings::Page();
+		gNativeSettingsPage->heading = heading;
+		gNativeSettingsPage->subtitle = subtitle ? subtitle : "";
+		return;
+	}
+#endif
 	FillVrMenuRect(0, 0, VR_MENU_WIDTH, VR_MENU_HEIGHT,
 		50, 49, 65, 238);
 	FillVrMenuRect(28, 28, VR_MENU_WIDTH-28, VR_MENU_HEIGHT-28,
@@ -4093,6 +4171,12 @@ DrawFullVrMenuRow(const char *text, int y, int scale, bool selected,
                   bool available = true, bool warning = false,
                   bool positive = false, bool highlight = false)
 {
+#ifdef __ANDROID__
+	if(gNativeSettingsPage) {
+		gNativeSettingsPage->rows.emplace_back(text, selected, available);
+		return;
+	}
+#endif
 	if(selected)
 		FillVrMenuRect(85, y-5, VR_MENU_WIDTH-85,
 			y+scale*7+4,
@@ -4117,9 +4201,13 @@ DrawQuestSettingsPage(void)
 		(int)QUEST_CPU_PERFORMANCE_AUTO),
 		(int)QUEST_CPU_PERFORMANCE_COUNT-1);
 	BeginFullVrMenuPage("SETTINGS");
-	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++)
+	for(int item = 0; item < VR_MAIN_ITEM_COUNT; item++){
+#ifdef __ANDROID__
+		if(!IsMenuItemVisible(VR_MENU_PAGE_SETTINGS, item)) continue;
+#endif
 		DrawFullVrMenuRow(QuestSettingsCategories[item].label, 152+item*36, 2,
 			item == gVrMenuSelection, true);
+	}
 
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE",
@@ -4132,6 +4220,7 @@ DrawQuestGameSettingsPage(bool audio)
 	BeginFullVrMenuPage(audio ? "AUDIO AND RADIO" : "LANGUAGE AND SUBTITLES");
 	const int count = audio ? QuestGameSettings::AudioCount : QuestGameSettings::LanguageCount;
 	for(int row = 0; row < count; ++row) {
+		if(!IsMenuItemVisible(gVrMenuPage, row)) continue;
 		char text[112];
 		if(audio) QuestGameSettings::AudioText(row, text, sizeof(text));
 		else QuestGameSettings::LanguageText(row, text, sizeof(text));
@@ -4278,7 +4367,10 @@ DrawQuestGraphicsPage(void)
 	snprintf(rows[VR_GRAPHICS_OPTIMIZATIONS],sizeof(rows[0]),"OPTIMIZATIONS  < OPEN >");
 	snprintf(rows[VR_GRAPHICS_DRAW_DISTANCE], sizeof(rows[0]), "DRAW DISTANCE  < %.2fX >", CMenuManager::m_PrefsLOD);
 	strcpy(rows[VR_GRAPHICS_BACK], "BACK TO SETTINGS");
-	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++)
+	for(int item = 0; item < VR_GRAPHICS_ITEM_COUNT; item++){
+#ifdef __ANDROID__
+		if(!IsMenuItemVisible(VR_MENU_PAGE_GRAPHICS, item)) continue;
+#endif
 		// Compact rows leave room for the status footer.
 		DrawFullVrMenuRow(rows[item], 170+item*(VR_GRAPHICS_ITEM_COUNT>24 ? 20 : VR_GRAPHICS_ITEM_COUNT>23 ? 21 : 22), 2,
 			item == gVrGraphicsSelection, true, false,
@@ -4290,6 +4382,7 @@ DrawQuestGraphicsPage(void)
 				item == VR_GRAPHICS_FOLIAGE,
 			// Highlight the lighting submenu.
 			item == VR_GRAPHICS_DYNAMIC_LIGHTS || item == VR_GRAPHICS_OPTIMIZATIONS);
+	}
 	if(scaleStatusValid){
 		char activeScale[192];
 		snprintf(activeScale, sizeof(activeScale),
@@ -4372,9 +4465,13 @@ DrawQuestWeaponsPage(void)
 			(OculusVR::IsQuestDualWieldEnabled(dualType) ? "ON" : "OFF") : "UNAVAILABLE");
 	strcpy(rows[VR_WEAPONS_CALIBRATION], "WEAPON CALIBRATION  < OPEN >");
 	strcpy(rows[VR_WEAPONS_BACK], "BACK TO SETTINGS");
-	for(int item = 0; item < VR_WEAPONS_ITEM_COUNT; item++)
+	for(int item = 0; item < VR_WEAPONS_ITEM_COUNT; item++){
+#ifdef __ANDROID__
+		if(!IsMenuItemVisible(VR_MENU_PAGE_WEAPONS, item)) continue;
+#endif
 		DrawFullVrMenuRow(rows[item], 170+item*49, 3,
 			item == gVrWeaponsSelection);
+	}
 }
 
 static void
@@ -4967,6 +5064,7 @@ DrawQuestSpeedometerPage(void)
 {
 	BeginFullVrMenuPage("VEHICLE SPEEDOMETER");
 	for(int row=0; row<QuestSpeedometer::MenuRows; ++row) {
+		if(!IsMenuItemVisible(VR_MENU_PAGE_SPEEDOMETER, row)) continue;
 		char text[112]; QuestSpeedometer::MenuRow(row,text,sizeof(text));
 		DrawFullVrMenuRow(text,158+row*36,2,row==*CurrentMenuSelection(),true);
 	}
@@ -4979,6 +5077,7 @@ DrawQuestRadioPage(void)
 {
     BeginFullVrMenuPage("RADIO AND CUSTOM MUSIC");
     for(int row=0;row<QuestRadio::MenuRows;++row) {
+		if(!IsMenuItemVisible(VR_MENU_PAGE_RADIO, row)) continue;
         char text[112]; QuestRadio::MenuRow(row,text,sizeof(text));
         DrawFullVrMenuRow(text,158+row*28,2,row==gVrRadioSelection,true);
     }
@@ -5079,9 +5178,13 @@ DrawQuestLocomotionPage(void)
 	strcpy(rows[VR_LOCOMOTION_RECENTER], "RECENTER VIEW");
 	snprintf(rows[VR_LOCOMOTION_BORDERS], sizeof(rows[0]), "CINEMA SCREEN BORDERS  < %s >", CMenuManager::m_PrefsCutsceneBorders ? "ON" : "OFF");
 	strcpy(rows[VR_LOCOMOTION_BACK], "BACK TO SETTINGS");
-	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++)
+	for(int item = 0; item < VR_LOCOMOTION_ITEM_COUNT; item++){
+#ifdef __ANDROID__
+		if(!IsMenuItemVisible(VR_MENU_PAGE_LOCOMOTION, item)) continue;
+#endif
 		DrawFullVrMenuRow(rows[item], 150+item*38, 3,
 			item == gVrLocomotionSelection);
+	}
 	// The one setting a standing player can be hurt by without knowing why.
 	if(gVrLocomotionSelection == VR_LOCOMOTION_MOVEMENT_ORIENTATION)
 		DrawVrMenuText(
@@ -5477,6 +5580,7 @@ DrawCutsceneCameraAnchorNotice(void)
 const unsigned char *
 VrSimulationRecordingPixels(void)
 {
+	if(FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bGameNotLoaded) return nil;
 	char text[80];
 	const bool recording = SimulationReplayRecordingText(text,sizeof(text));
 	const bool playback = !recording && !gVrMenuVisible &&
@@ -5500,34 +5604,9 @@ VrSimulationRecordingPixels(void)
 	return pixels;
 }
 
-const unsigned char *
-VrDebugPixels(int *width, int *height)
+static void
+DrawSharedSettingsPage()
 {
-	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
-	const bool minimalProfiler = gProfilerDisplayMode == 2;
-	const bool profilerVisible = QuestProfilerIsEnabled() || minimalProfiler;
-	const bool anchorCalibration =
-		androidgame::VrCutsceneCameraAnchorCalibrationActive();
-	const bool anchorNotice = !gVrMenuVisible && !anchorCalibration &&
-		gCutsceneAnchorNotice[0] != '\0' &&
-		MonotonicMilliseconds() < gCutsceneAnchorNoticeUntilMs;
-	if(anchorCalibration || anchorNotice){
-		*width = VR_MENU_WIDTH;
-		*height = VR_MENU_HEIGHT;
-		if(anchorCalibration)
-			DrawCutsceneCameraAnchorCalibrationPage();
-		else
-			DrawCutsceneCameraAnchorNotice();
-		return gVrMenuPixels;
-	}
-	*width = gVrMenuVisible ? VR_MENU_WIDTH : VR_DEBUG_WIDTH;
-	*height = gVrMenuVisible ? VR_MENU_HEIGHT :
-		(minimalProfiler ? VR_MINIMAL_HEIGHT :
-		 profilerVisible ? VR_DEBUG_HEIGHT : VR_FPS_HEIGHT);
-	if(!gDebugVisible && !gVrMenuVisible && !profilerVisible)
-		return nil;
-
-	if(gVrMenuVisible){
 		switch(gVrMenuPage){
 		case VR_MENU_PAGE_AUDIO:
 			DrawQuestGameSettingsPage(true);
@@ -5611,6 +5690,53 @@ VrDebugPixels(int *width, int *height)
 			DrawQuestSettingsPage();
 			break;
 		}
+}
+
+bool
+VrCollectNativeSettings(QuestNativeSettings::Page &page)
+{
+	if(!gSettingsFromFrontend || !gVrMenuVisible) return false;
+	NormalizeMenuSelection();
+	gNativeSettingsPage = &page;
+	DrawSharedSettingsPage();
+	gNativeSettingsPage = nil;
+	return true;
+}
+
+const unsigned char *
+VrDebugPixels(int *width, int *height)
+{
+	// Frontend settings use the native game surface, never an OpenXR quad.
+	if(FrontEndMenuManager.m_bMenuActive || FrontEndMenuManager.m_bGameNotLoaded) {
+		*width = *height = 0;
+		return nil;
+	}
+	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
+	const bool minimalProfiler = gProfilerDisplayMode == 2;
+	const bool profilerVisible = QuestProfilerIsEnabled() || minimalProfiler;
+	const bool anchorCalibration =
+		androidgame::VrCutsceneCameraAnchorCalibrationActive();
+	const bool anchorNotice = !gVrMenuVisible && !anchorCalibration &&
+		gCutsceneAnchorNotice[0] != '\0' &&
+		MonotonicMilliseconds() < gCutsceneAnchorNoticeUntilMs;
+	if(anchorCalibration || anchorNotice){
+		*width = VR_MENU_WIDTH;
+		*height = VR_MENU_HEIGHT;
+		if(anchorCalibration)
+			DrawCutsceneCameraAnchorCalibrationPage();
+		else
+			DrawCutsceneCameraAnchorNotice();
+		return gVrMenuPixels;
+	}
+	*width = gVrMenuVisible ? VR_MENU_WIDTH : VR_DEBUG_WIDTH;
+	*height = gVrMenuVisible ? VR_MENU_HEIGHT :
+		(minimalProfiler ? VR_MINIMAL_HEIGHT :
+		 profilerVisible ? VR_DEBUG_HEIGHT : VR_FPS_HEIGHT);
+	if(!gDebugVisible && !gVrMenuVisible && !profilerVisible)
+		return nil;
+
+	if(gVrMenuVisible){
+		DrawSharedSettingsPage();
 		return gVrMenuPixels;
 	}
 
