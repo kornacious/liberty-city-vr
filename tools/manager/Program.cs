@@ -24,6 +24,10 @@ internal static class Program
                 --run ACTION REQUEST.json   Run a configured action without the TUI.
                 --assemble RE3 OUTPUT       Assemble patched sources locally without building or accessing a device.
                 --prepare-windows-data GTA OUTPUT  Prepare an isolated local PCVR data copy; never overwrites a directory.
+                --benchmark-compare LEFT.run.csv RIGHT.run.csv  Compare local matched captures; JSON, exit 2 on mismatch.
+                --benchmark-collect OUTPUT  Copy recent Quest profiles/routes/captures into a new local folder.
+                --benchmark-inventory OUTPUT  Compare local Quest/PCVR asset hashes into a new diagnostic folder.
+                --benchmark-align-quest OUTPUT  Prepare a new isolated PCVR benchmark copy matching local Quest assets.
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
                          InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods,
                          LaunchPcvr, DiagnosePcvr.
@@ -49,6 +53,43 @@ internal static class Program
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancellation.Cancel(); };
         try
         {
+            if(args.Length is 2 or 3 && args[0] is "--benchmark-inventory" or "--benchmark-align-quest")
+            {
+                var benchmarkMode=args[0];var benchmarkDestination=args[1];
+                var assetSettings=args.Length==3 ? (JsonSerializer.Deserialize<RunRequest>(File.ReadAllText(args[2]))??throw new InvalidDataException("Invalid benchmark settings request.")).Settings : new SettingsStore().Load();
+                assetSettings.Validate();using var assetLog=new PrivateLog();assetLog.Line+=Console.WriteLine;
+                var assetRunner=new CommandRunner(assetLog);
+                var assetAdb=new Toolchain(assetSettings,assetRunner,assetLog).FindAdb() ?? throw new IOException("Configure ADB for local benchmark preparation.");
+                var assetDevice=await QuestDevice.Connect(assetRunner,assetLog,assetAdb,null,cancellation.Token) ?? throw new IOException("Connect the personal Quest 3 device.");
+                var reference=await BenchmarkAssets.Inventory(assetDevice,cancellation.Token);
+                var assetPaths=PcvrPaths.From(assetSettings);assetPaths.Validate(assetSettings);
+                if(benchmarkMode=="--benchmark-inventory") {
+                    var destination=Path.GetFullPath(benchmarkDestination);Paths.NoLinks(destination);
+                    if(Directory.Exists(destination) || File.Exists(destination))throw new IOException("Choose a new inventory output directory.");
+                    var differences=BenchmarkAssets.Compare(reference,BenchmarkAssets.LocalInventory(assetPaths.Data));Directory.CreateDirectory(destination);
+                    File.WriteAllText(Paths.Child(destination,"quest-inventory.json"),JsonSerializer.Serialize(reference,new JsonSerializerOptions{WriteIndented=true}));
+                    File.WriteAllText(Paths.Child(destination,"differences.json"),JsonSerializer.Serialize(differences,new JsonSerializerOptions{WriteIndented=true}));
+                    assetLog.Write($"Compared local asset inventories: {differences.Length} differences. No game assets or saves transferred.");
+                } else {
+                    var setup=await BenchmarkAssets.Prepare(assetSettings,benchmarkDestination,reference,(asset,path,token)=>BenchmarkAssets.CopyFromDevice(assetDevice,asset,path,token),cancellation.Token);
+                    assetLog.Write($"Prepared isolated benchmark data: {setup.LocalCopies} local copies, {setup.DeviceCopies} verified headset copies. Existing data and saves preserved.");
+                }
+                return 0;
+            }
+            if(args is ["--benchmark-collect",var benchmarkOutput])
+            {
+                var benchmarkSettings=new SettingsStore().Load();using var log=new PrivateLog();log.Line+=Console.WriteLine;
+                var runner=new CommandRunner(log);
+                var adb=new Toolchain(benchmarkSettings,runner,log).FindAdb() ?? throw new IOException("Configure ADB to collect local Quest diagnostics.");
+                var device=await QuestDevice.Connect(runner,log,adb,null,cancellation.Token) ?? throw new IOException("Connect the personal Quest 3 device.");
+                await BenchmarkTransfer.Collect(device,benchmarkOutput,log,cancellation.Token);return 0;
+            }
+            if(args is ["--benchmark-compare",var leftRun,var rightRun])
+            {
+                var comparison=BenchmarkReports.Compare(leftRun,rightRun);
+                Console.WriteLine(JsonSerializer.Serialize(comparison,new JsonSerializerOptions { WriteIndented=true }));
+                return comparison.WorkloadMatched?0:2;
+            }
             if (args is ["--prepare-windows-data", var retailSource, var dataOutput])
             {
                 Workflows.PrepareWindowsData(ManagerSettings.FindRepository(), Path.GetFullPath(retailSource),

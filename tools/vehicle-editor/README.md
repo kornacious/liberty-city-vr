@@ -38,11 +38,46 @@ Launch `liberty-vehicle-editor`, choose the **GTA III folder**, and click
 liberty-vehicle-editor --game "/path/to/GTA III" --workspace "/path/to/placements"
 ```
 
+For a prepared PCVR installation, add `--target pcvr --pcvr-data DIRECTORY
+--pcvr-user DIRECTORY` to select its transfer endpoint at launch.
+
 The workspace defaults to `workspace` beside the executable. Keep it local and
 outside version control. Local imports, device baselines and backups can contain
 personal settings. Never put original game files in this workspace or a release.
 
 ## Editing workflow
+
+### Quest and PCVR targets
+
+The **Quest / PCVR placement transfer** panel selects the transfer target separately
+from the model source. For PCVR, blank data/user fields use the manager's configured
+isolated directories; explicit fields select another prepared local installation.
+Quest uses the manager's configured ADB unless overridden. PCVR transfer needs no
+ADB or headset. Choose the corresponding prepared game-data folder for geometry.
+
+The editor labels the converted `modelsets/modern` collection **Original Xbox**.
+Existing Modern/Xbox selections and `xbox:` calibration IDs remain compatible.
+Use the manager's **Original Xbox assets** action to prepare the verified local ISO
+or reuse a verified prepared collection, and select Quest or Windows PCVR there.
+
+Templates in `vehicle_placements.template.ini` are shared across targets. Quest
+personal overrides keep their existing workspace-root path; PCVR personal overrides
+live under `targets/pcvr`. Bundled/legacy imports and review state also remain
+target-specific. Import updates that target's merge baseline; an existing shared
+template is preserved unless **Replace shared template during import** is checked.
+Separate baselines prevent a PCVR deployment from using a Quest import accidentally.
+
+On the Personal layer, **Copy selected personal fields from other target** copies
+selected vehicles into the current target's local overrides. It preserves unrelated
+fields; it does not deploy immediately. Save, preview the changes, then install.
+Author common defaults on the Template layer and deploy that shared template to each
+target after importing each target's baseline. Personal overrides retain priority.
+
+PCVR installation uses verified same-directory staging, backups and replacement.
+Both targets support live reload acknowledgement; restoring a backup requires the
+game to be closed. PCVR commands accept `--target pcvr --pcvr-data DIRECTORY
+--pcvr-user DIRECTORY`; omit directory flags to use manager settings. All workspaces,
+import baselines and backups stay local and outside version control.
 
 1. Open or create a workspace. Import placement packs or a legacy INI from the
    local-file section, or import the current headset settings from the device panel.
@@ -112,9 +147,9 @@ Reset removes only those personal speedometer fields and reveals inherited
 template/bundled values. Both styles render in immersive car driving; editor
 placement in a boat does not enable an in-game boat speedometer.
 
-Modern reads the Xbox HD assets prepared under `modelsets/modern` in the selected
+Original Xbox reads the converted assets prepared under `modelsets/modern` in the selected
 game folder, with Classic fallback for missing files. Old Modern or Xbox editor
-selections reopen as Modern. Modern placement records retain the `xbox:` section
+selections reopen as Original Xbox. These placement records retain the `xbox:` section
 prefix for compatibility with the game's HD calibration identity; existing
 placement files are preserved. Shared tyre and rim textures also come from
 `models/MISC.TXD` in the selected base game folder.

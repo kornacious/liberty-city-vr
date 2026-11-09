@@ -15,7 +15,7 @@ namespace fs = std::filesystem;
 // those assets from modelsets/modern. Only these two choices are visible.
 inline constexpr int visibleModelSets[] = {0, 2};
 inline int canonicalModelSet(int value) { return value == 1 || value == 2 ? 2 : 0; }
-inline const char *modelSetName(int value) { return value == 0 ? "Classic" : "Modern"; }
+inline const char *modelSetName(int value) { return value == 0 ? "Classic" : "Original Xbox"; }
 
 inline std::string lower(std::string s) {
     for (char &c : s)

@@ -4291,6 +4291,12 @@ deviceSystem(DeviceReq req, void *arg, int32 n)
 		vkGetPhysicalDeviceProperties(gvk.physicalDevice, &gvk.deviceProperties);
 		vkGetPhysicalDeviceMemoryProperties(gvk.physicalDevice, &gvk.memoryProperties);
 		vkGetPhysicalDeviceFeatures(gvk.physicalDevice, &gvk.deviceFeatures);
+		if(params->hasEnabledFeatures){
+			gvk.deviceFeatures = params->enabledFeatures;
+			if(params->maxSamplerAnisotropy >= 1)
+				gvk.deviceProperties.limits.maxSamplerAnisotropy =
+					std::min(gvk.deviceProperties.limits.maxSamplerAnisotropy, params->maxSamplerAnisotropy);
+		}
 		gvk.supportsBC = gvk.deviceFeatures.textureCompressionBC ? 1 : 0;
 		const VkSampleCountFlags framebufferSamples =
 			gvk.deviceProperties.limits.framebufferColorSampleCounts &

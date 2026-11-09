@@ -97,6 +97,8 @@ void VrDrawNativeSettings()
     // Non-editable explanatory text uses the original helper font.
     if(page.rows.empty()) for(size_t i=0;i<page.notes.size() && i<15;++i)
         NativeText(page.notes[i],40,64.0f+(float)i*18.0f,SMALLESTTEXT_X_SCALE,SMALLESTTEXT_Y_SCALE,CRGBA(235,170,50,255));
+    if(page.showStatusNotes && !page.rows.empty()) for(size_t i=0;i<page.notes.size() && i<3;++i)
+        NativeText(page.notes[i],40,280.0f+(float)i*18.0f,SMALLESTTEXT_X_SCALE,SMALLESTTEXT_Y_SCALE,CRGBA(235,170,50,255));
     if(!page.categories && page.rows.size()>QuestNativeSettings::Page::RowsPerPage) {
         char number[64];
         snprintf(number,sizeof(number),"%d / %d",page.Selected()+1,(int)page.rows.size());

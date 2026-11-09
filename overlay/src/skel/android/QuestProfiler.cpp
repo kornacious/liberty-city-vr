@@ -270,6 +270,24 @@ StartFrameCapture(void)
 	timespec realtime;
 	clock_gettime(CLOCK_REALTIME, &realtime);
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
+	details += std::string("execution_target,")+
+#ifdef LIBERTYVR_WINDOWS
+		"windows_pcvr\n";
+#else
+		"quest_android\n";
+#endif
+	MatchedProfile::captured["setting_MsaaSamples"]=rw::vulkan::getSceneSampleCount();
+	const bool profileSaved=xrvk::writeQuestProfile((std::string(stem)+".quest-profile").c_str());
+	details += "quest_workload_identity," + (profileSaved ? MatchedProfile::Identity(MatchedProfile::captured) : "unavailable") + "\n";
+	details += "compatibility_profile," + std::to_string(MatchedProfile::active?1:0) + "\n";
+	details += "compatibility_dirty_at_start," + std::to_string(MatchedProfile::dirty?1:0) + "\n";
+	details += "timing_scope,actual_execution_hardware_not_emulated_Quest\n";
+	xrvk::GraphicsContext matchedGraphics{};
+	if(xrvk::getContext(&matchedGraphics)) {
+		details += "enabled_bc,"+std::to_string(matchedGraphics.enabledFeatures.textureCompressionBC)+"\n";
+		details += "enabled_astc,"+std::to_string(matchedGraphics.enabledFeatures.textureCompressionASTC_LDR)+"\n";
+		details += "enabled_etc2,"+std::to_string(matchedGraphics.enabledFeatures.textureCompressionETC2)+"\n";
+	}
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "postfx_native_sampling_policy,filtered_or_integer_stencil_toggle_v2\n";

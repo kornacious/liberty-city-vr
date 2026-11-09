@@ -11,6 +11,7 @@
 
 #ifdef __ANDROID__
 #include <android_native_app_glue.h>
+#include <sys/system_properties.h>
 #endif
 #include <vulkan/vulkan.h>
 #include <openxr/openxr.h>
@@ -250,6 +251,8 @@ struct State
 	FrameRenderer frameRenderer = nullptr;
 	bool headPoseTrackedForFrame = false;
 	bool replayForwardViewActive = false;
+	VkPhysicalDeviceFeatures enabledFeatures{};
+	float maxSamplerAnisotropy = 1;
 	bool theaterMode = true;
 	bool theaterAnchorValid = false;
 	XrSpace theaterSpace = XR_NULL_HANDLE;
@@ -720,6 +723,26 @@ createVulkan(void)
 	g.fragmentStoresAndAtomicsEnabled =
 		deviceFeatures.fragmentStoresAndAtomics != VK_FALSE;
 	deviceFeatures = XrVulkanPolicy::optionalFeatures(availableFeatures);
+	g.maxSamplerAnisotropy = physicalProperties.limits.maxSamplerAnisotropy;
+	if(MatchedProfile::active){
+		auto flag=[&](const char *key,VkBool32 available){ return MatchedProfile::requested.at(key)!=0 && available ? VK_TRUE : VK_FALSE; };
+		deviceFeatures.samplerAnisotropy=flag("anisotropy",availableFeatures.samplerAnisotropy);
+		deviceFeatures.fragmentStoresAndAtomics=flag("atomics",availableFeatures.fragmentStoresAndAtomics);
+		deviceFeatures.textureCompressionBC=flag("bc",availableFeatures.textureCompressionBC);
+		deviceFeatures.textureCompressionASTC_LDR=flag("astc",availableFeatures.textureCompressionASTC_LDR);
+		deviceFeatures.textureCompressionETC2=flag("etc2",availableFeatures.textureCompressionETC2);
+		if(deviceFeatures.samplerAnisotropy!=MatchedProfile::requested.at("anisotropy") ||
+		   deviceFeatures.fragmentStoresAndAtomics!=MatchedProfile::requested.at("atomics")){
+			LOGE("Quest profile requires unavailable Vulkan features"); return false;
+		}
+		g.maxSamplerAnisotropy=std::min(g.maxSamplerAnisotropy,float(MatchedProfile::requested.at("max_anisotropy")));
+		const unsigned samples=unsigned(MatchedProfile::requested.at("setting_MsaaSamples"));
+		if(!(physicalProperties.limits.framebufferColorSampleCounts & physicalProperties.limits.framebufferDepthSampleCounts & samples)){
+			LOGE("Quest profile MSAA unavailable"); return false;
+		}
+	}
+	g.enabledFeatures=deviceFeatures;
+	g.fragmentStoresAndAtomicsEnabled=deviceFeatures.fragmentStoresAndAtomics!=VK_FALSE;
 
 	VkDeviceCreateInfo deviceInfo = { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 	deviceInfo.pNext = &multiviewFeatures;
@@ -1280,6 +1303,11 @@ createSwapchain(void)
 			(uint32_t)(recommendedWidth*uniformScale+0.5);
 		uint32_t candidateHeight =
 			(uint32_t)(recommendedHeight*uniformScale+0.5);
+		if(MatchedProfile::active){
+			candidateWidth=uint32_t(MatchedProfile::requested.at("width"));
+			candidateHeight=uint32_t(MatchedProfile::requested.at("height"));
+			if(candidateWidth>maxWidth || candidateHeight>maxHeight){ LOGE("Quest profile exceeds runtime image limits"); return false; }
+		}
 		// Rounding should already respect the common maximum scale. Keep the
 		// final values defensive without deriving a second per-axis scale.
 		if(candidateWidth > maxWidth)
@@ -1310,7 +1338,7 @@ createSwapchain(void)
 			g.renderHeight = candidateHeight;
 			selectedScalePercent = candidateScalePercent;
 			selectedEffectiveScalePercent =
-				candidateEffectiveScalePercent;
+				MatchedProfile::active ? MatchedProfile::requested.at("scale") : candidateEffectiveScalePercent;
 			break;
 		}
 		LOGW("xrCreateSwapchain %ux%u (request %d%%, candidate %d%%, "
@@ -1318,6 +1346,7 @@ createSwapchain(void)
 			candidateWidth, candidateHeight, renderScalePercent,
 			candidateScalePercent, candidateEffectiveScalePercent,
 			(int)createResult);
+		if(MatchedProfile::active) return false; // Exact profile extents never silently fall back.
 	}
 	if(g.swapchain == XR_NULL_HANDLE){
 		LOGE("xrCreateSwapchain failed for requested %d%% and all lower presets",
@@ -1326,6 +1355,7 @@ createSwapchain(void)
 	}
 	g.renderScaleSelectedPresetPercent = selectedScalePercent;
 	g.renderScaleEffectivePercent = (float)selectedEffectiveScalePercent;
+	if(MatchedProfile::active) g.renderScaleEffectivePercent=float(MatchedProfile::requested.at("scale"));
 	if(selectedScalePercent < renderScalePercent)
 		g.renderScaleFallbackReason =
 			RENDER_SCALE_FALLBACK_SWAPCHAIN_ALLOCATION;
@@ -1829,15 +1859,20 @@ drawScene(VkCommandBuffer commandBuffer)
 bool
 renderLayer(const XrView trackedViews[2])
 {
+	static ReplayBenchmark::ForwardView<XrView> snapshotView;
+	XrView canonical[2]; const float origin[3]={0,0,0};
+	if(snapshotView.Apply(trackedViews,canonical,1,origin,0)) MatchedProfile::StoreEyes(canonical);
 	const XrView *views = trackedViews;
 #ifndef MIAMIVR_BRINGUP
 	static ReplayBenchmark::ForwardView<XrView> benchmarkView;
 	XrView benchmarkViews[2];
 	float neutral[3], neutralYaw = 0;
 	const auto run = androidgame::SimulationReplayForwardViewRun();
+	XrView workloadViews[2]={trackedViews[0],trackedViews[1]};
+	if(run) MatchedProfile::ApplyEyes(workloadViews);
 	g.replayForwardViewActive = !g.theaterMode && run &&
 		androidgame::SimulationReplayForwardViewNeutralPose(neutral, &neutralYaw) &&
-		benchmarkView.Apply(trackedViews, benchmarkViews, run, neutral, neutralYaw);
+		benchmarkView.Apply(workloadViews, benchmarkViews, run, neutral, neutralYaw);
 	if(g.replayForwardViewActive) views = benchmarkViews;
 	else benchmarkView.Reset();
 #endif
@@ -1943,7 +1978,8 @@ renderLayer(const XrView trackedViews[2])
 		                im2dDistance, headPos, headYaw, headQuat, eyeFovDeg,
 		                eyePos, eyeQuat);
 #ifdef LIBERTYVR_WINDOWS
-        Desktop::Present(image.image,image.view,g.renderWidth,g.renderHeight,g.theaterMode ? androidgame::VrTheaterAspectRatio() : 0.f);
+        if(!MatchedProfile::benchmark)
+            Desktop::Present(image.image,image.view,g.renderWidth,g.renderHeight,g.theaterMode ? androidgame::VrTheaterAspectRatio() : 0.f);
 #endif
 
 		XrSwapchainImageReleaseInfo releaseInfo = { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
@@ -2372,6 +2408,8 @@ getContext(GraphicsContext *out)
 	out->physicalDevice = g.physicalDevice;
 	out->device = g.device;
 	out->fragmentStoresAndAtomicsEnabled = g.fragmentStoresAndAtomicsEnabled;
+	out->enabledFeatures = g.enabledFeatures;
+	out->maxSamplerAnisotropy = g.maxSamplerAnisotropy;
 	out->queue = g.queue;
 	out->queueFamilyIndex = g.queueFamily;
 	out->width = g.renderWidth;
@@ -2380,6 +2418,39 @@ getContext(GraphicsContext *out)
 	out->viewCount = 2;
 	out->colourFormat = g.attachmentFormat;
 	return true;
+}
+
+bool writeQuestProfile(const char *path)
+{
+	auto &v=MatchedProfile::captured;
+	v["schema"]=1;
+#ifdef __ANDROID__
+	char model[PROP_VALUE_MAX]{}; __system_property_get("ro.product.model",model);
+	v["quest3"]=strcmp(model,"Quest 3")==0 ? 1 : 0;
+#else
+	v["quest3"]=MatchedProfile::active ? 1 : 0;
+#endif
+	v["width"]=g.renderWidth; v["height"]=g.renderHeight;
+	v["scale"]=g.renderScaleEffectivePercent;
+	float measuredRefresh=0;
+	v["hz"]=(g.hasRefreshRateExt && g.getRefreshRate &&
+		XR_SUCCEEDED(g.getRefreshRate(g.session,&measuredRefresh)) &&
+		std::isfinite(measuredRefresh) && measuredRefresh>0) ? measuredRefresh : 0;
+	v["anisotropy"]=g.enabledFeatures.samplerAnisotropy;
+	v["atomics"]=g.enabledFeatures.fragmentStoresAndAtomics;
+	v["bc"]=g.enabledFeatures.textureCompressionBC;
+	v["astc"]=g.enabledFeatures.textureCompressionASTC_LDR;
+	v["etc2"]=g.enabledFeatures.textureCompressionETC2;
+	v["max_anisotropy"]=g.maxSamplerAnisotropy;
+	if(MatchedProfile::active) {
+		// Unsupported mobile compression uses the existing decoded fallback;
+		// the effective feature difference is separately reported, never hidden.
+		v["astc"]=MatchedProfile::requested.at("astc");
+		v["etc2"]=MatchedProfile::requested.at("etc2");
+		for(const auto &entry:MatchedProfile::requested)
+			if(entry.first.rfind("eye",0)==0) v[entry.first]=entry.second;
+	}
+	return MatchedProfile::Save(path);
 }
 
 bool
@@ -2954,8 +3025,14 @@ renderFrame(void)
 
 	XrFrameWaitInfo waitInfo = { XR_TYPE_FRAME_WAIT_INFO };
 	XrFrameState frameState = { XR_TYPE_FRAME_STATE };
+#ifdef LIBERTYVR_WINDOWS
+	const int64_t pacingStart = monotonicTimeNs();
+#endif
 	if(XR_FAILED(xrWaitFrame(g.session, &waitInfo, &frameState)))
 		return;
+#ifdef LIBERTYVR_WINDOWS
+	const int64_t pacingWaitEnd = monotonicTimeNs();
+#endif
 	g.predictedDisplayTime = frameState.predictedDisplayTime;
 	g.lastPredictedDisplayTimeNs = (long long)frameState.predictedDisplayTime;
 	if(g.cpuBoostActive){
@@ -2996,6 +3073,9 @@ renderFrame(void)
 	XrFrameBeginInfo beginInfo = { XR_TYPE_FRAME_BEGIN_INFO };
 	if(XR_FAILED(xrBeginFrame(g.session, &beginInfo)))
 		return;
+#ifdef LIBERTYVR_WINDOWS
+	const int64_t pacingBeginEnd = monotonicTimeNs();
+#endif
 
 	// Sampled once per frame, after the wait, so the state the game reads is
 	// the freshest available for this display time.
@@ -3206,7 +3286,28 @@ renderFrame(void)
 	endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 	endInfo.layerCount = layerCount;
 	endInfo.layers = layers;
+#ifdef LIBERTYVR_WINDOWS
+	const int64_t pacingEndStart = monotonicTimeNs();
+#endif
 	const XrResult ended = xrEndFrame(g.session, &endInfo);
+#ifdef LIBERTYVR_WINDOWS
+	// Keep runtime scheduling separate from local game/GPU work and display Hz.
+	// Bounded aggregate logging avoids per-frame console I/O in measurements.
+	const int64_t pacingEnd = monotonicTimeNs();
+	static unsigned pacingFrames = 0;
+	static double waitNs = 0, beginNs = 0, workNs = 0, endNs = 0, periodNs = 0;
+	waitNs += double(pacingWaitEnd-pacingStart);
+	beginNs += double(pacingBeginEnd-pacingWaitEnd);
+	workNs += double(pacingEndStart-pacingBeginEnd);
+	endNs += double(pacingEnd-pacingEndStart);
+	periodNs += double(frameState.predictedDisplayPeriod);
+	if(++pacingFrames == 600){
+		LOGI("PCVR pacing: wait=%.3f begin=%.3f work=%.3f end=%.3f ms; predicted period=%.3f ms; display=%.1f Hz",
+			waitNs/600e6, beginNs/600e6, workNs/600e6, endNs/600e6,
+			periodNs/600e6, g.currentRefreshRateHz);
+		pacingFrames=0; waitNs=beginNs=workNs=endNs=periodNs=0;
+	}
+#endif
 #ifndef MIAMIVR_BRINGUP
 	androidgame::SimulationReplayEndCaptureFrame(XR_SUCCEEDED(ended) && layerCount>0);
 #endif

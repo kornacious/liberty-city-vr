@@ -56,7 +56,7 @@ set(DESKTOP_IMGUI "${LIBRW_DIR}/skeleton/imgui")
 add_library(libertyvr-desktop STATIC DesktopWindow.cpp DesktopGpu.cpp
     "${DESKTOP_IMGUI}/imgui.cpp" "${DESKTOP_IMGUI}/imgui_draw.cpp" "${DESKTOP_IMGUI}/imgui_demo.cpp")
 add_dependencies(libertyvr-desktop desktop_shaders)
-target_include_directories(libertyvr-desktop PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" PRIVATE "${DESKTOP_IMGUI}" "${SPIRV_OUT_DIR}")
+target_include_directories(libertyvr-desktop PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${LIBERTYVR_OVERLAY_DIR}/src/xr" PRIVATE "${DESKTOP_IMGUI}" "${SPIRV_OUT_DIR}")
 target_compile_definitions(libertyvr-desktop PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX)
 target_link_libraries(libertyvr-desktop PUBLIC Vulkan::Vulkan user32 gdi32)
 if(LIBERTYVR_RE3_ROOT)

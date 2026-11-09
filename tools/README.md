@@ -8,6 +8,9 @@ Windows uses MSVC, Ninja, CMake and Vulkan tools, with versioned local installat
 isolated game data/saves, launch and OpenXR diagnostics. Direct [Windows CMake
 builds](../overlay/windows/README.md) and CLI source/data preparation remain available.
 Public desktop binary packaging remains in [the platform roadmap](../PLATFORMS.md).
+Windows launch can select a captured Quest workload profile. Local diagnostic
+collection and matched replay comparison commands are described in
+[BENCHMARKS](../BENCHMARKS.md); desktop timings remain PC measurements.
 See [BUILDING](../BUILDING.md), [RELEASING](../RELEASING.md) and the
 [third-party inventory](../NOTICE.md).
 

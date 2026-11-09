@@ -1,18 +1,22 @@
 #pragma once
 #include "VehicleCaptureCore.h"
 #include <algorithm>
+#include <array>
 
 // A simulation tape contains controls and a reference route, never game assets.
 // It intentionally does not claim to restore the ambient world or RNG state.
 namespace SimulationReplayCore {
 constexpr unsigned MaxSamples = VehicleCaptureCore::MaxSamples;
 constexpr uint64_t MaxTimeUs = VehicleCaptureCore::MaxTimeUs;
+constexpr size_t HandlingCount=46;
 struct Initial {
     VehicleCaptureCore::Initial vehicle;
     int assets[5] = {};
     int gear = 0;
     float gearTime = 0;
     int recordingGhost = -1; // Unknown for legacy V1 tapes.
+    bool portableHandling=false;
+    std::array<double,HandlingCount> handling{};
 };
 struct Sample {
     VehicleCaptureCore::Input input;
@@ -43,14 +47,39 @@ inline bool Valid(const Initial &s) {
     if(!VehicleCaptureCore::Valid(s.vehicle) || s.gear < 0 || s.gear > 5 || !std::isfinite(s.gearTime) || std::fabs(s.gearTime)>100000) return false;
     if(s.recordingGhost < -1 || s.recordingGhost > 1) return false;
     for(int a:s.assets) if(a<0 || a>2) return false;
+    if(s.portableHandling) for(size_t i=0;i<HandlingCount;++i){
+        const double v=s.handling[i];
+        if(!std::isfinite(v) || std::fabs(v)>1e12) return false;
+        if(i>=19 && i<=24 && (v<0 || v>4294967295.0 || std::floor(v)!=v)) return false;
+    }
+    return true;
+}
+inline bool HandlingMatches(const Initial &reference,const Initial &actual,size_t *difference=nullptr) {
+    if(!reference.portableHandling) return reference.vehicle.signature==actual.vehicle.signature;
+    if(!actual.portableHandling) return false;
+    for(size_t i=0;i<HandlingCount;++i) {
+        const double a=reference.handling[i],b=actual.handling[i];
+        const bool flags=i>=19 && i<=24;
+        const double tolerance=flags?0.:1e-6+1e-5*std::max(std::fabs(a),std::fabs(b));
+        if(!std::isfinite(a) || !std::isfinite(b) || std::fabs(a-b)>tolerance) {
+            if(difference) *difference=i;
+            return false;
+        }
+    }
     return true;
 }
 inline bool Header(FILE *f,const Initial &s) {
     if(!Valid(s)) return false;
-    std::fprintf(f,"LCVR_SIM_V2,%d,%u",s.vehicle.model,s.vehicle.signature);
+    std::fprintf(f,s.portableHandling?"LCVR_SIM_V3,%d,%u":"LCVR_SIM_V2,%d,%u",s.vehicle.model,s.vehicle.signature);
     for(float v:s.vehicle.pose) std::fprintf(f,",%.9g",double(v));
     for(int a:s.assets) std::fprintf(f,",%d",a);
-    return std::fprintf(f,",%d,%.9g,%d\n",s.gear,double(s.gearTime),s.recordingGhost)>0 && !std::ferror(f);
+    if(std::fprintf(f,",%d,%.9g,%d\n",s.gear,double(s.gearTime),s.recordingGhost)<=0) return false;
+    if(s.portableHandling){
+        std::fputs("HANDLING_V1",f);
+        for(double v:s.handling) std::fprintf(f,",%.17g",v);
+        std::fputc('\n',f);
+    }
+    return !std::ferror(f);
 }
 inline bool Write(FILE *f,const Sample &s) {
     if(!Valid(s)) return false;
@@ -69,18 +98,26 @@ public:
     size_t cursor=0;
     bool read=false;
     bool Load(FILE *f) {
-        samples.clear(); endUs=0; cursor=0; lastReadUs=0; read=false;
-        char line[1024],tail; int used=0;
+        samples.clear(); endUs=0; cursor=0; lastReadUs=0; read=false;initial={};
+        char line[4096],tail; int used=0;
         if(!f || !std::fgets(line,sizeof(line),f)) return false;
         const bool v2=std::strncmp(line,"LCVR_SIM_V2,",12)==0;
-        if(std::sscanf(line,v2?"LCVR_SIM_V2,%d,%u%n":"LCVR_SIM_V1,%d,%u%n",&initial.vehicle.model,&initial.vehicle.signature,&used)!=2) return false;
+        const bool v3=std::strncmp(line,"LCVR_SIM_V3,",12)==0;
+        if(std::sscanf(line,v3?"LCVR_SIM_V3,%d,%u%n":v2?"LCVR_SIM_V2,%d,%u%n":"LCVR_SIM_V1,%d,%u%n",&initial.vehicle.model,&initial.vehicle.signature,&used)!=2) return false;
         const char *p=line+used;
         for(float &v:initial.vehicle.pose) { if(std::sscanf(p,",%f%n",&v,&used)!=1) return false; p+=used; }
         for(int &a:initial.assets) { if(std::sscanf(p,",%d%n",&a,&used)!=1) return false; p+=used; }
         initial.recordingGhost=-1;
-        if(v2){
+        if(v2 || v3){
             if(std::sscanf(p,",%d,%f,%d %c",&initial.gear,&initial.gearTime,&initial.recordingGhost,&tail)!=3) return false;
         }else if(std::sscanf(p,",%d,%f %c",&initial.gear,&initial.gearTime,&tail)!=2) return false;
+        initial.portableHandling=v3;
+        if(v3){
+            if(!std::fgets(line,sizeof(line),f) || std::strncmp(line,"HANDLING_V1,",12)!=0) return false;
+            p=line+11;
+            for(double &v:initial.handling){if(std::sscanf(p,",%lf%n",&v,&used)!=1)return false;p+=used;}
+            if(std::sscanf(p," %c",&tail)==1)return false;
+        }
         if(!Valid(initial)) return false;
         while(std::fgets(line,sizeof(line),f)) {
             unsigned long long us=0;

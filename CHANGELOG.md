@@ -5,6 +5,80 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Added Quest/Windows target selection for Original Xbox asset installation and
+  reuse of fully verified prepared collections. PCVR uses checksummed local
+  staging, rollback and retained backups; Quest backups are retained too. Staging
+  and backups remain outside the active asset fingerprint roots.
+- Fixed Windows asset-source preferences to use the active game-data INI rather
+  than the executable directory, matching the VR menu and isolating installations.
+  Windows data preparation/builds now copy the same bundled vehicle defaults as Quest.
+- Extended the vehicle editor with PCVR import, preview, atomic installation,
+  restore and live reload acknowledgements. Templates are shared; personal/legacy
+  layers, review state and import baselines are separate by target. Added explicit
+  selected-field copying between target overrides and optional shared-template
+  replacement during import, retaining merge/conflict protection.
+- Renamed the editor's Modern asset label to Original Xbox while preserving its
+  calibration IDs and old preferences. Existing wheel, dashboard, HUD, radio/music
+  and speedometer controls work with both target workflows. Added target/path CLI
+  overrides, configured ADB fallback, a canonical embedded bridge source and
+  synthetic local-transfer checks.
+- Benchmark inventory/alignment commands can use an optional local request's
+  settings, allowing separate Xbox benchmark directories without changing global paths.
+- Validated Original Xbox visuals/audio and three matched replays on each target,
+  with zero dropped capture rows and ~120 FPS PCVR delivery. Verified live PCVR
+  vehicle-template acknowledgement with a zero-field-change deployment and backup.
+- Added bounded Windows OpenXR pacing diagnostics separating wait, begin, local
+  frame work, end/submission, predicted period and actual display refresh. Physical
+  matched runs passed on both targets; PCVR's observed 90 FPS with reported 120 Hz
+  was traced to a headset-side SideQuest optimizer profile limiting Virtual
+  Desktop to 90 FPS. The user corrected that profile and completed three matched
+  gameplay runs at 120 FPS. HEVC and H.264 were not the cause.
+  The data-free renderer also reports rendered frame/submission timing so runtime
+  pacing can be isolated from re3, assets, gameplay and desktop preview costs.
+- Added local asset inventory and Quest-aligned benchmark preparation commands.
+  SHA256-verified copies use a new isolated data/save directory, exclude PC-only
+  benchmark assets and preserve originals. The Android read-only provider exposes
+  only the scoped game-asset roots to authorized local root/shell callers.
+- Replaced the performance recorder's contended producer mutex with a bounded
+  single-producer/single-consumer queue. Samples are dropped only when full;
+  ordered multi-wrap delivery and shutdown draining have regression coverage.
+- Added captured Quest 3 rendering workload profiles: allowlisted in-memory settings,
+  exact output extent/effective MSAA, stereo benchmark geometry, anisotropy and
+  optional Vulkan feature restrictions. Manager launch and CLI select the profile
+  independently of game target; blank restores native PCVR on restart. Saved
+  graphics preferences are preserved. Desktop timings are explicitly PC measurements.
+- Added matched route playback with fixed noon/sunny conditions, environment
+  restoration, source/asset/tape identities and desktop mirror suppression during
+  measurement. Canonical completed duration avoids frame-step-dependent report drift.
+- Added local benchmark diagnostic collection and comparison commands. Comparisons
+  reject mismatched/incomplete/dirty captures and report CPU/frame-interval
+  percentiles plus deduplicated delayed GPU source samples, without predicting
+  Quest performance from desktop timings. Ambient simulation remains nondeterministic.
+- Routed Quest benchmark collection through the existing read-only Android
+  diagnostics provider, extended its allowlist for numeric profile exports, and
+  made missing/inaccessible captures an explicit error. Scoped-storage devices
+  no longer silently produce an empty collection.
+- Made replay status/help text visible on native settings pages and logged distinct
+  vehicle-model, handling and asset-selection rejection reasons for failed starts.
+- Added portable V3 replay handling metadata after the physical test exposed
+  different Android/Windows handling hashes. Numeric compatibility checks bound
+  rounding differences and require exact flags; legacy exact-matching setups can
+  create upgraded copies while preserving original tapes. Matched playback now
+  defaults on, with an explicit live-world option.
+- Initialized the Windows profiler output directory before engine startup, fixing
+  replay aborts when auto profile could not start. Physical PCVR playback and
+  closed frame/session/profile/draw capture output were confirmed afterward.
+- Separated runtime display-rate reporting from application/reprojection pacing,
+  checked profile snapshots against recorded fingerprints, tolerated sub-millihertz rate rounding,
+  and attributed recorder-row loss separately from rendering-state changes.
+- Scoped source identities to native/shader/build/platform inputs and the pinned
+  re3 base, normalizing line endings and excluding documentation so host checkout
+  conventions and documentation edits do not invalidate equivalent code builds.
+- Fixed adopted Vulkan device capabilities to reflect enabled features instead of
+  all physically advertised features. Fixed desktop input adapter header ordering
+  and updated the replay test fixture for the current native menu interfaces.
+- Documented profile export, local route transfer, repeated measurements and limits
+  in `BENCHMARKS.md`; added parser, settings-preservation and report regression checks.
 - Added a Windows desktop eye preview with an ImGui controls panel and F1–F12
   shortcuts: eye selection, square/cropped framing, windowed/borderless/fullscreen
   modes, mouse capture, input toggles, statistics and reset. Pictures downscale

@@ -10,6 +10,12 @@ public final class TestPerfCaptureFiles {
         check(PerfCaptureFiles.validName(valid));
         check(PerfCaptureFiles.validName(valid.replace("frames", "session")));
         check(PerfCaptureFiles.validName(valid.replace("frames", "draws")));
+        String profile = "20261027T001530Z-123456789.quest-profile";
+        check(PerfCaptureFiles.validName(profile));
+        check(!PerfCaptureFiles.validName(profile, true));
+        check(PerfCaptureFiles.resolve(external, profile).getName().equals(profile));
+        check(!PerfCaptureFiles.validName("../"+profile));
+        check(!PerfCaptureFiles.validName(profile+".tmp"));
         check(!PerfCaptureFiles.validName(valid.replace("frames", "draws"), true));
         for (String invalid : new String[] {"../quest_perf.csv", "quest_perf.csv", "/data/private",
                 "20261027T001530Z-1.frames.csv/../../saves", "20261027T001530Z-1.frames.csv.tmp", "", "name.csv"}) {

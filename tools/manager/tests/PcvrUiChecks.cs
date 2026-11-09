@@ -42,7 +42,7 @@ internal static class PcvrUiChecks
                         Check(Prepare().Value==CheckState.UnChecked,"Cancel did not discard PCVR option edits.");
                         File.WriteAllText(Path.Combine(directory,"pcvr-build.txt"),app.ToString());
                         Button("Launch PCVR").InvokeCommand(Command.Accept);
-                        Check(All(ui.Window).OfType<TextField>().Count()==3,"Launch page lacks isolated PCVR directories.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==4,"Launch page lacks profile choice and isolated PCVR directories.");
                         Button("_Cancel").InvokeCommand(Command.Accept);
                         Check(ui.Window.MostFocused?.Text=="Launch PCVR","Launch Cancel did not return navigation focus.");
                         Button("PCVR diagnostics").InvokeCommand(Command.Accept);

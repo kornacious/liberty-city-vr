@@ -5,9 +5,15 @@ Two developer executables use the same librw Vulkan backend and shaders as Quest
 is an experimental playable GTA III port using the shared re3/VR integration.
 The [manager](../../tools/manager/README.md#windows-pcvr) now provides Windows target
 selection, build/checks, versioned local installation, launch and runtime diagnostics.
-Public binary packaging and the Quest compatibility profile remain in the [roadmap](../../PLATFORMS.md).
+Public binary packaging remains in the [roadmap](../../PLATFORMS.md). Captured
+Quest workload profiles and matched replay reporting are available below.
 
 ## Desktop preview and input
+
+Launch with `--quest-profile FILE` (or the manager's Quest profile field) to use
+a captured Quest rendering workload. The ImGui panel identifies the active profile;
+restart to switch back to native PCVR. See [matched benchmarks](../../BENCHMARKS.md)
+for export, exact workload constraints and measurement limits.
 
 The game opens a desktop eye preview alongside its console. It requires the active
 OpenXR headset/session. Select the left or right application eye; runtime dashboards

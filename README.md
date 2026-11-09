@@ -34,13 +34,21 @@ Windows PCVR variant** in one source repository:
 
 Windows/Linux manager support and the desktop vehicle editor are host tools;
 they do not constitute a PCVR game build. See [platform scope and roadmap](PLATFORMS.md)
-for the shared architecture, target boundaries and planned Quest compatibility profile.
+for the shared architecture and target boundaries, and [BENCHMARKS](BENCHMARKS.md)
+for the captured Quest workload profile.
 Developers can build the [Windows game and renderer diagnostic](overlay/windows/README.md).
 The game uses separate local data/save directories; the diagnostic requires no game data.
 In the manager, select **Windows PCVR** under **Build and install**, then use
 **Launch PCVR** or **PCVR diagnostics**. See the [PCVR manager workflow](tools/manager/README.md#windows-pcvr).
 The game also opens a [desktop eye preview](overlay/windows/README.md#desktop-preview-and-input)
 with ImGui/F1–F12 display controls and keyboard/mouse/PC gamepad input.
+Captured Quest workload profiles and local matched replay comparisons are available;
+see [benchmark setup and measurement limits](BENCHMARKS.md).
+Verified Original Xbox collections are supported on both targets, including matched
+Xbox replay comparisons. The [vehicle editor](tools/vehicle-editor/README.md#quest-and-pcvr-targets)
+authors wheels, vehicle HUD/dashboard panels, radio/music and speedometer placement
+using shared templates and separate Quest/PCVR personal overrides, with transfer
+previews, backups and live reload acknowledgement.
 
 Android positional sound effects use the full listener-relative 3D position
 for distance attenuation. Gain stays full inside the supplied minimum range,
@@ -276,9 +284,9 @@ directed and reviewed by the project maintainer. Planned work includes:
 - Refining tracked controls, vehicle interactions and cutscene comfort.
 - Improving Quest rendering performance and stability, including Vulkan resource
   handling and visual correctness.
-- Extracting shared platform services and bringing up Windows OpenXR/Vulkan
-  PCVR, followed by manager target selection and a Quest compatibility profile;
-  see [platform scope](PLATFORMS.md). These capabilities are not implemented yet.
+- Expanding runtime/controller coverage and performance validation of the
+  experimental Windows OpenXR/Vulkan game, manager integration and captured Quest
+  workload profile; see [platform scope](PLATFORMS.md).
 - Maintaining regression coverage, source assembly, build/update tooling and
   contributor documentation as features evolve.
 

@@ -78,6 +78,8 @@ struct GraphicsContext
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
 	bool fragmentStoresAndAtomicsEnabled;
+	VkPhysicalDeviceFeatures enabledFeatures;
+	float maxSamplerAnisotropy;
 	VkQueue queue;
 	unsigned int queueFamilyIndex;
 	unsigned int width;
@@ -89,6 +91,8 @@ struct GraphicsContext
 
 // Valid only after create() succeeded.
 bool getContext(GraphicsContext *out);
+// Numeric Quest workload snapshot; never includes device identifiers.
+bool writeQuestProfile(const char *path);
 
 // The menu value is only a request. OpenXR may clamp it to the runtime's
 // maximum image extent or reject the large swapchain and make startup select

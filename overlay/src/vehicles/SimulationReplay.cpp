@@ -2,6 +2,10 @@
 #include "SimulationReplay.h"
 #if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 #include "SimulationReplayCore.h"
+#include "BenchmarkIdentity.h"
+#include "SourceIdentity.h"
+#include "Clock.h"
+#include "Weather.h"
 #include "platform_android.h"
 #include "Automobile.h"
 #include "HandlingMgr.h"
@@ -49,6 +53,17 @@ bool ghost=true,autoProfile=true,runGhost=false,runAutoProfile=false,profileStar
 bool recordingGhost=true,startFailed=false;
 bool routeAssistance=true,runAssisted=false;
 bool forwardView=true,runForwardView=false;
+bool matchedWorkload=true,runMatched=false;
+std::string routeIdentity,assetIdentity;
+decltype(CClock::ms_nGameClockHours) oldHours=0,oldMinutes=0;
+decltype(CClock::ms_nGameClockSeconds) oldSeconds=0;
+decltype(CWeather::OldWeatherType) oldWeather=0,newWeather=0,forcedWeather=0;
+float weatherInterpolation=0;
+void FixedEnvironment(){
+    CClock::ms_nGameClockHours=12; CClock::ms_nGameClockMinutes=0; CClock::ms_nGameClockSeconds=0;
+    CWeather::OldWeatherType=CWeather::NewWeatherType=CWeather::ForcedWeatherType=0;
+    CWeather::InterpolationValue=0;
+}
 bool renderdocCapture=false,runRenderdocCapture=false,captureAttempted=false,captureFrameActive=false;
 uint64_t captureAtUs=37000000,runCaptureAtUs=0,capturedAtUs=0,captureStartNs=0,captureEndNs=0;
 std::string captureResult="off",capturePrefix,captureFile;
@@ -78,7 +93,7 @@ uint64_t playbackStartNs=0,playbackEndNs=0,profileStartUs=0;
 double gameTime=0,warmTime=0;
 float frameDt=0;
 uint64_t Now(){ timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return uint64_t(t.tv_sec)*1000000000ULL+t.tv_nsec; }
-void Status(const char *s){ std::snprintf(status,sizeof(status),"%s",s); }
+void Status(const char *s){ std::snprintf(status,sizeof(status),"%s",s); std::fprintf(stderr,"Simulation replay: %s\n",s); }
 std::string Unique(){
     const time_t now=time(nullptr); tm date={}; gmtime_r(&now,&date);
     char stamp[32],id[64]; strftime(stamp,sizeof(stamp),"%Y%m%dT%H%M%SZ",&date);
@@ -118,21 +133,25 @@ CAutomobile *Ready(){
     if(c->GetUp().z<0.7f || c->m_vecMoveSpeed.MagnitudeSqr()>0.0004f){Status("STOP THE CAR UPRIGHT BEFORE STARTING");return nullptr;}
     return c;
 }
-unsigned Signature(CAutomobile *c){
+std::array<double,Core::HandlingCount> Handling(CAutomobile *c){
     const tHandlingData &h=*c->pHandling;
     // Canonical text, never compiler padding or pointer values. Include transmission.
-    const float values[]={c->m_fMass,c->m_fTurnMass,h.fTractionMultiplier,h.fTractionLoss,h.fBrakeDeceleration,h.fBrakeBias,
+    const double values[]={c->m_fMass,c->m_fTurnMass,h.fTractionMultiplier,h.fTractionLoss,h.fBrakeDeceleration,h.fBrakeBias,
         h.fSuspensionForceLevel,h.fSuspensionDampingLevel,h.fSuspensionBias,h.fSteeringLock,
         h.fTractionBias,h.fSuspensionUpperLimit,h.fSuspensionLowerLimit,h.fBuoyancy,h.fCollisionDamageMultiplier,
         h.Transmission.fEngineAcceleration,h.Transmission.fMaxVelocity,h.Transmission.fMaxCruiseVelocity,h.Transmission.fMaxReverseVelocity,
-        float(h.Transmission.nNumberOfGears),float(h.Transmission.nDriveType),float(h.Transmission.nEngineType),float(h.Transmission.Flags),
-        float(h.bABS),float(h.Flags),c->m_vecCentreOfMass.x,c->m_vecCentreOfMass.y,c->m_vecCentreOfMass.z};
-    unsigned hash=2166136261u;
-    for(float v:values){ char text[40]; std::snprintf(text,sizeof(text),"%.9g;",double(v)); for(const char *p=text;*p;++p) hash=(hash^unsigned(*p))*16777619u; }
+        double(h.Transmission.nNumberOfGears),double(h.Transmission.nDriveType),double(h.Transmission.nEngineType),double(h.Transmission.Flags),
+        double(h.bABS),double(h.Flags),c->m_vecCentreOfMass.x,c->m_vecCentreOfMass.y,c->m_vecCentreOfMass.z};
+    std::array<double,Core::HandlingCount> out{};size_t i=0;
+    for(double v:values)out[i++]=v;
     for(const auto &g:h.Transmission.Gears){
-        char text[128]; std::snprintf(text,sizeof(text),"%.9g;%.9g;%.9g;",double(g.fMaxVelocity),double(g.fShiftUpVelocity),double(g.fShiftDownVelocity));
-        for(const char *p=text;*p;++p) hash=(hash^unsigned(*p))*16777619u;
+        out[i++]=g.fMaxVelocity;out[i++]=g.fShiftUpVelocity;out[i++]=g.fShiftDownVelocity;
     }
+    return out;
+}
+unsigned Signature(CAutomobile *c){
+    unsigned hash=2166136261u;
+    for(double value:Handling(c)){const float v=float(value);char text[40];std::snprintf(text,sizeof(text),"%.9g;",double(v));for(const char *p=text;*p;++p)hash=(hash^unsigned(*p))*16777619u;}
     return hash;
 }
 CVector Vec(const float *v){ return CVector(v[0],v[1],v[2]); }
@@ -142,7 +161,8 @@ Core::Initial Initial(CAutomobile *c){
     const CVector vectors[]={c->GetPosition(),c->GetRight(),c->GetForward(),c->GetUp(),c->m_vecMoveSpeed,c->m_vecTurnSpeed};
     int i=0; for(const CVector &v:vectors){s.vehicle.pose[i++]=v.x;s.vehicle.pose[i++]=v.y;s.vehicle.pose[i++]=v.z;}
     for(i=0;i<5;++i) s.assets[i]=int(ModelSets::GetActiveForCategory(ModelSets::eModelCategory(i)));
-    s.gear=int(c->m_nCurrentGear); s.gearTime=c->m_fChangeGearTime; return s;
+    s.gear=int(c->m_nCurrentGear); s.gearTime=c->m_fChangeGearTime;
+    s.portableHandling=true;s.handling=Handling(c);return s;
 }
 void Restore(CAutomobile *c){
     Repair(c);
@@ -202,9 +222,10 @@ void WriteReport(){
     FILE *f=std::fopen(Path(runId+".run.csv").c_str(),"wx");
     if(!f){Status("RUN REPORT WRITE FAILED");return;}
     std::fprintf(f,"schema,LCVR_SIM_RUN_V1\ndemo,%s\nresult,%s\nghost,%d\nauto_profile,%d\nprofile,%s\nmodel,%u\nhandling,%u\nelapsed_us,%llu\ncomparison_samples,%u\nposition_rms_m,%.9g\nposition_max_m,%.9g\nspeed_max_error_kmh,%.9g\nheading_max_error_deg,%.9g\nbuild,%s %s\n",
-        label.c_str(),result.c_str(),runGhost?1:0,runAutoProfile?1:0,profile.c_str(),model,signature,(unsigned long long)elapsed,
+        label.c_str(),result.c_str(),runGhost?1:0,runAutoProfile?1:0,profile.c_str(),model,initial.vehicle.signature,(unsigned long long)elapsed,
         drift.count,drift.Rms(),double(drift.maxPosition),double(drift.maxSpeed),double(drift.maxHeading),__DATE__,__TIME__);
     for(int i=0;i<5;++i) std::fprintf(f,"assets_%d,%d\n",i,initial.assets[i]);
+    std::fprintf(f,"execution_handling,%u\nhandling_match_policy,%s\n",signature,initial.portableHandling?"numeric_abs1e-6_rel1e-5_flags_exact":"legacy_exact_hash");
     std::fprintf(f,"recording_ghost,%d\n",initial.recordingGhost);
     std::fprintf(f,"view_policy,%s\n",runForwardView?"fixed_forward":"live_head_tracking");
     std::fprintf(f,"renderdoc_requested,%d\nrenderdoc_target_us,%llu\nrenderdoc_result,%s\nrenderdoc_actual_us,%llu\nrenderdoc_start_ns,%llu\nrenderdoc_end_ns,%llu\nrenderdoc_file,%s\n",
@@ -215,6 +236,9 @@ void WriteReport(){
         runAssisted?"route_assisted":"input_only",corrections,double(correctionMax),runAssisted?"position_heading_and_estimated_path_velocity":"unmodified_simulation");
     std::fprintf(f,"playback_start_monotonic_ns,%llu\nplayback_end_monotonic_ns,%llu\nprofile_start_simulation_us,%llu\n",
         (unsigned long long)playbackStartNs,(unsigned long long)playbackEndNs,(unsigned long long)profileStartUs);
+    std::fprintf(f,"matched_workload,%d\nroute_fingerprint,%s\nasset_fingerprint,%s\nsource_identity,%s\ncompatibility_dirty_at_end,%d\nenvironment,%s\nambient_world,not_restored_rng_traffic_particles_audio_not_deterministic\nfingerprint_policy,fnv1a64_local_workload_not_security_digest\n",
+        runMatched?1:0,routeIdentity.c_str(),assetIdentity.c_str(),LCVR_SOURCE_IDENTITY,MatchedProfile::dirty?1:0,
+        runMatched?"noon_sunny_each_simulation_step":"live");
     if(std::fclose(f)!=0) Status("RUN REPORT CLOSE FAILED");
 }
 bool Start(int operation){
@@ -231,17 +255,51 @@ bool Start(int operation){
         tape.reset(new Core::Tape); const bool loaded=f && tape->Load(f); if(f) std::fclose(f);
         if(!loaded){tape.reset();Status("INCOMPLETE OR INVALID DEMO");return false;}
         if(tape->endUs<1000000){tape.reset();Status("RECORD AT LEAST ONE SECOND BEFORE PLAYBACK");return false;}
-        const Core::Initial &s=tape->initial;
-        bool match=s.vehicle.model==current.vehicle.model && s.vehicle.signature==current.vehicle.signature && s.gear<=c->pHandling->Transmission.nNumberOfGears;
-        for(int i=0;i<5;++i) match=match && s.assets[i]==current.assets[i];
-        if(!match){tape.reset();Status("USE THE RECORDED CAR MODEL, ASSETS AND HANDLING");return false;}
+        Core::Initial &s=tape->initial;
+        std::fprintf(stderr,"Simulation replay validation: model=%u/%u handling=%u/%u gear=%d/%d\n",unsigned(current.vehicle.model),unsigned(s.vehicle.model),current.vehicle.signature,s.vehicle.signature,s.gear,c->pHandling->Transmission.nNumberOfGears);
+        if(s.vehicle.model!=current.vehicle.model){tape.reset();Status("USE THE RECORDED CAR MODEL");return false;}
+        size_t difference=0;
+        if(!Core::HandlingMatches(s,current,&difference) || s.gear>c->pHandling->Transmission.nNumberOfGears){
+            if(s.portableHandling) std::fprintf(stderr,"Simulation replay handling difference: field=%zu recorded=%.9g current=%.9g\n",difference,double(s.handling[difference]),double(current.handling[difference]));
+            tape.reset();Status("RECORDED CAR HANDLING DOES NOT MATCH");return false;
+        }
+        bool match=true;for(int i=0;i<5;++i) match=match && s.assets[i]==current.assets[i];
+        if(!match){tape.reset();Status("RECORDED MODEL SETS DO NOT MATCH");return false;}
+        if(!s.portableHandling){
+            // Only the original exact-matching setup may upgrade a legacy tape.
+            // Keep the original file intact; publish a fully written new tape.
+            s.portableHandling=true;s.handling=current.handling;
+            const auto upgraded=Unique();const auto path=Path(upgraded+".sim.csv");
+            FILE *file=std::fopen(path.c_str(),"wx");bool saved=file && Core::Header(file,s);
+            if(file){for(const auto &sample:tape->samples)if(saved)saved=Core::Write(file,sample);
+                if(saved)saved=std::fprintf(file,"END,%llu\n",(unsigned long long)tape->endUs)>0;
+                if(std::fclose(file)!=0)saved=false;}
+            if(!saved){if(file)std::remove(path.c_str());tape.reset();Status("PORTABLE ROUTE UPGRADE FAILED - ORIGINAL KEPT");return false;}
+            label=upgraded;Status("PORTABLE ROUTE COPY CREATED - ORIGINAL KEPT");
+        }
         if(renderdocCapture){
             if(!QuestRenderDocAvailable()){tape.reset();Status("LAUNCH THE GAME THROUGH RENDERDOC TO USE TIMED CAPTURE");return false;}
             if(captureAtUs>=tape->endUs){tape.reset();Status("RENDERDOC CAPTURE TIME MUST BE BEFORE THE DEMO END");return false;}
             if(mkdir(RenderDocRoot(),0700)!=0 && errno!=EEXIST){tape.reset();Status("CANNOT CREATE LOCAL RENDERDOC CAPTURE DIRECTORY");return false;}
         }
         initial=s;
+        runMatched=matchedWorkload || MatchedProfile::active;
+        routeIdentity.clear(); assetIdentity.clear();
+        if(runMatched){
+            if(!ghost || !routeAssistance || !forwardView || !autoProfile || renderdocCapture){
+                tape.reset();Status("MATCHED RUN NEEDS GHOST, ROUTE, FORWARD VIEW, AUTO PROFILE; NO RENDERDOC");return false;
+            }
+            try {
+                routeIdentity=BenchmarkIdentity::Hex(BenchmarkIdentity::File(14695981039346656037ULL,Path(label+".sim.csv")));
+                assetIdentity=BenchmarkIdentity::Assets(platform::gameDataRoot());
+            } catch(...) { tape.reset();Status("BENCHMARK ASSET FINGERPRINT FAILED");return false; }
+            oldHours=CClock::ms_nGameClockHours;oldMinutes=CClock::ms_nGameClockMinutes;oldSeconds=CClock::ms_nGameClockSeconds;
+            oldWeather=CWeather::OldWeatherType;newWeather=CWeather::NewWeatherType;forcedWeather=CWeather::ForcedWeatherType;
+            weatherInterpolation=CWeather::InterpolationValue;
+            FixedEnvironment();
+        }
     }else{
+        runMatched=false;
         initial.recordingGhost=recordingGhost?1:0;
         label=Unique(); output=std::fopen(Path(label+".sim.csv").c_str(),"wx");
         if(!output){Status("CANNOT CREATE DEMO FILE");return false;}
@@ -272,7 +330,8 @@ bool Start(int operation){
             CStreaming::LoadScene(start);
             CTimer::Update();
         }
-        Restore(c); mode=Preparing; Status(runForwardView?"PREPARING PLAYBACK - FIXED FORWARD VIEW":"PREPARING PLAYBACK - LIVE HEAD TRACKING");
+        Restore(c); mode=Preparing; MatchedProfile::benchmark=runMatched;
+        Status(runForwardView?"PREPARING PLAYBACK - FIXED FORWARD VIEW":"PREPARING PLAYBACK - LIVE HEAD TRACKING");
     }else{Restore(c);mode=Recording;Status("RECORDING - OPEN THIS MENU TO STOP");}
     return true;
 }
@@ -299,6 +358,7 @@ bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b){
 }
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker){return Protected(victim)||Protected(attacker);}
 void SimulationReplayBeginFrame(){
+    if(runMatched && (mode==Preparing || mode==Playing)) FixedEnvironment();
     if(request==1 || request==2){const int op=request;request=0;startFailed=!Start(op);}
     if(mode==Idle || mode==Finishing) return;
     CAutomobile *c=Target();
@@ -339,7 +399,7 @@ void SimulationReplayEndFrame(){
     if(mode==Preparing){warmTime+=frameDt;return;}
     gameTime+=double(frameDt);elapsed=uint64_t(gameTime*1000000.0+0.5);
     if(mode==Recording && elapsed>=uint64_t(duration)*1000000ULL){elapsed=uint64_t(duration)*1000000ULL;Finish("RECORDING SAVED");}
-    else if(mode==Playing && elapsed>=tape->endUs) Finish("COMPLETE");
+    else if(mode==Playing && elapsed>=tape->endUs){elapsed=tape->endUs;Finish("COMPLETE");}
 }
 void SimulationReplayAfterAppFrame(){
     if((request==1 || request==2) && Now()-requestStartNs>3000000000ULL){
@@ -361,7 +421,14 @@ void SimulationReplayAfterAppFrame(){
         if(runRenderdocCapture && !captureAttempted)captureResult="not_reached";
         if(runAutoProfile && !runId.empty()){QuestProfilerSetDisplayMode(0);QuestProfilerSetCaptureContext("");}
         const bool recorded=runId.empty();
-        WriteReport(); tape.reset(); reference=-1;mode=Idle;Refresh();
+        WriteReport();
+        if(runMatched){
+            CClock::ms_nGameClockHours=oldHours;CClock::ms_nGameClockMinutes=oldMinutes;CClock::ms_nGameClockSeconds=oldSeconds;
+            CWeather::OldWeatherType=oldWeather;CWeather::NewWeatherType=newWeather;CWeather::ForcedWeatherType=forcedWeather;
+            CWeather::InterpolationValue=weatherInterpolation;
+        }
+        MatchedProfile::benchmark=false;
+        tape.reset(); reference=-1;mode=Idle;Refresh();
         if(recorded){
             const auto found=std::find(demos.begin(),demos.end(),label);
             if(found!=demos.end()) selectedDemo=int(found-demos.begin());
@@ -424,6 +491,7 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 10:std::snprintf(text,capacity,"BENCHMARK FORWARD VIEW  < %s >",forwardView?"ON":"OFF");break;
     case 11:std::snprintf(text,capacity,"RENDERDOC CAPTURE < %s >",!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - LAUNCH VIA RENDERDOC":captureResult=="saved"?"ON - SAVED":"ON");break;
     case 12:std::snprintf(text,capacity,"CAPTURE AT < %.1f SECONDS >",double(captureAtUs)/1000000);break;
+    case 13:std::snprintf(text,capacity,"MATCHED WORKLOAD < %s >",MatchedProfile::active?"PROFILE - ON":matchedWorkload?"ON":"OFF");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
@@ -444,6 +512,7 @@ bool SimulationReplayMenuAction(int row,int direction){
     case 10:forwardView=!forwardView;break;
     case 11:renderdocCapture=!renderdocCapture;break;
     case 12:captureAtUs=direction<0?(captureAtUs?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;break;
+    case 13:matchedWorkload=!matchedWorkload;break;
     case 8:{
         Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
         const std::string name=demos[selectedDemo];

@@ -2,6 +2,8 @@
 #include "VulkanPolicy.h"
 #include "VulkanPlatform.h"
 #include "MirrorPolicy.h"
+#include "MatchedProfile.h"
+#include "BenchmarkIdentity.h"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -10,6 +12,29 @@ void require(bool value, const char *message) { if(!value) throw std::runtime_er
 bool near(float a, float b) { return std::abs(a-b) < 0.0001f; }
 int main() {
     try {
+        MatchedProfile::Values profile{{"schema",1},{"quest3",1},{"width",1872},{"height",2016},{"scale",100},{"hz",72},
+            {"anisotropy",1},{"atomics",1},{"bc",0},{"astc",1},{"etc2",1},{"max_anisotropy",16},
+            {"setting_MsaaSamples",4},{"setting_RenderScalePercent",100}};
+        for(int eye=0;eye<2;++eye) {
+            const auto prefix="eye"+std::to_string(eye)+"_";
+            for(const char *part:{"px","py","pz","qx","qy","qz"}) profile[prefix+part]=0;
+            profile[prefix+"px"]=eye?.032:-.032;profile[prefix+"qw"]=1;
+            profile[prefix+"left"]=-.8;profile[prefix+"right"]=.8;profile[prefix+"up"]=.9;profile[prefix+"down"]=-.9;
+        }
+        auto parsed=[&](const std::string &text){std::istringstream input(text);return MatchedProfile::Parse(input);};
+        const auto valid=MatchedProfile::Text(profile);
+        require(parsed(valid)==profile,"Quest profile round trip");
+        for(const auto &bad:{valid+"width=1000\n",valid+"personal_device=123\n",std::string("schema=nan\n")}) {
+            bool failed=false;try { parsed(bad); } catch(...) { failed=true; } require(failed,"invalid/private profile rejected");
+        }
+        auto invalid=profile;invalid["eye0_qw"]=0;
+        bool failed=false;try { parsed(MatchedProfile::Text(invalid)); } catch(...) { failed=true; }
+        require(failed,"invalid profile stereo rejected");
+        MatchedProfile::requested=profile;MatchedProfile::active=true;
+        require(MatchedProfile::Read("VR","MsaaSamples",1)==4,"profile overrides settings in memory");
+        require(!MatchedProfile::Write("VR","MsaaSamples","2") && MatchedProfile::dirty,"profile changes invalidate matching and never persist");
+        MatchedProfile::active=false;MatchedProfile::dirty=false;MatchedProfile::captured.clear();
+        require(BenchmarkIdentity::Hex(MatchedProfile::Hash("hello"))=="a430d84680aabd0b","stable workload fingerprint known vector");
         auto square=Desktop::FitPicture(2496,2688,1920,1080,Desktop::Framing::Square);
         require(square.width==1080 && square.height==1080 && square.x==420 && square.y==0,"square preview letterboxing");
         auto small=Desktop::FitPicture(640,480,1920,1080,Desktop::Framing::Cropped);

@@ -15,5 +15,6 @@
     <Compile Remove="tests/**/*.cs" />
     <None Update="NOTICE.md;ONIGWRAP-NOTICES.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="../modelsets/xbox-disc.json" Link="xbox-disc.json" />
+    <EmbeddedResource Include="../vehicle-editor/device_bridge.py" LogicalName="LibertyManager.VehicleBridge.py" />
   </ItemGroup>
 </Project>

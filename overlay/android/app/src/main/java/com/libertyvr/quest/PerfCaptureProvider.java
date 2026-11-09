@@ -29,6 +29,9 @@ public final class PerfCaptureProvider extends ContentProvider {
     private File capture(Uri uri) throws IOException {
         if (uri.getPathSegments().size() != 2) throw new IOException("Expected diagnostics/name");
         String scope = uri.getPathSegments().get(0);
+        if ("asset".equals(scope)) {
+            return BenchmarkAssets.resolve(getContext().getExternalFilesDir(null), uri.getLastPathSegment());
+        }
         if ("renderdoc".equals(scope)) {
             return PerfCaptureFiles.resolveRenderDoc(getContext().getExternalFilesDir(null), uri.getLastPathSegment());
         }
@@ -53,6 +56,14 @@ public final class PerfCaptureProvider extends ContentProvider {
     @Override public Cursor query(Uri uri, String[] projection, String selection,
             String[] selectionArgs, String sortOrder) {
         enforce();
+        if (uri.getPathSegments().size() == 1 && "assets".equals(uri.getLastPathSegment())) {
+            MatrixCursor inventory = new MatrixCursor(new String[] {"path_b64", "_size", "sha256"});
+            try {
+                for (BenchmarkAssets.Entry entry : BenchmarkAssets.inventory(getContext().getExternalFilesDir(null)))
+                    inventory.addRow(new Object[] {entry.token, entry.size, entry.sha256});
+            } catch (IOException error) { throw new IllegalArgumentException("Cannot inventory benchmark assets"); }
+            return inventory;
+        }
         if (uri.getPathSegments().size() != 1 ||
                 (!"captures".equals(uri.getLastPathSegment()) && !"replays".equals(uri.getLastPathSegment()) &&
                  !"renderdocs".equals(uri.getLastPathSegment()))) {
@@ -81,7 +92,7 @@ public final class PerfCaptureProvider extends ContentProvider {
 
     @Override public String getType(Uri uri) {
         enforce();
-        return uri.getPathSegments().size() == 2 && "renderdoc".equals(uri.getPathSegments().get(0)) ?
+        return uri.getPathSegments().size() == 2 && ("renderdoc".equals(uri.getPathSegments().get(0)) || "asset".equals(uri.getPathSegments().get(0))) ?
                 "application/octet-stream" : "text/csv";
     }
     @Override public Uri insert(Uri uri, ContentValues values) { throw new UnsupportedOperationException("Read-only"); }

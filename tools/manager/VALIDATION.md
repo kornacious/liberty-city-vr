@@ -1,5 +1,149 @@
 # Manager migration verification
 
+## Original Xbox PCVR and cross-target vehicle authoring — 2026-11-09
+
+- Local Windows execution. Original assets stayed on this computer/headset.
+  A verified prepared Original Xbox collection was installed into a new isolated
+  PCVR data copy. The existing headset collection already had the verified identity;
+  no asset replacement there was needed. Inventories matched except three PC-only
+  files. A separate benchmark copy reused 482 verified local files and required
+  zero headset asset reads, with matching asset fingerprint.
+- 120/120 manager checks passed, including verified Xbox installation, retained
+  backups, rejection of overlapping outputs, failed-stage preservation and shared
+  bundled-default copying without replacing personal/template files.
+- Windows game Release compilation and all nine native checks passed. Quest ARM64
+  debug compilation passed with the same generated source identity. The APK was
+  updated on the personal Quest 3 device without uninstalling or clearing data.
+- The editor compiled and passed all six CTest targets. Local asset catalogue smoke
+  checks loaded all 55 supported Classic and 55 Xbox vehicle previews without failures.
+  All eight synthetic PCVR bridge tests and 14 existing Quest bridge tests passed.
+  Synthetic PCVR transfer tests cover atomic backups, conflicts, target-scoped imports,
+  shared-template preservation, selected merges, endpoint baselines and link rejection.
+- Actual Quest/PCVR configuration imports into a shared local workspace passed;
+  templates remained shared and personal layers stayed separate. Original game data
+  and saves were not transferred by the editor bridge.
+- The user confirmed standalone Original Xbox visuals/audio and three completed
+  replays. All three captures passed qualification with zero dropped rows, all five
+  asset categories set to Original Xbox, and matching route/source/asset identities.
+  The exported profile is 1512x1584 per eye at 120 Hz. Numeric layouts and the new
+  route were copied into the isolated PCVR benchmark folder; normal personal
+  overrides were preserved.
+- The user confirmed PCVR Xbox visuals/audio and three completed replays. All
+  three corresponding Quest/PCVR comparisons passed every gate with zero dropped
+  recorder rows. PCVR run means were 8.334–8.335 ms intervals, 3.08–3.35 ms local
+  CPU and 0.988–1.019 ms sampled GPU; Quest means were 10.023–10.115 ms intervals,
+  6.50–6.58 ms local CPU and 9.170–9.220 ms sampled GPU. The route differs from the
+  earlier Classic test, so these do not establish a Classic-versus-Xbox cost delta.
+- Actual PCVR bridge import/preview/deployment passed against the running game in
+  the isolated benchmark copy. The unchanged Kuruma template preview reported zero
+  changed fields and no conflicts. Deployment retained a backup, verified staging
+  and received the running game's nonce/content-hash live acknowledgement. Normal
+  target personal overrides and shared editor templates were left untouched.
+  The user then quit; the manager reported a successful Windows PCVR exit.
+- Windows/Linux self-contained manager packages and the Windows editor ZIP were
+  refreshed. Linux was cross-published, not executed. The running previous manager
+  was preserved under a previous filename; it was not closed and is excluded from
+  the editor's bundled manager runtime. The updated editor opened for review;
+  computer-use inspection was not completed because app approval timed out.
+
+## Quest compatibility workload and matched benchmarks — 2026-11-09
+
+Local Windows execution. Game data remains local. Diagnostic collection copies
+numeric profiles/routes and captures; explicit asset alignment additionally creates
+a separate local benchmark data copy without changing either target's originals.
+
+- Asset diagnosis found 296 Quest-only files and three PCVR-only files, with
+  identical SHA256 contents for all shared files. The new isolated copy reused
+  186 matching local files and verified 296 local headset reads. Its complete
+  asset fingerprint matches Quest. Existing data and saves were preserved.
+- The revised bounded SPSC recorder passed 4,096 ordered samples across queue
+  wraps, payload integrity and shutdown draining, plus the 1,024-row flood test.
+  Full Windows and Quest compilation passed; all nine Windows checks passed.
+  The APK updated the personal Quest 3 device without clearing data or saves.
+- 120/120 manager checks passed, including the asset inventory and isolated-copy
+  fixtures. Restricted execution initially blocked existing Bash/junction fixtures;
+  rerunning with local process access passed the complete suite. Windows and Linux
+  self-contained manager publication passed; Linux was cross-published, not run.
+- Java synthetic asset inventory/path boundary checks passed. Three fresh physical
+  Quest runs completed with zero dropped rows, identical workload/profile state
+  and matching source/route/asset identities. Pairwise Quest comparisons passed.
+  The captured profile is 1512x1584 per eye at 120 Hz. Three fresh PCVR runs also
+  completed with zero dropped rows and passed comparison against Quest. Both
+  targets use the same source identity, portable route and aligned asset scope.
+  The earlier unqualified pair below must not be used to claim matched performance.
+- The initial PCVR captures averaged 11.111 ms intervals (90 FPS) despite a
+  reported 120 Hz display. Native PCVR, a data-free triangle renderer, a process-only
+  SteamVR override and a disabled Oculus compatibility layer reproduced the pacing.
+  Global OpenXR and Radeon settings were preserved. Windows diagnostics compiled
+  and passed all nine checks; bounded logs separate OpenXR wait/begin/end and frame
+  work from predicted display period and reported display refresh.
+- A user-approved local 600-frame VDXR trace measured ~11.05 ms in the asynchronous
+  submission thread's OVR_BeginFrame and ~10.55 ms in app xrEndFrame. Reprojection
+  was inactive and all 601 display-rate samples reported 120 Hz. The trace was
+  stopped successfully; raw ETW/decoded files remain ignored and local. Report
+  output must use explicitly allowlisted numeric timing fields.
+- The user identified the cause: a headset-side SideQuest optimizer profile was
+  limiting Virtual Desktop to 90 FPS. Correcting the optimizer profile restored
+  sustained 120 FPS gameplay. HEVC/H.264 codec selection was not the cause;
+  the earlier apparent codec correlation was confounded by the external FPS limit.
+- Three final PCVR replays completed and quit normally. Each comparison against
+  its corresponding Quest run passed all gates with zero dropped recorder rows:
+  source, route, asset scope, rendering profile/state, refresh and portable handling.
+  The preserved pre-diagnostic Windows build matched the Quest source identity;
+  subsequent logging-only diagnostic builds are not substituted into these reports.
+  PCVR means were 8.334–8.338 ms intervals (~120 FPS), 2.54–2.60 ms local CPU and
+  0.726–0.738 ms sampled GPU. Quest means were 9.37–9.49 ms intervals,
+  5.80–6.07 ms local CPU and 7.50–7.59 ms sampled GPU. These are per-device
+  observations, not desktop-to-Quest emulation ratios. Passing workload checks
+  establishes aligned settings/content, not deterministic traffic or identical FPS.
+- Final Quest ARM64 debug compilation passed after syncing the diagnostic sources.
+  Its generated source identity matches the final Windows assembly. The APK was
+  updated on the personal Quest 3 device without launching or clearing data/saves.
+  The six measured runs remain associated with their matching pre-diagnostic builds.
+- 117/117 manager checks passed, including warmup exclusion, GPU source-sample
+  deduplication, workload/state mismatch rejection, snapshot fingerprint checking,
+  refresh rounding tolerance, dropped-row attribution, optional profile arguments,
+  portable source identities and diagnostic filename restrictions.
+- PCVR terminal UI checks passed with the optional Quest profile field and legacy
+  target switching/draft/Cancel behavior. Windows and Linux self-contained manager
+  packages were refreshed using locked cached dependencies with offline NuGet audit
+  disabled. Linux was cross-published and was not executed.
+- Fresh manager-assembled Windows x64 Release build/install passed all nine native
+  checks, including profile parser/override tests and existing Vulkan GPU tests.
+- The Windows performance writer regression passed exclusive-session creation,
+  raw timing precision, CSV schema, bounded queue accounting and shutdown drain
+  with 1,024 recorded rows.
+- Full Quest ARM64 debug compilation passed and the APK updated the personal Quest
+  3 device with existing data/saves preserved. Both assembled targets embed the same
+  source identity. Existing upstream compiler/shader warnings remain.
+- The production replay runtime adapter passed 15,861 checks, including matched
+  environment restoration, mirror suppression state, file-content fingerprints and
+  expanded replay menu layout, replay-only native status notes, portable handling
+  tolerance, exact high-bit flags and original-preserving legacy upgrades. Its
+  synthetic native-menu fixture and local source-only auxiliary workspace were
+  updated to the current public interfaces.
+- Physical Quest replay completed; a subsequent collected run confirmed matched
+  workload mode. Android scoped storage blocked the initial direct-folder collector;
+  provider-based collection and SHA256 verification then succeeded. The Java
+  filename/canonical-path boundary tests passed with numeric profile exports.
+- The PCVR profile started at the captured 1512x1584 per-eye extent and 1x MSAA.
+  The original exact handling hash rejected the recorded Kuruma on Windows.
+  Numeric V3 handling metadata and original-preserving upgrades were added rather
+  than bypassing validation. The user confirmed the upgraded route completed on
+  Quest and PCVR. Windows initialization now sets the profiler output directory;
+  the completed PCVR run produced closed frame/session/profile/draw captures.
+- PCVR initially advertised 144 Hz and subsequently confirmed the matching 120 Hz.
+  Capture inspection exposed application/reprojection periods being mistaken for
+  display refresh. The final code uses the actual runtime display-rate query for
+  profile export and preserves the existing display-rate telemetry separately.
+- The paired smoke-test captures are **not a qualified matched timing comparison**:
+  local asset inventories differ, the source identities changed during debugging,
+  the Quest recorder dropped one row, and the PCVR capture predates the final
+  refresh telemetry correction. The comparer returned exit 2 and explicit target
+  and workload reasons while retaining each device's measured summaries. Align
+  data and capture fresh loss-free runs from both final builds before making
+  performance comparisons. No cross-device speedup or visual equivalence is claimed.
+
 ## Windows desktop preview and input — 2026-11-09
 
 Local Windows execution; original assets remained in the existing isolated PCVR

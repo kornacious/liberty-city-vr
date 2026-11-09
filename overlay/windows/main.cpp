@@ -70,6 +70,8 @@ struct Application {
     bool running = false, focused = false, exit = false;
     XrEnvironmentBlendMode blend = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     uint32_t submitted = 0;
+    uint32_t pacingSamples = 0;
+    double pacingFrameMs = 0, pacingEndMs = 0, pacingPeriodMs = 0;
 
     ~Application() {
         if(device) vkDeviceWaitIdle(device);
@@ -323,6 +325,7 @@ struct Application {
     }
 
     void frame() {
+        const auto frameStart = std::chrono::steady_clock::now();
         XrFrameWaitInfo wait{XR_TYPE_FRAME_WAIT_INFO}; XrFrameState state{XR_TYPE_FRAME_STATE};
         xrCheck(xrWaitFrame(session, &wait, &state), "xrWaitFrame");
         XrFrameBeginInfo begin{XR_TYPE_FRAME_BEGIN_INFO}; xrCheck(xrBeginFrame(session, &begin), "xrBeginFrame");
@@ -389,8 +392,21 @@ struct Application {
             if(acquired && waited) { XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO}; xrReleaseSwapchainImage(swapchain, &release); }
             xrEndFrame(session, &end); throw;
         }
+        const auto endStart = std::chrono::steady_clock::now();
         xrCheck(xrEndFrame(session, &end), "xrEndFrame");
-        if(end.layerCount) ++submitted;
+        const auto frameEnd = std::chrono::steady_clock::now();
+        if(end.layerCount) {
+            ++submitted;
+            pacingFrameMs += std::chrono::duration<double,std::milli>(frameEnd-frameStart).count();
+            pacingEndMs += std::chrono::duration<double,std::milli>(frameEnd-endStart).count();
+            pacingPeriodMs += double(state.predictedDisplayPeriod)/1e6;
+            if(++pacingSamples==600) {
+                std::cout << "Diagnostic rendered pacing: frame=" << pacingFrameMs/600
+                    << " end=" << pacingEndMs/600 << " predicted period=" << pacingPeriodMs/600
+                    << " ms (serialized diagnostic, not a game benchmark)\n";
+                pacingSamples=0; pacingFrameMs=pacingEndMs=pacingPeriodMs=0;
+            }
+        }
     }
 };
 

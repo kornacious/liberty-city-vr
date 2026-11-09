@@ -1,10 +1,10 @@
+#include "common.h" // Engine typedefs must precede ControllerConfig/Frontend.
 #include "ControllerConfig.h"
 #include "DesktopMirror.h"
 #include "Frontend.h"
 #include "Pad.h"
 #include "RuntimeCompat.h"
 #include "android.h"
-#include "common.h"
 #include "crossplatform.h"
 #include "main.h"
 #include "skeleton.h"

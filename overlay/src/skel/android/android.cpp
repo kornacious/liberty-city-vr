@@ -2643,6 +2643,9 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 	backendParams.device = context.device;
 	backendParams.fragmentStoresAndAtomicsEnabled =
 		context.fragmentStoresAndAtomicsEnabled;
+	backendParams.hasEnabledFeatures = 1;
+	backendParams.enabledFeatures = context.enabledFeatures;
+	backendParams.maxSamplerAnisotropy = context.maxSamplerAnisotropy;
 	backendParams.queue = context.queue;
 	backendParams.queueFamilyIndex = context.queueFamilyIndex;
 	backendParams.width = context.width;

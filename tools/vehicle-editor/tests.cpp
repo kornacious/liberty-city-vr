@@ -18,7 +18,7 @@ int main() {
         check(editor::canonicalModelSet(0) == 0 && editor::canonicalModelSet(1) == 2 &&
                   editor::canonicalModelSet(2) == 2 && editor::canonicalModelSet(-1) == 0,
               "old Modern/Xbox preferences map to the HD calibration identity");
-        check(std::string(editor::modelSetName(2)) == "Modern", "HD calibration ID is labelled Modern");
+        check(std::string(editor::modelSetName(2)) == "Original Xbox", "HD calibration ID identifies the Original Xbox asset source");
         // Radio keeps its seat-relative frame independent of wheel/dashboard/steering.
         auto radioValues = legacyDefaults(0, 95, false);
         auto rb = radio(Vec(1, 2, 3), false, radioValues);
@@ -61,6 +61,9 @@ int main() {
         editor::Preferences prefs;
         prefs.paths["GameFolder"] = "D:/GTA III = local; assets";
         prefs.paths["WorkspaceFolder"] = "/home/player/placements";
+        prefs.paths["PCVRData"] = "D:/PCVR data";
+        prefs.paths["PCVRUser"] = "D:/PCVR user";
+        prefs.set("TransferTarget", 1);
         prefs.set("InvertX", 1);
         prefs.set("FPSLimit", 144);
         prefs.set("VSync", 0);

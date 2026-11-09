@@ -49,10 +49,18 @@ launch and runtime diagnostics are implemented. Windows builds never invoke APK
 installation or ADB. A desktop eye preview provides ImGui/F1–F12 display options
 and focused keyboard/mouse/XInput input alongside VR controls; the user confirmed
 the preview options and desktop controls work through VirtualDesktopXR. Public desktop
-binary packaging and the Quest profile remain
-future work. Runtime/controller
+binary packaging remains future work. Captured Quest workload profiles and matched
+replay reporting are implemented and validated with three completed runs on each
+target, matching source/content/settings and no dropped recorder rows. PCVR
+gameplay at 120 FPS was confirmed after correcting a headset optimizer limit;
+see [benchmark workflow and limits](BENCHMARKS.md). Broader runtime/controller
 compatibility and any fallback for unavailable Vulkan features need validation;
 OpenXR alone does not establish support for every headset/runtime combination.
+
+Original Xbox collections can be installed into either target from the same
+verified local conversion. The vehicle editor uses shared per-vehicle/modelset
+templates with separate Quest/PCVR personal overrides, conflict-aware transfer
+and live reload acknowledgements. See the [editor workflow](tools/vehicle-editor/README.md#quest-and-pcvr-targets).
 
 ## Configuration, validation and compatibility
 
@@ -62,9 +70,10 @@ transfer rather than shared writable saves. Preserve existing Quest application
 IDs, storage paths, signing identities and manager configuration locations.
 Existing checkout folders may retain their old names after the repository rename.
 
-The planned Quest profile should match supported capabilities, shaders, stereo
-rendering, resolution, formats, MSAA and relevant quality settings where feasible.
-It may report workload budgets and calibrated estimates. A slowed desktop GPU
+The Quest workload profile matches captured settings, output extent, MSAA and
+benchmark stereo geometry with explicit platform-format and capability limits.
+It reports actual execution-device measurements. Calibrated estimates and broader
+capability emulation remain future work. A slowed desktop GPU
 does not emulate Quest GPU architecture, drivers, memory behavior or thermals;
 synthetic frame pressure and estimated timings must be labeled accordingly.
 Measure Quest improvements on Quest and PCVR improvements on the tested PC/runtime.

@@ -13,6 +13,8 @@
 #include "vulkan/OpaqueOrder.h"
 #include "vulkan/UniformAlphaPolicy.h"
 #include <memory>
+#include <algorithm>
+#include <utility>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -169,11 +171,14 @@ struct Frame {
 class Writer {
     static constexpr size_t Capacity = 1024;
     std::unique_ptr<std::array<Frame,Capacity>> queue;
-    size_t head = 0, count = 0;
+    // One game-thread producer and one writer-thread consumer. Release/acquire
+    // transfers slot ownership; transient writer activity cannot drop a sample.
+    std::atomic<size_t> readSequence{0};
+    std::atomic<size_t> writeSequence{0};
     std::mutex mutex;
     std::condition_variable ready;
     std::thread worker;
-    bool stopping = false;
+    std::atomic<bool> stopping{false};
     FILE *frames = nullptr, *metadata = nullptr, *draws = nullptr;
     uint64_t lastDrawFrame=0,drawRows=0,drawSamples=0;
     std::atomic<uint64_t> dropped{0};
@@ -286,18 +291,17 @@ class Writer {
         bool failed = false;
         auto lastFlush = std::chrono::steady_clock::now();
         for(;;) {
-            size_t n;
-            {
+            const size_t read = readSequence.load(std::memory_order_relaxed);
+            const size_t available = writeSequence.load(std::memory_order_acquire)-read;
+            const size_t n = std::min(available,batch.size());
+            if(!n) {
+                if(stopping.load(std::memory_order_acquire) && writeSequence.load(std::memory_order_acquire)==read) break;
                 std::unique_lock<std::mutex> lock(mutex);
-                ready.wait_for(lock, std::chrono::milliseconds(200), [this]{return count || stopping;});
-                n = count < batch.size() ? count : batch.size();
-                for(size_t i = 0; i < n; ++i) {
-                    batch[i] = (*queue)[head];
-                    head = (head+1)%Capacity;
-                }
-                count -= n;
-                if(!n && stopping) break;
+                ready.wait_for(lock, std::chrono::milliseconds(200), [this]{return writeSequence.load(std::memory_order_acquire)!=readSequence.load(std::memory_order_relaxed) || stopping.load(std::memory_order_acquire);});
+                continue;
             }
+            for(size_t i=0;i<n;++i) batch[i]=std::move((*queue)[(read+i)%Capacity]);
+            readSequence.store(read+n,std::memory_order_release);
             for(size_t i = 0; i < n; ++i) {
                 if(!failed) {
                     Write(batch[i]);
@@ -359,7 +363,7 @@ public:
             return false;
         }
         lastDrawFrame=drawRows=drawSamples=0;
-        head = count = 0; written = 0; dropped = 0; stopping = false;
+        readSequence=0;writeSequence=0;written = 0; dropped = 0; stopping = false;
         queue=std::make_unique<std::array<Frame,Capacity>>();
         worker = std::thread(&Writer::Run, this);
         return true;
@@ -367,17 +371,17 @@ public:
     bool Submit(const Frame &frame)
     {
         if(!worker.joinable()) return false;
-        std::unique_lock<std::mutex> lock(mutex, std::try_to_lock);
-        if(!lock.owns_lock() || count == Capacity) { ++dropped; return false; }
-        (*queue)[(head+count)%Capacity] = frame;
-        ++count;
-        if(count >= 64) ready.notify_one();
+        const size_t write=writeSequence.load(std::memory_order_relaxed);
+        if(write-readSequence.load(std::memory_order_acquire)>=Capacity) { ++dropped; return false; }
+        (*queue)[write%Capacity] = frame;
+        writeSequence.store(write+1,std::memory_order_release);
+        if(write+1-readSequence.load(std::memory_order_acquire)>=64) ready.notify_one();
         return true;
     }
     void Stop()
     {
         if(worker.joinable()) {
-            { std::lock_guard<std::mutex> lock(mutex); stopping = true; }
+            { std::lock_guard<std::mutex> lock(mutex); stopping.store(true,std::memory_order_release); }
             ready.notify_one();
             worker.join();
         }

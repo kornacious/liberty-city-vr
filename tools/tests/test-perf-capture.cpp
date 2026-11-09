@@ -302,5 +302,26 @@ int main()
     std::ifstream largeRows(stem+"-large.draws.csv");
     unsigned exported=0;while(std::getline(largeRows,line))++exported;
     assert(exported==1+GpuPassCount+owners*3);
-    std::printf("PASS: player transitions, raw timing precision, CSV schema, bounded writer accounting, shutdown drain and exclusive sessions (%u rows).\n", rows);
+    // Wrap the SPSC ring repeatedly while the reader drains it. Retry only
+    // genuine full-queue submissions; accepted samples must remain ordered.
+    assert(writer.Start(stem+"-wrap", "queue_test,spsc_wrap\n"));
+    Frame paced;
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+    for(unsigned id=1;id<=4096;++id) {
+        paced.id=id;paced.startNs=uint64_t(id)*10000000;paced.cpuMs=id*.001;
+        while(!writer.Submit(paced)) {
+            assert(std::chrono::steady_clock::now()<deadline);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    writer.Stop();
+    std::ifstream wrapped(stem+"-wrap.frames.csv");std::string wrappedLine;
+    assert(std::getline(wrapped,wrappedLine));unsigned expectedId=1;
+    while(std::getline(wrapped,wrappedLine)) {
+        const auto cells=Cells(wrappedLine);
+        assert(std::stoull(cells[0])==expectedId && std::stoull(cells[1])==uint64_t(expectedId)*10000000);
+        assert(std::fabs(std::stod(cells[3])-expectedId*.001)<.000001);++expectedId;
+    }
+    assert(expectedId==4097);
+    std::printf("PASS: player transitions, raw timing precision, CSV schema, bounded writer accounting, shutdown drain, exclusive sessions and 4096 ordered SPSC samples (%u flood rows).\n", rows);
 }

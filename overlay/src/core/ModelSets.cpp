@@ -100,7 +100,13 @@ void NormalizeRoot(const char *root)
 
 void FindSettingsPath()
 {
-#ifdef _WIN32
+#ifdef LIBERTYVR_WINDOWS
+	// The VR menu's relative INI reads use the active game-data directory.
+	// An EXE-relative choice would leak asset selection between isolated targets
+	// and disagree with the menu after restart.
+	snprintf(gSettingsPath, sizeof(gSettingsPath), "%svr_settings.ini", gGameRoot);
+	return;
+#elif defined(_WIN32)
 	const DWORD length = GetModuleFileNameA(nil, gSettingsPath,
 		(DWORD)ARRAY_SIZE(gSettingsPath));
 	if(length > 0 && length < ARRAY_SIZE(gSettingsPath)){

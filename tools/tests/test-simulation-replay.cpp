@@ -1,6 +1,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "ragdoll-test-vector.h"
 #include "../../overlay/src/vehicles/SimulationReplayCore.h"
+#include "../../overlay/src/xr/BenchmarkIdentity.h"
+#include "../../overlay/src/xr/SourceIdentity.h"
+#include "../../overlay/src/core/QuestNativeSettings.h"
 #include <filesystem>
 #include <chrono>
 #include <cstring>
@@ -17,6 +20,9 @@ static unsigned long long fakeNs=1000000000ULL;
 static int clock_gettime(int,timespec *t){t->tv_sec=static_cast<time_t>(fakeNs/1000000000ULL);t->tv_nsec=long(fakeNs%1000000000ULL);return 0;}
 static tm *gmtime_r(const time_t *t,tm *out){return gmtime_s(out,t)==0?out:nullptr;}
 static std::string captureRoot;
+namespace platform { static const char *gameDataRoot(){return captureRoot.c_str();} }
+struct CClock {inline static unsigned char ms_nGameClockHours=8,ms_nGameClockMinutes=15;inline static unsigned short ms_nGameClockSeconds=30;};
+struct CWeather {inline static short OldWeatherType=1,NewWeatherType=2,ForcedWeatherType=-1;inline static float InterpolationValue=.5f;};
 #define LCVR_SIMULATION_REPLAY_ROOT captureRoot.c_str()
 #define LCVR_RENDERDOC_CAPTURE_ROOT captureRoot.c_str()
 static int mkdir(const char *path,int){std::error_code ec;std::filesystem::create_directories(path,ec);return ec? -1:0;}
@@ -106,6 +112,8 @@ enum {VR_MENU_WIDTH=1024,VR_MENU_HEIGHT=768};
 enum {VR_DEBUG_WIDTH=512};
 static uint8 gDebugPixels[512*64*4]={};
 static bool gVrMenuVisible=false;
+static QuestNativeSettings::Page *gNativeSettingsPage=nullptr;
+static struct {bool m_bMenuActive=false,m_bGameNotLoaded=false;} FrontEndMenuManager;
 #define nil nullptr
 struct Rect {int left,top,right,bottom;};
 static std::vector<Rect> textRects,highlightRects;
@@ -118,6 +126,11 @@ static void DrawDebugText(const char *s,int x,int y,int scale,uint8 r,uint8 g,ui
 #include "simulation-replay-hud.inc"
 static bool Overlap(Rect a,Rect b){return a.left<b.right&&b.left<a.right&&a.top<b.bottom&&b.top<a.bottom;}
 static void LayoutTests(){
+    QuestNativeSettings::Page nativePage;
+    Check(!nativePage.showStatusNotes,"status notes are opt-in for native pages");
+    gNativeSettingsPage=&nativePage;DrawQuestSimulationPage();
+    Check(nativePage.showStatusNotes && nativePage.rows.size()==SimulationReplayMenuRows,"replay native page includes its status notes and all rows");
+    gNativeSettingsPage=nullptr;
     for(int scenario=0;scenario<4;++scenario){
     renderdocCapture=scenario!=0;rdocAvailable=scenario==1||scenario==3;captureResult=scenario==3?"saved":"off";
     for(int row=0;row<SimulationReplayMenuRows;++row){
@@ -150,6 +163,15 @@ static void CoreTests(){
     std::string legacy=header;legacy.replace(0,11,"LCVR_SIM_V1");legacy.erase(legacy.rfind(','));legacy+='\n';
     f=Temporary();std::fputs(legacy.c_str(),f);C::Write(f,MakeSample(0));std::fputs("END,10000\n",f);std::rewind(f);C::Tape old;
     Check(old.Load(f)&&old.initial.recordingGhost==-1,"legacy V1 demos remain readable with unknown recording ghost state");std::fclose(f);
+    auto portable=MakeInitial();portable.portableHandling=true;portable.handling[0]=1200;portable.handling[19]=5;portable.handling[24]=1024;
+    auto compatible=portable;compatible.handling[0]=1200.001f;compatible.vehicle.signature=123;
+    Check(C::HandlingMatches(portable,compatible),"numeric handling accepts bounded cross-platform rounding independently of legacy hash");
+    compatible.handling[0]=1201;Check(!C::HandlingMatches(portable,compatible),"real mass changes rejected");
+    compatible=portable;compatible.handling[24]=1025;Check(!C::HandlingMatches(portable,compatible),"handling flags must match exactly");
+    portable.handling[24]=2147483648.;compatible=portable;compatible.handling[24]=2147483649.;
+    Check(!C::HandlingMatches(portable,compatible),"high handling flag bits retain exact integer precision");
+    f=Temporary();Check(C::Header(f,portable),"V3 header written");C::Write(f,MakeSample(0));std::fputs("END,10000\n",f);std::rewind(f);C::Tape portableTape;
+    Check(portableTape.Load(f)&&portableTape.initial.portableHandling&&portableTape.initial.handling==portable.handling,"V3 numeric handling round trip");std::fclose(f);
     for(const char *row:{"0,nan,0,0,0,0,0,0,0,1,0,0\nEND,1\n","0,2,0,0,0,0,0,0,0,1,0,0\nEND,1\n","1,0,0,0,0,0,0,0,0,1,0,0\nEND,2\n","0,0,0,0,0,0,0,0,0,1,0,0\n0,0,0,0,0,0,0,0,0,1,0,0\nEND,2\n","0,0,0,0,0,0,0,0,0,1,0,0\n","0,0,0,0,0,0,0,0,0,1,0,0\nEND,120000001\n","0,0,0,0,0,0,0,0,0,1,0,0junk\nEND,1\n","0,0,0,0,0,0,0,0,0,1,0,0\nEND,1\ntrailing"}){
         f=Temporary();C::Header(f,initial);std::fputs(row,f);std::rewind(f);C::Tape bad;Check(!bad.Load(f),"malformed or unfinished tape rejected");std::fclose(f);
     }
@@ -340,4 +362,39 @@ static void ExternalTape(const char *path){
     Check(valid,"external tape supports route assistance over its entire duration at mixed frame rates");
     std::printf("External tape: %.3f seconds, %zu source samples, %u route frames validated.\n",double(input.endUs)/1000000,input.samples.size(),frames);
 }
-int main(int argc,char **argv){CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();RenderDocReplayTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}
+static void MatchedRuntimeTests(){
+    using namespace androidgame;
+    std::filesystem::create_directories(captureRoot+"/data");
+    const auto fixture=captureRoot+"/data/workload.fixture";
+    {std::ofstream file(fixture);file<<"first";}
+    const auto before=BenchmarkIdentity::Assets(captureRoot);
+    {std::ofstream file(fixture);file<<"second";}
+    Check(before!=BenchmarkIdentity::Assets(captureRoot),"asset identity follows file contents");
+    car.m_vecMoveSpeed=CVector(0,0,0);car.up=CVector(0,0,1);selectedCar=&car;
+    ghost=routeAssistance=autoProfile=forwardView=matchedWorkload=true;renderdocCapture=false;
+    CClock::ms_nGameClockHours=8;CWeather::ForcedWeatherType=-1;
+    SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Preparing && MatchedProfile::benchmark,"matched run suppresses desktop mirror during preparation");
+    Check(CClock::ms_nGameClockHours==12 && CWeather::ForcedWeatherType==0,"matched run establishes fixed noon sunny environment");
+    CClock::ms_nGameClockHours=9;Frame();Check(CClock::ms_nGameClockHours==12,"environment held each simulation step");
+    Stop();
+    Check(mode==Idle && !MatchedProfile::benchmark && CClock::ms_nGameClockHours==8 && CWeather::ForcedWeatherType==-1,"stop restores environment and mirror");
+    Check(!assetIdentity.empty() && !routeIdentity.empty(),"matched run fingerprints route and assets before profiling");
+    matchedWorkload=false;
+}
+static void LegacyUpgradeTests(){
+    using namespace androidgame;
+    car.m_vecMoveSpeed=CVector(0,0,0);car.up=CVector(0,0,1);selectedCar=&car;
+    auto legacy=Initial(&car);legacy.portableHandling=false;
+    const auto name=Unique()+"-9";
+    FILE *file=std::fopen(Path(name+".sim.csv").c_str(),"wx");Check(file!=nullptr,"legacy upgrade fixture created");
+    Check(Core::Header(file,legacy)&&Core::Write(file,MakeSample(0)),"legacy upgrade fixture written");std::fputs("END,2000000\n",file);std::fclose(file);
+    Refresh();selectedDemo=int(std::find(demos.begin(),demos.end(),name)-demos.begin());
+    ghost=autoProfile=routeAssistance=forwardView=true;renderdocCapture=matchedWorkload=false;
+    SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Preparing && initial.portableHandling && label!=name,"exact-matching original setup upgrades into a new portable route");
+    file=std::fopen(Path(name+".sim.csv").c_str(),"r");Core::Tape original;Check(file&&original.Load(file)&&!original.initial.portableHandling,"legacy original remains untouched");if(file)std::fclose(file);
+    file=std::fopen(Path(label+".sim.csv").c_str(),"r");Core::Tape upgraded;Check(file&&upgraded.Load(file)&&upgraded.initial.portableHandling,"portable copy loads completely");if(file)std::fclose(file);
+    Check(upgraded.samples.size()==original.samples.size()&&upgraded.endUs==original.endUs,"upgrade retains route samples and duration");Stop();
+}
+int main(int argc,char **argv){Check(androidgame::matchedWorkload,"matched benchmark defaults on");androidgame::matchedWorkload=false;CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();RenderDocReplayTests();LegacyUpgradeTests();MatchedRuntimeTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}

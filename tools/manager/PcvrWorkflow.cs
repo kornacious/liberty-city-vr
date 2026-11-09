@@ -167,7 +167,7 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         if (options.PcvrPrepareData && !Directory.Exists(paths.Data))
             Workflows.PrepareWindowsData(settings.Repository,settings.GameDirectory,paths.Data,token);
         ValidatePreparedData(paths.Data);
-        Paths.CopyTree(Path.Combine(settings.Repository,"overlay/gamefiles"),paths.Data,token);
+        Workflows.RefreshWindowsPortFiles(settings.Repository,paths.Data,token);
         Directory.CreateDirectory(paths.Install);
         var relative="versions/"+id; var install=Paths.Child(paths.Install,relative);
         await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
@@ -229,14 +229,18 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         var install=ResolveInstallation(paths.Install);
         await Probe(runner,Path.Combine(install,"libertyvr-pcvr.exe"),log,token);
     }
-    public static string[] LaunchArguments(PcvrPaths paths,int frames)
+    public static string[] LaunchArguments(PcvrPaths paths,int frames,string questProfile="")
     {
         if (frames<0 || frames>1000000) throw new InvalidDataException("PCVR frame limit must be between 0 and 1000000 (0 means unlimited).");
-        return ["--game-data",paths.Data,"--user-data",paths.User,"--frames",frames.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+        string[] arguments=["--game-data",paths.Data,"--user-data",paths.User,"--frames",frames.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+        if(string.IsNullOrWhiteSpace(questProfile)) return arguments;
+        Paths.NoLinks(questProfile);
+        if(!File.Exists(questProfile) || new FileInfo(questProfile).Length>32768) throw new InvalidDataException("Choose a local Quest profile exported by a profiler capture (maximum 32 KiB).");
+        return [..arguments,"--quest-profile",Path.GetFullPath(questProfile)];
     }
     public async Task Launch(ActionOptions options,CancellationToken token)
     {
-        RequireWindows(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit);
+        RequireWindows(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
         ValidatePreparedData(paths.Data); var install=ResolveInstallation(paths.Install); Runtime();
         await Probe(runner,Path.Combine(install,"libertyvr-pcvr.exe"),log,token);
         Directory.CreateDirectory(paths.User);

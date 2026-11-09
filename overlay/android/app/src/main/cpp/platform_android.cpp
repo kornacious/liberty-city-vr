@@ -1,3 +1,4 @@
+#define LCVR_PROFILE_API_IMPLEMENTATION
 #include "platform_android.h"
 
 #include <android/native_activity.h>

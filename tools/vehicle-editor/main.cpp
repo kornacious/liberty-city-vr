@@ -32,6 +32,9 @@ static Legacy legacy, radioLegacy, radioDefaults;
 static Store store;
 static Pack *editing = &store.personal;
 static int layer = 0, set = 0, selected = -1, element = 0, operation = 0;
+static int transferTarget = 0;
+static char pcvrData[1024] = "", pcvrUser[1024] = "";
+static bool importSharedTemplate = false;
 static Vec seat, eye;
 static bool cameraInitialized = false, autoResetCamera = false, vsync = true, invertX = false,
             invertY = false;
@@ -48,6 +51,9 @@ static float yaw = 0, pitch = 0, fov = 80, steering = 0, eyeAboveSeat = 0.68f;
 static bool extras[6] = {}, dirty = false, showHud = true, showWheel = true, orbit = false,
             closeRequested = false;
 static char gamePath[1024] = "", workPath[1024] = "", search[128] = "", adbPath[1024] = "adb";
+static fs::path targetWorkspace(int target) {
+    return target ? fs::path(workPath) / "targets" / "pcvr" : fs::path(workPath);
+}
 #ifdef _WIN32
 static char managerPath[1024] = "LibertyManager.exe";
 #else
@@ -79,7 +85,10 @@ static Preferences capturePreferences() {
     p.paths["WorkspaceFolder"] = workPath;
     p.paths["Manager"] = managerPath;
     p.paths["ADB"] = adbPath;
-    for (auto key : {"GameFolder", "WorkspaceFolder"})
+    p.paths["PCVRData"] = pcvrData;
+    p.paths["PCVRUser"] = pcvrUser;
+    p.set("TransferTarget", transferTarget);
+    for (auto key : {"GameFolder", "WorkspaceFolder", "PCVRData", "PCVRUser"})
         if (!p.paths[key].empty()) {
             std::error_code error;
             auto path = fs::absolute(fs::u8path(p.paths[key]), error);
@@ -118,6 +127,9 @@ static Preferences capturePreferences() {
     return p;
 }
 static void applyPreferences(const Preferences &p) {
+    transferTarget = (int)p.get("TransferTarget");
+    std::snprintf(pcvrData, sizeof(pcvrData), "%s", p.paths.at("PCVRData").c_str());
+    std::snprintf(pcvrUser, sizeof(pcvrUser), "%s", p.paths.at("PCVRUser").c_str());
     if (!p.paths.at("GameFolder").empty())
         std::snprintf(gamePath, sizeof(gamePath), "%s", p.paths.at("GameFolder").c_str());
     if (!p.paths.at("WorkspaceFolder").empty())
@@ -532,7 +544,7 @@ static void checkReviews() {
 static void readReviews() {
     reviews.clear();
     staleReviews.clear();
-    std::ifstream in(fs::path(workPath) / "vehicle_placements.review.txt");
+    std::ifstream in(targetWorkspace(transferTarget) / "vehicle_placements.review.txt");
     std::string a, b;
     while (in >> a >> b)
         if (validSection(a))
@@ -540,7 +552,7 @@ static void readReviews() {
     checkReviews();
 }
 static bool saveReviews() {
-    auto path = fs::path(workPath) / "vehicle_placements.review.txt";
+    auto path = targetWorkspace(transferTarget) / "vehicle_placements.review.txt";
     auto temporary = path;
     temporary += ".tmp";
     auto backup = path;
@@ -579,21 +591,22 @@ static void openWorkspace() {
     }
     try {
         fs::create_directories(workPath);
+        fs::create_directories(targetWorkspace(transferTarget));
         Store next;
         std::string error;
         const char *files[] = {"vehicle_placements.bundled.ini", "vehicle_placements.template.ini",
                                "vehicle_placements.personal.ini"};
         Pack *packs[] = {&next.bundled, &next.templates, &next.personal};
         for (int i = 0; i < 3; i++) {
-            auto p = fs::path(workPath) / files[i];
+            auto p = (i == 1 ? fs::path(workPath) : targetWorkspace(transferTarget)) / files[i];
             if (fs::exists(p) && !packs[i]->load(p.string(), error))
                 throw std::runtime_error(error);
         }
         store = next;
         editing = layer ? &store.templates : &store.personal;
-        legacy.load(fs::path(workPath) / "vr_settings.ini");
-        radioLegacy.load(fs::path(workPath) / "radio_board.ini");
-        radioDefaults.load(fs::path(workPath) / "radio_board_defaults.ini");
+        legacy.load(targetWorkspace(transferTarget) / "vr_settings.ini");
+        radioLegacy.load(targetWorkspace(transferTarget) / "radio_board.ini");
+        radioDefaults.load(targetWorkspace(transferTarget) / "radio_board_defaults.ini");
         dirty = false;
         readReviews();
         history.clear();
@@ -608,7 +621,10 @@ static bool save() {
         return false;
     }
     std::string error;
-    if (!store.personal.save((fs::path(workPath) / "vehicle_placements.personal.ini").string(), error) ||
+    std::error_code directoryError;
+    fs::create_directories(targetWorkspace(transferTarget), directoryError);
+    if(directoryError) { message="Cannot create target configuration workspace."; return false; }
+    if (!store.personal.save((targetWorkspace(transferTarget) / "vehicle_placements.personal.ini").string(), error) ||
         !store.templates.save((fs::path(workPath) / "vehicle_placements.template.ini").string(),
                               error)) {
         message = error;
@@ -853,7 +869,13 @@ static void device(const std::string &action, bool automatic = false) {
     std::vector<std::string> args = {
         managerPath, "--vehicle-bridge", action, "--workspace", fs::absolute(workPath).string(),
         "--adb",    adbPath};
-    if (deviceIndex) {
+    if(transferTarget) {
+        args.insert(args.end(), {"--target", "pcvr"});
+        if(*pcvrData) args.insert(args.end(), {"--pcvr-data", pcvrData});
+        if(*pcvrUser) args.insert(args.end(), {"--pcvr-user", pcvrUser});
+    }
+    if(action=="import" && importSharedTemplate) args.push_back("--import-template");
+    if (deviceIndex && !transferTarget) {
         args.push_back("--device-index");
         args.push_back(std::to_string(deviceIndex));
     }
@@ -861,7 +883,7 @@ static void device(const std::string &action, bool automatic = false) {
         args.push_back("--kind");
         args.push_back(layer ? "template" : "personal");
         args.push_back("--pack");
-        args.push_back((fs::absolute(workPath) /
+        args.push_back((fs::absolute(layer ? fs::path(workPath) : targetWorkspace(transferTarget)) /
                         (layer ? "vehicle_placements.template.ini" : "vehicle_placements.personal.ini"))
                            .string());
         std::string sections;
@@ -1056,7 +1078,7 @@ static void ui() {
                     throw std::runtime_error("Choose an existing legacy INI and a workspace.");
                 auto sourceName = lower(fs::path(importPath).filename().string());
                 auto destination =
-                    fs::absolute(fs::path(workPath) / (sourceName == "radio_board.ini" ||
+                    fs::absolute(targetWorkspace(transferTarget) / (sourceName == "radio_board.ini" ||
                                                                sourceName == "radio_board_defaults.ini"
                                                            ? sourceName
                                                            : "vr_settings.ini"));
@@ -1067,9 +1089,9 @@ static void ui() {
                                       fs::copy_options::overwrite_existing);
                     fs::copy_file(source, destination, fs::copy_options::overwrite_existing);
                 }
-                legacy.load(fs::path(workPath) / "vr_settings.ini");
-                radioLegacy.load(fs::path(workPath) / "radio_board.ini");
-                radioDefaults.load(fs::path(workPath) / "radio_board_defaults.ini");
+                legacy.load(targetWorkspace(transferTarget) / "vr_settings.ini");
+                radioLegacy.load(targetWorkspace(transferTarget) / "radio_board.ini");
+                radioDefaults.load(targetWorkspace(transferTarget) / "radio_board_defaults.ini");
                 reviews.clear();
                 history.clear();
                 dirty = true;
@@ -1089,7 +1111,7 @@ static void ui() {
     ImGui::SameLine();
     if (ImGui::Button("Redo") && history.redo(*editing, reviews))
         dirty = true;
-    const char *sets[] = {"Classic", assets.available[2] ? "Modern" : "Modern (not installed)"};
+    const char *sets[] = {"Classic", assets.available[2] ? "Original Xbox" : "Original Xbox (not installed)"};
     int visibleSet = set == 0 ? 0 : 1;
     if (ImGui::Combo("Modelset", &visibleSet, sets, 2)) {
         set = editor::visibleModelSets[visibleSet];
@@ -1305,12 +1327,40 @@ static void ui() {
 
     ImGui::SetNextWindowPos(ImVec2(8, 700), ImGuiCond_Once);
     ImGui::SetNextWindowSize(ImVec2(600, 280), ImGuiCond_Once);
-    ImGui::Begin("Quest 3 import and deployment");
+    ImGui::Begin("Quest / PCVR placement transfer");
+    int nextTarget=transferTarget;
+    if(ImGui::Combo("Transfer target", &nextTarget, "Quest standalone\0Windows PCVR\0") && nextTarget!=transferTarget) {
+        if(!deviceTask.valid() && (!dirty || save())) {
+            transferTarget=nextTarget; liveSync=false; liveObserved.clear(); liveSent.clear(); openWorkspace();
+        }
+    }
     ImGui::InputText("Manager executable", managerPath, sizeof(managerPath));
-    ImGui::InputText("ADB executable", adbPath, sizeof(adbPath));
-    ImGui::InputInt("Device index (0=auto)", &deviceIndex);
-    if (ImGui::Button("Check headset"))
+    if(transferTarget) {
+        ImGui::InputText("PCVR data (blank: manager)", pcvrData, sizeof(pcvrData));
+        ImGui::InputText("PCVR user (blank: manager)", pcvrUser, sizeof(pcvrUser));
+    } else {
+        ImGui::InputText("ADB executable", adbPath, sizeof(adbPath));
+        ImGui::InputInt("Device index (0=auto)", &deviceIndex);
+    }
+    ImGui::Checkbox("Replace shared template during import", &importSharedTemplate);
+    ImGui::TextWrapped("Templates are shared; personal overrides and import baselines stay separate for Quest and PCVR.");
+    if (ImGui::Button("Check target"))
         device("status");
+    if(ImGui::Button("Copy selected personal fields from other target") && layer==0 && !deviceTask.valid()) {
+        Pack other; std::string error;
+        if(other.load((targetWorkspace(1-transferTarget)/"vehicle_placements.personal.ini").string(),error)) {
+            remember(); auto entries=selection; if(entries.empty() && !currentSection().empty())entries.insert(currentSection());
+            size_t copied=0;
+            for(const auto &entry:entries) if(other.entries.count(entry)) {
+                for(const auto &field:other.entries.at(entry))store.personal.entries[entry][field.first]=field.second;
+                copied+=other.entries.at(entry).size();
+                reviews.erase(entry);
+            }
+            if(copied)dirty=true;
+            message=copied?"Copied selected personal fields into this target workspace; preview before deployment.":"No personal fields found for the selected entries on the other target.";
+        } else message=error;
+    }
+    if(layer!=0)ImGui::TextDisabled("Select Personal overrides to copy personal fields.");
     ImGui::SameLine();
     if (ImGui::Button("Import all placement settings")) {
         if (dirty)
@@ -1351,7 +1401,7 @@ static void ui() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
-    if (ImGui::Checkbox("Live sync current entry to headset", &liveSync)) {
+    if (ImGui::Checkbox("Live sync current entry to target", &liveSync)) {
         liveObserved.clear();
         liveSent.clear();
         liveStatus = liveSync ? "Waiting to synchronize current entry..." : "Disabled";
@@ -1571,6 +1621,12 @@ sk::EventStatus AppEventHandler(sk::Event event, void *param) {
                 std::snprintf(gamePath, sizeof(gamePath), "%s", args.argv[++i]);
             else if (a == "--workspace" && i + 1 < args.argc)
                 std::snprintf(workPath, sizeof(workPath), "%s", args.argv[++i]);
+            else if (a == "--target" && i + 1 < args.argc)
+                transferTarget = std::string(args.argv[++i]) == "pcvr" ? 1 : 0;
+            else if (a == "--pcvr-data" && i + 1 < args.argc)
+                std::snprintf(pcvrData, sizeof(pcvrData), "%s", args.argv[++i]);
+            else if (a == "--pcvr-user" && i + 1 < args.argc)
+                std::snprintf(pcvrUser, sizeof(pcvrUser), "%s", args.argv[++i]);
             else if (a == "--smoke" && i + 1 < args.argc)
                 smokeFrames = std::atoi(args.argv[++i]);
             else if (a == "--smoke-all") {

@@ -1,5 +1,6 @@
 #define NOMINMAX
 #include "DesktopMirror.h"
+#include "MatchedProfile.h"
 #include "imgui.h"
 #include <chrono>
 #include <cstdio>
@@ -404,6 +405,8 @@ void BeginUi() {
   if (options.panel) {
     ImGui::SetNextWindowSize(ImVec2(390, 410), ImGuiCond_FirstUseEver);
     ImGui::Begin("Desktop preview (F1)", &options.panel);
+    ImGui::Text("Graphics: %s", MatchedProfile::active ? "Quest 3 compatibility" : "Native PCVR");
+    if(MatchedProfile::active) ImGui::TextWrapped("Restart via the manager to change profile. Timings measure this PC.");
     int eye = options.eye;
     if (ImGui::Combo("Eye / F2", &eye, "Left\0Right\0")) {
       options.eye = eye;

@@ -174,10 +174,19 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 if (loadMusicOnOpen) app.Invoke(() => { if (!disposed && selected == 2 && running is not { IsCompleted: false }) { musicRefresh = true; Start(); } });
                 break;
             case 3:
+                var assetTarget=new OptionSelector {X=1,Y=row,Labels=["Quest standalone","Windows PCVR"],Value=(int)options.Target,Width=Dim.Fill(2),Height=2};
+                assetTarget.SetScheme(Theme());form.Add(assetTarget);row+=3;
+                readFields.Add(()=>options.Target=(GameTarget)(assetTarget.Value??0));
+                assetTarget.ValueChanged+=(_,_)=>{
+                    foreach(var read in readFields.ToArray())read();
+                    app.Invoke(()=>{if(!disposed && selected==3)Render(3,preserveDraft:true);});
+                };
+                if(options.Target==GameTarget.WindowsPcvr)Note("PCVR destination: "+PcvrPaths.From(draft).Data);
                 options.DownloadModels = false; options.ModelSource = "";
                 Note("Import Xbox US 1.0 visuals, particles, Neo effects and audio from your local ISO. Requires FFmpeg/ffprobe. No game downloads.");
                 Note("Conversion requires CMake, Ninja and C++ build tools (Visual Studio C++ on Windows).");
-                Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File);
+                Toggle("Use verified prepared output (skip ISO conversion)",options.UsePreparedModels,v=>options.UsePreparedModels=v);
+                Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File, false);
                 Field("Output folder named modern (blank: workplace)", options.ModelOutput, v => options.ModelOutput = v, OpenMode.Directory, false);
                 Toggle("Build only (skip asset installation)", options.BuildOnly, v => options.BuildOnly = v); break;
             case 4:
@@ -254,6 +263,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 break;
             case (int)ManagerAction.LaunchPcvr:
                 Note("Launch the installed Windows PCVR game with separate local game data and saves.");
+                Field("Quest profile (blank: native PCVR; restart to change)", options.PcvrQuestProfile, v => options.PcvrQuestProfile = v, OpenMode.File);
+                Note("Matches captured Quest workload; PC timings are not Quest performance.");
                 PcvrDirectories();
                 Note("Connect the headset to your PC OpenXR runtime. Quit in-game to return here.");
                 Note("Cancel stops the game process; use in-game Quit for a normal exit.");

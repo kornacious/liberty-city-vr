@@ -31,12 +31,25 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 else if (options.MusicRevision.Length == 0) log.Write("No imports or playlist changes selected. Use Refresh to load the headset library.");
                 break;
             case ManagerAction.InstallModernModels:
+                if(!Enum.IsDefined(options.Target))throw new InvalidDataException("Select a valid game target.");
+                if(options.Target==GameTarget.WindowsPcvr)
+                    PcvrXboxAssets.ValidateOutput(settings,string.IsNullOrWhiteSpace(options.ModelOutput)?Path.Combine(settings.Workplace,"original-xbox/modelsets/modern"):Path.GetFullPath(options.ModelOutput));
                 var models = new ModernModels(settings, runner, log);
-                var output = await models.Prepare(options, token);
+                string output;
+                if(options.UsePreparedModels) {
+                    output=string.IsNullOrWhiteSpace(options.ModelOutput)?Path.Combine(settings.Workplace,"original-xbox/modelsets/modern"):Path.GetFullPath(options.ModelOutput);
+                    OriginalXboxModels.ValidateOverlay(output);
+                    log.Write("Prepared Original Xbox overlay verified locally; ISO conversion skipped.");
+                } else output = await models.Prepare(options, token);
                 if (!options.BuildOnly)
                 {
-                    var device = await Connect(token) ?? throw new IOException("Models built, but no eligible Quest 3 is available for installation.");
-                    await models.Install(device, output, token);
+                    if(options.Target==GameTarget.WindowsPcvr) {
+                        PcvrXboxAssets.Install(settings,output,token);
+                        log.Write("Original Xbox visuals and audio installed in isolated PCVR data. Select Original Xbox under Appearance > Asset Source and restart. Existing placements and saves preserved.");
+                    } else {
+                        var device = await Connect(token) ?? throw new IOException("Models built, but no eligible Quest 3 is available for installation.");
+                        await models.Install(device, output, token);
+                    }
                 }
                 break;
             case ManagerAction.RepairGameFiles: await Repair(options, token); break;
@@ -140,6 +153,9 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         }
         Paths.CopyTree(Path.Combine(repository, "overlay"), destination, token);
         Paths.CopyTree(Path.Combine(repository, "librw"), Path.Combine(destination, "vendor/librw"), token);
+        Directory.CreateDirectory(Path.Combine(destination,"src/xr"));
+        File.WriteAllText(Path.Combine(destination,"src/xr/SourceIdentity.h"),
+            "#pragma once\n#define LCVR_SOURCE_IDENTITY \""+BenchmarkReports.SourceIdentity(repository)+"\"\n");
         // Android requires a shell wrapper inside diagnostic APKs. Keep its source in the manager,
         // and generate it only in the private build product.
         var wrapper = Path.Combine(destination, "android/diagnostics/asan-wrap.sh");
@@ -170,9 +186,17 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             throw new IOException("Windows game data must remain separate from source and repository directories.");
         Directory.CreateDirectory(destination);
         foreach (var directory in directories) Paths.CopyTree(directory, Path.Combine(destination, Path.GetFileName(directory)), token);
-        Paths.CopyTree(Path.Combine(repository, "overlay/gamefiles"), destination, token);
+        RefreshWindowsPortFiles(repository,destination,token);
         // Marker is written last so an interrupted preparation cannot be launched as complete.
         File.WriteAllText(Path.Combine(destination, ".libertyvr-pcvr-data"), "Liberty City VR local Windows data v1\n");
+    }
+
+    public static void RefreshWindowsPortFiles(string repository,string destination,CancellationToken token)
+    {
+        Paths.CopyTree(Path.Combine(repository,"overlay/gamefiles"),destination,token);
+        var baseline=Paths.Child(repository,"overlay/android/app/src/main/assets/vehicle_placements.bundled.ini");
+        var target=Paths.Child(destination,"vehicle_placements.bundled.ini");
+        token.ThrowIfCancellationRequested();File.Copy(baseline,target,true);
     }
 
     public static async Task PushGameTree(QuestDevice device, string source, string relative, CancellationToken token, bool convertedRadio = false)
@@ -248,9 +272,11 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             throw new IOException("Editor output must be separate from the repository and its build directory.");
         Paths.NoLinks(build); Paths.NoLinks(output);
         List<string> arguments = ["-S", Path.Combine(settings.Repository, "tools/vehicle-editor"), "-B", build, "-DCMAKE_BUILD_TYPE=Release"];
+        if(!string.IsNullOrWhiteSpace(settings.Python))arguments.Add("-DPython3_EXECUTABLE="+settings.Python);
         var managerRuntime = Path.Combine(settings.Workplace, "editor-manager-runtime-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(managerRuntime);
-        foreach (var file in Directory.GetFiles(AppContext.BaseDirectory).Where(p => !p.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)))
+        foreach (var file in Directory.GetFiles(AppContext.BaseDirectory).Where(p => !p.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase) &&
+                     !Path.GetFileName(p).StartsWith("LibertyManager.previous",StringComparison.OrdinalIgnoreCase)))
             File.Copy(file, Path.Combine(managerRuntime, Path.GetFileName(file)));
         foreach (var directory in Directory.GetDirectories(AppContext.BaseDirectory).Where(d => Directory.GetFiles(d, "*.resources.dll").Length > 0))
             Paths.CopyTree(directory, Path.Combine(managerRuntime, Path.GetFileName(directory)), token);

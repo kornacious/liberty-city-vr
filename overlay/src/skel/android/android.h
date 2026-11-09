@@ -23,6 +23,8 @@ struct VulkanContext
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
 	bool fragmentStoresAndAtomicsEnabled;
+	VkPhysicalDeviceFeatures enabledFeatures;
+	float maxSamplerAnisotropy;
 	VkQueue queue;
 	unsigned int queueFamilyIndex;
 	unsigned int width;

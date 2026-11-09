@@ -40,8 +40,8 @@ public sealed class ModernModels(ManagerSettings settings, ICommandRunner runner
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
         var root = QuestDevice.GameData + "/modelsets";
         var stamp = Guid.NewGuid().ToString("N");
-        var stage = root + "/.modern-incoming-" + stamp;
-        var backup = root + "/.modern-backup-" + stamp;
+        var stage = QuestDevice.GameData + "/.libertyvr-modelset-staging/modern-" + stamp;
+        var backup = QuestDevice.GameData + "/.libertyvr-modelset-backups/modern-" + stamp;
         var final = root + "/modern";
         var activated = false;
         try
@@ -55,10 +55,11 @@ public sealed class ModernModels(ManagerSettings settings, ICommandRunner runner
             await device.Shell("chmod -R a+rX " + QuestDevice.Quote(stage), token);
             // One remote shell transaction restores the old profile if activation fails.
             var qFinal = QuestDevice.Quote(final); var qBackup = QuestDevice.Quote(backup); var qStage = QuestDevice.Quote(stage);
+            await device.Shell("mkdir -p " + QuestDevice.Quote(root) + " " + QuestDevice.Quote(QuestDevice.GameData + "/.libertyvr-modelset-backups"), token);
             await device.Shell($"if [ -d {qFinal} ]; then mv {qFinal} {qBackup} || exit 1; fi; if mv {qStage} {qFinal}; then :; else if [ -d {qBackup} ]; then mv {qBackup} {qFinal}; fi; exit 1; fi", token);
             activated = true;
-            await device.Shell("rm -rf " + qBackup, token);
             log.Write("Original Xbox visuals and audio installed. Select Original Xbox under Appearance > Asset Source and fully restart the game.");
+            log.Write("Any previous overlay is retained in local modelset backups, outside the active benchmark asset scope.");
         }
         finally
         {

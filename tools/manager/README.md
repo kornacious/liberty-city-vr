@@ -109,6 +109,16 @@ The game opens a desktop eye preview with ImGui controls and F1–F12 shortcuts,
 plus focused keyboard/mouse and XInput gamepad input. See the
 [preview controls](../../overlay/windows/README.md#desktop-preview-and-input).
 Preview preferences are separate from Quest settings and stored in the PCVR user directory.
+The optional **Quest profile** field selects a captured Quest rendering workload;
+blank uses native PCVR. Restart to change profiles. `--benchmark-collect OUTPUT`
+copies recent allowlisted diagnostics locally; `--benchmark-compare LEFT.run.csv
+RIGHT.run.csv` reports matched workload checks and per-device measured timings.
+See [benchmark workflow](../../BENCHMARKS.md); desktop timings are not Quest estimates.
+`--benchmark-inventory OUTPUT` compares local Quest/PCVR asset hashes;
+`--benchmark-align-quest OUTPUT` creates a new verified Quest-aligned PCVR data/user
+copy. Original data and saves are preserved; global launch paths remain unchanged.
+These operations require local headset access and must never run against cloud
+storage or publish original assets.
 
 CLI callers use `--run BuildAndInstall REQUEST.json` with `Options.Target: 1` and
 PCVR-specific flags `PcvrBuildOnly`, `PcvrPrepareData`, `PcvrGpuTests` and
@@ -118,6 +128,19 @@ or `--run LaunchPcvr REQUEST.json`; launch optionally accepts `PcvrFrameLimit`
 (0 means unlimited). Relevant settings are `VulkanSdk`, `PcvrShaderCompiler`,
 `PcvrOpenXrSource`, `PcvrInstallDirectory`, `PcvrDataDirectory` and `PcvrUserDirectory`.
 Old JSON requests without Target continue to build Quest.
+
+**Original Xbox assets** also offers Quest/Windows target selection. Conversion
+still accepts only the supported locally owned Xbox disc image; **Use verified
+prepared output** rechecks the complete collection and skips conversion. Windows
+installs it under the prepared data directory's `modelsets/modern`, with verified
+staging and retained backups. Quest retains previous collections too. Staging and
+backups live outside active asset roots, so they do not alter matched fingerprints.
+No asset downloads, save replacement or automatic asset-source switch occurs.
+PCVR builds/data preparation also install the same bundled vehicle defaults as Quest.
+
+The vehicle editor shares authored templates across Quest/PCVR and keeps personal
+overrides separate. Its bridge resolves manager PCVR paths and configured ADB;
+see the [target transfer workflow](../vehicle-editor/README.md#quest-and-pcvr-targets).
 
 ## Actions
 

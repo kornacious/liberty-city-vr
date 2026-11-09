@@ -21,7 +21,10 @@ public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runn
     {
         var resources = new ResourceManager("LibertyManager.EmbeddedTools", typeof(AuxiliaryTools).Assembly);
         var set = resources.GetResourceSet(System.Globalization.CultureInfo.InvariantCulture, true, true)!;
-        return set.Cast<DictionaryEntry>().ToDictionary(e => (string)e.Key, e => (string)e.Value!, StringComparer.Ordinal);
+        var sources=set.Cast<DictionaryEntry>().ToDictionary(e => (string)e.Key, e => (string)e.Value!, StringComparer.Ordinal);
+        using var bridge=typeof(AuxiliaryTools).Assembly.GetManifestResourceStream("LibertyManager.VehicleBridge.py")!;
+        using var reader=new StreamReader(bridge);sources.Add("tools/vehicle-editor/device_bridge.py",reader.ReadToEnd());
+        return sources;
     }
     private static readonly HashSet<string> Primary = new(StringComparer.Ordinal)
     {
@@ -144,6 +147,26 @@ public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runn
 
     public async Task Bridge(string[] arguments, CancellationToken token)
     {
+        string? Option(string name) {
+            var indices=arguments.Select((value,index)=>(value,index)).Where(p=>p.value==name).Select(p=>p.index).ToArray();
+            if(indices.Length>1 || indices.Length==1 && indices[0]+1>=arguments.Length)throw new InvalidDataException("Invalid vehicle transfer options.");
+            return indices.Length==0?null:arguments[indices[0]+1];
+        }
+        if(Option("--target")=="pcvr") {
+            var localSettings=settings with {PcvrDataDirectory=Option("--pcvr-data")??settings.PcvrDataDirectory,
+                PcvrUserDirectory=Option("--pcvr-user")??settings.PcvrUserDirectory};
+            var pcvr=PcvrPaths.From(localSettings);pcvr.Validate(localSettings);PcvrWorkflow.ValidatePreparedData(pcvr.Data);
+            var workspace=Option("--workspace")??throw new InvalidDataException("Choose a workspace.");
+            Paths.NoLinks(workspace);
+            foreach(var target in new[]{pcvr.Data,pcvr.User,pcvr.Install})
+                if(Paths.Within(target,workspace)||Paths.Within(workspace,target))throw new InvalidDataException("Keep the editor workspace separate from PCVR data, saves and installation.");
+            if(Option("--pcvr-data") is null)arguments=[..arguments,"--pcvr-data",pcvr.Data];
+            if(Option("--pcvr-user") is null)arguments=[..arguments,"--pcvr-user",pcvr.User];
+        } else if(!arguments.Contains("--help") && !arguments.Contains("-h") && (Option("--adb") is null or "adb")) {
+            var adb=new Toolchain(settings,runner as CommandRunner??new CommandRunner(log),log).FindAdb()??throw new IOException("Configure ADB for Quest placement transfer.");
+            var index=Array.IndexOf(arguments,"--adb");
+            if(index<0)arguments=[..arguments,"--adb",adb];else arguments[index+1]=adb;
+        }
         const string key = "tools/vehicle-editor/device_bridge.py";
         var root = Path.Combine(settings.Workplace, ".tmp", "lcvr-bridge-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);

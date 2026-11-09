@@ -93,3 +93,15 @@ int32_t WritePrivateProfileStringA(const char *section, const char *key,
 }
 
 #endif
+
+#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && !defined(LCVR_PROFILE_API_IMPLEMENTATION)
+#include "MatchedProfile.h"
+inline int32_t LcvrProfileInt(const char *section,const char *key,int32_t fallback,const char *file) {
+    return MatchedProfile::Read(section,key,(int32_t)GetPrivateProfileIntA(section,key,fallback,file));
+}
+inline int32_t LcvrProfileWrite(const char *section,const char *key,const char *value,const char *file) {
+    return MatchedProfile::Write(section,key,value) ? WritePrivateProfileStringA(section,key,value,file) : 1;
+}
+#define GetPrivateProfileIntA LcvrProfileInt
+#define WritePrivateProfileStringA LcvrProfileWrite
+#endif

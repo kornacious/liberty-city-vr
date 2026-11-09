@@ -601,6 +601,8 @@ gameThreadMain(android_app *app, AppState *state)
 			context.device = graphics.device;
 			context.fragmentStoresAndAtomicsEnabled =
 				graphics.fragmentStoresAndAtomicsEnabled;
+			context.enabledFeatures=graphics.enabledFeatures;
+			context.maxSamplerAnisotropy=graphics.maxSamplerAnisotropy;
 			context.queue = graphics.queue;
 			context.queueFamilyIndex = graphics.queueFamilyIndex;
 			context.width = graphics.width;
@@ -1051,6 +1053,7 @@ EndVrWristPanel(void)
 #include "DesktopMirror.h"
 int RunWindowsGame(unsigned frameLimit)
 {
+    androidgame::QuestProfilerSetLogDirectory(platform::storageRoot());
     VehiclePlacement::configureRuntime(platform::gameDataRoot());
     if(!xrvk::create(nullptr)) { xrvk::destroy(); return 1; }
     xrvk::GraphicsContext graphics{};
@@ -1061,6 +1064,7 @@ int RunWindowsGame(unsigned frameLimit)
     androidgame::VulkanContext context{};
     context.instance=graphics.instance; context.physicalDevice=graphics.physicalDevice;
     context.device=graphics.device; context.fragmentStoresAndAtomicsEnabled=graphics.fragmentStoresAndAtomicsEnabled;
+    context.enabledFeatures=graphics.enabledFeatures; context.maxSamplerAnisotropy=graphics.maxSamplerAnisotropy;
     context.queue=graphics.queue; context.queueFamilyIndex=graphics.queueFamilyIndex;
     context.width=graphics.width; context.height=graphics.height;
     context.renderScaleEffectivePercent=graphics.renderScaleEffectivePercent;

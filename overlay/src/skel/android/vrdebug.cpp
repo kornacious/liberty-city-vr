@@ -4297,6 +4297,7 @@ static void
 DrawQuestSimulationPage(void)
 {
 	BeginFullVrMenuPage("SIMULATION REPLAY", "AUTOMOBILE INPUT REPLAY - LIVE WORLD");
+	if(gNativeSettingsPage) gNativeSettingsPage->showStatusNotes = true;
 	char row[160];
 	for(int i=0;i<SimulationReplayMenuRows;++i){
 		SimulationReplayMenuRow(i,row,sizeof(row));

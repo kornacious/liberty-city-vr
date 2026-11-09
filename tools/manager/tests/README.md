@@ -1,6 +1,14 @@
 # Manager verification
 
 Run `dotnet run --project tools/manager/tests -c Release` from the repository.
+Benchmark checks cover warmup exclusion, delayed GPU-sample deduplication,
+mismatch/dirty/incomplete capture rejection, optional profile launch arguments,
+source identities and diagnostic filename restrictions.
+Asset preparation checks cover bounded inventory parsing, path/case rejection,
+verified reuse/transfers, exclusion of PC-only assets, partial failure and
+preservation of original data and saves using synthetic fixtures.
+Native Windows core checks exercise the shared profile parser and in-memory overrides; the replay runtime
+adapter checks fixed environment restoration and asset fingerprints.
 This dependency-free executable checks the active C# workflows and returns a
 nonzero exit code on any failure. It uses synthetic audio/IMG/provider/device
 fixtures, disposable settings and temporary Git repositories. It reads no retail

@@ -88,6 +88,7 @@ public sealed record ActionOptions
     public bool PcvrGpuTests { get; set; }
     public bool PcvrAudioTests { get; set; }
     public int PcvrFrameLimit { get; set; }
+    public string PcvrQuestProfile { get; set; } = "";
     public string ModId { get; set; } = "upstate-liberty";
     public string ModArchive { get; set; } = "";
     public ModOperation ModOperation { get; set; }
@@ -99,6 +100,7 @@ public sealed record ActionOptions
     public bool PackageEditor { get; set; } = true;
     public bool ValidateMusicOnly { get; set; }
     public bool DownloadModels { get; set; }
+    public bool UsePreparedModels { get; set; }
     public bool UpdateDryRun { get; set; }
     public string MusicSource { get; set; } = "";
     public string[] MusicSources { get; set; } = [];

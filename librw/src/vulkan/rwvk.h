@@ -26,6 +26,9 @@ struct EngineOpenParams
 	VkPhysicalDevice physicalDevice;
 	VkDevice device;
 	bool32 fragmentStoresAndAtomicsEnabled;
+	bool32 hasEnabledFeatures;
+	VkPhysicalDeviceFeatures enabledFeatures;
+	float32 maxSamplerAnisotropy;
 	uint32 queueFamilyIndex;
 	VkQueue queue;
 
