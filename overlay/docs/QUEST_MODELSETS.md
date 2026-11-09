@@ -9,6 +9,10 @@ Fully close and restart the application after changing the source. The active
 audio source is displayed separately from the requested source so pending restart
 changes are clear. Custom music and saves are independent of this choice.
 
+While Body IK controls Claude's arms, his opening prison jumpsuit keeps its own
+hand models with either asset source. Changing into his regular outfit restores
+the VR hand meshes automatically; no setting change or restart is needed.
+
 ## Import from your own disc image
 
 Open **Original Xbox assets** in the .NET 10 Manager. Select your local GTA III

@@ -17,6 +17,7 @@
 #include "Camera.h"
 #include "CutsceneMgr.h"
 #include "ModelSets.h"
+#include "ModelInfo.h"
 
 extern bool gVrFirstPersonActive;
 extern void VrUpdateFirstPersonAnchor(bool postPhysics);
@@ -32,6 +33,19 @@ extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 // tracked hands that are already being rendered.
 namespace VrBodyIK
 {
+
+bool
+UsesOutfitHands(void)
+{
+	CPlayerPed *player = FindPlayerPed();
+	if(player == nil || !WeaponOwnershipActive())
+		return false;
+	// Special player models reuse the player slot. Inspect its live streamed
+	// name so changing out of the jumpsuit immediately restores the VR mesh,
+	// for both Classic rigid and Original Xbox skinned models.
+	return strcmp(CModelInfo::GetModelInfo(player->GetModelIndex())->GetModelName(),
+		"playerp") == 0;
+}
 
 static QuestHeadAttachment::Snapshot gNativeCameraHead;
 static bool gNativeCameraHeadFromPreRender;
