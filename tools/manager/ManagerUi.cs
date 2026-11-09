@@ -298,7 +298,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         browse.Accepting += (_, e) =>
         {
             e.Handled = true;
-            using var dialog = new OpenDialog { Title = label, OpenMode = mode, MustExist = mustExist };
+            using var dialog = new ManagerFileDialog { Title = label, OpenMode = mode, MustExist = mustExist };
             dialog.SetScheme(Theme());
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var start = string.IsNullOrWhiteSpace(field.Text) ? (Directory.Exists(draft.Workplace) ? draft.Workplace : home) : field.Text;

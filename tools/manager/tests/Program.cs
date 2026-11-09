@@ -6,6 +6,7 @@ using LibertyManager;
 
 if (args is ["--ui", var uiDirectory]) return UiChecks.Run(uiDirectory);
 if (args is ["--ui-pcvr", var pcvrUiDirectory]) return PcvrUiChecks.Run(pcvrUiDirectory);
+if (args is ["--file-browser"]) { await FileBrowserChecks.Run(); Console.WriteLine("PASS file browser"); return 0; }
 
 if (args is ["--probe-noise"])
 {
@@ -41,6 +42,7 @@ File.WriteAllText(Path.Combine(repository, "overlay/android/app/build.gradle.kts
 var config = new ManagerSettings { Repository = repository, Workplace = Path.Combine(root, "work") };
 const string goodProbe = """{"streams":[{"codec_type":"audio","codec_name":"mp3","channels":2,"sample_rate":"44100"}],"format":{"duration":"10.2"}}""";
 
+await Test("File browser places, expansion, navigation and layout", FileBrowserChecks.Run);
 await Test("Windows and Linux workplace defaults", () =>
 { Assert(ManagerSettings.DefaultWorkplace(true) == @"C:\LCVRBuild"); Assert(ManagerSettings.DefaultWorkplace(false).EndsWith("LCVRBuild")); return Task.CompletedTask; });
 await Test("Settings survive save/load without device identifiers", () =>

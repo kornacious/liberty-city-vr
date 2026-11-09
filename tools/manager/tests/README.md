@@ -1,6 +1,11 @@
 # Manager verification
 
 Run `dotnet run --project tools/manager/tests -c Release` from the repository.
+File-browser checks cover the host's root/shortcut ordering, default tree
+visibility and expansion, shortcut navigation and layout at 80 × 24 and 120 × 35.
+They also check deep initial paths, navigation from the file list, parent navigation,
+automatic tree scrolling, focus and filename/edit-selection preservation. Run just
+these checks with `dotnet run --project tools/manager/tests -c Release -- --file-browser`.
 Benchmark checks cover warmup exclusion, delayed GPU-sample deduplication,
 mismatch/dirty/incomplete capture rejection, optional profile launch arguments,
 source identities and diagnostic filename restrictions.

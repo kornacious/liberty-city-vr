@@ -73,7 +73,7 @@ public sealed class MusicManagementView : View
         {
             e.Handled = true;
             var importing = mode == OpenMode.Mixed;
-            using var dialog = new OpenDialog { Title = importing ? "Import audio · Ctrl-click/Space: select · Alt-click: range" : "Export radio board placement", OpenMode = mode, MustExist = importing, AllowsMultipleSelection = importing };
+            using var dialog = new ManagerFileDialog { Title = importing ? "Import audio · Ctrl-click/Space: select · Alt-click: range" : "Export radio board placement", OpenMode = mode, MustExist = importing, AllowsMultipleSelection = importing };
             dialog.SetScheme(ManagerUi.Theme());
             if (importing) dialog.AllowedTypes.Add(new AllowedType("Audio", ".mp3", ".m4a", ".ogg", ".opus", ".flac", ".wav"));
             var initial = importing && importPaths.Length > 0 && field.Text == importCaption ? importPaths[0] : field.Text;

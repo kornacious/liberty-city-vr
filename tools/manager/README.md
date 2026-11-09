@@ -48,6 +48,13 @@ an action it cancels the tool process, waits for cleanup, then returns focus.
 Only one action runs at a time. Tab, Shift+Tab, arrows, Enter and the mouse
 work throughout the interface; Ctrl+Q quits after cancelling active work.
 Forms scroll and every path field has a terminal file/directory browser.
+The browser always shows its places tree. Windows starts with an expanded
+**User** containing Desktop, Downloads, Documents, Music, Pictures and Video,
+in that order, followed by fixed, removable and mapped network drive letters
+at the root level. Drive contents expand on demand. Linux starts with an
+expanded `/` as its only root.
+Navigating in the file list or path field expands the current folder's ancestors
+in the tree, selects that folder and scrolls it into view.
 
 ## Windows PCVR
 
