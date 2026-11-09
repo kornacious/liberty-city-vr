@@ -737,7 +737,7 @@ enum eVrGraphicsMenuItem {
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	VR_GRAPHICS_CULL_VIZ,
 #endif
-	VR_GRAPHICS_FOUNTAIN,
+	VR_GRAPHICS_ACTIVE_PROFILING,
 	VR_GRAPHICS_FOG,
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
 	VR_GRAPHICS_QUICK_START,
@@ -1387,6 +1387,7 @@ LoadVrSettings(void)
 	gProfilerDisplayMode = clamp((int)(int32)GetPrivateProfileIntA("VR",
 		"ShowProfiler", 0, ".\\vr_settings.ini"), 0, 2);
 	QuestProfilerSetDisplayMode(gProfilerDisplayMode);
+	QuestProfilerSetEnabled(GetPrivateProfileIntA("VR", "ActivePerformanceProfiling", 0, ".\\vr_settings.ini") != 0);
 	gSpatialAaMode = GetPrivateProfileIntA("VR", "AntiAliasing", 1,
 		".\\vr_settings.ini") != 0;
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
@@ -1415,9 +1416,6 @@ LoadVrSettings(void)
 	// this and an ini carrying anything else has to land somewhere.
 	gQuestMsaaSamples = gQuestMsaaSamples >= 4 ? 4 :
 		gQuestMsaaSamples >= 2 ? 2 : 1;
-	CParticleObject::SetVrFountainQuality(Min(Max(GetPrivateProfileIntA("VR",
-		"FountainQuality", VR_FOUNTAIN_OPTIMIZED, ".\\vr_settings.ini"),
-		(int)VR_FOUNTAIN_OFF), (int)VR_FOUNTAIN_QUALITY_COUNT-1));
 	{
 		// Migrate the old boolean without rewriting it. OFF remains the exact
 		// original full-360 render path; AUTHORED is the recommended default.
@@ -3320,13 +3318,10 @@ VrDebugUpdate(const PadInput &in)
 				// Keep older builds able to honour the explicit OFF fallback.
 				SaveVrInteger("OcclusionCulling",
 					gOcclusionCullingMode != VR_OCCLUSION_CULLING_OFF ? 1 : 0);
-			}else if(gVrGraphicsSelection == VR_GRAPHICS_FOUNTAIN){
-				const int direction = decreasePulse ? -1 : 1;
-				const int quality =
-					(CParticleObject::GetVrFountainQuality()+direction+
-					 VR_FOUNTAIN_QUALITY_COUNT)%VR_FOUNTAIN_QUALITY_COUNT;
-				CParticleObject::SetVrFountainQuality(quality);
-				SaveVrInteger("FountainQuality", quality);
+			}else if(gVrGraphicsSelection == VR_GRAPHICS_ACTIVE_PROFILING){
+				const bool active = !QuestProfilerIsRecording();
+				QuestProfilerSetEnabled(active);
+				SaveVrInteger("ActivePerformanceProfiling", active ? 1 : 0);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_FOG){
 				gDistanceFog = !gDistanceFog;
 				SaveVrInteger("DistanceFog", gDistanceFog ? 1 : 0);
@@ -4434,7 +4429,7 @@ DrawQuestGraphicsPage(void)
 	snprintf(rows[VR_GRAPHICS_COLOR], sizeof(rows[0]),
 		"COLOR FILTER  < %s >", gViceCityColorEnabled ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_PROFILER], sizeof(rows[0]),
-		"* PERFORMANCE PROFILER (FPS)  < %s >",
+		"SHOW FPS AND RENDERING STATS  < %s >",
 		gProfilerDisplayMode == 2 ? "MINIMAL" :
 		gProfilerDisplayMode == 1 ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_CPU_PERFORMANCE], sizeof(rows[0]),
@@ -4467,9 +4462,9 @@ DrawQuestGraphicsPage(void)
 		snprintf(rows[VR_GRAPHICS_CULL_VIZ], sizeof(rows[0]),
 			"CULLING VISUALIZER  < FREEZE AND PAINT >");
 #endif
-	snprintf(rows[VR_GRAPHICS_FOUNTAIN], sizeof(rows[0]),
-		"FOUNTAIN PARTICLES  < %s >",
-		CParticleObject::GetVrFountainQualityName());
+	snprintf(rows[VR_GRAPHICS_ACTIVE_PROFILING], sizeof(rows[0]),
+		"ACTIVE PERFORMANCE PROFILING  < %s >",
+		QuestProfilerIsRecording() ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_FOG], sizeof(rows[0]),
 		"DISTANCE FOG  < %s >", gDistanceFog ? "ON" : "OFF");
 #if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
@@ -5829,7 +5824,7 @@ VrDebugPixels(int *width, int *height)
 	}
 	gProfilerDisplayMode = QuestProfilerGetDisplayMode();
 	const bool minimalProfiler = gProfilerDisplayMode == 2;
-	const bool profilerVisible = QuestProfilerIsEnabled() || minimalProfiler;
+	const bool profilerVisible = gProfilerDisplayMode != 0;
 	const bool anchorCalibration =
 		androidgame::VrCutsceneCameraAnchorCalibrationActive();
 	const bool anchorNotice = !gVrMenuVisible && !anchorCalibration &&

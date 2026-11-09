@@ -81,8 +81,12 @@ struct CCarCtrl {static bool ThisRoadObjectCouldMove(int id){return id==2004 || 
 namespace ModelSets {enum eModelCategory {World,Vegetation,Vehicles,Peds,Weapons};static int asset=0;static int GetActiveForCategory(eModelCategory){return asset;}}
 namespace androidgame {
 static int profilerMode=0;static unsigned profileStarts=0,profileStops=0;static std::string profileContext;
-static bool captureAvailable=true;
-static void QuestProfilerSetDisplayMode(int m){if(m && !profilerMode)++profileStarts;if(!m && profilerMode)++profileStops;profilerMode=m;}
+static bool captureAvailable=true, activeProfiling=false, captureRecording=false;
+static int replayProfiling=0;
+static void UpdateRecording(){bool next=replayProfiling?replayProfiling==2:activeProfiling;if(next&&!captureRecording)++profileStarts;if(!next&&captureRecording)++profileStops;captureRecording=next;}
+static void QuestProfilerSetReplayProfiling(int state){replayProfiling=state;UpdateRecording();}
+static bool QuestProfilerIsRecording(){return captureRecording;}
+static void QuestProfilerSetDisplayMode(int m){profilerMode=m;}
 static void QuestProfilerSetCaptureContext(const char *s){profileContext=s;}
 static const char *QuestProfilerGetCaptureStem(){return captureAvailable?"test-profile":"";}
 static bool rdocAvailable=false,rdocActive=false,rdocBusy=false;
@@ -98,7 +102,6 @@ questcapture::RenderDocFrame::Result QuestRenderDocEnd(bool keep){
 }
 bool QuestRenderDocActive(){return rdocActive;}
 const char *QuestRenderDocCapturePath(){return "/local/test_frame.rdc";}
-static bool QuestProfilerIsEnabled(){return profilerMode!=0;}
 static int QuestProfilerGetDisplayMode(){return profilerMode;}
 }
 namespace rw { namespace vulkan {
@@ -221,49 +224,53 @@ static void RuntimeTests(){
     Check(f&&saved.Load(f)&&saved.samples.size()==130&&saved.initial.recordingGhost==1,"saved V2 tape preserves recording ghost state");if(f)std::fclose(f);
     CVehicle ambient;CPed ped;CEntity building;player.m_pMyVehicle=&car;
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost does not affect ordinary gameplay");
-    SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&!profilerMode,"preparation excluded from automatic capture");
+    SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&!captureRecording,"preparation excluded from automatic capture");
     Check(SimulationReplayIgnoreCollision(&car,&ambient)&&SimulationReplayIgnoreCollision(&ambient,&car)&&SimulationReplayIgnoreCollision(&ped,&car),"car and ped contacts ignored in both directions");
     prop.model=0;Check(SimulationReplayIgnoreCollision(&car,&prop)&&SimulationReplayIgnoreCollision(&prop,&car),"playback ghosts props symmetrically too");
     Check(!SimulationReplayIgnoreCollision(&car,&building)&&!SimulationReplayIgnoreCollision(&ambient,&ped),"terrain and ambient mutual collisions retained");
     Check(SimulationReplayIgnoreDamage(&car,&ped)&&SimulationReplayIgnoreDamage(&ped,&player)&&!SimulationReplayIgnoreDamage(&ped,&ambient),"damage isolated around protected replay group");
-    Prepare();Check(profilerMode==2&&profileStarts==1&&profileContext.find("ghost=1")!=std::string::npos,"playback starts minimal capture with linked context");
+    Prepare();Check(captureRecording&&profilerMode==0&&profileStarts==1&&profileContext.find("ghost=1")!=std::string::npos,"playback starts capture without changing display");
     Check(SimulationReplayForwardViewRun() && profileContext.find("view=fixed_forward")!=std::string::npos,"playback snapshots default forward view into capture provenance");
     const auto viewRun=SimulationReplayForwardViewRun();float neutral[3],yaw=0;
     Check(SimulationReplayForwardViewNeutralPose(neutral,&yaw)&&neutral[1]==2&&yaw==.5f,"view uses backend cockpit neutral pose");
-    SimulationReplayMenuAction(10,1);Check(SimulationReplayForwardViewRun()==viewRun&&forwardView,"view policy cannot change halfway through a replay");
+    SimulationReplayMenuAction(9,1);Check(SimulationReplayForwardViewRun()==viewRun&&forwardView,"view policy cannot change halfway through a replay");
     car.m_fGasPedal=0;Frame();Check(car.m_fGasPedal==.5f,"playback overrides live driving controls");
     while(mode==Playing)Frame(false);
-    Check(mode==Finishing&&profilerMode==2,"final playback frame remains measured before app frame completion");
+    Check(mode==Finishing&&captureRecording,"final playback frame remains measured before app frame completion");
     Check(!SimulationReplayForwardViewRun(),"ending replay releases benchmark view request");
-    SimulationReplayAfterAppFrame();Check(mode==Idle&&profilerMode==0&&profileStops==1,"after final app frame capture closes");
+    SimulationReplayAfterAppFrame();Check(mode==Idle&&!captureRecording&&profilerMode==0&&profileStops==1,"after final app frame capture closes");
     Check(std::filesystem::exists(Path(runId+".run.csv")),"run report persisted");
     Check(!SimulationReplayProtected(&car)&&!SimulationReplayProtected(&player),"ghost fully clears after playback");
-    SimulationReplayMenuAction(10,1);SimulationReplayMenuAction(2,1);Frame();Prepare();
+    SimulationReplayMenuAction(9,1);SimulationReplayMenuAction(2,1);Frame();Prepare();
     Check(!SimulationReplayForwardViewRun()&&profileContext.find("view=live_head_tracking")!=std::string::npos,"OFF retains live head tracking and labels capture");Stop();
-    SimulationReplayMenuAction(10,1);
+    SimulationReplayMenuAction(9,1);
     SimulationReplayMenuAction(2,1);Frame();Prepare();QuestProfilerSetDisplayMode(0);Frame();
-    Check(mode==Idle&&result.find("INTERRUPTED")!=std::string::npos,"manual profiler interruption marks playback aborted");
+    Check(mode==Playing&&captureRecording,"display changes do not interrupt playback capture");Stop();
+    activeProfiling=true;UpdateRecording();
+    SimulationReplayMenuAction(2,1);Frame();Prepare();Stop();
+    Check(captureRecording&&activeProfiling,"stopped playback restores prior ON preference");
+    activeProfiling=false;UpdateRecording();
     SimulationReplayMenuAction(2,1);Frame();captureAvailable=false;
     for(int i=0;i<220 && mode!=Idle;++i)Frame();
     Check(mode==Idle&&result.find("COULD NOT START")!=std::string::npos,"capture creation failure aborts benchmark");captureAvailable=true;
-    SimulationReplayMenuAction(9,1);SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"input-only mode retains drift abort without corrections");car.pos.x=0;SimulationReplayMenuAction(9,1);
-    SimulationReplayMenuAction(4,1);SimulationReplayMenuAction(5,1);SimulationReplayMenuAction(2,1);Frame();
-    Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost toggle respected");Prepare();Check(!profilerMode,"automatic capture can be disabled");Stop();
+    SimulationReplayMenuAction(8,1);SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"input-only mode retains drift abort without corrections");car.pos.x=0;SimulationReplayMenuAction(8,1);
+    SimulationReplayMenuAction(4,1);SimulationReplayMenuAction(2,1);Frame();
+    Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost toggle respected");Prepare();Check(captureRecording,"playback always enables profiling");Stop();
     car.model=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"CAR MODEL"),"wrong car model produces useful visible failure");car.model=100;
     ModelSets::asset=1;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed assets rejected");ModelSets::asset=0;
     car.handling.fTractionLoss=.7f;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed handling rejected");car.handling.fTractionLoss=.8f;
     car.pos.x=2000;SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&car.pos.x==0&&CStreaming::loads==1&&CCollision::loads==1&&CGame::currLevel==2,"distant playback loads target island and scene before teleporting");Stop();
     SimulationReplayMenuAction(2,1);Frame();++poolHandle;Frame();Check(mode==Idle,"pool generation change releases stale replay binding");
     SimulationReplayMenuAction(0,1);Frame();selectedCar=nullptr;Frame();Check(mode==Idle,"player exit stops recording");selectedCar=&car;
-    SimulationReplayMenuAction(7,1);SimulationReplayMenuAction(0,1);Frame();Check(!SimulationReplayIgnoreCollision(&car,&recordingTraffic),"recording ghost can be disabled independently");
-    const std::string activePath=Path(label+".sim.csv");SimulationReplayMenuAction(8,1);Check(std::filesystem::exists(activePath)&&mode==Recording,"deletion cannot disrupt active capture");Stop();
-    SimulationReplayMenuAction(7,1);
+    SimulationReplayMenuAction(6,1);SimulationReplayMenuAction(0,1);Frame();Check(!SimulationReplayIgnoreCollision(&car,&recordingTraffic),"recording ghost can be disabled independently");
+    const std::string activePath=Path(label+".sim.csv");SimulationReplayMenuAction(7,1);Check(std::filesystem::exists(activePath)&&mode==Recording,"deletion cannot disrupt active capture");Stop();
+    SimulationReplayMenuAction(6,1);
     duration=120;CTimer::step=.2f;SimulationReplayMenuAction(0,1);for(int i=0;i<605;++i)Frame();
     f=std::fopen(Path(label+".sim.csv").c_str(),"r");SimulationReplayCore::Tape maximum;
     Check(f&&maximum.Load(f)&&maximum.endUs==SimulationReplayCore::MaxTimeUs,"maximum-duration recording remains valid after frame overshoot");if(f)std::fclose(f);
     const std::string maximumPath=Path(label+".sim.csv");const std::string reportPath=Path("keep.run.csv");f=std::fopen(reportPath.c_str(),"w");std::fputs("kept",f);std::fclose(f);
-    SimulationReplayMenuAction(8,1);Check(std::filesystem::exists(maximumPath),"delete requires an explicit second press");
-    SimulationReplayMenuAction(8,1);Check(!std::filesystem::exists(maximumPath)&&std::filesystem::exists(reportPath),"delete removes only selected tape and retains reports");
+    SimulationReplayMenuAction(7,1);Check(std::filesystem::exists(maximumPath),"delete requires an explicit second press");
+    SimulationReplayMenuAction(7,1);Check(!std::filesystem::exists(maximumPath)&&std::filesystem::exists(reportPath),"delete removes only selected tape and retains reports");
     std::printf("Runtime artifacts: %s\n",captureRoot.c_str());
 }
 static void LongRoute(){
@@ -282,7 +289,7 @@ static void LongRoute(){
     }
     Check(wrote,"write all route frames");
     std::fputs("END,120000000\n",f);std::fclose(f);Refresh();selectedDemo=int(std::find(demos.begin(),demos.end(),name)-demos.begin());
-    ghost=routeAssistance=autoProfile=true;CTimer::step=.01f;SimulationReplayMenuAction(2,1);Frame();Prepare();
+    ghost=routeAssistance=true;CTimer::step=.01f;SimulationReplayMenuAction(2,1);Frame();Prepare();
     const unsigned repairsAtStart=car.repairs;unsigned frames=0;
     while(mode==Playing && frames<30000){
         // Deliberately different step lengths, delayed acceleration/turning,
@@ -293,7 +300,7 @@ static void LongRoute(){
     }
     Check(mode==Idle&&result=="COMPLETE"&&elapsed>=120000000,"assisted playback completes the full 120 seconds under mixed frame times and large drift");
     Check(corrections>5000&&correctionMax>=79.0f&&drift.maxPosition>=79.0f,"correction counts and pre-correction divergence remain visible");
-    Check(car.repairs==repairsAtStart&&!profilerMode,"assistance does not repeatedly repair the car and closes profiling normally");
+    Check(car.repairs==repairsAtStart&&!captureRecording,"assistance does not repeatedly repair the car and closes profiling normally");
     f=std::fopen(Path(runId+".run.csv").c_str(),"r");char report[4096]={};Check(f!=nullptr,"assisted report persisted");std::fread(report,1,sizeof(report)-1,f);std::fclose(f);
     Check(std::strstr(report,"tracking,route_assisted")&&std::strstr(report,"route_corrections,")&&std::strstr(report,"estimated_path_velocity"),"assisted captures cannot be mistaken for unmodified simulation replay");
 }
@@ -319,9 +326,9 @@ static void RenderDocReplayTests(){
     using namespace androidgame;
     selectedCar=&car;car.m_vecMoveSpeed=CVector(0,0,0);car.m_vecTurnSpeed=CVector(0,0,0);
     Check(!renderdocCapture,"RenderDoc defaults OFF for normal benchmarks");
-    captureAtUs=0;SimulationReplayMenuAction(12,-1);Check(captureAtUs==119500000,"capture time wraps downward");
-    SimulationReplayMenuAction(12,1);Check(captureAtUs==0,"capture time wraps upward in half seconds");
-    SimulationReplayMenuAction(11,1);SimulationReplayMenuAction(2,1);Frame();
+    captureAtUs=0;SimulationReplayMenuAction(11,-1);Check(captureAtUs==119500000,"capture time wraps downward");
+    SimulationReplayMenuAction(11,1);Check(captureAtUs==0,"capture time wraps upward in half seconds");
+    SimulationReplayMenuAction(10,1);SimulationReplayMenuAction(2,1);Frame();
     Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(status,"THROUGH RENDERDOC"),"unattached capture run fails visibly before teleporting");
     rdocAvailable=true;captureAtUs=120000000;SimulationReplayMenuAction(2,1);Frame();
     Check(mode==Idle&&std::strstr(status,"BEFORE THE DEMO END"),"capture beyond tape end rejected");
@@ -331,7 +338,7 @@ static void RenderDocReplayTests(){
     while(elapsed<runCaptureAtUs)Frame();
     CTimer::step=0;SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==0,"paused playback does not trigger");CTimer::step=.01f;
     SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==1&&captureFrameActive&&capturedAtUs>=500000,"first eligible frame starts at target");
-    SimulationReplayBeginCaptureFrame(&car);SimulationReplayMenuAction(12,1);
+    SimulationReplayBeginCaptureFrame(&car);SimulationReplayMenuAction(11,1);
     Check(rdocStarts==1&&captureAtUs==500000,"one-shot capture and frozen run options");
     SimulationReplayEndCaptureFrame(true);Check(captureResult=="saved"&&captureFile=="/local/test_frame.rdc"&&!captureFrameActive,"successful full frame records output");
     SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==1,"later frames cannot retrigger");Stop();
@@ -371,7 +378,7 @@ static void MatchedRuntimeTests(){
     {std::ofstream file(fixture);file<<"second";}
     Check(before!=BenchmarkIdentity::Assets(captureRoot),"asset identity follows file contents");
     car.m_vecMoveSpeed=CVector(0,0,0);car.up=CVector(0,0,1);selectedCar=&car;
-    ghost=routeAssistance=autoProfile=forwardView=matchedWorkload=true;renderdocCapture=false;
+    ghost=routeAssistance=forwardView=matchedWorkload=true;renderdocCapture=false;
     CClock::ms_nGameClockHours=8;CWeather::ForcedWeatherType=-1;
     SimulationReplayMenuAction(2,1);Frame();
     Check(mode==Preparing && MatchedProfile::benchmark,"matched run suppresses desktop mirror during preparation");
@@ -390,7 +397,7 @@ static void LegacyUpgradeTests(){
     FILE *file=std::fopen(Path(name+".sim.csv").c_str(),"wx");Check(file!=nullptr,"legacy upgrade fixture created");
     Check(Core::Header(file,legacy)&&Core::Write(file,MakeSample(0)),"legacy upgrade fixture written");std::fputs("END,2000000\n",file);std::fclose(file);
     Refresh();selectedDemo=int(std::find(demos.begin(),demos.end(),name)-demos.begin());
-    ghost=autoProfile=routeAssistance=forwardView=true;renderdocCapture=matchedWorkload=false;
+    ghost=routeAssistance=forwardView=true;renderdocCapture=matchedWorkload=false;
     SimulationReplayMenuAction(2,1);Frame();
     Check(mode==Preparing && initial.portableHandling && label!=name,"exact-matching original setup upgrades into a new portable route");
     file=std::fopen(Path(name+".sim.csv").c_str(),"r");Core::Tape original;Check(file&&original.Load(file)&&!original.initial.portableHandling,"legacy original remains untouched");if(file)std::fclose(file);

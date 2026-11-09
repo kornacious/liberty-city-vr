@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#include "../../librw/src/vulkan/DebugVisualization.h"
 #include "../../overlay/src/core/QuestNativeSettings.h"
 #include "../../overlay/src/skel/android/QuestSettingsMenu.h"
 #include "../../overlay/src/vr/QuestRadio.h"

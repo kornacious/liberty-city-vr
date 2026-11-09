@@ -49,7 +49,7 @@ enum Mode { Idle,Recording,Preparing,Playing,Finishing };
 Mode mode=Idle;
 int request=0,reference=-1,selectedDemo=0;
 unsigned model=0,signature=0,duration=120,sampleCount=0;
-bool ghost=true,autoProfile=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
+bool ghost=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
 bool recordingGhost=true,startFailed=false;
 bool routeAssistance=true,runAssisted=false;
 bool forwardView=true,runForwardView=false;
@@ -286,8 +286,8 @@ bool Start(int operation){
         runMatched=matchedWorkload || MatchedProfile::active;
         routeIdentity.clear(); assetIdentity.clear();
         if(runMatched){
-            if(!ghost || !routeAssistance || !forwardView || !autoProfile || renderdocCapture){
-                tape.reset();Status("MATCHED RUN NEEDS GHOST, ROUTE, FORWARD VIEW, AUTO PROFILE; NO RENDERDOC");return false;
+            if(!ghost || !routeAssistance || !forwardView || renderdocCapture){
+                tape.reset();Status("MATCHED RUN NEEDS GHOST, ROUTE, FORWARD VIEW; NO RENDERDOC");return false;
             }
             try {
                 routeIdentity=BenchmarkIdentity::Hex(BenchmarkIdentity::File(14695981039346656037ULL,Path(label+".sim.csv")));
@@ -309,7 +309,7 @@ bool Start(int operation){
     reference=CPools::GetVehicleRef(c);model=unsigned(c->GetModelIndex());signature=current.vehicle.signature;
     sampleCount=0; elapsed=lastInput=0; gameTime=warmTime=0; drift={}; wallStart=Now();
     playbackStartNs=playbackEndNs=profileStartUs=0;
-    runGhost=operation==1?recordingGhost:ghost;runAutoProfile=autoProfile;profileStarted=false;profile.clear();runId.clear();
+    runGhost=operation==1?recordingGhost:ghost;runAutoProfile=operation==2;profileStarted=false;profile.clear();runId.clear();
     runAssisted=operation==2 && routeAssistance && runGhost;corrections=0;correctionMax=0;
     runForwardView=operation==2 && forwardView;
     runRenderdocCapture=operation==2 && renderdocCapture;runCaptureAtUs=captureAtUs;
@@ -318,7 +318,7 @@ bool Start(int operation){
     if(operation==2){
         runId=Unique();
         if(runRenderdocCapture)capturePrefix=std::string(RenderDocRoot())+"/"+runId;
-        if(runAutoProfile) QuestProfilerSetDisplayMode(0);
+        QuestProfilerSetReplayProfiling(1);
         // Match the game's waypoint teleport: load the island's collision and
         // scene before moving the occupied car. Preparation stays unprofiled.
         const CVector start=Vec(initial.vehicle.pose);
@@ -409,17 +409,17 @@ void SimulationReplayAfterAppFrame(){
     if(mode!=Idle && mode!=Finishing && Now()-wallStart>300000000000ULL) Finish("ABORTED - WALL TIME LIMIT");
     if(mode==Playing && runAutoProfile && !profileStarted){
         const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";view="+(runForwardView?"fixed_forward":"live_head_tracking")+";renderdoc="+(runRenderdocCapture?"1":"0")+";capture_at_us="+std::to_string(runCaptureAtUs)+";run="+runId;
-        QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetDisplayMode(2);
+        QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetReplayProfiling(2);
         profileStartUs=elapsed;
         profile=QuestProfilerGetCaptureStem();profileStarted=true;
         if(profile.empty()) Finish("ABORTED - PERFORMANCE CAPTURE COULD NOT START");
     }
     if(mode==Playing && runAutoProfile && profileStarted &&
-        (!QuestProfilerIsEnabled() || profile!=QuestProfilerGetCaptureStem()))
+        (!QuestProfilerIsRecording() || profile!=QuestProfilerGetCaptureStem()))
         Finish("ABORTED - PERFORMANCE CAPTURE WAS INTERRUPTED");
     if(mode==Finishing && !captureFrameActive){
         if(runRenderdocCapture && !captureAttempted)captureResult="not_reached";
-        if(runAutoProfile && !runId.empty()){QuestProfilerSetDisplayMode(0);QuestProfilerSetCaptureContext("");}
+        if(runAutoProfile && !runId.empty()){QuestProfilerSetReplayProfiling(1);QuestProfilerSetCaptureContext("");QuestProfilerSetReplayProfiling(0);}
         const bool recorded=runId.empty();
         WriteReport();
         if(runMatched){
@@ -483,20 +483,19 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 2:std::snprintf(text,capacity,"PLAY SELECTED DEMO  < START >");break;
     case 3:std::snprintf(text,capacity,"STOP  < %s %.1f S >",mode==Recording?"RECORDING":mode==Preparing?"PREPARING":mode==Playing?"PLAYING":"IDLE",double(elapsed)/1000000);break;
     case 4:std::snprintf(text,capacity,"PLAYBACK GHOST  < %s >",ghost?"ON":"OFF");break;
-    case 5:std::snprintf(text,capacity,"AUTO PROFILE PLAYBACK  < %s >",autoProfile?"ON":"OFF");break;
-    case 6:std::snprintf(text,capacity,"RECORDING LIMIT  < %u SECONDS >",duration);break;
-    case 7:std::snprintf(text,capacity,"RECORDING GHOST  < %s >",recordingGhost?"ON":"OFF");break;
-    case 8:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
-    case 9:std::snprintf(text,capacity,"ROUTE ASSISTANCE  < %s >",ghost?(routeAssistance?"ON":"OFF"):"OFF - PLAYBACK GHOST REQUIRED");break;
-    case 10:std::snprintf(text,capacity,"BENCHMARK FORWARD VIEW  < %s >",forwardView?"ON":"OFF");break;
-    case 11:std::snprintf(text,capacity,"RENDERDOC CAPTURE < %s >",!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - LAUNCH VIA RENDERDOC":captureResult=="saved"?"ON - SAVED":"ON");break;
-    case 12:std::snprintf(text,capacity,"CAPTURE AT < %.1f SECONDS >",double(captureAtUs)/1000000);break;
-    case 13:std::snprintf(text,capacity,"MATCHED WORKLOAD < %s >",MatchedProfile::active?"PROFILE - ON":matchedWorkload?"ON":"OFF");break;
+    case 5:std::snprintf(text,capacity,"RECORDING LIMIT  < %u SECONDS >",duration);break;
+    case 6:std::snprintf(text,capacity,"RECORDING GHOST  < %s >",recordingGhost?"ON":"OFF");break;
+    case 7:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
+    case 8:std::snprintf(text,capacity,"ROUTE ASSISTANCE  < %s >",ghost?(routeAssistance?"ON":"OFF"):"OFF - PLAYBACK GHOST REQUIRED");break;
+    case 9:std::snprintf(text,capacity,"BENCHMARK FORWARD VIEW  < %s >",forwardView?"ON":"OFF");break;
+    case 10:std::snprintf(text,capacity,"RENDERDOC CAPTURE < %s >",!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - LAUNCH VIA RENDERDOC":captureResult=="saved"?"ON - SAVED":"ON");break;
+    case 11:std::snprintf(text,capacity,"CAPTURE AT < %.1f SECONDS >",double(captureAtUs)/1000000);break;
+    case 12:std::snprintf(text,capacity,"MATCHED WORKLOAD < %s >",MatchedProfile::active?"PROFILE - ON":matchedWorkload?"ON":"OFF");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
 bool SimulationReplayMenuAction(int row,int direction){
-    if(row!=8) deleteArmed.clear();
+    if(row!=7) deleteArmed.clear();
     if(row==-1){Refresh();return false;}
     if(row==3){request=3;return false;}
     if(mode!=Idle || request){Status("STOP THE CURRENT RUN FIRST");return false;}
@@ -505,15 +504,14 @@ bool SimulationReplayMenuAction(int row,int direction){
     case 1:Refresh();if(!demos.empty()) selectedDemo=(selectedDemo+direction+int(demos.size()))%int(demos.size());break;
     case 2:if(!Ready()) return false;Refresh();if(demos.empty()){Status("NO RECORDED DEMOS");return false;}request=2;requestStartNs=Now();return true;
     case 4:ghost=!ghost;break;
-    case 5:autoProfile=!autoProfile;break;
-    case 6:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
-    case 7:recordingGhost=!recordingGhost;break;
-    case 9:routeAssistance=!routeAssistance;break;
-    case 10:forwardView=!forwardView;break;
-    case 11:renderdocCapture=!renderdocCapture;break;
-    case 12:captureAtUs=direction<0?(captureAtUs?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;break;
-    case 13:matchedWorkload=!matchedWorkload;break;
-    case 8:{
+    case 5:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
+    case 6:recordingGhost=!recordingGhost;break;
+    case 8:routeAssistance=!routeAssistance;break;
+    case 9:forwardView=!forwardView;break;
+    case 10:renderdocCapture=!renderdocCapture;break;
+    case 11:captureAtUs=direction<0?(captureAtUs?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;break;
+    case 12:matchedWorkload=!matchedWorkload;break;
+    case 7:{
         Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
         const std::string name=demos[selectedDemo];
         if(deleteArmed!=name){deleteArmed=name;Status("PRESS DELETE AGAIN TO REMOVE THE SELECTED DEMO");break;}

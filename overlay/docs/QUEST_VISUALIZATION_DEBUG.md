@@ -55,7 +55,7 @@ before a nearer one can still contribute; this is not a final-visible-surface
 count or a GPU hardware fragment-invocation counter. Both overdraw variants
 exclude sky/effects and override the geometry selector.
 
-For live statistics, select **Graphics > Performance Profiler (FPS) > ON**,
+For live statistics, select **Graphics > Show FPS and Rendering Stats > ON**,
 then close the settings menu. MINIMAL only shows FPS and frame time. The full
 profiler shows FPS, frame budget, CPU workload, GPU timing (META/runtime and/or
 VK/Vulkan), CPU rendering phase costs and visible-entity counts. Its final rows

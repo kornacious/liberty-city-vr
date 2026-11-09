@@ -6,11 +6,19 @@
 > models, repair and update. See [the manager guide](../../tools/manager/README.md) for runtime requirements.
 # Recording and comparing performance
 
-In **Graphics → Performance Profiler (FPS)** select **MINIMAL** for FPS/frame time
-only, or **ON** for the full diagnostic display. **Both modes record the same
-performance metrics.** Switching ON ↔ MINIMAL preserves one continuous session,
-frame IDs, events and vehicle-speed peaks. Select **OFF** after the route to
-drain accepted samples and close the files; only OFF stops recording.
+In **Graphics → Show FPS and Rendering Stats** select **MINIMAL** for FPS/frame
+time only, **ON** for the full live diagnostic display, or **OFF** to hide it.
+These display modes never start or stop recording.
+
+Use **Graphics → Active Performance Profiling → ON** to record the existing
+performance metrics. It defaults to **OFF**. Select **OFF** after the route to
+drain accepted samples and close the files. Display changes preserve a running
+capture session, frame IDs, events and vehicle-speed peaks.
+
+Replay Simulation always enables profiling during demo playback. Preparation is
+excluded; completion, manual stop and abort restore the prior profiling preference.
+The temporary override is never saved and does not change the stats display.
+The former Auto Profile Playback switch has been removed.
 
 Recording keeps the existing one-second `quest_perf.csv` and also writes
 a unique pair of files for each session under:
@@ -69,7 +77,7 @@ gameplay coordinates, but no device identifiers or original game assets.
   engine derives them from handling/drag; they are not the original unconverted
   handling-file value or guaranteed road top speed. Slopes, collisions, tuning
   and cheats can change achieved speed. Vehicle values are `-1` when unavailable.
-- `profiler_display_mode` records `1=ON` / `2=MINIMAL` per frame, so display
+- `profiler_display_mode` records `0=OFF` / `1=ON` / `2=MINIMAL` per frame, so display
   changes can be identified without splitting the session.
 - Entity-render call counts for vehicles, pedestrians and static objects.
   These are **not** Vulkan draw-call counts or final visible-object counts.
@@ -80,12 +88,12 @@ saved graphics values. Early startup metadata can precede model initialization;
 per-frame active selection is authoritative. Asset names describe configured
 routing, not content hashes or proof that base files are unmodified. `saved_*`
 values can be `-1` when absent and can differ from active settings. Toggle
-profiling OFF and back to ON or MINIMAL after changing settings for fresh
+Active Performance Profiling OFF and back to ON after changing settings for fresh
 metadata. The analyzer supports schema 1, 2 and 3 recordings.
 
 ## Vulkan begin-frame investigation (schema 3)
 
-MINIMAL and ON additionally capture synchronous CPU timings for pipeline
+Active Performance Profiling additionally captures synchronous CPU timings for pipeline
 compilation, frame-slot fence waiting, timestamp readback, retired-resource
 destruction, wrist/scope-target preparation and remaining backend setup.
 `vk_begin_detail_valid=0` means unavailable; canceled/failed/skipped begins must
@@ -571,7 +579,7 @@ profiling drains accepted samples and closes the pair; force-stop can lose
 the last buffered portion. Disk errors are recorded in session metadata.
 
 `recorder_prepare_ms` excludes enqueue, legacy logging and worker contention.
-Measure total overhead with matched recording OFF versus MINIMAL/ON OVR runs.
-MINIMAL reduces display clutter; it still incurs the metric collection cost.
+Measure total overhead with matched Active Performance Profiling OFF versus ON OVR runs.
+MINIMAL reduces display clutter; recording cost is controlled separately by Active Performance Profiling.
 Files grow with session length and are not automatically deleted. Disable full
 profiling when finished and remove unwanted recordings locally.

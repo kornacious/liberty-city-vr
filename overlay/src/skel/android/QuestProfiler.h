@@ -6,9 +6,12 @@ namespace androidgame {
 
 // Successful player weapon activations, counted on the game thread.
 void QuestProfilerCountPlayerWeaponUse(void);
-// OFF stops recording; full and minimal select a display while recording.
+// Display selection never starts or stops recording.
 void QuestProfilerSetDisplayMode(int mode);
 int QuestProfilerGetDisplayMode();
+bool QuestProfilerIsRecording();
+// 0 restores the preference, 1 suspends for preparation, 2 forces playback capture.
+void QuestProfilerSetReplayProfiling(int state);
 // Internal benchmark context; values must not contain CSV delimiters/newlines.
 void QuestProfilerSetCaptureContext(const char *context);
 const char *QuestProfilerGetCaptureStem();

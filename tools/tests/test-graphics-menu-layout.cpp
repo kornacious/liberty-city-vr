@@ -31,7 +31,7 @@ static constexpr int GS_PLAYING_GAME=1;
 static int gGameState=GS_PLAYING_GAME;
 static struct {bool m_bGameNotLoaded=false,m_bMenuActive=false;} FrontEndMenuManager;
 namespace CRenderer {static const char*GetVrOcclusionCullingModeName(){return "AGGRESSIVE EXPERIMENTAL";}}
-namespace CParticleObject {static const char*GetVrFountainQualityName(){return "OPTIMIZED";}}
+static bool QuestProfilerIsRecording(){return false;}
 namespace CShadows {static bool IsRenderEnabled(){return true;}}
 static int gProfilerDisplayMode=1,gOpaqueWorldAlphaFastPath=1,gOpaqueOrderExperiment=0,gMaskedAlphaPassSkip=0,gOpaqueMeshBatch=0,gStaticInstances=0,gWorldBackface=0,gWorldOcclusion=0;
 struct Rect {int left,top,right,bottom;};

@@ -28,8 +28,14 @@
 
 namespace questperf {
 
-// Display mode affects presentation only. Both visible modes record.
-inline bool RecordsDisplayMode(int mode) { return mode == 1 || mode == 2; }
+// Replay preparation suspends capture; playback overrides the saved preference.
+struct ProfilingState {
+    int display = 0;
+    bool active = false;
+    int replay = 0; // 0: normal, 1: preparing, 2: playing
+    bool Recording() const { return replay ? replay == 2 : active; }
+    bool Collecting() const { return Recording() || display == 1; }
+};
 
 inline float SpeedKmh(float engineSpeed)
 {

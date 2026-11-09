@@ -20,17 +20,25 @@ static std::vector<std::string> Cells(const std::string &line)
 int main()
 {
     using namespace questperf;
-    // A complete full/minimal switching sequence has one recording session.
-    bool recording = false;
-    int starts = 0, stops = 0;
+    ProfilingState state;
+    assert(!state.Recording() && !state.Collecting());
     for(int mode : {0, 1, 2, 1, 2, 0}) {
-        bool next = RecordsDisplayMode(mode);
-        if(next && !recording) ++starts;
-        if(!next && recording) ++stops;
-        recording = next;
+        state.display = mode;
+        assert(!state.Recording());
+        assert(state.Collecting() == (mode == 1));
     }
-    assert(starts == 1 && stops == 1);
-    assert(!RecordsDisplayMode(-1) && !RecordsDisplayMode(3));
+    for(bool active : {false, true}) {
+        state.active = active;
+        state.replay = 1;
+        assert(!state.Recording());
+        state.replay = 2;
+        for(int mode : {0, 1, 2}) {
+            state.display = mode;
+            assert(state.Recording() && state.Collecting());
+        }
+        state.replay = 0;
+        assert(state.Recording() == active);
+    }
     assert(SpeedKmh(0) == 0 && SpeedKmh(1) == 180);
     assert(std::fabs(SpeedKmh(100.0f/180.0f)-100.0f) < 0.0001f);
     assert(SpeedKmh(-1) == -1);

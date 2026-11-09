@@ -43,6 +43,8 @@ namespace androidgame {
 namespace {
 
 bool gProfilerEnabled;
+bool gRecordingEnabled;
+questperf::ProfilingState gProfilingState;
 int gCaptureDisplayMode;
 std::string gCaptureContext;
 std::string gLastCaptureStem;
@@ -847,13 +849,29 @@ QuestProfilerSetLogDirectory(const char *directory)
 	snprintf(gCaptureDirectory, sizeof(gCaptureDirectory), "%s/perf-captures", directory);
 }
 
+static void UpdateProfilerRecording(bool enabled);
+
 void
 QuestProfilerSetDisplayMode(int mode)
 {
-	gCaptureDisplayMode = questperf::RecordsDisplayMode(mode) ? mode : 0;
-	// SetEnabled is idempotent: switching full <-> minimal preserves the
-	// same recording, frame IDs, events and observed vehicle peak.
-	QuestProfilerSetEnabled(questperf::RecordsDisplayMode(gCaptureDisplayMode));
+	gCaptureDisplayMode = mode == 1 || mode == 2 ? mode : 0;
+	gProfilingState.display = gCaptureDisplayMode;
+	gProfilerEnabled = gProfilingState.Collecting();
+	rw::vulkan::setGpuFrameTimingEnabled(gProfilerEnabled ? 1 : 0);
+	xrvk::setPerformanceMetricsEnabled(gProfilerEnabled);
+}
+
+void QuestProfilerSetEnabled(bool enabled)
+{
+	gProfilingState.active = enabled;
+	UpdateProfilerRecording(gProfilingState.Recording());
+}
+
+bool QuestProfilerIsRecording() { return gRecordingEnabled; }
+void QuestProfilerSetReplayProfiling(int state)
+{
+	gProfilingState.replay = state;
+	UpdateProfilerRecording(gProfilingState.Recording());
 }
 
 int QuestProfilerGetDisplayMode(){ return gCaptureDisplayMode; }
@@ -863,12 +881,13 @@ void QuestProfilerSetCaptureContext(const char *context){
 	for(char &c : gCaptureContext) if(c == ',' || c == '\n' || c == '\r') c = '_';
 }
 
-void
-QuestProfilerSetEnabled(bool enabled)
+static void
+UpdateProfilerRecording(bool enabled)
 {
-	if(gProfilerEnabled == enabled)
+	if(gRecordingEnabled == enabled)
 		return;
-	gProfilerEnabled = enabled;
+	gRecordingEnabled = enabled;
+	gProfilerEnabled = gProfilingState.Collecting();
 	if(enabled) StartFrameCapture();
 	else gCaptureWriter.Stop();
 	if(gLogFile != nil){
@@ -1011,7 +1030,7 @@ QuestProfilerSetEnabled(bool enabled)
 			      "sgsr_scene_width,sgsr_scene_height,sgsr_output_width,"
 			      "sgsr_output_height\n", gLogFile);
 			fflush(gLogFile);
-			__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+			if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 				"persistent log opened: %s", gLogPath);
 		}else
 			__android_log_print(ANDROID_LOG_ERROR, "QuestPerf",
@@ -1123,8 +1142,8 @@ QuestProfilerSetEnabled(bool enabled)
 	ResetOpenPhases();
 	gLogWindowStartedMs = NowMilliseconds();
 	gLogWindowFrames = 0;
-	rw::vulkan::setGpuFrameTimingEnabled(enabled ? 1 : 0);
-	xrvk::setPerformanceMetricsEnabled(enabled);
+	rw::vulkan::setGpuFrameTimingEnabled(gProfilerEnabled ? 1 : 0);
+	xrvk::setPerformanceMetricsEnabled(gProfilerEnabled);
 }
 
 bool
@@ -1478,83 +1497,85 @@ QuestProfilerEndAppFrame(void)
 	}
 	// CPU phases belong to this frame. GPU values are the latest asynchronous
 	// measurements and deliberately have separate validity/scope columns.
-	const double prepareStarted = NowMilliseconds();
-	gCaptureFrame.cpuMs = localCpuAppRaw;
-	gCaptureFrame.runtimeCpuMs = runtime.appCpuFrameValid ? runtime.appCpuFrameMs : -1;
-	gCaptureFrame.runtimeGpuMs = runtime.appGpuFrameValid ? runtime.appGpuFrameMs : -1;
-	gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
-	gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
-	gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
-	gCaptureFrame.replayForwardViewActive = xrvk::isReplayForwardViewActive() ? 1 : 0;
-	gCaptureFrame.opaqueOrderExperimentEnabled = rw::vulkan::getOpaqueOrderEnabled() ? 1 : 0;
-	gCaptureFrame.opaqueOrder = rw::vulkan::getOpaqueOrderStats();
-	gCaptureFrame.renderdocCaptureActive = QuestRenderDocActive() ? 1 : 0;
-	gCaptureFrame.opaqueWorldAlphaFastPathEnabled =
-		rw::vulkan::getOpaqueWorldAlphaFastPathEnabled() ? 1 : 0;
-	static_assert(questperf::GpuPassCount==GpuPassProfile::Count,"GPU capture/backend pass count");
-	static_assert(GpuPassProfile::SampleInterval==8,"GPU capture sampling metadata");
-	static_assert(QUEST_PROFILER_PHASE_RENDER_EFFECTS-QUEST_PROFILER_PHASE_RENDER_SKY==GpuPassProfile::Effects-GpuPassProfile::Sky,"CPU/GPU pass mapping");
-	GpuPassProfile::Result passes;
-	if(rw::vulkan::getGpuPassProfile(&passes)){
-		gCaptureFrame.gpu.frameId=passes.frameId;gCaptureFrame.gpu.startNs=passes.startNs;
-		gCaptureFrame.gpu.geometry=passes.geometry;
-		gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
-		for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
+	if(gRecordingEnabled){
+		const double prepareStarted = NowMilliseconds();
+		gCaptureFrame.cpuMs = localCpuAppRaw;
+		gCaptureFrame.runtimeCpuMs = runtime.appCpuFrameValid ? runtime.appCpuFrameMs : -1;
+		gCaptureFrame.runtimeGpuMs = runtime.appGpuFrameValid ? runtime.appGpuFrameMs : -1;
+		gCaptureFrame.vulkanGpuMs = gSnapshot.gpuVulkanValid ? vulkanGpuMs : -1;
+		gCaptureFrame.refreshHz = runtime.displayRefreshRateHz;
+		gCaptureFrame.profilerDisplayMode = gCaptureDisplayMode;
+		gCaptureFrame.replayForwardViewActive = xrvk::isReplayForwardViewActive() ? 1 : 0;
+		gCaptureFrame.opaqueOrderExperimentEnabled = rw::vulkan::getOpaqueOrderEnabled() ? 1 : 0;
+		gCaptureFrame.opaqueOrder = rw::vulkan::getOpaqueOrderStats();
+		gCaptureFrame.renderdocCaptureActive = QuestRenderDocActive() ? 1 : 0;
+		gCaptureFrame.opaqueWorldAlphaFastPathEnabled =
+			rw::vulkan::getOpaqueWorldAlphaFastPathEnabled() ? 1 : 0;
+		static_assert(questperf::GpuPassCount==GpuPassProfile::Count,"GPU capture/backend pass count");
+		static_assert(GpuPassProfile::SampleInterval==8,"GPU capture sampling metadata");
+		static_assert(QUEST_PROFILER_PHASE_RENDER_EFFECTS-QUEST_PROFILER_PHASE_RENDER_SKY==GpuPassProfile::Effects-GpuPassProfile::Sky,"CPU/GPU pass mapping");
+		GpuPassProfile::Result passes;
+		if(rw::vulkan::getGpuPassProfile(&passes)){
+			gCaptureFrame.gpu.frameId=passes.frameId;gCaptureFrame.gpu.startNs=passes.startNs;
+			gCaptureFrame.gpu.geometry=passes.geometry;
+			gCaptureFrame.gpu.mask=passes.mask;gCaptureFrame.gpu.status=passes.status;gCaptureFrame.gpu.frameMs=passes.frameMs;
+			for(unsigned i=0;i<questperf::GpuPassCount;++i){gCaptureFrame.gpu.ms[i]=passes.ms[i];gCaptureFrame.gpu.draws[i]=passes.draws[i];}
+		}
+		gCaptureFrame.lodFadeTransitionEnabled=VrWorldLod::FadeTransitions()?1:0;
+		gCaptureFrame.fxaaIntegerSamplingEnabled=rw::vulkan::getFxaaIntegerStencilEnabled()?1:0;
+		gCaptureFrame.fxaaIntegerSamplingActive=rw::vulkan::getFxaaIntegerStencilActive()?1:0;
+		gCaptureFrame.worldLodMode = VrWorldLod::Mode();
+		gCaptureFrame.worldLod = VrWorldLod::GetStats();
+		gCaptureFrame.worldOcclusionEnabled=rw::vulkan::getWorldOcclusionEnabled()?1:0;
+		gCaptureFrame.worldOcclusion=rw::vulkan::getWorldOcclusionStats();
+		gCaptureFrame.worldBackfaceEnabled=rw::vulkan::getWorldBackfaceEnabled()?1:0;
+		gCaptureFrame.worldBackface=rw::vulkan::getWorldBackfaceStats();
+		gCaptureFrame.staticInstancesEnabled = rw::vulkan::getStaticInstancesEnabled()?1:0;
+		gCaptureFrame.staticInstances = rw::vulkan::getStaticInstancesStats();
+		gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();
+		gCaptureFrame.opaqueMeshBatchEnabled = rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0;
+		gCaptureFrame.opaqueMeshBatch = rw::vulkan::getOpaqueMeshBatchStats();
+		gCaptureFrame.alphaBound = rw::vulkan::getAlphaBoundStats();
+		gCaptureFrame.maskedAlphaPassSkipEnabled = rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0;
+		rw::vulkan::FrameBeginStats begin = {};
+		if(rw::vulkan::getFrameBeginStats(&begin)){
+			gCaptureFrame.begin.valid = 1;
+			gCaptureFrame.atomicSubmission = rw::vulkan::getAtomicSubmissionStats();
+			gCaptureFrame.begin.totalMs = begin.totalMs;
+			gCaptureFrame.begin.pipelineMs = begin.pipelineMs;
+			gCaptureFrame.begin.fenceWaitMs = begin.fenceWaitMs;
+			gCaptureFrame.begin.timestampMs = begin.timestampMs;
+			gCaptureFrame.begin.retirementMs = begin.retirementMs;
+			gCaptureFrame.begin.setupMs = begin.setupMs;
+			gCaptureFrame.begin.wristMs = begin.wristMs;
+			gCaptureFrame.begin.pipelineRequests = begin.pipelineRequests;
+			gCaptureFrame.begin.pipelinesCreated = begin.pipelinesCreated;
+			gCaptureFrame.begin.pipelineFailures = begin.pipelineFailures;
+			gCaptureFrame.begin.retiredBuffers = begin.retiredBuffers;
+			gCaptureFrame.begin.retiredImages = begin.retiredImages;
+			gCaptureFrame.begin.retiredDescriptors = begin.retiredDescriptors;
+			gCaptureFrame.begin.uploadCommands = begin.uploadCommands;
+			gCaptureFrame.begin.framebufferCreated = begin.framebufferCreated;
+			gCaptureFrame.begin.lastPipelineKey = begin.lastPipelineKey;
+		}
+		for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT; ++category)
+			gCaptureFrame.activeModels[category] = (int)ModelSets::GetActiveForCategory((ModelSets::eModelCategory)category);
+		gCaptureFrame.requestedModel = (int)ModelSets::GetRequested();
+		xrvk::RenderScaleStatus captureScale = {};
+		if(xrvk::getRenderScaleStatus(&captureScale)){
+			gCaptureFrame.width = (int)captureScale.actualWidth;
+			gCaptureFrame.height = (int)captureScale.actualHeight;
+			gCaptureFrame.renderScale = captureScale.effectivePercent;
+		}
+		memcpy(gCaptureFrame.renderCalls, gFrameRenderEntityCalls, sizeof(gFrameRenderEntityCalls));
+		gCaptureFrame.player = CapturePlayer();
+		gCaptureFrame.weaponUses = gPlayerWeaponUses;
+		gPlayerWeaponUses = 0;
+		gCaptureFrame.events = gCaptureEvents.Update(gCaptureFrame.player, gCaptureFrame.weaponUses);
+		gCaptureFrame.stages[5] = (float)(NowMilliseconds()-prepareStarted);
+		gCaptureWriter.Submit(gCaptureFrame);
+		gPreviousCaptureStartNs = gCaptureFrame.startNs;
 	}
-	gCaptureFrame.lodFadeTransitionEnabled=VrWorldLod::FadeTransitions()?1:0;
-	gCaptureFrame.fxaaIntegerSamplingEnabled=rw::vulkan::getFxaaIntegerStencilEnabled()?1:0;
-	gCaptureFrame.fxaaIntegerSamplingActive=rw::vulkan::getFxaaIntegerStencilActive()?1:0;
-	gCaptureFrame.worldLodMode = VrWorldLod::Mode();
-	gCaptureFrame.worldLod = VrWorldLod::GetStats();
-	gCaptureFrame.worldOcclusionEnabled=rw::vulkan::getWorldOcclusionEnabled()?1:0;
-	gCaptureFrame.worldOcclusion=rw::vulkan::getWorldOcclusionStats();
-	gCaptureFrame.worldBackfaceEnabled=rw::vulkan::getWorldBackfaceEnabled()?1:0;
-	gCaptureFrame.worldBackface=rw::vulkan::getWorldBackfaceStats();
-	gCaptureFrame.staticInstancesEnabled = rw::vulkan::getStaticInstancesEnabled()?1:0;
-	gCaptureFrame.staticInstances = rw::vulkan::getStaticInstancesStats();
-	gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();
-	gCaptureFrame.opaqueMeshBatchEnabled = rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0;
-	gCaptureFrame.opaqueMeshBatch = rw::vulkan::getOpaqueMeshBatchStats();
-	gCaptureFrame.alphaBound = rw::vulkan::getAlphaBoundStats();
-	gCaptureFrame.maskedAlphaPassSkipEnabled = rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0;
-	rw::vulkan::FrameBeginStats begin = {};
-	if(rw::vulkan::getFrameBeginStats(&begin)){
-		gCaptureFrame.begin.valid = 1;
-		gCaptureFrame.atomicSubmission = rw::vulkan::getAtomicSubmissionStats();
-		gCaptureFrame.begin.totalMs = begin.totalMs;
-		gCaptureFrame.begin.pipelineMs = begin.pipelineMs;
-		gCaptureFrame.begin.fenceWaitMs = begin.fenceWaitMs;
-		gCaptureFrame.begin.timestampMs = begin.timestampMs;
-		gCaptureFrame.begin.retirementMs = begin.retirementMs;
-		gCaptureFrame.begin.setupMs = begin.setupMs;
-		gCaptureFrame.begin.wristMs = begin.wristMs;
-		gCaptureFrame.begin.pipelineRequests = begin.pipelineRequests;
-		gCaptureFrame.begin.pipelinesCreated = begin.pipelinesCreated;
-		gCaptureFrame.begin.pipelineFailures = begin.pipelineFailures;
-		gCaptureFrame.begin.retiredBuffers = begin.retiredBuffers;
-		gCaptureFrame.begin.retiredImages = begin.retiredImages;
-		gCaptureFrame.begin.retiredDescriptors = begin.retiredDescriptors;
-		gCaptureFrame.begin.uploadCommands = begin.uploadCommands;
-		gCaptureFrame.begin.framebufferCreated = begin.framebufferCreated;
-		gCaptureFrame.begin.lastPipelineKey = begin.lastPipelineKey;
-	}
-	for(int category = 0; category < ModelSets::MODEL_CATEGORY_COUNT; ++category)
-		gCaptureFrame.activeModels[category] = (int)ModelSets::GetActiveForCategory((ModelSets::eModelCategory)category);
-	gCaptureFrame.requestedModel = (int)ModelSets::GetRequested();
-	xrvk::RenderScaleStatus captureScale = {};
-	if(xrvk::getRenderScaleStatus(&captureScale)){
-		gCaptureFrame.width = (int)captureScale.actualWidth;
-		gCaptureFrame.height = (int)captureScale.actualHeight;
-		gCaptureFrame.renderScale = captureScale.effectivePercent;
-	}
-	memcpy(gCaptureFrame.renderCalls, gFrameRenderEntityCalls, sizeof(gFrameRenderEntityCalls));
-	gCaptureFrame.player = CapturePlayer();
-	gCaptureFrame.weaponUses = gPlayerWeaponUses;
-	gPlayerWeaponUses = 0;
-	gCaptureFrame.events = gCaptureEvents.Update(gCaptureFrame.player, gCaptureFrame.weaponUses);
-	gCaptureFrame.stages[5] = (float)(NowMilliseconds()-prepareStarted);
-	gCaptureWriter.Submit(gCaptureFrame);
-	gPreviousCaptureStartNs = gCaptureFrame.startNs;
 
 	gLogWindowFrames++;
 	if(now-gLogWindowStartedMs >= 1000.0){
@@ -1569,7 +1590,7 @@ QuestProfilerEndAppFrame(void)
 		gSnapshot.cpuPostMaxMs = gWindowPostMaxMs;
 		gSnapshot.cpuVkEndMaxMs = gWindowVkEndMaxMs;
 		UpdatePhaseMaximumSnapshot();
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestPerf CPU_APP=%.2fms MAX=%.2fms(%s) "
 			"PRE=%.2f/%.2f VK_BEGIN=%.2f/%.2f "
 			"STEP=%.2f/%.2f POST=%.2f/%.2f "
@@ -1591,7 +1612,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.gpuVulkanValid ?
 				gSnapshot.gpuVulkanMs : -1.0f,
 			fps, gSnapshot.frameBudgetMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"Traffic want=%.1f served=%.1f amb=%d pursuit=%d proxy=%d "
 			"pending=%d debris=%d stalled=%d pool=%d/%d ped=%d/%d "
 			"spawn=%d ok=%d deny=%d top=%d:%d",
@@ -1606,7 +1627,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.spawnDeniedPerSecond,
 			gSnapshot.spawnTopDenyReason,
 			gSnapshot.spawnTopDenyCount);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"TrafficJob dispatch=%d skip=%d hit=%d miss=%d "
 			"worker=%.3f/%.3fms build=%.3f/%.3fms",
 			gSnapshot.trafficJobDispatchesPerSecond,
@@ -1617,13 +1638,13 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.trafficJobMaxMs,
 			gSnapshot.trafficJobBuildMs,
 			gSnapshot.trafficJobBuildMaxMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"TrafficCruise eligible=%d hit=%d miss=%d stale=%d",
 			gSnapshot.trafficCruiseEligiblePerSecond,
 			gSnapshot.trafficCruiseHitsPerSecond,
 			gSnapshot.trafficCruiseMissesPerSecond,
 			gSnapshot.trafficCruiseStalePerSecond);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"CollisionFlat scope=%d build=%d reuse=%d stale=%d "
 			"overflow=%d items=%d saved=%d",
 			gSnapshot.collisionFlatScopesPerSecond,
@@ -1633,7 +1654,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.collisionFlatOverflowsPerSecond,
 			gSnapshot.collisionFlatItemsPerSecond,
 			gSnapshot.collisionFlatSavedNodeVisitsPerSecond);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"PhysicsDirector mode=%d tiers=%d/%d/%d/%d "
 			"check=%d simple=%d skip=%d nodes=%d cand=%d pair=%d "
 			"col=%d wheel=%d tri=%d step=%d+%d retry=%d "
@@ -1657,7 +1678,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.physicsRemoveAndAddPerSecond,
 			gSnapshot.physicsRemoveAndAddMs,
 			gSnapshot.physicsClassifyMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"PhysicsV2 preset=%d level=%d budget=%.2fms managed=%.3f/%.3fms "
 			"rail col=%d/%d ai=%d/%d proxy col=%d/%d ai=%d/%d "
 			"promote=%d/%d/%d adapt=%d/%d work=%.3f/%.3fms remove_skip=%d",
@@ -1682,21 +1703,21 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.physicsManagedSimpleCollisionMs,
 			gSnapshot.physicsManagedAiMs,
 			gSnapshot.physicsRemoveAndAddSkippedPerSecond);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"VehicleVisual mode=%d VHI=%d VLO=%d SKIPPED=%d OCC_SKIP=%d",
 			gSnapshot.vehicleVisualBudgetMode,
 			gSnapshot.vehicleVisualHighPerSecond,
 			gSnapshot.vehicleVisualVloPerSecond,
 			gSnapshot.vehicleVisualAtomicsSkippedPerSecond,
 			gSnapshot.vehicleVisualOccupantsSkippedPerSecond);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"OpenXR performance supported=%d CPU=%d/%d GPU=%d/%d",
 			xrvk::isPerformanceModeSupported() ? 1 : 0,
 			xrvk::getPerformanceMode(),
 			xrvk::getActivePerformanceMode(),
 			xrvk::getGpuPerformanceMode(),
 			xrvk::getActiveGpuPerformanceMode());
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"RenderScale request=%d selected=%d effective=%.2f%% "
 			"actual=%dx%d recommended=%dx%d max=%dx%d fallback=%s "
 			"previous=%d->%d/%s",
@@ -1715,7 +1736,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.renderScalePreviousFallbackPercent,
 			xrvk::getRenderScaleFallbackReasonName(
 				gSnapshot.renderScalePreviousFallbackReason));
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestPerfPhases GAME=%.2f/%.2f "
 			"STREAM=%.2f/%.2f SIM_OTHER=%.2f/%.2f "
 			"AUDIO=%.2f/%.2f LIST=%.2f/%.2f "
@@ -1736,7 +1757,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.cpuWorldRenderMs,
 			gSnapshot.cpuWorldRenderMaxMs,
 			gSnapshot.cpuUiMs, gSnapshot.cpuUiMaxMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestGameSplit SCRIPT=%.2f/%.2f PRE_MISC=%.2f/%.2f "
 			"WORLD=%.2f/%.2f POST_FX=%.2f/%.2f RESIDUAL=%.2f/%.2f",
 			gSnapshot.cpuScriptMs, gSnapshot.cpuScriptMaxMs,
@@ -1748,7 +1769,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.cpuPostWorldCameraFxMaxMs,
 			gSnapshot.cpuSimOtherMs,
 			gSnapshot.cpuSimOtherMaxMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestWorldSim TOTAL=%.2f/%.2f PED=%.2f/%.2f "
 			"VEH=%.2f/%.2f OBJ=%.2f/%.2f ANI=%.2f/%.2f "
 			"COL=%.2f/%.2f CALLS=%d/%d/%d",
@@ -1763,7 +1784,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.pedControlCalls,
 			gSnapshot.vehicleControlCalls,
 			gSnapshot.collisionCalls);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestRender SKY=%.2f/%.2f ROAD=%.2f/%.2f "
 			"REFL=%.2f/%.2f WORLD=%.2f/%.2f WATER=%.2f/%.2f "
 			"FADE=%.2f/%.2f WEATHER=%.2f/%.2f FX=%.2f/%.2f "
@@ -1778,7 +1799,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.cpuRenderWeatherMs, gSnapshot.cpuRenderWeatherMaxMs,
 			gSnapshot.cpuRenderEffectsMs, gSnapshot.cpuRenderEffectsMaxMs,
 			gSnapshot.cpuRenderOtherMs, gSnapshot.cpuRenderOtherMaxMs);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestRenderEntity V=%.2f/%d P=%.2f/%d S=%.2f/%d "
 			"FV=%.2f/%d FP=%.2f/%d FS=%.2f/%d",
 			gSnapshot.cpuRenderEntityMs[QUEST_RENDER_ENTITY_VEHICLE],
@@ -1793,7 +1814,7 @@ QuestProfilerEndAppFrame(void)
 			gSnapshot.renderFadingEntityCalls[QUEST_RENDER_ENTITY_PED],
 			gSnapshot.cpuRenderFadingEntityMs[QUEST_RENDER_ENTITY_STATIC],
 			gSnapshot.renderFadingEntityCalls[QUEST_RENDER_ENTITY_STATIC]);
-		__android_log_print(ANDROID_LOG_INFO, "QuestPerf",
+		if(gRecordingEnabled) __android_log_print(ANDROID_LOG_INFO, "QuestPerf",
 			"QuestRenderVehicle LIGHT=%.2f OCC=%.2f BODY=%.2f "
 			"ALPHA=%.2f OCC_N=%d",
 			gSnapshot.cpuVehicleRenderPhaseMs
