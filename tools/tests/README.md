@@ -218,6 +218,8 @@ Listening to playback still requires headset verification.
 `test-radio-touch.ps1` exercises production input and menu functions for the
 saved laser/touch setting, fingertip contact, release hysteresis, both hands,
 tracking/menu/weapon transitions, driving capture and the original laser input.
+It also checks left/right steering ownership in both modes, suppression with
+both hands steering, and held-trigger/contact transitions after wheel release.
 The fake poses do not establish physical reach or headset appearance.
 
 `test-cd-directory.ps1 -StageRoot <assembled-tree>` compiles the production

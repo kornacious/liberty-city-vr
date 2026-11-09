@@ -44,6 +44,7 @@ Placement global,model,bundledGlobal,bundledModel,draft;
 bool loaded=false, visible=true, edit=false, modelTarget=false, interacting=false, xDown=false;
 bool triggerDown[2]={true,true};
 bool touchMode=false;
+unsigned interactingHands=0;
 RadioBoard::Touch touch[2];
 CVehicle *touchVehicle=nil;
 int modelId=-1, hover=-1, placementSet=-1;
@@ -210,6 +211,7 @@ void TrackTitle(const Plane &p,const char *text) {
 const char *MenuStatus() { return notice; }
 void CloseEditor() { edit=false; }
 bool Interacting() { return interacting; }
+unsigned InteractingHands() { return interactingHands; }
 bool TouchEnabled() { Plane p; return BuildPlane(p) && touchMode; }
 bool Update(bool blocked) {
     Load(); const auto &input=androidgame::GetPadInput();
@@ -218,22 +220,30 @@ bool Update(bool blocked) {
     bool x=available && input.x;
     if(x && !xDown) xSince=now;
     if(!x && xDown && available && now-xSince<.30) tap=true;
-    interacting=!touchMode && x && now-xSince>=.30;
+    const bool laserRequested=!touchMode && x && now-xSince>=.30;
+    interactingHands=0;
     xDown=x; hover=-1;
     bool activated=false;
     for(int hand=0;hand<2;++hand) {
         bool trigger=(hand?input.rightTrigger:input.leftTrigger)>=.55f;
         const auto &aim=input.aimPose[hand];
+        // The wheel keeps ownership of a grabbed hand in either UI mode.
+        // Still seed trigger edges so releasing the wheel cannot click the UI.
+        if(OculusVR::IsImmersiveSteeringHandleGrabbed(hand)) {
+            touch[hand].Reset(); triggerDown[hand]=trigger; continue;
+        }
         if(touchMode) {
             CVector tip;
             if(available && OculusVR::GetTrackedIndexTip(hand,&tip)) {
                 CVector delta=tip-plane.origin; int nearbyControl=-1;
                 int press=touch[hand].Update(DotProduct(delta,plane.right),DotProduct(delta,plane.up),
                     DotProduct(delta,plane.normal),plane.width,nearbyControl);
-                if(nearbyControl>=0) { hover=nearbyControl; interacting=true; }
+                if(nearbyControl>=0) { hover=nearbyControl; interactingHands|=1u<<hand; }
                 if(press>=0 && !activated) { Activate(press); activated=true; }
             } else touch[hand].Reset();
-        } else if(interacting && aim.valid && !OculusVR::IsTrackedWeaponHeld(hand)) {
+        } else if(laserRequested && !OculusVR::IsTrackedWeaponHeld(hand)) {
+            interactingHands|=1u<<hand;
+            if(!aim.valid) { triggerDown[hand]=trigger; continue; }
             float right[3],up[3],forward[3],origin[3];
             if(rw::vulkan::playPoseToFirstPersonWorld(aim.position,aim.orientation,right,up,forward,origin)) {
                 CVector delta=CVector(origin[0],origin[1],origin[2])-plane.origin;
@@ -249,6 +259,7 @@ bool Update(bool blocked) {
         // Seed while blocked too; held acceleration cannot become a UI click.
         triggerDown[hand]=trigger;
     }
+    interacting=interactingHands!=0;
     // Preserve the original X station shortcut when the board is hidden or
     // third person is active. These paths intentionally use an ordinary edge.
     static bool fallbackDown=false;
@@ -274,7 +285,7 @@ void MenuAction(int row,int direction) {
     if(row==1) {
         bool next=!touchMode;
         if(WritePrivateProfileStringA("RadioBoard","InteractionMode",next?"1":"0",personal.c_str())) {
-            touchMode=next; for(auto &t:touch) t.Reset(); interacting=false;
+            touchMode=next; for(auto &t:touch) t.Reset(); interacting=false; interactingHands=0;
             snprintf(notice,sizeof(notice),"%s",touchMode?"TOUCH BUTTONS WITH YOUR INDEX FINGER":"HOLD X, POINT, THEN CLICK TRIGGER");
         } else snprintf(notice,sizeof(notice),"INTERACTION SETTING SAVE FAILED");
         return;
@@ -318,7 +329,8 @@ void Render() {
     RwIm3DVertex rays[4]{}; int rayCount=0;
     if(interacting && !touchMode) for(int hand=0;hand<2;++hand) {
         const auto &aim=androidgame::GetPadInput().aimPose[hand];
-        if(!aim.valid || OculusVR::IsTrackedWeaponHeld(hand)) continue;
+        if(!(interactingHands & (1u<<hand)) || !aim.valid ||
+           OculusVR::IsImmersiveSteeringHandleGrabbed(hand) || OculusVR::IsTrackedWeaponHeld(hand)) continue;
         float right[3],up[3],forward[3],origin[3];
         if(!rw::vulkan::playPoseToFirstPersonWorld(aim.position,aim.orientation,right,up,forward,origin)) continue;
         CVector from(origin[0],origin[1],origin[2]),dir(forward[0],forward[1],forward[2]),delta=from-p.origin;

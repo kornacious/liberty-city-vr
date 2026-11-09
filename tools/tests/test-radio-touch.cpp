@@ -21,6 +21,8 @@ const PadInput &GetPadInput() { return input; }
 }
 namespace OculusVR {
 bool weapon[2]={},valid[2]={}; CVector tips[2];
+bool steering[2]={};
+bool IsImmersiveSteeringHandleGrabbed(int h) { return steering[h]; }
 bool IsTrackedWeaponHeld(int h) { return weapon[h]; }
 bool GetTrackedIndexTip(int h,CVector *tip) { *tip=tips[h]; return valid[h] && !weapon[h]; }
 }
@@ -41,6 +43,7 @@ namespace QuestRadio {
 using RadioBoard::Placement;
 struct Plane { CVector origin,right={1,0,0},up={0,1,0},normal={0,0,1}; float width=.4f; };
 bool touchMode=false,interacting=false,xDown=false,triggerDown[2]={true,true};
+unsigned interactingHands=0;
 bool boardAvailable=true,vehicle=true,visible=true,edit=false,modelTarget=false;
 RadioBoard::Touch touch[2];
 int hover=-1,modelId=1,activations=0,last=-1;
@@ -109,6 +112,36 @@ int main() {
     in.leftTrigger=1;Update(false);assert(activations==4 && last==6);
     Update(false);assert(activations==4);
     writeOK=false;MenuAction(1,1);assert(!touchMode && savedMode==0);
+    // A held X belongs only to free hands, for either steering hand.
+    in.aimPose[1]=in.aimPose[0];
+    for(int steeringHand=0;steeringHand<2;++steeringHand) {
+        OculusVR::steering[steeringHand]=true;
+        in.leftTrigger=in.rightTrigger=0;Update(false);
+        assert(interacting && interactingHands==(1u<<(1-steeringHand)));
+        int before=activations;
+        if(steeringHand==0) in.leftTrigger=1; else in.rightTrigger=1;
+        Update(false);assert(activations==before);
+        in.leftTrigger=in.rightTrigger=1;Update(false);assert(activations==before+1);
+        OculusVR::steering[1-steeringHand]=true;Update(false);
+        assert(!interacting && interactingHands==0);
+        OculusVR::steering[0]=OculusVR::steering[1]=false;
+        Update(false);assert(activations==before+1); // held trigger cannot click on release
+    }
+    // Direct contact must also leave the steering hand out of UI ownership.
+    touchMode=true;in.x=false;
+    for(int steeringHand=0;steeringHand<2;++steeringHand) {
+        for(auto &t:touch) t.Reset();
+        OculusVR::steering[steeringHand]=true;
+        Finger(0,1,.04f);Finger(1,1,.04f);Update(false);
+        assert(interactingHands==(1u<<(1-steeringHand)));
+        int before=activations;
+        Finger(0,1,.005f);Finger(1,1,.005f);Update(false);
+        assert(activations==before+1 && interactingHands==(1u<<(1-steeringHand)));
+        OculusVR::steering[1-steeringHand]=true;Update(false);
+        assert(!interacting && interactingHands==0);
+        OculusVR::steering[0]=OculusVR::steering[1]=false;
+        Update(false);assert(activations==before+1);
+    }
     RadioBoard::Touch t;int near=-1;
     for(float width:{.16f,.4f,1.f}) {
         const auto &b=RadioBoard::Buttons[7];float x=((b.left+b.right)/2-256)*width/512;
@@ -132,5 +165,5 @@ int main() {
     assert(VRHandModel::IndexTip(0,{0,0,0},{1,0,0},{0,1,0},{0,0,1},0,0,&tip));
     assert(fabsf(tip.x-.03f)<.00001f && tip.z>.16f);
     assert(!VRHandModel::IndexTip(-1,{},{},{},{},0,0,&tip));
-    puts("Radio touch: saved mode, menu rows, front contact, hysteresis, capture, tracking, weapon gates and laser fallback passed.");
+    puts("Radio interaction: touch/laser steering ownership, saved mode, contact hysteresis, capture, tracking, weapon gates and laser fallback passed.");
 }

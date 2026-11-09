@@ -2381,7 +2381,8 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 	CVehicle *vehicle = FindPlayerVehicle();
 
 	gVrRadioChangeJustPressed = QuestRadio::Update(blocked);
-    const bool radioInteracting = QuestRadio::Interacting();
+	const bool radioInteracting = QuestRadio::Interacting();
+	const uint32 radioHands = QuestRadio::InteractingHands();
 	if(vehicle && !blocked){
 		// X is a dedicated radio edge in VR. Preserve L2 brake/reverse, but
 		// remove CapturePad's face-X contribution to Square. A is the dedicated
@@ -2397,7 +2398,7 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 	const float grips[VR_HAND_COUNT] = {
 		input.leftGrip, input.rightGrip
 	};
-	const uint32 blockedHands = (blocked || radioInteracting) ? 3u : 0u;
+	const uint32 blockedHands = blocked ? 3u : radioHands;
 	uint32 captured = UpdateImmersiveBikeInput(
 		grips, input, blockedHands);
 	captured |= UpdateImmersiveCarInput(grips, blockedHands);
@@ -2426,7 +2427,7 @@ UpdateQuestDrivingInput(CControllerState *state, bool blocked)
 		}
 	}
 	MapHornToPad(state);
-	return radioInteracting ? 3u : captured;
+	return captured | radioHands;
 }
 
 void
