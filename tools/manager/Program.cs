@@ -34,6 +34,7 @@ internal static class Program
                 BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr.
                 PCVR options: PcvrBuildOnly, PcvrPrepareData, PcvrGpuTests, PcvrAudioTests.
                 ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
+                                    Target 0 Quest (default), 1 WindowsPcvr,
                                     ModOperation 0 Status, 1 Install, 2 Enable, 3 Disable,
                                                  4 Delete, 5 Validate locally (no device access).
                 TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),

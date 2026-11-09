@@ -5,6 +5,14 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Fixed Windows DAT `CDIMAGE` archives bypassing mod overlay resolution. Upstate
+  map definitions could load while its geometry archive was never registered,
+  leaving missing terrain/buildings. Added an archive-opening diagnostic that
+  uses the production Windows streamer without requiring a headset.
+- Extended Mods with a Windows PCVR target for pinned Upstate Liberty v1.1.2
+  installation, status, enable/disable and deletion. Launch PCVR selects the
+  separate expanded engine after verification; Classic/Xbox saves and base data
+  remain separate. Added native package/early-exit and manager lifecycle/UI checks.
 - Added Quest/Windows target selection for Original Xbox asset installation and
   reuse of fully verified prepared collections. PCVR uses checksummed local
   staging, rollback and retained backups; Quest backups are retained too. Staging

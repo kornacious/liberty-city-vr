@@ -215,8 +215,17 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));
                 break;
             case (int)ManagerAction.ManageMods:
+                var modTarget = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)"],
+                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 2 };
+                modTarget.SetScheme(Theme()); form.Add(modTarget); row += 3;
+                readFields.Add(() => options.Target = (GameTarget)(modTarget.Value ?? 0));
+                modTarget.ValueChanged += (_, _) => {
+                    foreach (var read in readFields.ToArray()) read();
+                    app.Invoke(() => { if (!disposed && selected == (int)ManagerAction.ManageMods) Render(selected, preserveDraft: true); });
+                };
+                if (options.Target == GameTarget.WindowsPcvr) PcvrDirectories();
                 options.ModId = CuratedMods.Upstate.Id;
-                Note("Upstate Liberty v1.1.2 — map expansion for Classic. Requires a compatible APK.");
+                Note("Upstate Liberty v1.1.2 — map expansion for Classic or Original Xbox assets.");
                 var modOperation = new OptionSelector { X = 1, Y = row, Labels = ["Status", "Install", "Enable", "Disable", "Delete", "Validate locally"],
                     Value = (int)options.ModOperation, Width = Dim.Fill(2), Height = 6 };
                 modOperation.SetScheme(Theme()); form.Add(modOperation); row += 7;
@@ -224,10 +233,10 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("UL.7z package (blank: download v1.1.2)", options.ModArchive, v => options.ModArchive = v, OpenMode.File);
                 Note("Install: choose UL.7z or leave blank to download v1.1.2. SHA256 verified.");
                 Note("Upstate uses a separate native engine and save folder. Headset acceptance is experimental.");
-                Note("Install auto-enables only when the APK reports Upstate runtime support.");
-                Note("Status reads the headset. Validate locally never accesses a device.");
+                Note("Install auto-enables when the selected target has Upstate runtime support. Rebuild PCVR to add it.");
+                Note("Status reads the selected target. Validate locally never accesses a device.");
                 Note("Disable keeps files. Enable verifies files. Delete keeps saves and the PC archive.");
-                Note("The game stops before changes. Restart after activation changes.");
+                Note("Quest stops before changes. Quit PCVR before changes; Launch PCVR loads the enabled mod.");
                 break;
             case SettingsPage:
                 Note("Shared configuration. Cancel discards edits; Save stores them for every action.");

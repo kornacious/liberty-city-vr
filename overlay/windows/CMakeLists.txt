@@ -65,23 +65,29 @@ if(LIBERTYVR_RE3_ROOT)
     set(LIBERTYVR_SOURCES game_main.cpp platform_windows.cpp WaveDecode.cpp renderdoc_windows.cpp streaming_windows.cpp DesktopGameInput.cpp
         "${LIBERTYVR_APP_DIR}/android_main.cpp" "${LIBERTYVR_APP_DIR}/xr_vulkan_session.cpp")
     include("${LIBERTYVR_OVERLAY_DIR}/cmake/LibertyGameSources.cmake")
-    add_executable(libertyvr-game ${LIBERTYVR_SOURCES})
-    add_dependencies(libertyvr-game libertyvr_shaders)
-    target_include_directories(libertyvr-game PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-        "${CMAKE_CURRENT_SOURCE_DIR}/compat" "${LIBERTYVR_OVERLAY_DIR}/src/xr"
-        "${LIBERTYVR_OVERLAY_DIR}/src/core" "${LIBERTYVR_APP_DIR}" "${SPIRV_OUT_DIR}" ${GAME_INCLUDES})
-    target_compile_definitions(libertyvr-game PRIVATE LIBRW RW_VULKAN GTA_VR_WEAPONS
-        AUDIO_ANDROID LIBERTYVR_WINDOWS WITHWINDOWS XR_USE_GRAPHICS_API_VULKAN
-        LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
-        LIBERTYVR_VEHICLE_CAPTURE=0 CMAKE_NO_AUTOLINK NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(libertyvr-game PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/compat/RuntimeCompat.h" /bigobj /MP8 /Zi)
-    target_link_options(libertyvr-game PRIVATE /DEBUG)
-    target_link_libraries(libertyvr-game PRIVATE librw libertyvr-desktop OpenXR::openxr_loader
-        avrt winmm msacm32 mfplay mfplat mfreadwrite mfuuid ole32 propsys shlwapi shell32 dbghelp)
-    if(TARGET openxr_loader)
-        add_custom_command(TARGET libertyvr-game POST_BUILD COMMAND ${CMAKE_COMMAND} -E
-            copy_if_different $<TARGET_FILE:openxr_loader> $<TARGET_FILE_DIR:libertyvr-game>)
-    endif()
+    foreach(game_target libertyvr-game libertyvr-upstate)
+        add_executable(${game_target} ${LIBERTYVR_SOURCES})
+        add_dependencies(${game_target} libertyvr_shaders)
+        target_include_directories(${game_target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/compat" "${LIBERTYVR_OVERLAY_DIR}/src/xr"
+            "${LIBERTYVR_OVERLAY_DIR}/src/core" "${LIBERTYVR_APP_DIR}" "${SPIRV_OUT_DIR}" ${GAME_INCLUDES})
+        target_compile_definitions(${game_target} PRIVATE LIBRW RW_VULKAN GTA_VR_WEAPONS
+            AUDIO_ANDROID LIBERTYVR_WINDOWS WITHWINDOWS XR_USE_GRAPHICS_API_VULKAN
+            LIBERTYVR_DEV_TOOLS=$<BOOL:${LIBERTYVR_DEV_TOOLS}>
+            LIBERTYVR_VEHICLE_CAPTURE=0 CMAKE_NO_AUTOLINK NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${game_target} PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/compat/RuntimeCompat.h" /bigobj /MP8 /Zi)
+        target_link_options(${game_target} PRIVATE /DEBUG)
+        target_link_libraries(${game_target} PRIVATE librw libertyvr-desktop OpenXR::openxr_loader
+            avrt winmm msacm32 mfplay mfplat mfreadwrite mfuuid ole32 propsys shlwapi shell32 dbghelp)
+        if(TARGET openxr_loader)
+            add_custom_command(TARGET ${game_target} POST_BUILD COMMAND ${CMAKE_COMMAND} -E
+                copy_if_different $<TARGET_FILE:openxr_loader> $<TARGET_FILE_DIR:${game_target}>)
+        endif()
+        if(game_target STREQUAL "libertyvr-upstate")
+            target_compile_definitions(${game_target} PRIVATE LCVR_UPSTATE_ENGINE=1)
+        endif()
+    endforeach()
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/pcvr-mod-capabilities.txt" "upstate-liberty/1\n")
 endif()
 add_executable(libertyvr-pcvr main.cpp)
 target_compile_definitions(libertyvr-pcvr PRIVATE
@@ -108,7 +114,8 @@ endif()
 include(CTest)
 install(TARGETS libertyvr-pcvr RUNTIME DESTINATION .)
 if(TARGET libertyvr-game)
-    install(TARGETS libertyvr-game RUNTIME DESTINATION .)
+    install(TARGETS libertyvr-game libertyvr-upstate RUNTIME DESTINATION .)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pcvr-mod-capabilities.txt" DESTINATION .)
 endif()
 if(TARGET openxr_loader)
     install(FILES $<TARGET_FILE:openxr_loader> DESTINATION .)
@@ -123,6 +130,14 @@ endif()
 install(FILES "${LIBRW_DIR}/LICENSE" DESTINATION . RENAME LIBRW_LICENSE.txt)
 install(FILES "${DESKTOP_IMGUI}/LICENSE_imgui.txt" DESTINATION . RENAME IMGUI_LICENSE.txt)
 if(BUILD_TESTING)
+    if(TARGET libertyvr-upstate)
+        add_test(NAME pcvr-game-help COMMAND libertyvr-game --help)
+        add_test(NAME pcvr-upstate-help COMMAND libertyvr-upstate --help)
+        add_test(NAME pcvr-upstate-reject-package COMMAND libertyvr-upstate
+            --game-data "${CMAKE_CURRENT_BINARY_DIR}/missing-upstate-data"
+            --user-data "${CMAKE_CURRENT_BINARY_DIR}/unused-upstate-user")
+        set_tests_properties(pcvr-upstate-reject-package PROPERTIES WILL_FAIL TRUE)
+    endif()
     if(LIBERTYVR_AUDIO_TESTS)
         add_executable(pcvr-platform-tests platform_tests.cpp platform_windows.cpp WaveDecode.cpp)
         target_include_directories(pcvr-platform-tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compat"

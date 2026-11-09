@@ -26,7 +26,8 @@ inline const char *RelativeFile(const std::string &root,const std::string &cwd,c
     relative=relative.substr(first,relative.find_last_not_of(" \t\r\n")-first+1);
     while(!base.empty()&&base.back()=='/') base.pop_back(); base+='/';
     if(relative.find("..")!=std::string::npos) return nullptr;
-    if(relative[0]!='/') {
+    const bool absolute=relative[0]=='/' || (relative.size()>2 && relative[1]==':' && relative[2]=='/');
+    if(!absolute) {
         std::string dir=Normalized(cwd); while(!dir.empty()&&dir.back()=='/') dir.pop_back(); dir+='/';
         if(dir.compare(0,base.size(),base)!=0) return nullptr;
         relative=dir.substr(base.size())+relative;

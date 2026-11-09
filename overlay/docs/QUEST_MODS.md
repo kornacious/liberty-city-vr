@@ -1,11 +1,12 @@
 # Curated mods in the VR Manager
 
 Open **Mods** in Liberty City / VR Manager. The initial catalog entry is
-**Upstate Liberty v1.1.2**. Choose an operation, then **Perform**:
+**Upstate Liberty v1.1.2**. Select **Quest standalone** or **Windows PCVR**, choose
+an operation, then **Perform**:
 
-- **Status** reads installed/enabled/runtime-support state from the selected Quest 3.
+- **Status** reads installed/enabled/runtime-support state from the selected target.
 - **Validate locally** prepares the package without discovering or accessing a headset.
-- **Install** uploads and verifies a staged package, then replaces the previous managed
+- **Install** copies and verifies a staged package, then replaces the previous managed
   package with rollback if activation fails.
 - **Enable** verifies installed file hashes again before activation.
 - **Disable** retains the files for later re-enabling.
@@ -22,7 +23,17 @@ This digest matches the official release asset metadata and the supplied local
 archive. Other versions/repacked archives are rejected without changing the source.
 Install 7-Zip (`7zz` or `7z`) or select its executable in **Settings**.
 The archive and prepared payload remain under `<workplace>/mods`, outside Git.
-Windows ASI executables are never executed or transferred to the headset.
+Windows ASI executables are excluded on both targets.
+
+PCVR requires a prepared local PCVR data copy and a Windows build installed from
+the manager. Close PCVR before changes. Builds with `libertyvr-upstate.exe` and the
+versioned capability record support automatic enablement; older builds install
+the package disabled until rebuilt. **Launch PCVR** verifies the package and
+selects the separate expanded engine. The executable checks the pinned native
+inventory before opening game state. Corrupt enabled packages stop launch; disable
+or reinstall to recover. Base files are retained under the isolated data directory;
+Upstate saves use `<PCVR user>/userfiles/upstate-liberty-1.1.2`. No ADB is used for
+PCVR mod operations. Gameplay and performance acceptance remains experimental.
 
 ## Native engine adapter
 

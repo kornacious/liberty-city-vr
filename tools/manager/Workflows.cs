@@ -54,6 +54,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 break;
             case ManagerAction.RepairGameFiles: await Repair(options, token); break;
             case ManagerAction.ManageMods:
+                if (!Enum.IsDefined(options.Target)) throw new InvalidDataException("Select a valid game target.");
                 var mods = new CuratedMods(settings, runner, log);
                 var mod = CuratedMods.Find(options.ModId);
                 if (!Enum.IsDefined(options.ModOperation)) throw new InvalidDataException("Select a valid mod operation.");
@@ -62,6 +63,19 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                     prepared = await mods.Prepare(mod, options.ModArchive, token);
                 if (options.ModOperation == ModOperation.Validate)
                 { log.Write("Package verified and prepared locally. No device access. " + prepared); break; }
+                if (options.Target == GameTarget.WindowsPcvr)
+                {
+                    var modPaths = PcvrMods.Layout(settings);
+                    var status = options.ModOperation switch
+                    {
+                        ModOperation.Install => PcvrMods.Install(modPaths, mod, prepared!, token),
+                        ModOperation.Status => PcvrMods.Status(modPaths, mod),
+                        _ => PcvrMods.Change(modPaths, mod, options.ModOperation, token)
+                    };
+                    log.Write(mod.Name + " v" + mod.Version + " (PCVR): " + status);
+                    log.Write("Launch PCVR selects the enabled engine. Quit PCVR before changes. Base data and all saves are preserved.");
+                    break;
+                }
                 var modDevice = await Connect(token) ?? throw new IOException("Connect an authorized Quest 3 to manage installed mods.");
                 var modStatus = options.ModOperation switch
                 {

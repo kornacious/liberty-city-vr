@@ -242,11 +242,13 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     {
         RequireWindows(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
         ValidatePreparedData(paths.Data); var install=ResolveInstallation(paths.Install); Runtime();
+        var engine=PcvrMods.SelectEngine(paths);
         await Probe(runner,Path.Combine(install,"libertyvr-pcvr.exe"),log,token);
         Directory.CreateDirectory(paths.User);
         log.Write("Starting Windows PCVR. Quit in-game to return to the manager. Cancel stops the game process.");
         var previous=runner.CommandTimeout; runner.CommandTimeout=Timeout.InfiniteTimeSpan;
-        try { await runner.Run(Path.Combine(install,"libertyvr-game.exe"),arguments,paths.Data,token:token); }
+        log.Write(engine==PcvrMods.Engine ? "Selected Upstate Liberty engine with separate Upstate saves." : "Selected Classic / Xbox engine.");
+        try { await runner.Run(Path.Combine(install,engine),arguments,paths.Data,token:token); }
         finally { runner.CommandTimeout=previous; }
         log.Write("Windows PCVR exited successfully.");
     }

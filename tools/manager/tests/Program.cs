@@ -369,6 +369,7 @@ await MusicChecks.Run(root, Test);
 await RadioChecks.Run(root, Test);
 await SaveTransferChecks.Run(root, Test);
 await ModChecks.Run(root, Test);
+await PcvrModChecks.Run(root, Test);
 await PcvrChecks.Run(root, Test);
 await BenchmarkChecks.Run(root, Test);
 await BenchmarkAssetChecks.Run(root, Test);

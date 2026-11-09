@@ -1,8 +1,21 @@
 # Windows OpenXR/Vulkan development builds
 
-Two developer executables use the same librw Vulkan backend and shaders as Quest:
+The developer executables use the same librw Vulkan backend and shaders as Quest:
 `libertyvr-pcvr` renders a diagnostic scene without game data; `libertyvr-game`
 is an experimental playable GTA III port using the shared re3/VR integration.
+`libertyvr-upstate` builds that integration with the isolated expanded Upstate
+engine tables and save layout. In the manager, select **Windows PCVR** on **Mods**
+to install/enable Upstate Liberty v1.1.2; **Launch PCVR** verifies the package and
+selects its executable. Quit PCVR before changing mods. Disabling returns to the
+Classic/Xbox executable. Upstate saves remain in
+`<PCVR user>/userfiles/upstate-liberty-1.1.2`; Windows ASIs are excluded. Expansion
+gameplay/performance acceptance remains experimental.
+
+To check an installed Upstate archive without a headset, run
+`libertyvr-upstate --game-data DATA --user-data USER --check-upstate-archive`
+with the prepared data and user directories. It validates the pinned package,
+then opens the DAT archive through the production Windows streamer and checks
+that it registered the mod overlay. This checks archive resolution, not rendering.
 The [manager](../../tools/manager/README.md#windows-pcvr) now provides Windows target
 selection, build/checks, versioned local installation, launch and runtime diagnostics.
 Public binary packaging remains in the [roadmap](../../PLATFORMS.md). Captured

@@ -25,6 +25,9 @@ int main(int argc,char **argv) {
     require(std::string(RelativeFile("/game","/game","DATA\\MAPS\\UL\\ul_generic\\ul_generic.IDE "))=="data/maps/UL/ul_generic/ul_generic.ide","DAT LoadLine terminal whitespace matches package entry");
     require(std::string(RelativeFile("/game","/game"," \tDATA\\MAIN.SCM\r\n"))=="data/main.scm","native file-open whitespace semantics preserved");
     require(!RelativeFile("/game","/game"," \r\n"),"empty whitespace request rejected");
+    require(std::string(RelativeFile("D:\\Game", "d:/game/data", "D:\\Game\\data\\main.scm"))=="data/main.scm","Windows drive absolute path resolves once");
+    require(std::string(RelativeFile("D:/Game", "d:/game/data", "main.scm"))=="data/main.scm","Windows drive relative path");
+    require(!RelativeFile("D:/Game", "d:/game", "E:/Game/data/main.scm"),"different Windows drive rejected");
     require(IsPackageAssetPath("/game/","/GAME/mods/UPSTATE-LIBERTY/data/maps/UL/ul.img"),"mod archive classification ignores case and trailing root separators");
     require(IsPackageAssetPath("/game","\\game\\mods\\upstate-liberty\\data\\maps\\UL\\ul.dir"),"mod archive classification normalizes backslashes");
     require(!IsPackageAssetPath("/game","/game/mods/upstate-liberty-other/ul.img"),"mod archive classification enforces package boundary");

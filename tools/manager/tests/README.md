@@ -56,6 +56,13 @@ and save preservation. These transaction fixtures use Git Bash on Windows and
 selector and Cancel behavior. See [curated mod guide](../../../overlay/docs/QUEST_MODS.md)
 for the current runtime limitation and local/download workflows.
 
+PCVR mod fixtures cover older-build gating, automatic enablement, engine selection,
+disable/re-enable/delete, modified payloads and activation markers, cancelled
+replacement, unmanaged directories and save/base-file preservation. PCVR UI checks
+switch the Mods target and verify its isolated directory controls. Windows CTest
+also checks both engine help paths and clean rejection of an absent Upstate package;
+the portable Upstate package checks cover Windows drive-letter asset resolution.
+
 Artifacts remain under `.cache/manager-tests-*` for local inspection. They must
 not be committed. The synthetic privacy fixtures deliberately contain values
 assembled at runtime that the scanner must reject.

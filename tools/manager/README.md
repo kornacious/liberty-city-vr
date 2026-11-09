@@ -163,7 +163,7 @@ see the [target transfer workflow](../vehicle-editor/README.md#quest-and-pcvr-ta
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean main, fetches official main, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
 | Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
 | Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake, Vulkan SDK, PCVR tools/directories and optional auxiliary runtimes; pinned tool download preference. |
-| Mods | Curated Upstate Liberty v1.1.2: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete device mod files. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
+| Mods | Curated Upstate Liberty v1.1.2 for Quest or Windows PCVR: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete mod files on the selected target. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
 
 The [curated mod guide](../../overlay/docs/QUEST_MODS.md) documents package handling
@@ -172,6 +172,24 @@ isolated engine limits and saves; headset gameplay/performance acceptance remain
 experimental. Older APKs keep the package disabled until a compatible runtime
 advertises support. Automatic enablement and re-enabling are gated by that
 capability; Windows ASI binaries are excluded from device packages.
+
+For PCVR, first build and install Windows PCVR and prepare its isolated data copy.
+On **Mods**, select **Windows PCVR**, confirm the PCVR directories, and choose
+**Install**. The package uses the same pinned archive and contains no Windows ASIs.
+Close PCVR before installing, enabling, disabling or deleting a mod. Install enables
+Upstate when the installed build includes `libertyvr-upstate.exe` and its capability
+record; older builds retain the package disabled until rebuilt. **Launch PCVR**
+verifies the enabled package and selects the separate Upstate executable. The
+native engine also verifies the pinned inventory before startup. Disable returns
+launches to Classic/Xbox; delete removes only the managed mod payload. Base data,
+archive cache and saves remain intact. Upstate saves use
+`<PCVR user>/userfiles/upstate-liberty-1.1.2`, separate from Classic saves. PCVR
+gameplay and performance acceptance for the expansion remains experimental.
+
+Headless example: `--run ManageMods REQUEST.json` with
+`"Options":{"Target":1,"ModOperation":1,"ModId":"upstate-liberty","ModArchive":"C:\\Mods\\UL.7z"}`.
+Use the same PCVR directory settings for Mods and Launch PCVR. `ModOperation:5`
+validates and prepares the archive locally without accessing either game target.
 
 Saved configuration lives in `%APPDATA%\LibertyCityVR\settings.json` on Windows
 and `~/.liberty-city-vr/settings.json` on Linux. Action options are saved when

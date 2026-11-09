@@ -47,6 +47,17 @@ internal static class PcvrUiChecks
                         Check(ui.Window.MostFocused?.Text=="Launch PCVR","Launch Cancel did not return navigation focus.");
                         Button("PCVR diagnostics").InvokeCommand(Command.Accept);
                         File.WriteAllText(Path.Combine(directory,"pcvr-diagnostics.txt"),app.ToString());
+                        Button("Mods").InvokeCommand(Command.Accept);
+                        Check(All(ui.Window).OfType<OptionSelector>().Count()==2,"Mods lacks target selector.");
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==2).Value=1;
+                        break;
+                    case 3:
+                        Check(All(ui.Window).OfType<TextField>().Count()==4,"PCVR Mods lacks isolated directories and package field.");
+                        File.WriteAllText(Path.Combine(directory,"pcvr-mods.txt"),app.ToString());
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==2).Value=0;
+                        break;
+                    case 4:
+                        Check(All(ui.Window).OfType<TextField>().Count()==1,"Quest Mods retained PCVR directory fields.");
                         app.RequestStop(); return false;
                 }
             }
