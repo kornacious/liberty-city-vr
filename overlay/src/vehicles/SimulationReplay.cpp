@@ -32,6 +32,8 @@
 #include <sys/stat.h>
 #include <time.h>
 
+extern bool SpawnVrVehicleForReplay(int model);
+
 namespace androidgame { namespace {
 namespace Core=SimulationReplayCore;
 #ifndef LCVR_SIMULATION_REPLAY_ROOT
@@ -48,6 +50,8 @@ const char *Root(){
 enum Mode { Idle,Recording,Preparing,Playing,Finishing };
 Mode mode=Idle;
 int request=0,reference=-1,selectedDemo=0;
+unsigned repeatCount=1,runRepeatCount=1,runIteration=1;
+bool repeatPending=false;
 unsigned model=0,signature=0,duration=120,sampleCount=0;
 bool ghost=true,runGhost=false,runAutoProfile=false,profileStarted=false,sampled=false;
 bool recordingGhost=true,startFailed=false;
@@ -217,10 +221,10 @@ void Finish(const char *reason){
     mode=Finishing; // Finish profiling after this rendered app frame, before cleanup.
     Status(result.c_str());
 }
-void WriteReport(){
-    if(runId.empty()) return;
+bool WriteReport(){
+    if(runId.empty()) return true;
     FILE *f=std::fopen(Path(runId+".run.csv").c_str(),"wx");
-    if(!f){Status("RUN REPORT WRITE FAILED");return;}
+    if(!f){Status("RUN REPORT WRITE FAILED");return false;}
     std::fprintf(f,"schema,LCVR_SIM_RUN_V1\ndemo,%s\nresult,%s\nghost,%d\nauto_profile,%d\nprofile,%s\nmodel,%u\nhandling,%u\nelapsed_us,%llu\ncomparison_samples,%u\nposition_rms_m,%.9g\nposition_max_m,%.9g\nspeed_max_error_kmh,%.9g\nheading_max_error_deg,%.9g\nbuild,%s %s\n",
         label.c_str(),result.c_str(),runGhost?1:0,runAutoProfile?1:0,profile.c_str(),model,initial.vehicle.signature,(unsigned long long)elapsed,
         drift.count,drift.Rms(),double(drift.maxPosition),double(drift.maxSpeed),double(drift.maxHeading),__DATE__,__TIME__);
@@ -239,23 +243,42 @@ void WriteReport(){
     std::fprintf(f,"matched_workload,%d\nroute_fingerprint,%s\nasset_fingerprint,%s\nsource_identity,%s\ncompatibility_dirty_at_end,%d\nenvironment,%s\nambient_world,not_restored_rng_traffic_particles_audio_not_deterministic\nfingerprint_policy,fnv1a64_local_workload_not_security_digest\n",
         runMatched?1:0,routeIdentity.c_str(),assetIdentity.c_str(),LCVR_SOURCE_IDENTITY,MatchedProfile::dirty?1:0,
         runMatched?"noon_sunny_each_simulation_step":"live");
-    if(std::fclose(f)!=0) Status("RUN REPORT CLOSE FAILED");
+    std::fprintf(f,"repeat_index,%u\nrepeat_count,%u\n",runIteration,runRepeatCount);
+    const bool written=!std::ferror(f);
+    if(std::fclose(f)!=0 || !written){Status("RUN REPORT CLOSE FAILED");return false;}
+    return true;
 }
-bool Start(int operation){
+bool Start(int operation,bool continuing=false){
     if(mode!=Idle) {Status("STOP THE CURRENT RUN FIRST");return false;}
-    CAutomobile *c=Ready();if(!c) return false;
+    if(CWorld::bProcessCutsceneOnly || CReplay::IsPlayingBack() || !FindPlayerPed()){
+        Status("RESUME NORMAL GAMEPLAY BEFORE STARTING A RUN");return false;
+    }
+    CAutomobile *c=nullptr;
+    Core::Initial current;
     mkdir(Root(),0700);
-    Core::Initial current=Initial(c);
-    if(!Core::Valid(current) || current.gear>c->pHandling->Transmission.nNumberOfGears){Status("INVALID VEHICLE STATE");return false;}
-    initial=current;
     if(operation==2){
         Refresh(); if(demos.empty()){Status("NO RECORDED DEMOS");return false;}
+        if(continuing){
+            const auto found=std::find(demos.begin(),demos.end(),label);
+            if(found==demos.end()){Status("RECORDED DEMO NO LONGER AVAILABLE");return false;}
+            selectedDemo=int(found-demos.begin());
+        }
         label=demos[selectedDemo];
         FILE *f=std::fopen(Path(label+".sim.csv").c_str(),"r");
         tape.reset(new Core::Tape); const bool loaded=f && tape->Load(f); if(f) std::fclose(f);
         if(!loaded){tape.reset();Status("INCOMPLETE OR INVALID DEMO");return false;}
         if(tape->endUs<1000000){tape.reset();Status("RECORD AT LEAST ONE SECOND BEFORE PLAYBACK");return false;}
         Core::Initial &s=tape->initial;
+        c=Selected();
+        if(!c || c->GetModelIndex()!=s.vehicle.model){
+            if(!SpawnVrVehicleForReplay(int(s.vehicle.model)) || !(c=Selected()) ||
+                c->GetModelIndex()!=s.vehicle.model){
+                tape.reset();Status("COULD NOT SPAWN AND ENTER RECORDED CAR MODEL");return false;
+            }
+        }
+        current=Initial(c);
+        // The current pose/velocity may be moving or overturned. Playback replaces
+        // those with the validated tape state; only model/handling/assets must match.
         std::fprintf(stderr,"Simulation replay validation: model=%u/%u handling=%u/%u gear=%d/%d\n",unsigned(current.vehicle.model),unsigned(s.vehicle.model),current.vehicle.signature,s.vehicle.signature,s.gear,c->pHandling->Transmission.nNumberOfGears);
         if(s.vehicle.model!=current.vehicle.model){tape.reset();Status("USE THE RECORDED CAR MODEL");return false;}
         size_t difference=0;
@@ -299,6 +322,10 @@ bool Start(int operation){
             FixedEnvironment();
         }
     }else{
+        c=Ready();if(!c) return false;
+        current=Initial(c);
+        if(!Core::Valid(current) || current.gear>c->pHandling->Transmission.nNumberOfGears){Status("INVALID VEHICLE STATE");return false;}
+        initial=current;
         runMatched=false;
         initial.recordingGhost=recordingGhost?1:0;
         label=Unique(); output=std::fopen(Path(label+".sim.csv").c_str(),"wx");
@@ -359,7 +386,13 @@ bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b){
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker){return Protected(victim)||Protected(attacker);}
 void SimulationReplayBeginFrame(){
     if(runMatched && (mode==Preparing || mode==Playing)) FixedEnvironment();
-    if(request==1 || request==2){const int op=request;request=0;startFailed=!Start(op);}
+    if(request==1 || request==2){
+        const int op=request;request=0;
+        const bool continuing=repeatPending;repeatPending=false;
+        if(!continuing){runIteration=1;runRepeatCount=op==2?repeatCount:1;}
+        startFailed=!Start(op,continuing);
+        if(startFailed && continuing)QuestProfilerSetReplayProfiling(0);
+    }
     if(mode==Idle || mode==Finishing) return;
     CAutomobile *c=Target();
     if(!c || CWorld::bProcessCutsceneOnly || CReplay::IsPlayingBack()){Finish("ABORTED - VEHICLE EXITED OR GAMEPLAY CHANGED");return;}
@@ -403,12 +436,12 @@ void SimulationReplayEndFrame(){
 }
 void SimulationReplayAfterAppFrame(){
     if((request==1 || request==2) && Now()-requestStartNs>3000000000ULL){
-        request=0;startFailed=true;Status("RESUME NORMAL GAMEPLAY BEFORE STARTING A RUN");
+        request=0;if(repeatPending)QuestProfilerSetReplayProfiling(0);repeatPending=false;startFailed=true;Status("RESUME NORMAL GAMEPLAY BEFORE STARTING A RUN");
     }
-    if(request==3){request=0;Finish(mode==Recording?"RECORDING SAVED":"ABORTED - STOPPED BY USER");}
+    if(request==3){request=0;if(repeatPending)QuestProfilerSetReplayProfiling(0);repeatPending=false;Finish(mode==Recording?"RECORDING SAVED":"ABORTED - STOPPED BY USER");}
     if(mode!=Idle && mode!=Finishing && Now()-wallStart>300000000000ULL) Finish("ABORTED - WALL TIME LIMIT");
     if(mode==Playing && runAutoProfile && !profileStarted){
-        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";view="+(runForwardView?"fixed_forward":"live_head_tracking")+";renderdoc="+(runRenderdocCapture?"1":"0")+";capture_at_us="+std::to_string(runCaptureAtUs)+";run="+runId;
+        const std::string context="demo="+label+";ghost="+(runGhost?"1":"0")+";recording_ghost="+std::to_string(initial.recordingGhost)+";tracking="+(runAssisted?"route_assisted":"input_only")+";view="+(runForwardView?"fixed_forward":"live_head_tracking")+";renderdoc="+(runRenderdocCapture?"1":"0")+";capture_at_us="+std::to_string(runCaptureAtUs)+";repeat_index="+std::to_string(runIteration)+";repeat_count="+std::to_string(runRepeatCount)+";run="+runId;
         QuestProfilerSetCaptureContext(context.c_str());QuestProfilerSetReplayProfiling(2);
         profileStartUs=elapsed;
         profile=QuestProfilerGetCaptureStem();profileStarted=true;
@@ -419,9 +452,12 @@ void SimulationReplayAfterAppFrame(){
         Finish("ABORTED - PERFORMANCE CAPTURE WAS INTERRUPTED");
     if(mode==Finishing && !captureFrameActive){
         if(runRenderdocCapture && !captureAttempted)captureResult="not_reached";
-        if(runAutoProfile && !runId.empty()){QuestProfilerSetReplayProfiling(1);QuestProfilerSetCaptureContext("");QuestProfilerSetReplayProfiling(0);}
+        // Flush this capture before resetting the vehicle or streaming the next start.
+        if(runAutoProfile && !runId.empty()){QuestProfilerSetReplayProfiling(1);QuestProfilerSetCaptureContext("");}
         const bool recorded=runId.empty();
-        WriteReport();
+        const bool reportSaved=WriteReport();
+        const bool again=!recorded && result=="COMPLETE" && reportSaved && runIteration<runRepeatCount;
+        if(runAutoProfile && !recorded && !again)QuestProfilerSetReplayProfiling(0);
         if(runMatched){
             CClock::ms_nGameClockHours=oldHours;CClock::ms_nGameClockMinutes=oldMinutes;CClock::ms_nGameClockSeconds=oldSeconds;
             CWeather::OldWeatherType=oldWeather;CWeather::NewWeatherType=newWeather;CWeather::ForcedWeatherType=forcedWeather;
@@ -429,6 +465,10 @@ void SimulationReplayAfterAppFrame(){
         }
         MatchedProfile::benchmark=false;
         tape.reset(); reference=-1;mode=Idle;Refresh();
+        if(again){
+            ++runIteration;repeatPending=true;request=2;requestStartNs=Now();
+            Status("PREPARING NEXT PLAYBACK - PERFORMANCE CAPTURE SAVED");
+        }
         if(recorded){
             const auto found=std::find(demos.begin(),demos.end(),label);
             if(found!=demos.end()) selectedDemo=int(found-demos.begin());
@@ -472,7 +512,10 @@ bool SimulationReplayRecordingText(char *text,size_t capacity){
 }
 bool SimulationReplayPlaybackText(char *text,size_t capacity){
     if(mode!=Playing || !tape || !tape->endUs) return false;
-    std::snprintf(text,capacity,"PLAYING %.1fS OUT OF %.1fS",
+    if(runRepeatCount>1)
+        std::snprintf(text,capacity,"PLAY %.1f/%.1fS RUN %u/%u",
+            double(std::min(elapsed,tape->endUs))/1000000,double(tape->endUs)/1000000,runIteration,runRepeatCount);
+    else std::snprintf(text,capacity,"PLAYING %.1fS OUT OF %.1fS",
         double(std::min(elapsed,tape->endUs))/1000000,double(tape->endUs)/1000000);
     return true;
 }
@@ -491,6 +534,7 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 10:std::snprintf(text,capacity,"RENDERDOC CAPTURE < %s >",!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - LAUNCH VIA RENDERDOC":captureResult=="saved"?"ON - SAVED":"ON");break;
     case 11:std::snprintf(text,capacity,"CAPTURE AT < %.1f SECONDS >",double(captureAtUs)/1000000);break;
     case 12:std::snprintf(text,capacity,"MATCHED WORKLOAD < %s >",MatchedProfile::active?"PROFILE - ON":matchedWorkload?"ON":"OFF");break;
+    case 13:std::snprintf(text,capacity,"PLAYBACK COUNT < %u >",repeatCount);break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
@@ -502,7 +546,7 @@ bool SimulationReplayMenuAction(int row,int direction){
     switch(row){
     case 0:if(!Ready()) return false;request=1;requestStartNs=Now();return true;
     case 1:Refresh();if(!demos.empty()) selectedDemo=(selectedDemo+direction+int(demos.size()))%int(demos.size());break;
-    case 2:if(!Ready()) return false;Refresh();if(demos.empty()){Status("NO RECORDED DEMOS");return false;}request=2;requestStartNs=Now();return true;
+    case 2:Refresh();if(demos.empty()){Status("NO RECORDED DEMOS");return false;}request=2;requestStartNs=Now();return true;
     case 4:ghost=!ghost;break;
     case 5:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
     case 6:recordingGhost=!recordingGhost;break;
@@ -511,6 +555,7 @@ bool SimulationReplayMenuAction(int row,int direction){
     case 10:renderdocCapture=!renderdocCapture;break;
     case 11:captureAtUs=direction<0?(captureAtUs?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;break;
     case 12:matchedWorkload=!matchedWorkload;break;
+    case 13:repeatCount=direction<0?(repeatCount==1?10:repeatCount-1):(repeatCount==10?1:repeatCount+1);break;
     case 7:{
         Refresh();if(demos.empty()){Status("NO RECORDED DEMOS TO DELETE");break;}
         const std::string name=demos[selectedDemo];

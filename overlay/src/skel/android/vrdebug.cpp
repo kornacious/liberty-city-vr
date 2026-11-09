@@ -4318,11 +4318,11 @@ DrawQuestSimulationPage(void)
 	char row[160];
 	for(int i=0;i<SimulationReplayMenuRows;++i){
 		SimulationReplayMenuRow(i,row,sizeof(row));
-		DrawFullVrMenuRow(row,180+i*27,2,i==*CurrentMenuSelection(),true);
+		DrawFullVrMenuRow(row,174+i*25,2,i==*CurrentMenuSelection(),true);
 	}
 	DrawVrMenuText(SimulationReplayStatus(), VR_MENU_WIDTH/2, 580, 2, 255, 222, 145);
-	DrawVrMenuText("START STOPPED IN A CAR. PLAYBACK TELEPORTS TO THE START.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
-	DrawVrMenuText("PLAYBACK REPAIRS AND REPOSITIONS YOUR CAR. NO WORLD RESET.", VR_MENU_WIDTH/2, 654, 2, 210, 190, 145);
+	DrawVrMenuText("RECORD STOPPED IN A CAR. PLAYBACK SETS UP THE RECORDED CAR.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
+	DrawVrMenuText("EACH PLAYBACK RESETS THE CAR AND SAVES A SEPARATE PROFILE.", VR_MENU_WIDTH/2, 654, 2, 210, 190, 145);
 	DrawVrMenuText("LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE", VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 

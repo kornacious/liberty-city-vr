@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "../../librw/src/vulkan/DebugVisualization.h"
 #include "../../overlay/src/skel/android/VrWeaponCalibrationMenu.h"
 #include "../../overlay/src/vr/QuestRadio.h"
 #include "../../overlay/src/vr/QuestSpeedometer.h"

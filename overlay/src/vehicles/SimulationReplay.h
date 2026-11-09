@@ -13,8 +13,8 @@ bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
 // Rows: record, demo, play, stop, playback ghost, limit,
 // recording ghost, delete, route assistance, benchmark forward view,
-// RenderDoc capture, capture time, back.
-constexpr int SimulationReplayMenuRows=14;
+// RenderDoc capture, capture time, matched workload, playback count, back.
+constexpr int SimulationReplayMenuRows=15;
 // Nonzero only during the playback preparation/playback belonging to this run.
 unsigned long long SimulationReplayForwardViewRun();
 bool SimulationReplayForwardViewNeutralPose(float position[3],float *yaw);

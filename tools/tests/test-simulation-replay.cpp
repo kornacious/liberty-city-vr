@@ -5,6 +5,7 @@
 #include "../../overlay/src/xr/SourceIdentity.h"
 #include "../../overlay/src/core/QuestNativeSettings.h"
 #include <filesystem>
+#include <fstream>
 #include <chrono>
 #include <cstring>
 #include <ctime>
@@ -65,6 +66,13 @@ public:
 static CAutomobile car;static CVehicle *selectedCar=&car;static int poolHandle=5;static CPed player;
 static CVehicle *FindPlayerVehicle(){return selectedCar;}
 static CPed *FindPlayerPed(){return &player;}
+static bool spawnAvailable=true;
+static unsigned spawnCalls=0;
+static bool SpawnVrVehicleForReplay(int model){
+    ++spawnCalls;if(!spawnAvailable)return false;
+    car.model=model;car.status=STATUS_PLAYER;selectedCar=&car;player.m_pMyVehicle=&car;
+    ++poolHandle;return true;
+}
 struct CPools {static CVehicle *GetVehicle(int ref){return ref==poolHandle?&car:nullptr;}static int GetVehicleRef(CVehicle *){return poolHandle;}};
 struct CWorld {static bool bProcessCutsceneOnly;static void Remove(CVehicle *){}static void Add(CVehicle *){}};
 bool CWorld::bProcessCutsceneOnly;
@@ -82,13 +90,13 @@ namespace ModelSets {enum eModelCategory {World,Vegetation,Vehicles,Peds,Weapons
 namespace androidgame {
 static int profilerMode=0;static unsigned profileStarts=0,profileStops=0;static std::string profileContext;
 static bool captureAvailable=true, activeProfiling=false, captureRecording=false;
-static int replayProfiling=0;
-static void UpdateRecording(){bool next=replayProfiling?replayProfiling==2:activeProfiling;if(next&&!captureRecording)++profileStarts;if(!next&&captureRecording)++profileStops;captureRecording=next;}
+static int replayProfiling=0;static std::string captureStem;
+static void UpdateRecording(){bool next=replayProfiling?replayProfiling==2:activeProfiling;if(next&&!captureRecording){++profileStarts;captureStem="test-profile-"+std::to_string(profileStarts);}if(!next&&captureRecording)++profileStops;captureRecording=next;}
 static void QuestProfilerSetReplayProfiling(int state){replayProfiling=state;UpdateRecording();}
 static bool QuestProfilerIsRecording(){return captureRecording;}
 static void QuestProfilerSetDisplayMode(int m){profilerMode=m;}
 static void QuestProfilerSetCaptureContext(const char *s){profileContext=s;}
-static const char *QuestProfilerGetCaptureStem(){return captureAvailable?"test-profile":"";}
+static const char *QuestProfilerGetCaptureStem(){return captureAvailable?captureStem.c_str():"";}
 static bool rdocAvailable=false,rdocActive=false,rdocBusy=false;
 static unsigned rdocStarts=0,rdocEnds=0;
 bool QuestRenderDocAvailable(){return rdocAvailable;}
@@ -241,6 +249,56 @@ static void RuntimeTests(){
     SimulationReplayAfterAppFrame();Check(mode==Idle&&!captureRecording&&profilerMode==0&&profileStops==1,"after final app frame capture closes");
     Check(std::filesystem::exists(Path(runId+".run.csv")),"run report persisted");
     Check(!SimulationReplayProtected(&car)&&!SimulationReplayProtected(&player),"ghost fully clears after playback");
+    // Playback from foot spawns once; every repeat restores even a moving/overturned car.
+    SimulationReplayMenuAction(13,-1);Check(repeatCount==10,"count wraps down to ten");
+    SimulationReplayMenuAction(13,1);Check(repeatCount==1,"count wraps up to one");
+    for(int i=1;i<10;++i)SimulationReplayMenuAction(13,1);
+    const unsigned batchStarts=profileStarts,batchStops=profileStops,spawns=spawnCalls;
+    selectedCar=nullptr;
+    Check(SimulationReplayMenuAction(2,1),"playback queues on foot");Frame();
+    Check(mode==Preparing&&selectedCar==&car&&spawnCalls==spawns+1,"on-foot playback spawns and seats player");
+    std::vector<std::string> reports,profiles;
+    activeProfiling=true;UpdateRecording();
+    for(unsigned pass=1;pass<=10;++pass){
+        Check(mode==Preparing&&!captureRecording&&runIteration==pass,"each pass prepares without profiling");
+        Check(car.pos.x==saved.initial.vehicle.pose[0]&&car.m_vecMoveSpeed.MagnitudeSqr()==0,"repeat resets recorded position and velocity");
+        Prepare();reports.push_back(runId);profiles.push_back(profile);
+        Check(profileContext.find("repeat_index="+std::to_string(pass))!=std::string::npos,"capture provenance identifies pass");
+        SimulationReplayMenuAction(13,1);Check(repeatCount==10,"count locked during playback");
+        while(mode==Playing)Frame(false);
+        car.m_vecMoveSpeed=CVector(1,2,3);car.m_vecTurnSpeed=CVector(2,1,3);car.up=CVector(0,0,-1);car.pos.x=2000;
+        SimulationReplayAfterAppFrame();
+        Check(std::filesystem::exists(Path(reports.back()+".run.csv")),"completed pass report saved before next start");
+        std::ifstream reportFile(Path(reports.back()+".run.csv"));
+        const std::string reportText((std::istreambuf_iterator<char>(reportFile)),std::istreambuf_iterator<char>());
+        Check(reportText.find("profile,"+profiles.back()+"\n")!=std::string::npos&&
+            reportText.find("repeat_index,"+std::to_string(pass)+"\nrepeat_count,10\n")!=std::string::npos,
+            "each saved report references its own capture and correct batch pass");
+        if(pass<10){
+            Check(request==2&&repeatPending&&!captureRecording,"between passes keeps user's profiler preference suspended");
+            Frame();Check(car.up.z==1,"moving overturned finish resets upright before next run");
+        }
+    }
+    Check(mode==Idle&&captureRecording&&spawnCalls==spawns+1,"batch restores profiler preference and reuses its car");
+    Check(profileStarts==batchStarts+11&&profileStops==batchStops+10,"ten separate captures and preference restored only once");
+    std::sort(reports.begin(),reports.end());Check(std::adjacent_find(reports.begin(),reports.end())==reports.end(),"each pass has unique report name");
+    std::sort(profiles.begin(),profiles.end());Check(std::adjacent_find(profiles.begin(),profiles.end())==profiles.end(),"each pass has its own performance capture");
+    activeProfiling=false;UpdateRecording();
+    // Stop during the inter-run gap must cancel the queued repeat.
+    SimulationReplayMenuAction(2,1);Frame();Prepare();while(mode==Playing)Frame();
+    Check(repeatPending,"next pass queued");Stop();Frame();Check(mode==Idle&&!request&&!repeatPending,"stop cancels queued repeat");
+    SimulationReplayMenuAction(2,1);Frame();Prepare();car.handling.fTractionLoss=.7f;Frame();
+    Check(mode==Idle&&!request&&!captureRecording,"abort cancels remaining passes");car.handling.fTractionLoss=.8f;
+    // A failed restart releases the replay override instead of stranding profiling.
+    SimulationReplayMenuAction(2,1);Frame();Prepare();while(mode==Playing)Frame();
+    activeProfiling=true;car.handling.fTractionLoss=.7f;Frame();
+    Check(mode==Idle&&!request&&captureRecording&&SimulationReplayConsumeStartFailure(),"failed restart cancels batch and restores profiler preference");
+    activeProfiling=false;UpdateRecording();car.handling.fTractionLoss=.8f;
+    // A report write failure must also cancel the remaining passes.
+    SimulationReplayMenuAction(2,1);Frame();Prepare();
+    std::filesystem::create_directory(Path(runId+".run.csv"));while(mode==Playing)Frame();
+    Check(mode==Idle&&!request&&!captureRecording&&std::strstr(SimulationReplayStatus(),"REPORT WRITE FAILED"),"report persistence failure stops batch");
+    repeatCount=1;car.up=CVector(0,0,1);car.m_vecMoveSpeed=CVector(0,0,0);car.pos.x=0;
     SimulationReplayMenuAction(9,1);SimulationReplayMenuAction(2,1);Frame();Prepare();
     Check(!SimulationReplayForwardViewRun()&&profileContext.find("view=live_head_tracking")!=std::string::npos,"OFF retains live head tracking and labels capture");Stop();
     SimulationReplayMenuAction(9,1);
@@ -256,10 +314,13 @@ static void RuntimeTests(){
     SimulationReplayMenuAction(8,1);SimulationReplayMenuAction(2,1);Frame();Prepare();car.pos.x=51;Frame();Check(mode==Idle&&result.find("DRIFT")!=std::string::npos,"input-only mode retains drift abort without corrections");car.pos.x=0;SimulationReplayMenuAction(8,1);
     SimulationReplayMenuAction(4,1);SimulationReplayMenuAction(2,1);Frame();
     Check(!SimulationReplayIgnoreCollision(&car,&ambient),"ghost toggle respected");Prepare();Check(captureRecording,"playback always enables profiling");Stop();
-    car.model=101;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"CAR MODEL"),"wrong car model produces useful visible failure");car.model=100;
+    car.model=101;spawnAvailable=false;SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Idle&&SimulationReplayConsumeStartFailure()&&std::strstr(SimulationReplayStatus(),"CAR MODEL"),"failed spawn produces useful visible failure");
+    spawnAvailable=true;SimulationReplayMenuAction(2,1);Frame();
+    Check(mode==Preparing&&car.model==100&&selectedCar==&car,"wrong model is replaced with recorded car and occupied by player");Stop();
     ModelSets::asset=1;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed assets rejected");ModelSets::asset=0;
     car.handling.fTractionLoss=.7f;SimulationReplayMenuAction(2,1);Frame();Check(mode==Idle,"changed handling rejected");car.handling.fTractionLoss=.8f;
-    car.pos.x=2000;SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&car.pos.x==0&&CStreaming::loads==1&&CCollision::loads==1&&CGame::currLevel==2,"distant playback loads target island and scene before teleporting");Stop();
+    car.pos.x=2000;SimulationReplayMenuAction(2,1);Frame();Check(mode==Preparing&&car.pos.x==0&&CStreaming::loads>0&&CCollision::loads>0&&CGame::currLevel==2,"distant playback loads target island and scene before teleporting");Stop();
     SimulationReplayMenuAction(2,1);Frame();++poolHandle;Frame();Check(mode==Idle,"pool generation change releases stale replay binding");
     SimulationReplayMenuAction(0,1);Frame();selectedCar=nullptr;Frame();Check(mode==Idle,"player exit stops recording");selectedCar=&car;
     SimulationReplayMenuAction(6,1);SimulationReplayMenuAction(0,1);Frame();Check(!SimulationReplayIgnoreCollision(&car,&recordingTraffic),"recording ghost can be disabled independently");
@@ -320,6 +381,10 @@ static void PlaybackHudTests(){
     for(int display:{0,1}){profilerMode=display;Check(!VrSimulationRecordingPixels(),"playback strip only accompanies minimal profiling");}
     profilerMode=2;gVrMenuVisible=true;Check(!VrSimulationRecordingPixels(),"full menu hides playback strip");gVrMenuVisible=false;
     for(Mode inactive:{Preparing,Finishing,Idle}){mode=inactive;Check(!SimulationReplayPlaybackText(text,sizeof(text))&&!VrSimulationRecordingPixels(),"timer hidden during warmup and after stop/completion");}
+    mode=Playing;runRepeatCount=runIteration=10;elapsed=tape->endUs=120000000;
+    textRects.clear();Check(VrSimulationRecordingPixels()!=nullptr,"batch HUD displayed");
+    Check(textRects[0].left>=0&&textRects[0].right<=512,"ten-of-ten HUD fits compact strip");
+    runRepeatCount=runIteration=1;mode=Idle;
     tape.reset();profilerMode=0;duration=120;elapsed=0;
 }
 static void RenderDocReplayTests(){

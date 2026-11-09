@@ -63,8 +63,17 @@ Use the in-game VR menu's **Optimizations → Simulation replay** on each target
 a route of at least 10 seconds (30 seconds is a useful starting point), then stop
 and collect it. Copy the same generated `.sim.csv` locally into the PCVR user
 directory's `simulation-replays` folder without replacing another tape. Tapes
-contain controls/reference positions, not game assets. Use the recorded car model,
-handling and active model categories; playback already validates these.
+contain controls/reference positions, not game assets. Playback spawns the recorded
+car and seats the player if needed, or reuses the matching occupied car. It repairs
+and restores the recorded starting pose, velocity and drivetrain state even if the
+car is still moving. Handling and active model categories must still match.
+
+Set **Playback count** from **1** to **10** before selecting Play. Each pass has its
+own unprofiled preparation, performance capture and `.run.csv` report, with
+`repeat_index` and `repeat_count` in the report and capture context. The previous
+capture closes before the next reset; the profiler's prior ON preference resumes
+only after the batch ends. Stop, playback errors or report-write failures cancel
+the remaining passes. Ambient world state is not reset between passes.
 
 Enable **Matched workload** on Quest. Loading a Quest profile enables it for PCVR.
 Matched workload defaults on for new sessions; the menu can select a live-world

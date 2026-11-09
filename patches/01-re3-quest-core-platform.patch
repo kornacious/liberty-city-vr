@@ -562,7 +562,7 @@ index 2acb7991..1335ef9b 100644
  #include "ControllerConfig.h"
  #include "Timer.h"
  #include "Frontend.h"
-@@ -21,19 +30,24 @@
+@@ -21,19 +30,25 @@
  #include "Font.h"
  #include "Hud.h"
  #include "Text.h"
@@ -586,6 +586,7 @@ index 2acb7991..1335ef9b 100644
 +#include "Object.h"
 +#include "Pools.h"
 +#include "WaterLevel.h"
++#include "AudioManager.h"
  
  #ifdef GTA_PS2
  #include "eetypes.h"
@@ -641,7 +642,7 @@ index 2acb7991..1335ef9b 100644
  void BlowUpCarsCheat()
  {
  	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-@@ -348,6 +365,610 @@ void AltDodoCheat(void)
+@@ -348,6 +365,639 @@ void AltDodoCheat(void)
  }
  #endif
  
@@ -940,10 +941,11 @@ index 2acb7991..1335ef9b 100644
 +	return -1;
 +}
 +
-+bool SpawnVrVehicle(int model, bool inside)
++static bool SpawnVrVehicleImpl(int model, bool inside, bool replay)
 +{
 +	CPlayerPed *player = FindPlayerPed();
-+	if(!player || (inside && (player->bInVehicle || !player->IsPedInControl()))) return false;
++	if(!player || (inside && ((!replay && player->bInVehicle) ||
++		(!player->bInVehicle && !player->IsPedInControl())))) return false;
 +	if(model < MI_FIRST_VEHICLE || model > MI_LAST_VEHICLE) return false;
 +	CVehicle *vehicle = nil;
 +	if(CModelInfo::IsBoatModel(model)){
@@ -967,10 +969,38 @@ index 2acb7991..1335ef9b 100644
 +	}
 +	if(!vehicle) return false;
 +	if(inside){
++		// Allocate/load first so a failed replay spawn leaves the player seated.
++		if(replay && player->bInVehicle && player->m_pMyVehicle){
++			CVehicle *previous = player->m_pMyVehicle;
++			if(previous->pDriver == player){
++				previous->RemoveDriver();
++				previous->SetStatus(STATUS_ABANDONED);
++				previous->bEngineOn = false;
++				previous->AutoPilot.m_nCruiseSpeed = 0;
++			}else previous->RemovePassenger(player);
++			player->bInVehicle = false;
++			player->m_pMyVehicle = nil;
++			player->bRenderPedInCar = true;
++			player->RemoveInCarAnims();
++			player->m_pVehicleAnim = nil;
++			player->ClearObjective();
++			player->SetPedState(PED_IDLE);
++			AudioManager.PlayerJustLeftCar();
++		}
 +		player->SetObjective(OBJECTIVE_ENTER_CAR_AS_DRIVER, vehicle);
 +		player->WarpPedIntoCar(vehicle);
 +	}
 +	return true;
++}
++
++bool SpawnVrVehicle(int model, bool inside)
++{
++	return SpawnVrVehicleImpl(model, inside, false);
++}
++
++bool SpawnVrVehicleForReplay(int model)
++{
++	return SpawnVrVehicleImpl(model, true, true);
 +}
 +
 +int GetVrCheatCount(void)
