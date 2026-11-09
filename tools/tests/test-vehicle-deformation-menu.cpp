@@ -43,7 +43,7 @@ static void WritePrivateProfileStringA(const char*section,const char*key,const c
  Check(std::strcmp(section,"VR")==0&&std::strcmp(path,".\\vr_settings.ini")==0,"save uses the existing VR INI section and path");
  ini[key]=std::atoi(value);writes.push_back(key);
 }
-enum {VR_MENU_PAGE_SETTINGS,VR_MENU_PAGE_TRAFFIC,VR_MENU_PAGE_RAGDOLL,VR_MENU_PAGE_DEFORMATION,VR_MENU_PAGE_CHEATS,VR_MENU_PAGE_MISSIONS,VR_MENU_PAGE_VEHICLE_CALIBRATION};
+enum {VR_MENU_PAGE_SETTINGS,VR_MENU_PAGE_TRAFFIC,VR_MENU_PAGE_RAGDOLL,VR_MENU_PAGE_DEFORMATION,VR_MENU_PAGE_CHEATS,VR_MENU_PAGE_MISSIONS,VR_MENU_PAGE_VEHICLE_CALIBRATION,VR_MENU_PAGE_SIMULATION};
 enum {QUEST_PHYSICS_DIRECTOR_OFF,QUEST_PHYSICS_DIRECTOR_MEASURE,QUEST_PHYSICS_DIRECTOR_ADAPTIVE,QUEST_PHYSICS_DIRECTOR_MODE_COUNT};
 enum {QUEST_PHYSICS_PRESET_QUALITY,QUEST_PHYSICS_PRESET_BALANCED,QUEST_PHYSICS_PRESET_COUNT};
 enum {QUEST_VEHICLE_VISUAL_STOCK,QUEST_VEHICLE_VISUAL_REDUCED,QUEST_VEHICLE_VISUAL_MODE_COUNT};
@@ -51,14 +51,22 @@ static int gVrMenuPage=VR_MENU_PAGE_TRAFFIC,gVrTrafficSelection;
 static int gVrDeformationSelection,gVrMenuNavigateDirection;
 static double gVrMenuNavigateRepeatAt,gVrMenuIncreaseRepeatAt,gVrMenuDecreaseRepeatAt;
 static bool gVrMenuVisible,gVrMenuShortcutDown,gVrCheatShortcutDown,gVrMenuSelectDown,gVrMenuBackDown,gVrMenuIncreaseDown,gVrMenuDecreaseDown;
+static bool gVrReplayShortcutDown;
+static bool gSettingsReleaseGate;
+static bool replayAvailable=true;
+static int replayInitializations;
+static bool IsSimulationReplayAvailable(){return replayAvailable;}
+static int*CurrentMenuSelection(){return &gVrDeformationSelection;}
+static void SimulationReplayMenuAction(int row,int direction){Check(row==-1&&direction==0,"shortcut initializes replay without activating a row");++replayInitializations;}
+enum {SOUND_FRONTEND_MENU_BACK,SOUND_FRONTEND_MENU_NEW_PAGE};
+static struct {void PlayFrontEndSound(int,int){}} DMAudio;
 static bool inVehicle;
 static int shortcutOpens;
-static void*FindPlayerVehicle(){return inVehicle?&inVehicle:nullptr;}
 static void OpenCheatMenu(){++shortcutOpens;gVrMenuPage=VR_MENU_PAGE_CHEATS;}
 static bool gCutsceneAnchorConsumeUntilRelease=false;
 namespace androidgame {static bool VrCutsceneCameraAnchorCalibrationActive(){return false;}}
 namespace OculusVR{static void SetQuestVehicleCalibrationPreview(bool){} inline void InvalidateQuestWeaponLaserOverrides(){}}
-struct PadInput{bool b=false,leftStickClick=false;};
+struct PadInput{bool b=false,leftStickClick=false,y=false,a=false,rightStickClick=false;float leftTrigger=0,rightTrigger=0;};
 static int gTrafficPedPercent=135,gTrafficCarPercent=100;
 static int director=QUEST_PHYSICS_DIRECTOR_ADAPTIVE,fixturePreset=QUEST_PHYSICS_PRESET_QUALITY,visual=QUEST_VEHICLE_VISUAL_STOCK;
 static int applyTrafficCalls,ragdollOpenCalls;
@@ -97,6 +105,7 @@ static void Reset()
  applyTrafficCalls=ragdollOpenCalls=0;ModelSets::modern=false;
  VehicleDeformation::ResetTuning();gVrDeformationSelection=0;gVrMenuNavigateDirection=0;gVrMenuNavigateRepeatAt=0;
  gVrMenuVisible=gVrMenuShortcutDown=gVrCheatShortcutDown=false;inVehicle=false;shortcutOpens=0;
+ gVrReplayShortcutDown=false;replayAvailable=true;replayInitializations=0;
 }
 static void LoadAndPersist()
 {
@@ -244,16 +253,35 @@ static void VehicleCheatShortcut()
 {
  Reset();PadInput in;in.b=true;inVehicle=true;
  for(int i=0;i<50;i++)DispatchShortcut(in,true);
- Check(shortcutOpens==0&&!gVrMenuVisible&&gVrCheatShortcutDown,"vehicle B chord leaves gameplay active while latching the held chord");
- Check(!VrMenuConsumesInput(),"actual CapturePad and weapon-input gate leaves vehicle B available for gameplay");
+ Check(shortcutOpens==1&&gVrMenuVisible&&gVrCheatShortcutDown,"vehicle B chord opens cheats once");
+ Check(VrMenuConsumesInput(),"vehicle shortcut consumes gameplay input");
  inVehicle=false;DispatchShortcut(in,true);
- Check(shortcutOpens==0,"leaving vehicle while holding B cannot open cheats accidentally");
+ Check(shortcutOpens==1,"leaving vehicle while holding B cannot toggle cheats again");
  in.b=false;DispatchShortcut(in,true);in.b=true;DispatchShortcut(in,true);
- Check(shortcutOpens==1&&gVrMenuVisible,"a new on-foot chord still opens cheats");
- Check(VrMenuConsumesInput(),"normal open VR menu still owns input");
+ Check(shortcutOpens==2&&!gVrMenuVisible,"a new on-foot chord closes cheats");
+ Check(VrMenuConsumesInput(),"closing chord owns input through release");
  for(int i=0;i<50;i++)DispatchShortcut(in,true);
- Check(shortcutOpens==1,"held on-foot shortcut toggles only once");
+ Check(shortcutOpens==2,"held on-foot shortcut toggles only once");
  in.b=false;DispatchShortcut(in,true);in.b=true;DispatchShortcut(in,false);
- Check(shortcutOpens==1,"normal B without both-grip modifier never opens cheats");
+ Check(shortcutOpens==2&&!VrMenuConsumesInput(),"normal B without both-grip modifier never opens cheats or consumes gameplay");
 }
-int main(){LoadAndPersist();ResetDefaultsAndIsolation();NoHeldToggle();Layout();TuningAndNavigation();VehicleCheatShortcut();std::printf("PASS: vehicle deformation menu %u checks; actual submenu load/save/reset/repeat/layout and vehicle cheat-shortcut suppression.\n",checks);}
+static void ReplayShortcut()
+{
+ for(bool vehicle:{false,true}){
+  Reset();inVehicle=vehicle;PadInput in;in.y=true;in.leftTrigger=in.rightTrigger=1;
+  DispatchReplayShortcut(in,false);Check(!gVrMenuVisible,"replay requires empty-handed grip modifier");
+  replayAvailable=false;DispatchReplayShortcut(in,true);Check(!gVrMenuVisible,"replay unavailable outside live gameplay");
+  replayAvailable=true;
+  for(int i=0;i<50;i++)DispatchReplayShortcut(in,true);
+  Check(gVrMenuVisible&&gVrMenuPage==VR_MENU_PAGE_SIMULATION&&replayInitializations==1,"replay opens and initializes once on foot and in vehicles");
+  Check(gVrMenuIncreaseDown&&gVrMenuDecreaseDown,"opening with held triggers seeds value latches");
+  in.y=false;DispatchReplayShortcut(in,true);in.y=true;DispatchReplayShortcut(in,true);
+  Check(!gVrMenuVisible&&VrMenuConsumesInput(),"replay closes and consumes held shortcut");
+  for(int i=0;i<50;i++)DispatchReplayShortcut(in,true);
+  Check(!gVrMenuVisible&&replayInitializations==1,"holding close cannot reopen replay");
+  in.y=false;DispatchReplayShortcut(in,true);Check(!VrMenuConsumesInput(),"replay releases gameplay after chord release");
+  gVrMenuVisible=true;gVrMenuPage=VR_MENU_PAGE_CHEATS;in.y=true;DispatchReplayShortcut(in,true);
+  Check(gVrMenuVisible&&gVrMenuPage==VR_MENU_PAGE_SIMULATION,"replay shortcut switches from another menu");
+ }
+}
+int main(){LoadAndPersist();ResetDefaultsAndIsolation();NoHeldToggle();Layout();TuningAndNavigation();VehicleCheatShortcut();ReplayShortcut();std::printf("PASS: vehicle deformation menu %u checks; submenu and on-foot/in-vehicle service shortcuts.\n",checks);}

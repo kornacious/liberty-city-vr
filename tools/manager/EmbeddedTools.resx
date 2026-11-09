@@ -6392,6 +6392,9 @@ if(-not [regex]::IsMatch($source,'case VR_MENU_PAGE_DEFORMATION:\s*DrawQuestDefo
 $shortcut=[regex]::Match($source,'(?s)\tconst bool cheatShortcut = modifier &amp;&amp; in\.b;.*?\tgVrCheatShortcutDown = cheatShortcut;')
 if(-not $shortcut.Success){throw 'Missing actual cheat shortcut path'}
 $pieces.Add('static void DispatchShortcut(const PadInput &amp;in,bool modifier) {'+$shortcut.Value+'}')
+$shortcut=[regex]::Match($source,'(?s)\tconst bool replayShortcut = modifier &amp;&amp; in\.y.*?\tgVrReplayShortcutDown = replayShortcut;')
+if(-not $shortcut.Success){throw 'Missing actual replay shortcut path'}
+$pieces.Add('static void DispatchReplayShortcut(const PadInput &amp;in,bool modifier) {'+$shortcut.Value+'}')
 $pieces.Add((Definition $source '(?m)^bool\s+VrMenuConsumesInput\(void\)\s*\{'))
 $repeat=[regex]::Match($source,'(?s)if\(gVrMenuPage == VR_MENU_PAGE_TRAFFIC\)\s*(return[^;]+;)')
 if (-not $repeat.Success) {throw 'Missing traffic repeat predicate.'}

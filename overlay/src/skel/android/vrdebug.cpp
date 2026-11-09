@@ -170,6 +170,7 @@ static bool gSettingsFromFrontend;
 static bool gSettingsReleaseGate;
 static bool gVrMenuShortcutDown;
 static bool gVrCheatShortcutDown;
+static bool gVrReplayShortcutDown;
 static bool gVrMenuSelectDown;
 static bool gVrMenuBackDown;
 static int gVrMenuNavigateDirection;
@@ -2894,9 +2895,9 @@ VrDebugUpdate(const PadInput &in)
 		FrontEndMenuManager.m_nCurrScreen = MENUPAGE_OPTIONS;
 	gVrMenuShortcutDown = menuShortcut;
 
-	// Keep B available for drive-by shooting; latch the chord during driving.
+	// Empty-handed service shortcuts work both on foot and in vehicles.
 	const bool cheatShortcut = modifier && in.b;
-	if(cheatShortcut && !gVrCheatShortcutDown && !FindPlayerVehicle()){
+	if(cheatShortcut && !gVrCheatShortcutDown){
 		const bool closingCheats =
 			gVrMenuVisible && (gVrMenuPage == VR_MENU_PAGE_CHEATS ||
 			gVrMenuPage == VR_MENU_PAGE_MISSIONS);
@@ -2916,6 +2917,30 @@ VrDebugUpdate(const PadInput &in)
 		gVrMenuDecreaseRepeatAt = 0.0;
 	}
 	gVrCheatShortcutDown = cheatShortcut;
+
+	const bool replayShortcut = modifier && in.y && IsSimulationReplayAvailable();
+	if(replayShortcut && !gVrReplayShortcutDown){
+		const bool closingReplay = gVrMenuVisible && gVrMenuPage == VR_MENU_PAGE_SIMULATION;
+		DMAudio.PlayFrontEndSound(closingReplay ? SOUND_FRONTEND_MENU_BACK : SOUND_FRONTEND_MENU_NEW_PAGE, 0);
+		if(gVrMenuVisible && gVrMenuPage == VR_MENU_PAGE_VEHICLE_CALIBRATION)
+			OculusVR::SetQuestVehicleCalibrationPreview(false);
+		gVrMenuVisible = !closingReplay;
+		if(gVrMenuVisible){
+			OculusVR::InvalidateQuestWeaponLaserOverrides();
+			gVrMenuPage = VR_MENU_PAGE_SIMULATION;
+			*CurrentMenuSelection() = 0;
+			SimulationReplayMenuAction(-1, 0);
+		}
+		gVrMenuSelectDown = in.a || in.rightStickClick;
+		gVrMenuBackDown = in.b || in.leftStickClick;
+		ResetMenuNavigationRepeat();
+		// Holding the triggers while opening must not activate the first row.
+		gVrMenuIncreaseDown = in.rightTrigger >= 0.55f;
+		gVrMenuDecreaseDown = in.leftTrigger >= 0.55f;
+		gVrMenuIncreaseRepeatAt = 0.0;
+		gVrMenuDecreaseRepeatAt = 0.0;
+	}
+	gVrReplayShortcutDown = replayShortcut;
 
 	// During stereo cutscenes, R3 cycles camera source and L3 remembers it
 	// per scene. L3+R3 instead toggles model-specific anchor calibration, so
@@ -3035,10 +3060,7 @@ VrDebugUpdate(const PadInput &in)
 		androidgame::VrRecenterView();
 	gTouchRecenterShortcutDown = recenterShortcut;
 
-	// The profiler had a chord of its own, both grips and Y. Both grips are
-	// how a weapon is picked up, so players kept summoning the counters by
-	// accident and could not read the game through them. It is a developer
-	// tool with a row on the GRAPHICS page; that is route enough.
+	// The profiler remains available through GRAPHICS; grips + Y opens replay.
 
 	// Armed from the page itself rather than cleared on every exit: the menu
 	// can be left in half a dozen ways and each one would have to remember.
@@ -5582,7 +5604,7 @@ DrawQuestAboutPage(void)
 		"VERSION " LIBERTYVR_VERSION_TEXT " - NOT FOR SALE");
 	static const char *lines[] = {
 		"OPEN THE VR MENU: HOLD BOTH GRIPS + MENU",
-		"CHEATS: VR MENU OR ON FOOT BOTH GRIPS + B",
+		"CHEATS: VR MENU OR BOTH GRIPS + B",
 		"CHOOSE IMMERSIVE DRIVING IN VEHICLE SETTINGS",
 		"CALIBRATE WEAPONS IF A MODEL OR GRIP IS MISALIGNED",
 		"ASSET SOURCE SELECTS VISUALS AND AUDIO TOGETHER",
@@ -6135,6 +6157,7 @@ VrMenuConsumesInput(void)
 	// Keep the service chord from leaking through as Pause when the menu is
 	// opened or closed. Gameplay resumes only after Menu has been released.
 	return gVrMenuVisible || gSettingsReleaseGate || gVrMenuShortcutDown ||
+		gVrCheatShortcutDown || gVrReplayShortcutDown ||
 		gCutsceneAnchorConsumeUntilRelease ||
 		androidgame::VrCutsceneCameraAnchorCalibrationActive();
 }

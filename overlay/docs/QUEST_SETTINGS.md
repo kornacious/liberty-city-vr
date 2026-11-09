@@ -12,6 +12,11 @@ keeps ownership of pause and returns to its Settings entry when the shared menu
 closes; the gameplay shortcut closes back to play. Held opening/closing inputs
 are consumed so they cannot change a setting or immediately leave the parent.
 
+With both hands empty, hold both grips and press Y to open or close Simulation
+Replay, or B to open or close Cheats. Both shortcuts work on foot and in vehicles.
+Index triggers are optional; holding them while opening Simulation Replay does
+not activate a replay action.
+
 `src/skel/android/QuestSettingsMenu.h` defines category order and destinations.
 `vrdebug.cpp` supplies the common page definitions and controller interaction.
 `QuestNativeSettings` collects their rows and renders native label/value columns;
