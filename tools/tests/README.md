@@ -308,6 +308,12 @@ range updates and setter ordering, volume/fade/cutscene scaling, channel reuse,
 2D audio and invalid ranges/coordinates. It needs no game files or Android
 audio device. Listening tests on the headset are still needed to judge balance.
 
+`python tools/tests/test-horn-pitch.py <assembled-tree>` compiles the production
+`ProcessVehicleHorn` function and vehicle tuning table against synthetic PC and
+Xbox sample rates. It checks every vehicle's requested horn pitch, including the
+32 kHz Xbox Porsche sample, unchanged Classic rates and inactive horns. No game
+data or audio device is required.
+
 `test-autosave.ps1 -StageRoot <assembled-tree>` tests the production autosave
 transaction and extracts the engine filename/checksum/recovery functions. It
 injects failures at each transaction boundary, checks that manual slots remain

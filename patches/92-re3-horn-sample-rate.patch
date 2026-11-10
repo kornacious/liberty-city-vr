@@ -1,0 +1,18 @@
+diff --git a/src/audio/AudioLogic.cpp b/src/audio/AudioLogic.cpp
+--- a/src/audio/AudioLogic.cpp
++++ b/src/audio/AudioLogic.cpp
+@@ -1880,6 +1880,14 @@ cAudioManager::ProcessVehicleHorn(cVehicleParams& params)
+ 				m_sQueueSample.m_bIs2D = FALSE;
+ 				m_sQueueSample.m_nPriority = 2;
+ 				m_sQueueSample.m_nFrequency = aVehicleSettings[params.m_nIndex].m_nHornFrequency;
++#ifdef AUDIO_ANDROID
++				// Vehicle tuning is relative to the PC Porsche horn's 11025 Hz.
++				// The Xbox bank uses 32000 Hz; retain each car's pitch ratio when
++				// playing that sample through the shared Quest/Windows mixer.
++				if (m_sQueueSample.m_nSampleIndex == SFX_CAR_HORN_PORSCHE)
++					m_sQueueSample.m_nFrequency = uint32(uint64(m_sQueueSample.m_nFrequency) *
++						SampleManager.GetSampleBaseFrequency(SFX_CAR_HORN_PORSCHE) / 11025);
++#endif
+ 				m_sQueueSample.m_nLoopCount = 0;
+ 				SET_EMITTING_VOLUME(VEHICLE_HORN_VOLUME);
+ 				SET_LOOP_OFFSETS(m_sQueueSample.m_nSampleIndex)
