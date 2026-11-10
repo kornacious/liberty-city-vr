@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.libertyvr.depthprobe">
+  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="32" />
+  <uses-feature android:name="android.hardware.vulkan.version" android:version="0x00401000" android:required="true" />
+  <application android:label="Liberty VR Depth Control" android:debuggable="true" android:allowBackup="false" android:extractNativeLibs="true" android:theme="@android:style/Theme.Material.NoActionBar">
+    <activity android:name=".DepthProbeActivity" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+    </activity>
+  </application>
+</manifest>
