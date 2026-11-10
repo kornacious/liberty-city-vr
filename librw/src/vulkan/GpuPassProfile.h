@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cmath>
 #include <memory>
+#include <cstdio>
 #include "DrawProfile.h"
 
 // Portable bookkeeping/decoding shared by the Vulkan backend and host tests.
@@ -32,6 +33,21 @@ struct Result {
     std::shared_ptr<const DrawProfile::Stats> geometry;
     Result(){for(float &v:ms)v=-1;}
 };
+// Display only complete native-pass intervals. Logical draw buckets deliberately
+// stay unavailable: their commands execute together inside the tiled scene pass.
+inline void FormatTimingRows(const Result &sample,char *out,size_t capacity){
+    char values[5][24];
+    const unsigned passes[]={Scene,Postprocess,Wrist,Scope,Other};
+    for(unsigned i=0;i<5;++i){
+        const unsigned pass=passes[i];
+        if(sample.status==Complete && (sample.mask&(uint32_t(1)<<pass)) &&
+           std::isfinite(sample.ms[pass]) && sample.ms[pass]>=0)
+            std::snprintf(values[i],sizeof(values[i]),"%.2f",sample.ms[pass]);
+        else std::snprintf(values[i],sizeof(values[i]),"--");
+    }
+    std::snprintf(out,capacity,"GPU MS SCENE %s POST %s\nWRIST %s SCOPE %s OTHER %s\n",
+                  values[0],values[1],values[2],values[3],values[4]);
+}
 inline double Milliseconds(uint64_t begin,uint64_t end,unsigned bits,double period){
     if(bits==0||bits>64||!std::isfinite(period)||period<=0) return -1;
     uint64_t delta=end-begin;

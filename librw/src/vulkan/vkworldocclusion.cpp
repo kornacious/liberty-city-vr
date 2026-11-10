@@ -19,13 +19,44 @@ namespace {
 bool enabled=false,building=false,ready=false;
 WorldOcclusion::Stereo grid;
 WorldOcclusion::Stats stats;
-WorldOcclusion::Selection selection;
-struct Source {Atomic *atomic;InstanceDataHeader *header;double matrix[2][16];unsigned samples,order;int32 model;double priority;};
+WorldOcclusion::PolygonSelection selection;
+constexpr unsigned MaxSourceMeshes=64;
+struct Source {
+    Atomic *atomic;InstanceDataHeader *header;double matrix[2][16];
+    unsigned samples,order,rangeCount;int32 model;double priority;
+    WorldOcclusion::MeshRange ranges[MaxSourceMeshes];
+    bool Eligible(unsigned face) const {
+        for(unsigned i=0;i<rangeCount;++i)if(WorldOcclusion::ContainsFace(ranges[i],face))return true;
+        return false;
+    }
+    unsigned FaceAt(unsigned rank) const {
+        for(unsigned i=0;i<rangeCount;++i){
+            const unsigned count=ranges[i].count/3;
+            if(rank<count)return ranges[i].first/3+rank;
+            rank-=count;
+        }
+        return ~0u;
+    }
+};
 Source sources[WorldOcclusion::MaxSourceObjects];
 unsigned sourceCount=0;
 float views[2][16],world[16];
 double clip[2][16];
 std::chrono::steady_clock::time_point started;
+WorldOcclusion::BuildTimeline buildTimeline;
+uint64_t nanoseconds(std::chrono::steady_clock::time_point time){
+    return uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count());
+}
+void buildPhase(WorldOcclusion::BuildPhase next){
+    if(!buildTimeline.active)return;
+    ++stats.phaseClockReads;
+    buildTimeline.Switch(next,nanoseconds(std::chrono::steady_clock::now()));
+}
+struct ScopedBuildPhase {
+    WorldOcclusion::BuildPhase previous;
+    explicit ScopedBuildPhase(WorldOcclusion::BuildPhase next):previous(buildTimeline.phase){buildPhase(next);}
+    ~ScopedBuildPhase(){buildPhase(previous);}
+};
 
 bool mainView(){
     return gvk.inFrame&&gvk.firstPersonActive&&gvk.stereoCullPlanesValid&&
@@ -36,7 +67,7 @@ bool sameView(){
     return mainView()&&!getWorldBackfaceEnabled()&&!std::memcmp(world,gvk.worldToPlay,sizeof(world))&&
         !std::memcmp(views,getSceneData()->viewProj,sizeof(views));
 }
-InstanceDataHeader *source(Atomic *a,bool opaque){
+InstanceDataHeader *source(Atomic *a){
     if(!a||!a->getFrame()||!isDefaultWorldRenderCallback(a))return nil;
     auto *pipe=a->getPipeline();auto *g=a->geometry;
     if(!pipe||pipe->platform!=PLATFORM_VULKAN||
@@ -46,19 +77,35 @@ InstanceDataHeader *source(Atomic *a,bool opaque){
     auto *h=(InstanceDataHeader*)g->instData;
     if(!h->orderBoundsValid||!h->vertexBuffer||!h->indexBuffer||!h->inst||!h->numMeshes||
        h->primType!=VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST||h->serialNumber!=g->meshHeader->serialNum)return nil;
-    if(opaque)for(unsigned i=0;i<h->numMeshes;++i){
+    return h;
+}
+// Recheck materials every frame; cached face selection is never a material proof.
+bool opaqueRanges(Source &candidate,uint64_t &key){
+    auto *h=candidate.header;candidate.rangeCount=0;key=1469598103934665603ull;
+    uint64_t totalEligible=0;
+    if(h->numMeshes>MaxSourceMeshes){++stats.meshUnsupported;return false;}
+    for(unsigned i=0;i<h->numMeshes;++i){
         const auto &mesh=h->inst[i];auto *m=mesh.material;
-        if(mesh.vertexAlpha||!m||m->color.alpha!=255||MatFX::getEffects(m)!=MatFX::NOTHING)return nil;
+        if(!m || MatFX::getEffects(m)!=MatFX::NOTHING || mesh.offset%6 || mesh.numIndex%3 ||
+           uint64_t(mesh.offset/2)+mesh.numIndex>h->totalNumIndex){++stats.meshUnsupported;continue;}
+        if(mesh.vertexAlpha || m->color.alpha!=255){++stats.meshAlpha;continue;}
         auto *r=m->texture?m->texture->raster:nil;
-        if(r&&(r->platform!=PLATFORM_VULKAN||(r->type&0xF)!=Raster::TEXTURE||
-            (r->parent&&r->parent!=r)||rasterHasAlpha(r)))return nil;
+        if(r && (r->platform!=PLATFORM_VULKAN || (r->type&0xF)!=Raster::TEXTURE ||
+                 (r->parent&&r->parent!=r))){++stats.meshUnsupported;continue;}
+        if(r && rasterHasAlpha(r)){++stats.meshAlpha;continue;}
         if(m->texture){
             const unsigned u=m->texture->getAddressU(),v=m->texture->getAddressV();
             if((u!=Texture::WRAP&&u!=Texture::MIRROR&&u!=Texture::CLAMP)||
-               (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP))return nil;
+               (v!=Texture::WRAP&&v!=Texture::MIRROR&&v!=Texture::CLAMP)){++stats.meshUnsupported;continue;}
         }
+        if(!mesh.numIndex)continue;
+        totalEligible+=mesh.numIndex;
+        if(totalEligible>h->totalNumIndex){++stats.meshUnsupported;return false;}
+        auto &range=candidate.ranges[candidate.rangeCount++];range={mesh.offset/2,mesh.numIndex};
+        key=(key^range.first)*1099511628211ull;key=(key^range.count)*1099511628211ull;
+        ++stats.meshOpaque;
     }
-    return h;
+    return candidate.rangeCount!=0;
 }
 void matrices(Atomic *a,double (&out)[2][16]){
     const auto *m=a->getFrame()->getLTM();
@@ -75,8 +122,9 @@ void setWorldOcclusionEnabled(bool32 value){
     if(enabled!=(value!=0)){flushStaticInstances();enabled=value!=0;ready=building=false;}
 }
 bool32 getWorldOcclusionEnabled(void){return enabled;}
-void resetWorldOcclusion(void){ready=building=false;stats={};}
+void resetWorldOcclusion(void){ready=building=false;stats={};buildTimeline.Start(false,0);}
 WorldOcclusion::Stats getWorldOcclusionStats(void){return stats;}
+WorldOcclusion::Preview getWorldOcclusionPreview(void){return grid.MakePreview(stats.builds>0 && !building && enabled);}
 bool32 beginWorldOcclusion(void){
     if(!enabled||building||ready)return 0;
     // Keep this experiment independent of the backface experiment: the map
@@ -95,17 +143,22 @@ bool32 beginWorldOcclusion(void){
         clip[e][col*4+row]=0;
         for(unsigned k=0;k<4;++k)clip[e][col*4+row]+=double(views[e][k*4+row])*world[col*4+k];
     }
-    started=std::chrono::steady_clock::now();grid.Clear();selection.Clear();sourceCount=0;building=true;++stats.builds;
+    started=std::chrono::steady_clock::now();
+    stats.buildPhasesValid=gvk.frameTimestampEnabled!=0;
+    buildTimeline.Start(stats.buildPhasesValid,nanoseconds(started));
+    grid.Clear();selection.Clear();sourceCount=0;building=true;++stats.builds;
+    buildPhase(WorldOcclusion::BuildGather);
     return 1;
 }
 void addWorldOccluder(Atomic *a,int32 model){
     if(!building)return;
+    ScopedBuildPhase boundsPhase(WorldOcclusion::BuildBounds);
     ++stats.occluderCandidates;
     if(stats.occluderCandidates>WorldOcclusion::MaxSourceObjects){++stats.budget;return;}
-    auto *h=source(a,false);
-    if(!h||h->totalNumIndex%3||!h->totalNumIndex){++stats.invalid;return;}
+    auto *h=source(a);
+    if(!h||h->totalNumIndex%3||!h->totalNumIndex){++stats.invalid;++stats.sourceGeometryRejected;return;}
     ++stats.footprintCandidates;
-    Source candidate;candidate.atomic=a;candidate.header=h;candidate.samples=0;candidate.order=sourceCount;candidate.model=model;matrices(a,candidate.matrix);
+    Source candidate{};candidate.atomic=a;candidate.header=h;candidate.order=sourceCount;candidate.model=model;matrices(a,candidate.matrix);
     const auto left=WorldOcclusion::ProjectedFootprint(candidate.matrix[0],h->orderMin,h->orderMax);
     const auto right=WorldOcclusion::ProjectedFootprint(candidate.matrix[1],h->orderMin,h->orderMax);
     if(!left.valid||!right.valid)++stats.footprintUncertain;
@@ -117,34 +170,45 @@ void finishWorldOcclusion(void){
     if(!building)return;
     // Prefer current projected coverage before expensive material checks,
     // cold cache scans or triangle projection. Rejected sources still render.
+    buildPhase(WorldOcclusion::BuildSelect);
     std::sort(sources,sources+sourceCount,[](const Source &a,const Source &b){
         return a.priority!=b.priority?a.priority>b.priority:a.order<b.order;
     });
     const unsigned candidates=sourceCount;sourceCount=0;
     for(unsigned i=0;i<candidates;++i){
+        buildPhase(WorldOcclusion::BuildMaterials);
         if(sourceCount==WorldOcclusion::MaxFootprintSources){stats.footprintCapacitySkipped=candidates-i;break;}
-        auto &candidate=sources[i];auto *h=source(candidate.atomic,true);
-        if(!h){++stats.invalid;continue;}
+        auto &candidate=sources[i];auto *h=source(candidate.atomic);
+        if(!h){++stats.invalid;++stats.sourceGeometryRejected;continue;}
+        uint64_t eligibilityKey=0;
+        if(!opaqueRanges(candidate,eligibilityKey)){++stats.sourceNoOpaque;continue;}
+        buildPhase(WorldOcclusion::BuildCache);
         const auto *v=(const WorldVertex*)h->vertexBuffer;
-        const unsigned faces=h->totalNumIndex/3;
+        unsigned faces=0;
+        for(unsigned range=0;range<candidate.rangeCount;++range)faces+=candidate.ranges[range].count/3;
         auto &cache=h->occlusionSource;
-        if(!cache.ready){
+        if(!cache.ready || cache.eligibilityKey!=eligibilityKey){
             const unsigned scan=std::min(faces,WorldOcclusion::MaxCacheScan);
             if(stats.cacheScanned+scan>WorldOcclusion::MaxCacheScanPerFrame){++stats.cacheDeferred;continue;}
             stats.cacheScanned+=scan;++stats.cacheBuilds;
-            cache.Build(faces,[&](unsigned face,WorldOcclusion::Point (&p)[3]){
+            cache.BuildMapped(faces,[&](unsigned face,WorldOcclusion::Point (&p)[3]){
+                if(!candidate.Eligible(face))return false;
                 const uint16 *ix=h->indexBuffer+face*3;
                 for(unsigned k=0;k<3;++k){
                     if(ix[k]>=h->totalNumVertex){++stats.invalid;return false;}
                     const auto &position=v[ix[k]].position;p[k]={position[0],position[1],position[2]};
                 }
                 return true;
-            });
+            },[&](unsigned rank){return candidate.FaceAt(rank);});
+            cache.eligibilityKey=eligibilityKey;
         }else ++stats.cacheHits;
         if(!cache.count)continue;
         if(sourceCount!=i)sources[sourceCount]=candidate;
         ++sourceCount;++stats.sourceObjects;++stats.footprintSelected;
     }
+    stats.contributionCount=sourceCount;
+    for(unsigned i=0;i<sourceCount;++i)stats.contributions[i].model=sources[i].model;
+    buildPhase(WorldOcclusion::BuildProjection);
     unsigned available=0;for(unsigned i=0;i<sourceCount;++i)available+=sources[i].header->occlusionSource.count;
     stats.triangles=WorldOcclusion::Distribute(sourceCount,
       [&](unsigned object){return sources[object].header->occlusionSource.count;},
@@ -153,61 +217,78 @@ void finishWorldOcclusion(void){
         ++src.samples;
         if(src.samples>stats.sourceTopSamples){stats.sourceTopSamples=src.samples;stats.sourceTopModel=src.model;}
         const unsigned face=h->occlusionSource.faces[rank];
+        if(!src.Eligible(face))return; // Revalidate even on a cache hit/key collision.
         const uint16 *ix=h->indexBuffer+face*3;
         if(ix[0]>=h->totalNumVertex||ix[1]>=h->totalNumVertex||ix[2]>=h->totalNumVertex){++stats.invalid;return;}
         const auto *v=(const WorldVertex*)h->vertexBuffer;
-        WorldOcclusion::Triangle triangle;triangle.owner=object;
-        double score[2]={};
+        WorldOcclusion::Point points[3];
+        for(unsigned k=0;k<3;++k){const auto &p=v[ix[k]].position;points[k]={p[0],p[1],p[2]};}
+        WorldOcclusion::PolygonCandidate polygon;polygon.owner=object;double score[2]={};
         for(unsigned eye=0;eye<2;++eye){
-            auto &p=triangle.eye[eye];bool valid=true;
-            for(unsigned k=0;k<3;++k){
-                const auto &vtx=v[ix[k]];const double point[3]={vtx.position[0],vtx.position[1],vtx.position[2]};
-                if(!WorldOcclusion::Project(src.matrix[eye],point,p[k])){valid=false;break;}
-            }
-            triangle.valid[eye]=valid;
-            if(valid)score[eye]=WorldOcclusion::Priority(p);
+            polygon.eye[eye]=WorldOcclusion::ClipPolygon(src.matrix[eye],points,&stats.clipProfile);
+            score[eye]=WorldOcclusion::Priority(polygon.eye[eye]);
         }
-        // Favor usefulness to both eyes, while retaining one-eye contributors
-        // that can complement other triangles. This score never proves hiding.
-        triangle.priority=std::min(score[0],score[1])+.25*std::max(score[0],score[1]);
-        if(!triangle.valid[0]&&!triangle.valid[1])++stats.sourceProjectionRejected;
-        else if(triangle.priority<=0)++stats.sourceSmall;
-        else ++stats.sourceProjected;
-        selection.Add(triangle);
+        if(polygon.eye[0].changed||polygon.eye[1].changed)++stats.sourceClipped;
+        if(!polygon.eye[0].count&&!polygon.eye[1].count){++stats.sourceProjectionRejected;return;}
+        ++stats.sourceProjected;
+        stats.clipTriangles+=std::max(polygon.eye[0].count,polygon.eye[1].count)-2;
+        polygon.priority=std::min(score[0],score[1])+.25*std::max(score[0],score[1]);
+        if(polygon.priority<=0)++stats.sourceSmall;
+        else {
+            ++stats.polygonCandidates;
+            ScopedBuildPhase selectionPhase(WorldOcclusion::BuildSelect);
+            selection.Add(polygon);
+        }
+
       });
+    buildPhase(WorldOcclusion::BuildSelect);
     stats.sourceBudgetSkipped=available-stats.triangles;
     if(stats.sourceBudgetSkipped)++stats.budget;
-    stats.selectedTriangles=selection.Count();
+    stats.selectedPolygons=selection.Count();
+    stats.selectionDropped=stats.polygonCandidates-stats.selectedPolygons;
     bool contributing[WorldOcclusion::MaxSourceObjects]={};
-    selection.Visit([&](const WorldOcclusion::Triangle &t){
-        if(stats.rasterTests>=WorldOcclusion::MaxRasterTests||stats.rasterRows>=WorldOcclusion::MaxRasterRows){++stats.budget;return;}
-        if(!contributing[t.owner]&&stats.occluders>=WorldOcclusion::MaxOccluders){++stats.budget;return;}
-        const unsigned previous=stats.cells;
-        for(unsigned eye=0;eye<2;++eye)if(t.valid[eye]){
-            const auto &p=t.eye[eye];grid.eye[eye].Raster(p[0],p[1],p[2],stats);
-        }
-        if(stats.cells>previous&&!contributing[t.owner]){contributing[t.owner]=true;++stats.occluders;}
+    selection.Sort();
+    buildPhase(WorldOcclusion::BuildRaster);
+    selection.VisitSorted([&](const WorldOcclusion::PolygonCandidate &surface){
+        auto &contribution=stats.contributions[surface.owner];
+        stats.selectedTriangles+=std::max(surface.eye[0].count,surface.eye[1].count)-2;
+        if(stats.rasterTests>=WorldOcclusion::MaxRasterTests||stats.rasterRows>=WorldOcclusion::MaxRasterRows||stats.edgeTests>=WorldOcclusion::MaxRasterEdges){++stats.budget;++stats.rasterBudgetSkipped;contribution.Record(false,true,0,false);return;}
+        if(!contributing[surface.owner]&&stats.occluders>=WorldOcclusion::MaxOccluders){++stats.budget;++stats.rasterBudgetSkipped;contribution.Record(false,true,0,false);return;}
+        const unsigned previous=stats.cells,budgetBefore=stats.budget,redundantBefore=stats.redundantEyes;
+        for(unsigned eye=0;eye<2;++eye)grid.eye[eye].RasterPolygon(surface.eye[eye],stats);
+        if(stats.budget!=budgetBefore)++stats.rasterBudgetSkipped;
+        if(stats.cells>previous&&!contributing[surface.owner]){contributing[surface.owner]=true;++stats.occluders;}
+        if(stats.cells==previous)++stats.noDepthPolygons;
+        const unsigned validEyes=(surface.eye[0].count>=3?1u:0u)+(surface.eye[1].count>=3?1u:0u);
+        const bool fullyRedundant=validEyes && stats.redundantEyes-redundantBefore==validEyes;
+        if(fullyRedundant)++stats.redundantPolygons;
+        contribution.Record(true,stats.budget!=budgetBefore,stats.cells-previous,fullyRedundant);
     });
+    buildPhase(WorldOcclusion::BuildFinalize);
     building=false;ready=sameView();
     if(!ready)++stats.invalid;
     stats.leftCells=grid.eye[0].Coverage();stats.rightCells=grid.eye[1].Coverage();
     ready=ready&&stats.leftCells>0&&stats.rightCells>0;
-    stats.buildMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+    const auto finished=std::chrono::steady_clock::now();
+    stats.buildMs+=std::chrono::duration<double,std::milli>(finished-started).count();
+    buildTimeline.Finish(nanoseconds(finished));
+    if(stats.buildPhasesValid)for(unsigned phase=0;phase<WorldOcclusion::BuildPhaseCount;++phase)
+        stats.buildPhaseMs[phase]+=double(buildTimeline.ns[phase])/1000000.0;
 }
 bool32 isWorldOccluded(Atomic *a){
     if(!enabled||!ready)return 0;
     if(stats.queryTests>=WorldOcclusion::MaxQueryTests){++stats.budget;return 0;}
     const auto time=std::chrono::steady_clock::now();++stats.candidates;
     const auto result=[&](){
-        if(!sameView()||!gstate.zTestEnabled){++stats.invalid;return false;}
-        auto *h=source(a,false);
-        if(!h){++stats.invalid;return false;}
+        if(!sameView()||!gstate.zTestEnabled){++stats.invalid;++stats.queryInvalid;return false;}
+        auto *h=source(a);
+        if(!h){++stats.invalid;++stats.queryInvalid;return false;}
         double m[2][16];matrices(a,m);WorldOcclusion::Box box[2];
         for(unsigned e=0;e<2;++e){
             WorldOcclusion::Point corners[8];
             for(unsigned c=0;c<8;++c){
                 double p[3];for(unsigned axis=0;axis<3;++axis)p[axis]=(c&(1<<axis))?h->orderMax[axis]:h->orderMin[axis];
-                if(!WorldOcclusion::Project(m[e],p,corners[c])){++stats.invalid;return false;}
+                if(!WorldOcclusion::Project(m[e],p,corners[c])){++stats.invalid;++stats.queryInvalid;return false;}
             }
             box[e]=WorldOcclusion::Bounds(corners);
             // If visible to the left eye, avoid projecting/testing the right.

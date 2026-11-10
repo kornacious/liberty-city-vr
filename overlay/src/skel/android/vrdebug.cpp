@@ -4319,10 +4319,11 @@ DrawQuestSimulationPage(void)
 	char row[160];
 	for(int i=0;i<SimulationReplayMenuRows;++i){
 		SimulationReplayMenuRow(i,row,sizeof(row));
-		DrawFullVrMenuRow(row,174+i*25,2,i==*CurrentMenuSelection(),true);
+		DrawFullVrMenuRow(row,170+i*24,2,i==*CurrentMenuSelection(),true);
 	}
 	DrawVrMenuText(SimulationReplayStatus(), VR_MENU_WIDTH/2, 580, 2, 255, 222, 145);
-	DrawVrMenuText("RECORD STOPPED IN A CAR. PLAYBACK SETS UP THE RECORDED CAR.", VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
+	SimulationReplayMinimumText(row,sizeof(row));
+	DrawVrMenuText(row, VR_MENU_WIDTH/2, 622, 2, 210, 190, 145);
 	DrawVrMenuText("EACH PLAYBACK RESETS THE CAR AND SAVES A SEPARATE PROFILE.", VR_MENU_WIDTH/2, 654, 2, 210, 190, 145);
 	DrawVrMenuText("LEFT STICK SELECT   L2 PREVIOUS   R2 OR A NEXT   B CLOSE", VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
@@ -5877,8 +5878,22 @@ VrDebugPixels(int *width, int *height)
 	}
 
 	if(gProfilerDisplayMode == 3){
+		for(int eye=0;eye<2;++eye){
+			const int left=eye?320:96;
+			DrawDebugText(eye?"RIGHT MAP":"LEFT MAP",left+48,4,2,140,215,255);
+			int size=0;
+			const unsigned char *map=QuestProfilerOcclusionMap(eye,&size);
+			if(!map||size!=48){DrawDebugText("N/A",left+48,54,2,140,215,255);continue;}
+			for(int row=0;row<size;++row)for(int col=0;col<size;++col){
+				const unsigned char depth=map[row*size+col];
+				for(int dy=0;dy<2;++dy)for(int dx=0;dx<2;++dx)
+					PutDebugPixel(left+col*2+dx,22+row*2+dy,
+						depth?depth/4:0,depth,depth?128+depth/2:0,255);
+			}
+		}
+		DrawDebugText("BLACK: NO DEPTH / BRIGHT: NEARER",VR_DEBUG_WIDTH/2,123,1,140,215,255);
 		const char *line = QuestProfilerRenderingDetails();
-		int y = 4;
+		int y = 140;
 		while(*line && y+14 < *height){
 			const char *end = strchr(line, '\n');
 			if(!end) end = line+strlen(line);
@@ -5887,7 +5902,7 @@ VrDebugPixels(int *width, int *height)
 			const size_t length = Min((size_t)(end-line), (size_t)41);
 			memcpy(row,line,length); row[length]=0;
 			DrawDebugText(row,VR_DEBUG_WIDTH/2,y,2,140,215,255);
-			y += 19;
+			y += 16;
 			line += length;
 			if(*line == '\n') ++line;
 		}

@@ -299,6 +299,7 @@ void addWorldOccluder(Atomic *atomic, int32 model=-1);
 void finishWorldOcclusion(void);
 bool32 isWorldOccluded(Atomic *atomic);
 WorldOcclusion::Stats getWorldOcclusionStats(void);
+WorldOcclusion::Preview getWorldOcclusionPreview(void);
 void setWorldBackfaceEnabled(bool32 enabled);
 bool32 getWorldBackfaceEnabled(void);
 WorldBackface::Stats getWorldBackfaceStats(void);

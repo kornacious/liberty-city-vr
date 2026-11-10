@@ -5,8 +5,10 @@
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <algorithm>
 
 #include "QuestProfiler.h"
+#include "SimulationReplay.h"
 #include "VrWorldLod.h"
 #include "QuestPerfCapture.h"
 #include "QuestRenderDoc.h"
@@ -44,6 +46,7 @@ namespace {
 
 bool gProfilerEnabled;
 bool gDesktopObserver;
+WorldOcclusion::Preview gOcclusionPreview;
 char gRenderingDetails[4096] = "WAITING FOR A RENDERED FRAME";
 bool gRecordingEnabled;
 questperf::ProfilingState gProfilingState;
@@ -300,7 +303,8 @@ StartFrameCapture(void)
 	details += "world_lod_mode_at_start," + std::to_string(VrWorldLod::Mode()) + "\n";
 	details += "lod_fade_transition_at_start," + std::to_string(VrWorldLod::FadeTransitions()?1:0) + "\n";
 	details += "world_lod_policy,current_high_only_authored_or_aggressive_optional_fade_v3\n";
-	details += "world_occlusion_policy,current_frame_inner_tiles48_projected_sources32_v4\n";
+	details += "world_occlusion_policy,current_frame_inner_tiles48_clip_code_fast_paths_v9\n";
+	details += "world_occlusion_instrumentation,exclusive_phases_top3_zero_depth_v1\n";
 	details += "world_occlusion_at_start," + std::to_string(rw::vulkan::getWorldOcclusionEnabled()?1:0) + "\n";
 	details += "world_backface_policy,closed_outward_opaque_static_exterior_v1\n";
 	details += "world_backface_at_start," + std::to_string(rw::vulkan::getWorldBackfaceEnabled()?1:0) + "\n";
@@ -885,9 +889,14 @@ void QuestProfilerSetDesktopObserver(bool enabled)
 }
 
 const char *QuestProfilerRenderingDetails() { return gRenderingDetails; }
+const unsigned char *QuestProfilerOcclusionMap(int eye,int *size) {
+    *size=WorldOcclusion::Size;
+    return gOcclusionPreview.valid && eye>=0 && eye<2 ? gOcclusionPreview.eye[eye].data() : nullptr;
+}
 
 static void UpdateRenderingDetails()
 {
+    gOcclusionPreview=rw::vulkan::getWorldOcclusionPreview();
 	std::string lines;
 	char row[160];
 	const auto &p = gSnapshot;
@@ -896,39 +905,68 @@ static void UpdateRenderingDetails()
 		snprintf(row,sizeof(row),"VULKAN GPU %.2f MS\n",p.gpuVulkanMs); lines += row;
 	}else lines += "VULKAN GPU N/A\n";
 	snprintf(row,sizeof(row),"CPU LIST %.2f PRE %.2f RENDER %.2f MS\n",p.cpuWorldListMs,p.cpuPreRenderMs,p.cpuWorldRenderMs); lines += row;
-	snprintf(row,sizeof(row),"ENTITY LIST VISIBLE %d INVISIBLE %d\n",p.visibleEntities,p.invisibleEntities); lines += row;
-	snprintf(row,sizeof(row),"AUTHORED OCCLUSION %s\n",CRenderer::GetVrOcclusionCullingModeName()); lines += row;
+	snprintf(row,sizeof(row),"VIEW MODE %d BACKFACE %s\n",CRenderer::GetVrOcclusionCullingMode(),rw::vulkan::getWorldBackfaceEnabled()?"ON":"OFF"); lines += row;
 	const auto o = rw::vulkan::getWorldOcclusionStats();
 	snprintf(row,sizeof(row),"GEOMETRY OCCLUSION %s (CPU)\n",rw::vulkan::getWorldOcclusionEnabled()?"ON":"OFF"); lines += row;
 	snprintf(row,sizeof(row),"TESTED %u CULLED %u VISIBLE %u\n",o.candidates,o.rejected,o.visible); lines += row;
 	snprintf(row,sizeof(row),"FAIL OPEN INVALID %u BUDGET %u\n",o.invalid,o.budget); lines += row;
 	snprintf(row,sizeof(row),"OCCLUDERS %u CELLS L/R %u/%u\n",o.occluders,o.leftCells,o.rightCells); lines += row;
 	snprintf(row,sizeof(row),"OCC BUILD %.3f QUERY %.3f MS\n",o.buildMs,o.queryMs); lines += row;
+    if(o.buildPhasesValid){
+        snprintf(row,sizeof(row),"GATHER %.3f BOUNDS %.3f MS\n",o.buildPhaseMs[WorldOcclusion::BuildGather],o.buildPhaseMs[WorldOcclusion::BuildBounds]);lines+=row;
+        snprintf(row,sizeof(row),"MATERIAL %.3f CACHE %.3f MS\n",o.buildPhaseMs[WorldOcclusion::BuildMaterials],o.buildPhaseMs[WorldOcclusion::BuildCache]);lines+=row;
+        snprintf(row,sizeof(row),"CLIP/SEL/RAST %.3f/%.3f/%.3f\n",o.buildPhaseMs[WorldOcclusion::BuildProjection],o.buildPhaseMs[WorldOcclusion::BuildSelect],o.buildPhaseMs[WorldOcclusion::BuildRaster]);lines+=row;
+    }else lines+="OCC PHASE TIMING N/A\n";
+    const auto sourceRanks=WorldOcclusion::TopNoDepthSources(o);
+    for(unsigned rank=0;rank<WorldOcclusion::TopSourceCount;++rank){
+        const int slot=sourceRanks[rank];if(slot<0)continue;
+        const auto &source=o.contributions[unsigned(slot)];
+        snprintf(row,sizeof(row),"S%d M%d ZERO %u/%u ADD %u\n",slot,source.model,source.noDepth,source.attempted,source.improved);lines+=row;
+    }
+
+    snprintf(row,sizeof(row),"COVERAGE L/R %.1f%% / %.1f%%\n",100.0*o.leftCells/(WorldOcclusion::Size*WorldOcclusion::Size),100.0*o.rightCells/(WorldOcclusion::Size*WorldOcclusion::Size)); lines += row;
+    snprintf(row,sizeof(row),"SOURCES IN %u USED %u NO OPAQUE %u\n",o.occluderCandidates,o.sourceObjects,o.sourceNoOpaque); lines += row;
+    snprintf(row,sizeof(row),"MESH OPAQUE %u ALPHA %u UNSUP %u\n",o.meshOpaque,o.meshAlpha,o.meshUnsupported); lines += row;
+    snprintf(row,sizeof(row),"CLIPPED %u PROJECTED %u DROP %u\n",o.sourceClipped,o.sourceProjected,o.sourceProjectionRejected); lines += row;
+    snprintf(row,sizeof(row),"CLIP IN/OUT/CROSS %u/%u/%u\n",o.clipProfile.inside,o.clipProfile.outside,o.clipProfile.crossing);lines+=row;
+    snprintf(row,sizeof(row),"CLIP REF/BAD/PLANES %u/%u/%u\n",o.clipProfile.boundary,o.clipProfile.invalid,o.clipProfile.planeVisits);lines+=row;
+    snprintf(row,sizeof(row),"WORK C/R/E %u/%u/%u\n",o.rasterTests,o.rasterRows,o.edgeTests); lines += row;
+    snprintf(row,sizeof(row),"POLY IN %u KEEP %u DROP %u\n",o.polygonCandidates,o.selectedPolygons,o.selectionDropped);lines+=row;
+    snprintf(row,sizeof(row),"RASTER SKIP %u NO DEPTH %u EDGE %u\n",o.rasterBudgetSkipped,o.noDepthPolygons,o.edgeTests);lines+=row;
+    snprintf(row,sizeof(row),"DEPTH SKIP POLY %u EYES %u\n",o.redundantPolygons,o.redundantEyes);lines+=row;
+    snprintf(row,sizeof(row),"TILE/CELL %u/%u CHECKS %u\n",o.tileSkippedCells,o.depthSkippedCells,o.redundancyTests);lines+=row;
+    snprintf(row,sizeof(row),"SPAN R/C %u/%u FALL %u\n",o.spanRows,o.spanCells,o.spanFallbackRows);lines+=row;
 	const auto b = rw::vulkan::getOpaqueMeshBatchStats();
-	snprintf(row,sizeof(row),"MESH BATCH %s MERGED %u SAVED %u\n",rw::vulkan::getOpaqueMeshBatchEnabled()?"ON":"OFF",b.merged,b.savedDraws); lines += row;
 	const auto i = rw::vulkan::getStaticInstancesStats();
-	snprintf(row,sizeof(row),"INSTANCING %s GROUPS %u SAVED %u\n",rw::vulkan::getStaticInstancesEnabled()?"ON":"OFF",i.groups,i.savedDraws); lines += row;
-	snprintf(row,sizeof(row),"WORLD BACKFACE %s\n",rw::vulkan::getWorldBackfaceEnabled()?"ON":"OFF"); lines += row;
+	snprintf(row,sizeof(row),"BATCH %s:%u INST %s:%u\n",rw::vulkan::getOpaqueMeshBatchEnabled()?"ON":"OFF",b.savedDraws,rw::vulkan::getStaticInstancesEnabled()?"ON":"OFF",i.savedDraws); lines += row;
 	const auto lod = VrWorldLod::GetStats();
 	snprintf(row,sizeof(row),"LOD MODE %d HIGH %u LOWER %u LOD %u\n",VrWorldLod::Mode(),lod.highSelections,lod.lowerSelections,lod.lodSelections); lines += row;
 	GpuPassProfile::Result sample;
-	if(rw::vulkan::getGpuPassProfile(&sample) && sample.status==GpuPassProfile::Complete && sample.geometry){
+	const bool complete=rw::vulkan::getGpuPassProfile(&sample) && sample.status==GpuPassProfile::Complete;
+	GpuPassProfile::FormatTimingRows(sample,row,sizeof(row));lines+=row;
+	if(complete && sample.geometry){
 		unsigned long long draws=0,triangles=0,alpha=0;
 		for(const auto &pass:sample.geometry->passes){
 			draws+=pass[DrawProfile::Draws]; triangles+=pass[DrawProfile::Triangles]; alpha+=pass[DrawProfile::Alpha];
 		}
-		snprintf(row,sizeof(row),"GPU SAMPLE %llu EVERY %u FRAMES\n",(unsigned long long)sample.frameId,GpuPassProfile::SampleInterval); lines += row;
+		snprintf(row,sizeof(row),"GPU SAMPLE %llu TOTAL %.2f MS\n",(unsigned long long)sample.frameId,sample.frameMs); lines += row;
 		snprintf(row,sizeof(row),"DRAWS %llu TRI %.1fK ALPHA %llu\n",draws,double(triangles)/1000,alpha); lines += row;
-		for(unsigned pass=0;pass<DrawProfile::PassCount;++pass){
-			const auto *c=sample.geometry->passes[pass];
-			if(!c[DrawProfile::Draws]) continue;
-			snprintf(row,sizeof(row),"%s: %u DRAWS %.1fK TRI\n",GpuPassProfile::Name(pass),c[DrawProfile::Draws],double(c[DrawProfile::Triangles])/1000); lines += row;
-		}
+        unsigned order[DrawProfile::PassCount];
+        for(unsigned pass=0;pass<DrawProfile::PassCount;++pass)order[pass]=pass;
+        std::sort(order,order+DrawProfile::PassCount,[&](unsigned a,unsigned b){
+            return sample.geometry->passes[a][DrawProfile::Draws]>sample.geometry->passes[b][DrawProfile::Draws];
+        });
+        unsigned remaining=0;
+        for(unsigned rank=0;rank<DrawProfile::PassCount;++rank){
+            const unsigned pass=order[rank];const auto *c=sample.geometry->passes[pass];
+            if(!c[DrawProfile::Draws])continue;
+            if(rank>=4){remaining+=c[DrawProfile::Draws];continue;}
+            snprintf(row,sizeof(row),"%s: %u DRAWS %.1fK TRI\n",GpuPassProfile::Name(pass),c[DrawProfile::Draws],double(c[DrawProfile::Triangles])/1000);lines+=row;
+        }
+        if(remaining){snprintf(row,sizeof(row),"OTHER PASSES: %u DRAWS\n",remaining);lines+=row;}
+
 	}else lines += "GPU DRAW SAMPLE N/A - WAITING\n";
-	lines += "CPU COUNTERS: LATEST FRAME; GPU: SAMPLED\n"
-		"MULTIVIEW COMMANDS COUNT ONCE\n"
-		"COMPARE SAME VIEW WITH CULLING OFF\n"
-		"CHECK BOTH EYES FOR MISSING SURFACES\n";
+	lines += "GPU SAMPLED 1/8; TOP 4 DRAW BUCKETS\n";
 	snprintf(gRenderingDetails,sizeof(gRenderingDetails),"%s",lines.c_str());
 }
 const char *QuestProfilerGetCaptureStem(){ return gLastCaptureStem.c_str(); }
@@ -1629,6 +1667,7 @@ QuestProfilerEndAppFrame(void)
 		gPlayerWeaponUses = 0;
 		gCaptureFrame.events = gCaptureEvents.Update(gCaptureFrame.player, gCaptureFrame.weaponUses);
 		gCaptureFrame.stages[5] = (float)(NowMilliseconds()-prepareStarted);
+		SimulationReplayObserveFrame(gCaptureFrame.startNs,gCaptureFrame.intervalMs);
 		gCaptureWriter.Submit(gCaptureFrame);
 		gPreviousCaptureStartNs = gCaptureFrame.startNs;
 	}

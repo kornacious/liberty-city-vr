@@ -38,6 +38,11 @@ static VkResult vkGetQueryPoolResults(int,int,unsigned first,unsigned count,size
     return VK_NOT_READY; // Spare mono query lanes are intentionally unwritten.
 }
 void countGpuProfileDraw(uint32 count=0,uint32 topology=~0u,uint32 flags=0);
+// Submission helpers belong to the renderer; this fixture exercises the real
+// timestamp hooks/readback with no pending instance batches or descriptor reuse.
+static void flushStaticInstances(){}
+static void staticReuseBoundary(){}
+static void finishStaticReuseDraw(){}
 #include "gpu-pass-backend.inc"
 static void Start(uint64 id=8,unsigned slot=0){
     gvk.frameTimestampValidBits=64;gvk.activeFrame=int(slot);setGpuProfileFrame(id,id*1000);gGpuRecordingActive=1;
@@ -69,6 +74,14 @@ int main(){
     assert(std::fabs(result.ms[Scene]-.8f)<1e-6f&&std::fabs(result.ms[Other]-.2f)<1e-6f);
     assert(result.ms[World]==-1&&result.ms[Fading]==-1);
     assert(result.frameMs==1&&result.draws[World]==1&&result.draws[Fading]==2&&result.ms[Sky]==-1&&readCount==6);
+    char timingRows[256];FormatTimingRows(result,timingRows,sizeof(timingRows));
+    assert(std::strcmp(timingRows,"GPU MS SCENE 0.80 POST --\nWRIST -- SCOPE -- OTHER 0.20\n")==0);
+    Result unavailable=result;unavailable.status=Unavailable;
+    FormatTimingRows(unavailable,timingRows,sizeof(timingRows));
+    assert(std::strcmp(timingRows,"GPU MS SCENE -- POST --\nWRIST -- SCOPE -- OTHER --\n")==0);
+    unavailable=result;unavailable.ms[Scene]=std::numeric_limits<float>::quiet_NaN();
+    FormatTimingRows(unavailable,timingRows,sizeof(timingRows));
+    assert(std::strstr(timingRows,"SCENE --")&&std::strstr(timingRows,"OTHER 0.20"));
     float frame=0;assert(getGpuFrameTimeMs(&frame)&&frame==1);
     Start(16,1);beginGpuProfilePass(Sky);endGpuProfilePass(Sky);Decode();assert(getGpuPassProfile(&result)&&result.frameId==16);
     Start();beginGpuProfilePass(Scene);endGpuProfilePass(Scene);values[2][1]=0;Decode();
@@ -92,6 +105,8 @@ int main(){
     assert(std::fabs(result.ms[Postprocess]-.2f)<1e-6f&&std::fabs(result.ms[Scope]-.1f)<1e-6f);
     float sum=0;for(unsigned i=0;i<Count;++i)if(result.mask&(1u<<i))sum+=result.ms[i];
     assert(std::fabs(sum-result.frameMs)<1e-6f&&result.draws[Scope]==1);
+    FormatTimingRows(result,timingRows,sizeof(timingRows));
+    assert(std::strstr(timingRows,"POST 0.20")&&std::strstr(timingRows,"SCOPE 0.10"));
     Start();beginGpuProfilePass(Scene);beginGpuProfilePass(Fading);
     assert(gpuProfileSampling());
     assert(beginGpuProfileEntity(10,0,"road,\"name",DrawProfile::Distance));

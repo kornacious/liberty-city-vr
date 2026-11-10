@@ -8,13 +8,16 @@ void SimulationReplayBeginFrame();
 void SimulationReplayEndFrame();
 void SimulationReplayInputs(CAutomobile *car);
 void SimulationReplayAfterAppFrame();
+// Unsmoothed app frame-start interval, attributed to the preceding replay frame.
+void SimulationReplayObserveFrame(unsigned long long startNs,double intervalMs);
 bool SimulationReplayProtected(CEntity *entity);
 bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b);
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker);
 // Rows: record, demo, play, stop, playback ghost, limit,
 // recording ghost, delete, route assistance, benchmark forward view,
-// RenderDoc capture, capture time, matched workload, playback count, back.
-constexpr int SimulationReplayMenuRows=15;
+// RenderDoc auto capture, capture time, matched workload, playback count,
+// manual current-frame capture, back.
+constexpr int SimulationReplayMenuRows=16;
 // Nonzero only during the playback preparation/playback belonging to this run.
 unsigned long long SimulationReplayForwardViewRun();
 bool SimulationReplayForwardViewNeutralPose(float position[3],float *yaw);
@@ -24,6 +27,7 @@ const char *SimulationReplayStatus();
 bool SimulationReplayConsumeStartFailure();
 bool SimulationReplayRecordingText(char *text,size_t capacity);
 bool SimulationReplayPlaybackText(char *text,size_t capacity);
+void SimulationReplayMinimumText(char *text,size_t capacity);
 // Called only at complete OpenXR frame boundaries, outside GPU command recording.
 void SimulationReplayBeginCaptureFrame(void *vkInstance);
 void SimulationReplayEndCaptureFrame(bool rendered);
@@ -32,6 +36,7 @@ inline void SimulationReplayBeginFrame(){}
 inline void SimulationReplayEndFrame(){}
 inline void SimulationReplayInputs(CAutomobile *){}
 inline void SimulationReplayAfterAppFrame(){}
+inline void SimulationReplayObserveFrame(unsigned long long,double){}
 inline unsigned long long SimulationReplayForwardViewRun(){return 0;}
 inline bool SimulationReplayForwardViewNeutralPose(float[3],float *){return false;}
 inline bool SimulationReplayProtected(CEntity *){return false;}

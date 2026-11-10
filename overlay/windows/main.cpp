@@ -582,6 +582,12 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false,
             diagnosticVisible = visible;
             return "SYNTHETIC DIAGNOSTICS TEST\nNo game performance measurements";
         });
+        if(mirror) Desktop::SetOcclusionMapProvider([](int eye,int *size) -> const unsigned char * {
+            static unsigned char preview[48*48];*size=48;
+            for(int y=0;y<48;++y)for(int x=0;x<48;++x)
+                preview[y*48+x]=(x>8+eye*4&&x<40&&y>8&&y<40)?(unsigned char)(64+y*3):0;
+            return preview;
+        });
         for(int i = 0; i < (mirror ? 60 : burst ? 1 : colour ? 9 : 5); ++i) {
             if(mirror){
                 Desktop::Pump();

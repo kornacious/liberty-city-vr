@@ -29,6 +29,7 @@ void ResetWindow();
 void BeginUi();
 // Game supplies telemetry without linking re3 into the synthetic diagnostic.
 void SetRenderingDetailsProvider(const char *(*provider)(bool visible));
+void SetOcclusionMapProvider(const unsigned char *(*provider)(int eye,int *size));
 bool RenderingDetailsVisible();
 void EndUi();
 void *WindowHandle();

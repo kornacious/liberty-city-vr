@@ -1306,6 +1306,36 @@ def distribution(values):
     }
 
 
+def summarize_occlusion_phases(rows):
+    if not rows or "world_occlusion_build_phases_valid" not in rows[0]:
+        return None
+    timed = [row for row in rows if row.get("world_occlusion_build_phases_valid") == "1"]
+    phases = ("setup", "gather", "bounds", "materials", "cache", "projection", "selection", "raster", "finalize")
+    return {"timed_rows": len(timed),
+            "phase_ms": {phase: distribution([float(row["world_occlusion_build_"+phase+"_ms"]) for row in timed])
+                         for phase in phases if "world_occlusion_build_"+phase+"_ms" in rows[0]},
+            "clock_reads": distribution([float(row["world_occlusion_phase_clock_reads"]) for row in timed])}
+
+
+def summarize_occlusion_sources(rows):
+    if not rows or "world_occlusion_zero_source_1_slot" not in rows[0]:
+        return None
+    models = {}
+    fields = ("selected", "attempted", "no_depth", "improved", "budget", "redundant", "updates")
+    for row in rows:
+        for rank in range(1, 4):
+            prefix = "world_occlusion_zero_source_"+str(rank)+"_"
+            if int(row.get(prefix+"slot", "-1")) &lt; 0:
+                continue
+            model = str(int(row[prefix+"model"]))
+            totals = models.setdefault(model, dict.fromkeys(("observations",)+fields, 0))
+            totals["observations"] += 1
+            for field in fields:
+                totals[field] += int(row[prefix+field])
+    return {"scope": "top_three_sources_per_frame",
+            "models": dict(sorted(models.items(), key=lambda item: (-item[1]["no_depth"], int(item[0]))))}
+
+
 def summarize(path, include_nongameplay=False, allow_incomplete=False):
     if not path.name.endswith(".frames.csv"):
         raise ValueError("Expected a new .frames.csv capture, not the one-second quest_perf.csv")
@@ -1430,6 +1460,8 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),
         "static_instances": summarize_static_instances(selected),
+        "world_occlusion_build_phases": summarize_occlusion_phases(selected),
+        "world_occlusion_zero_depth_sources": summarize_occlusion_sources(selected),
         "world_occlusion_source_model_frames": dict(Counter(row["world_occlusion_source_top_model"]
             for row in selected if int(row.get("world_occlusion_source_top_model", "-1"))&gt;=0)),
         "world_occlusion": {key: distribution([float(row[key]) for row in selected]) for key in
@@ -1446,7 +1478,20 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
              "world_occlusion_source_budget_skipped", "world_occlusion_source_top_samples",
              "world_occlusion_footprint_candidates", "world_occlusion_footprint_rejected",
              "world_occlusion_footprint_uncertain", "world_occlusion_footprint_selected",
-             "world_occlusion_footprint_capacity_skipped") if key in rows[0]},
+             "world_occlusion_footprint_capacity_skipped",
+             "world_occlusion_source_geometry_rejected", "world_occlusion_source_no_opaque",
+             "world_occlusion_mesh_opaque", "world_occlusion_mesh_alpha", "world_occlusion_mesh_unsupported",
+             "world_occlusion_source_clipped", "world_occlusion_clip_triangles", "world_occlusion_query_invalid",
+             "world_occlusion_cells_per_eye", "world_occlusion_polygon_candidates", "world_occlusion_selected_polygons",
+             "world_occlusion_selection_dropped", "world_occlusion_raster_budget_skipped",
+             "world_occlusion_no_depth_polygons", "world_occlusion_edge_tests",
+             "world_occlusion_redundancy_tests", "world_occlusion_redundancy_budget_stops",
+             "world_occlusion_redundant_polygons", "world_occlusion_redundant_eyes",
+             "world_occlusion_tile_skipped_cells", "world_occlusion_depth_skipped_cells",
+             "world_occlusion_span_rows", "world_occlusion_span_cells", "world_occlusion_span_fallback_rows",
+             "world_occlusion_span_edge_tests", "world_occlusion_clip_inside", "world_occlusion_clip_outside",
+             "world_occlusion_clip_crossing", "world_occlusion_clip_boundary", "world_occlusion_clip_invalid",
+             "world_occlusion_clip_plane_visits") if key in rows[0]},
         "world_backface": {key: distribution([float(row[key]) for row in selected]) for key in
             ("world_backface_candidates", "world_backface_draws", "world_backface_reject_state",
              "world_backface_reject_geometry", "world_backface_reject_view", "world_backface_reject_transform",
@@ -4781,11 +4826,22 @@ class AnalysisTests(unittest.TestCase):
                        "world_render_ms", "render_fading_ms"]
             fields += ["world_occlusion_raster_rows", "world_occlusion_selected_triangles"]
             source_keys=["cache_builds", "cache_hits", "cache_scanned", "cache_deferred", "source_objects",
-                         "source_projected", "source_projection_rejected", "source_small", "source_budget_skipped", "source_top_samples"]
+                         "source_projected", "source_projection_rejected", "source_small", "source_budget_skipped", "source_top_samples",
+                           "source_geometry_rejected", "source_no_opaque", "mesh_opaque", "mesh_alpha", "mesh_unsupported",
+                           "source_clipped", "clip_triangles", "query_invalid", "polygon_candidates", "selected_polygons",
+                           "selection_dropped", "raster_budget_skipped", "no_depth_polygons", "edge_tests",
+                           "redundancy_tests", "redundancy_budget_stops", "redundant_polygons", "redundant_eyes",
+                           "tile_skipped_cells", "depth_skipped_cells", "span_rows", "span_cells", "span_fallback_rows", "span_edge_tests",
+                           "clip_inside", "clip_outside", "clip_crossing", "clip_boundary", "clip_invalid", "clip_plane_visits"]
             fields += ["world_occlusion_"+key for key in source_keys]+["world_occlusion_source_top_model"]
             footprint_keys=["footprint_candidates", "footprint_rejected", "footprint_uncertain", "footprint_selected", "footprint_capacity_skipped"]
             fields += ["world_occlusion_"+key for key in footprint_keys]
             fields += ["fxaa_integer_sampling_enabled", "fxaa_integer_sampling_active"]
+            build_phases=("setup", "gather", "bounds", "materials", "cache", "projection", "selection", "raster", "finalize")
+            fields += ["world_occlusion_build_phases_valid", "world_occlusion_phase_clock_reads"]
+            fields += ["world_occlusion_build_"+phase+"_ms" for phase in build_phases]
+            zero_fields=("slot", "model", "selected", "attempted", "no_depth", "improved", "budget", "redundant", "updates")
+            fields += ["world_occlusion_zero_source_"+str(rank)+"_"+field for rank in range(1,4) for field in zero_fields]
             with path.open("w", newline="") as stream:
                 writer = csv.DictWriter(stream, fieldnames=fields+timings)
                 writer.writeheader()
@@ -4801,6 +4857,14 @@ class AnalysisTests(unittest.TestCase):
                     row.update({"world_occlusion_"+key:i*3 for key in footprint_keys})
                     row["world_occlusion_source_top_model"]=1417 if i%2 else -1
                     row.update(fxaa_integer_sampling_enabled=i%2,fxaa_integer_sampling_active=int(i==1))
+                    row.update(world_occlusion_build_phases_valid=int(i!=2),world_occlusion_phase_clock_reads=800)
+                    row.update({"world_occlusion_build_"+phase+"_ms":0 for phase in build_phases})
+                    row.update(world_occlusion_build_gather_ms=99 if i==2 else .01*i,world_occlusion_build_raster_ms=.01*i)
+                    for rank in range(1,4):
+                        prefix="world_occlusion_zero_source_"+str(rank)+"_"
+                        row.update({prefix+field:(-1 if field in ("slot","model") else 0) for field in zero_fields})
+                        if rank==1 or (rank==2 and i==1):
+                            row.update({prefix+field:value for field,value in zip(zero_fields,(rank+2,1417,12,10,9,1,2,5,10))})
                     writer.writerow(row)
             session = path.with_name("run.session.csv")
             session.write_text("key,value\nschema,1\nactive_model_set,CLASSIC\nwritten_rows,4\ndropped_rows,0\nwrite_error,0\nclosed,1\n")
@@ -4824,6 +4888,15 @@ class AnalysisTests(unittest.TestCase):
             for key in source_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],4)
             for key in footprint_keys:self.assertEqual(result["world_occlusion"]["world_occlusion_"+key]["mean"],6)
             self.assertEqual(result["world_occlusion_source_model_frames"],{"1417":2})
+            self.assertEqual(result["world_occlusion_build_phases"]["timed_rows"],2)
+            self.assertAlmostEqual(result["world_occlusion_build_phases"]["phase_ms"]["gather"]["mean"],.02)
+            self.assertEqual(result["world_occlusion_build_phases"]["phase_ms"]["cache"]["mean"],0)
+            self.assertEqual(result["world_occlusion_zero_depth_sources"]["models"]["1417"]["observations"],4)
+            self.assertEqual(result["world_occlusion_zero_depth_sources"]["models"]["1417"]["no_depth"],36)
+            self.assertEqual(result["world_occlusion_zero_depth_sources"]["models"]["1417"]["attempted"],40)
+            self.assertEqual(result["world_occlusion_zero_depth_sources"]["models"]["1417"]["budget"],8)
+            self.assertIsNone(analysis.summarize_occlusion_phases([{"frame_id":"1"}]))
+            self.assertIsNone(analysis.summarize_occlusion_sources([{"frame_id":"1"}]))
             self.assertEqual(result["recorded_configuration"]["fxaa_integer_sampling_enabled"],["0","1"])
             self.assertEqual(result["recorded_configuration"]["fxaa_integer_sampling_active"],["0","1"])
             self.assertAlmostEqual(result["world_occlusion"]["world_occlusion_build_ms"]["mean"], .04)
@@ -6013,6 +6086,8 @@ foreach($pair in @(
 }
 $physical=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/entities/Physical.cpp'))
 if(([regex]::Matches($physical,'SimulationReplayIgnoreCollision\(A, B\)')).Count-ne3){throw 'Ghost pair filter must cover shift, simple car, and normal collision sector paths.'}
+$profiler=[IO.File]::ReadAllText((Join-Path $StageRoot 'src/skel/android/QuestProfiler.cpp'))
+if(-not$profiler.Contains('SimulationReplayObserveFrame(gCaptureFrame.startNs,gCaptureFrame.intervalMs)')){throw 'Replay minimum FPS must use the raw capture frame-start interval.'}
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-simulation-replay.cpp')
 if($LASTEXITCODE-ne0){throw 'Simulation replay regression failed.'}
 </value>

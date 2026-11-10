@@ -69,8 +69,21 @@ void FixedEnvironment(){
     CWeather::InterpolationValue=0;
 }
 bool renderdocCapture=false,runRenderdocCapture=false,captureAttempted=false,captureFrameActive=false;
-uint64_t captureAtUs=37000000,runCaptureAtUs=0,capturedAtUs=0,captureStartNs=0,captureEndNs=0;
+uint64_t captureAtUs=0,runCaptureAtUs=0,capturedAtUs=0,captureStartNs=0,captureEndNs=0;
 std::string captureResult="off",capturePrefix,captureFile;
+struct CaptureSettings {
+    bool baseline=false,customTime=false;
+    double worstIntervalMs=0;
+    uint64_t worstAtUs=0;
+    unsigned completed=0;
+} captureSettings;
+std::string settingsDemo;
+bool manualPending=false,captureIsManual=false,runDiagnostic=false,measureFrame=false,previousMeasure=false;
+unsigned manualCount=0;
+std::string manualResult="idle",manualFile;
+uint64_t measureAtUs=0,previousMeasureUs=0,previousMeasureNs=0;
+double runWorstIntervalMs=0;
+uint64_t runWorstAtUs=0;
 #ifndef LCVR_RENDERDOC_CAPTURE_ROOT
 #define LCVR_RENDERDOC_CAPTURE_ROOT "/sdcard/Android/data/com.libertyvr.quest/files/renderdoc-captures"
 #endif
@@ -104,10 +117,43 @@ std::string Unique(){
     std::snprintf(id,sizeof(id),"%s-%llu",stamp,(unsigned long long)(Now()/1000000)); return id;
 }
 std::string Path(const std::string &name){ return std::string(Root())+"/"+name; }
+void LoadCaptureSettings(const std::string &name){
+    if(settingsDemo==name)return;
+    settingsDemo=name;captureSettings={};captureAtUs=0;renderdocCapture=false;
+    if(name.empty())return;
+    FILE *f=std::fopen(Path(name+".capture.csv").c_str(),"r");
+    if(!f)f=std::fopen(Path(name+".capture.csv.bak").c_str(),"r");
+    if(!f)return;
+    unsigned enabled=0,custom=0,completed=0;unsigned long long at=0,worstAt=0;double interval=0;
+    const bool valid=std::fscanf(f,"LCVR_SIM_CAPTURE_V1\nauto,%u\nat_us,%llu\ncustom,%u\ncompleted,%u\nworst_interval_ms,%lf\nworst_at_us,%llu",
+        &enabled,&at,&custom,&completed,&interval,&worstAt)==6;
+    std::fclose(f);
+    if(!valid || enabled>1 || custom>1 || at>=120000000 || worstAt>=120000000 ||
+       !std::isfinite(interval) || interval<0 || (completed && interval<=0))return;
+    captureSettings.baseline=completed>0;captureSettings.customTime=custom!=0;
+    captureSettings.completed=completed;captureSettings.worstIntervalMs=interval;captureSettings.worstAtUs=worstAt;
+    captureAtUs=at;renderdocCapture=enabled && captureSettings.baseline;
+}
+bool SaveCaptureSettings(){
+    if(settingsDemo.empty())return false;
+    const auto path=Path(settingsDemo+".capture.csv"),temp=path+".tmp",backup=path+".bak";
+    FILE *f=std::fopen(temp.c_str(),"w");if(!f){Status("DEMO CAPTURE SETTINGS WRITE FAILED");return false;}
+    const bool written=std::fprintf(f,"LCVR_SIM_CAPTURE_V1\nauto,%u\nat_us,%llu\ncustom,%u\ncompleted,%u\nworst_interval_ms,%.17g\nworst_at_us,%llu\n",
+        renderdocCapture?1:0,(unsigned long long)captureAtUs,captureSettings.customTime?1:0,captureSettings.completed,
+        captureSettings.worstIntervalMs,(unsigned long long)captureSettings.worstAtUs)>0 && !std::ferror(f);
+    const bool closed=std::fclose(f)==0;
+    if(written && closed){
+        struct stat st={};const bool exists=lstat(path.c_str(),&st)==0;
+        if(exists){std::remove(backup.c_str());if(std::rename(path.c_str(),backup.c_str())!=0){Status("DEMO CAPTURE SETTINGS BACKUP FAILED");return false;}}
+        if(std::rename(temp.c_str(),path.c_str())==0){std::remove(backup.c_str());return true;}
+        if(exists)std::rename(backup.c_str(),path.c_str());
+    }
+    Status("DEMO CAPTURE SETTINGS SAVE FAILED");return false;
+}
 void Refresh(){
     const std::string previous=selectedDemo<int(demos.size())?demos[selectedDemo]:"";
     demos.clear(); mkdir(Root(),0700);
-    DIR *dir=opendir(Root()); if(!dir) return;
+    DIR *dir=opendir(Root()); if(!dir){LoadCaptureSettings("");return;}
     while(dirent *e=readdir(dir)) {
         const std::string n=e->d_name;
         if(n.size()>8 && n.size()<80 && n.substr(n.size()-8)==".sim.csv") {
@@ -121,6 +167,7 @@ void Refresh(){
     closedir(dir); std::sort(demos.begin(),demos.end());
     const auto found=std::find(demos.begin(),demos.end(),previous);
     selectedDemo=found==demos.end()?std::max(0,int(demos.size())-1):int(found-demos.begin());
+    LoadCaptureSettings(demos.empty()?"":demos[selectedDemo]);
 }
 CAutomobile *Selected(){
     CVehicle *v=FindPlayerVehicle();
@@ -244,6 +291,9 @@ bool WriteReport(){
         runMatched?1:0,routeIdentity.c_str(),assetIdentity.c_str(),LCVR_SOURCE_IDENTITY,MatchedProfile::dirty?1:0,
         runMatched?"noon_sunny_each_simulation_step":"live");
     std::fprintf(f,"repeat_index,%u\nrepeat_count,%u\n",runIteration,runRepeatCount);
+    std::fprintf(f,"lowest_fps,%.9g\nlowest_fps_at_us,%llu\nlowest_fps_interval_ms,%.17g\nlowest_fps_policy,frame_start_interval_previous_simulation_timestamp\nrenderdoc_diagnostic,%d\nmanual_capture_count,%u\nmanual_capture_result,%s\nmanual_capture_file,%s\n",
+        runWorstIntervalMs>0?1000/runWorstIntervalMs:0,(unsigned long long)runWorstAtUs,runWorstIntervalMs,
+        runDiagnostic?1:0,manualCount,manualResult.c_str(),manualFile.c_str());
     const bool written=!std::ferror(f);
     if(std::fclose(f)!=0 || !written){Status("RUN REPORT CLOSE FAILED");return false;}
     return true;
@@ -299,8 +349,10 @@ bool Start(int operation,bool continuing=false){
                 if(std::fclose(file)!=0)saved=false;}
             if(!saved){if(file)std::remove(path.c_str());tape.reset();Status("PORTABLE ROUTE UPGRADE FAILED - ORIGINAL KEPT");return false;}
             label=upgraded;Status("PORTABLE ROUTE COPY CREATED - ORIGINAL KEPT");
+            LoadCaptureSettings(label);
         }
         if(renderdocCapture){
+            if(!captureSettings.baseline){tape.reset();Status("COMPLETE ONE PLAYBACK BEFORE AUTO CAPTURE");return false;}
             if(!QuestRenderDocAvailable()){tape.reset();Status("LAUNCH THE GAME THROUGH RENDERDOC TO USE TIMED CAPTURE");return false;}
             if(captureAtUs>=tape->endUs){tape.reset();Status("RENDERDOC CAPTURE TIME MUST BE BEFORE THE DEMO END");return false;}
             if(mkdir(RenderDocRoot(),0700)!=0 && errno!=EEXIST){tape.reset();Status("CANNOT CREATE LOCAL RENDERDOC CAPTURE DIRECTORY");return false;}
@@ -332,6 +384,7 @@ bool Start(int operation,bool continuing=false){
         if(!output){Status("CANNOT CREATE DEMO FILE");return false;}
         std::setvbuf(output,nullptr,_IOFBF,65536);
         if(!Core::Header(output,initial)){std::fclose(output);output=nullptr;std::remove(Path(label+".sim.csv").c_str());Status("DEMO HEADER WRITE FAILED");return false;}
+        LoadCaptureSettings(label); // A newly recorded demo always starts at zero, auto OFF.
     }
     reference=CPools::GetVehicleRef(c);model=unsigned(c->GetModelIndex());signature=current.vehicle.signature;
     sampleCount=0; elapsed=lastInput=0; gameTime=warmTime=0; drift={}; wallStart=Now();
@@ -340,8 +393,10 @@ bool Start(int operation,bool continuing=false){
     runAssisted=operation==2 && routeAssistance && runGhost;corrections=0;correctionMax=0;
     runForwardView=operation==2 && forwardView;
     runRenderdocCapture=operation==2 && renderdocCapture;runCaptureAtUs=captureAtUs;
-    captureAttempted=captureFrameActive=false;capturedAtUs=captureStartNs=captureEndNs=0;
+    captureAttempted=false;capturedAtUs=captureStartNs=captureEndNs=0;
     captureResult=runRenderdocCapture?"armed":"off";capturePrefix.clear();captureFile.clear();
+    runDiagnostic=runRenderdocCapture || manualPending || captureFrameActive || QuestRenderDocActive();runWorstIntervalMs=0;runWorstAtUs=0;
+    measureFrame=previousMeasure=false;previousMeasureNs=0;manualCount=0;manualResult="idle";manualFile.clear();
     if(operation==2){
         runId=Unique();
         if(runRenderdocCapture)capturePrefix=std::string(RenderDocRoot())+"/"+runId;
@@ -385,6 +440,7 @@ bool SimulationReplayIgnoreCollision(CEntity *a,CEntity *b){
 }
 bool SimulationReplayIgnoreDamage(CEntity *victim,CEntity *attacker){return Protected(victim)||Protected(attacker);}
 void SimulationReplayBeginFrame(){
+    measureFrame=false;
     if(runMatched && (mode==Preparing || mode==Playing)) FixedEnvironment();
     if(request==1 || request==2){
         const int op=request;request=0;
@@ -402,6 +458,7 @@ void SimulationReplayBeginFrame(){
     if(!std::isfinite(frameDt) || frameDt<0 || frameDt>0.25f){Finish("ABORTED - INVALID SIMULATION TIMESTEP");return;}
     if(mode==Preparing && warmTime>=2){Restore(c);mode=Playing;playbackStartNs=Now();Status(runAssisted?"PLAYING - ROUTE ASSISTANCE ACTIVE":"PLAYING - INPUT ONLY, DRIFT LIMIT 50M");}
     if(mode==Playing){
+        measureFrame=!CTimer::GetIsPaused();measureAtUs=elapsed;
         if(!tape->At(elapsed,applied)){Finish("COMPLETE");return;}
         const CVector p=c->GetPosition(),f=c->GetForward();
         const float position[]={p.x,p.y,p.z},forward[]={f.x,f.y,f.z};
@@ -455,6 +512,14 @@ void SimulationReplayAfterAppFrame(){
         // Flush this capture before resetting the vehicle or streaming the next start.
         if(runAutoProfile && !runId.empty()){QuestProfilerSetReplayProfiling(1);QuestProfilerSetCaptureContext("");}
         const bool recorded=runId.empty();
+        if(!recorded && result=="COMPLETE" && !runDiagnostic && runWorstIntervalMs>0){
+            ++captureSettings.completed;captureSettings.baseline=true;
+            if(runWorstIntervalMs>captureSettings.worstIntervalMs){
+                captureSettings.worstIntervalMs=runWorstIntervalMs;captureSettings.worstAtUs=runWorstAtUs;
+                if(!captureSettings.customTime)captureAtUs=runWorstAtUs;
+            }
+            SaveCaptureSettings();
+        }else if(recorded && result=="RECORDING SAVED")SaveCaptureSettings();
         const bool reportSaved=WriteReport();
         const bool again=!recorded && result=="COMPLETE" && reportSaved && runIteration<runRepeatCount;
         if(runAutoProfile && !recorded && !again)QuestProfilerSetReplayProfiling(0);
@@ -472,11 +537,34 @@ void SimulationReplayAfterAppFrame(){
         if(recorded){
             const auto found=std::find(demos.begin(),demos.end(),label);
             if(found!=demos.end()) selectedDemo=int(found-demos.begin());
+            LoadCaptureSettings(demos.empty()?"":demos[selectedDemo]);
         }
     }
 }
+void SimulationReplayObserveFrame(unsigned long long startNs,double intervalMs){
+    const bool valid=measureFrame && !runDiagnostic && !QuestRenderDocActive() && !CTimer::GetIsPaused() &&
+        (mode==Playing || (mode==Finishing && result=="COMPLETE"));
+    if(valid && previousMeasure && startNs>previousMeasureNs &&
+       std::isfinite(intervalMs) && intervalMs>0 && intervalMs>runWorstIntervalMs){
+        runWorstIntervalMs=intervalMs;runWorstAtUs=previousMeasureUs;
+    }
+    previousMeasure=valid;previousMeasureNs=startNs;previousMeasureUs=measureAtUs;
+    measureFrame=false; // One observation per app frame, including the final rendered frame.
+}
 void SimulationReplayBeginCaptureFrame(void *vkInstance){
+    if(captureFrameActive)return;
+    if(manualPending){
+        manualPending=false;captureIsManual=true;
+        const auto prefix=std::string(RenderDocRoot())+"/manual-"+Unique();
+        const auto started=QuestRenderDocBegin(vkInstance,prefix.c_str());
+        captureFrameActive=started==questcapture::RenderDocFrame::Started;
+        manualResult=captureFrameActive?"capturing":started==questcapture::RenderDocFrame::Busy?"busy":
+            started==questcapture::RenderDocFrame::Unavailable?"unavailable":"start_failed";
+        if(!captureFrameActive){captureIsManual=false;Status("MANUAL RENDERDOC CAPTURE DID NOT START");}
+        return;
+    }
     if(mode!=Playing || !runRenderdocCapture || captureAttempted || elapsed<runCaptureAtUs || CTimer::GetIsPaused())return;
+    captureIsManual=false;
     captureAttempted=true;capturedAtUs=elapsed;captureStartNs=Now();
     const auto started=QuestRenderDocBegin(vkInstance,capturePrefix.c_str());
     captureFrameActive=started==questcapture::RenderDocFrame::Started;
@@ -486,7 +574,18 @@ void SimulationReplayBeginCaptureFrame(void *vkInstance){
 }
 void SimulationReplayEndCaptureFrame(bool rendered){
     if(!captureFrameActive)return;
-    const auto ended=QuestRenderDocEnd(rendered);captureFrameActive=false;captureEndNs=Now();
+    const auto ended=QuestRenderDocEnd(rendered);captureFrameActive=false;
+    if(captureIsManual){
+        captureIsManual=false;
+        manualResult=ended==questcapture::RenderDocFrame::Saved?"saved":ended==questcapture::RenderDocFrame::Discarded?"discarded":"end_failed";
+        if(ended==questcapture::RenderDocFrame::Saved){
+            ++manualCount;manualFile=QuestRenderDocCapturePath();for(char &c:manualFile)if(c==','||c=='\r'||c=='\n')c='_';
+            Status("MANUAL RENDERDOC FRAME SAVED");
+        }else Status("MANUAL RENDERDOC FRAME NOT SAVED");
+        if(mode==Finishing)SimulationReplayAfterAppFrame();
+        return;
+    }
+    captureEndNs=Now();
     captureResult=ended==questcapture::RenderDocFrame::Saved?"saved":
         ended==questcapture::RenderDocFrame::Discarded?"discarded":"end_failed";
     if(ended==questcapture::RenderDocFrame::Saved){
@@ -519,6 +618,11 @@ bool SimulationReplayPlaybackText(char *text,size_t capacity){
         double(std::min(elapsed,tape->endUs))/1000000,double(tape->endUs)/1000000);
     return true;
 }
+void SimulationReplayMinimumText(char *text,size_t capacity){
+    if(captureSettings.baseline && captureSettings.worstIntervalMs>0)
+        std::snprintf(text,capacity,"LOWEST FPS %.2f AT %.6f SECONDS",1000/captureSettings.worstIntervalMs,double(captureSettings.worstAtUs)/1000000);
+    else std::snprintf(text,capacity,"COMPLETE A PLAYBACK TO SET AUTO CAPTURE TIME");
+}
 void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     switch(row){
     case 0:std::snprintf(text,capacity,"RECORD ROUTE  < REPAIRS CAR >");break;
@@ -531,29 +635,44 @@ void SimulationReplayMenuRow(int row,char *text,size_t capacity){
     case 7:std::snprintf(text,capacity,deleteArmed.empty()?"DELETE SELECTED DEMO":"CONFIRM DELETE  < PRESS AGAIN >");break;
     case 8:std::snprintf(text,capacity,"ROUTE ASSISTANCE  < %s >",ghost?(routeAssistance?"ON":"OFF"):"OFF - PLAYBACK GHOST REQUIRED");break;
     case 9:std::snprintf(text,capacity,"BENCHMARK FORWARD VIEW  < %s >",forwardView?"ON":"OFF");break;
-    case 10:std::snprintf(text,capacity,"RENDERDOC CAPTURE < %s >",!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - LAUNCH VIA RENDERDOC":captureResult=="saved"?"ON - SAVED":"ON");break;
-    case 11:std::snprintf(text,capacity,"CAPTURE AT < %.1f SECONDS >",double(captureAtUs)/1000000);break;
+    case 10:std::snprintf(text,capacity,"RENDERDOC AUTO CAPTURE < %s >",!captureSettings.baseline?"OFF - PLAY FIRST":!renderdocCapture?"OFF":!QuestRenderDocAvailable()?"ON - NOT ATTACHED":"ON");break;
+    case 11:std::snprintf(text,capacity,"CAPTURE AT < %.6f SECONDS >",double(captureAtUs)/1000000);break;
     case 12:std::snprintf(text,capacity,"MATCHED WORKLOAD < %s >",MatchedProfile::active?"PROFILE - ON":matchedWorkload?"ON":"OFF");break;
     case 13:std::snprintf(text,capacity,"PLAYBACK COUNT < %u >",repeatCount);break;
+    case 14:std::snprintf(text,capacity,"RENDERDOC CAPTURE CURRENT FRAME");break;
     default:std::snprintf(text,capacity,"BACK");break;
     }
 }
 bool SimulationReplayMenuAction(int row,int direction){
     if(row!=7) deleteArmed.clear();
     if(row==-1){Refresh();return false;}
+    if(row==14){
+        if(manualPending || captureFrameActive){Status("A RENDERDOC CAPTURE IS ALREADY PENDING OR ACTIVE");return false;}
+        if(!QuestRenderDocAvailable()){Status("LAUNCH THE GAME THROUGH RENDERDOC TO CAPTURE A FRAME");return false;}
+        if(mkdir(RenderDocRoot(),0700)!=0 && errno!=EEXIST){Status("CANNOT CREATE LOCAL RENDERDOC CAPTURE DIRECTORY");return false;}
+        manualPending=true;
+        if(mode==Playing || mode==Preparing){runDiagnostic=true;if(runMatched)MatchedProfile::dirty=true;}
+        Status("MANUAL RENDERDOC CAPTURE QUEUED");return true;
+    }
     if(row==3){request=3;return false;}
     if(mode!=Idle || request){Status("STOP THE CURRENT RUN FIRST");return false;}
     switch(row){
     case 0:if(!Ready()) return false;request=1;requestStartNs=Now();return true;
-    case 1:Refresh();if(!demos.empty()) selectedDemo=(selectedDemo+direction+int(demos.size()))%int(demos.size());break;
+    case 1:Refresh();if(!demos.empty()) selectedDemo=(selectedDemo+direction+int(demos.size()))%int(demos.size());LoadCaptureSettings(demos.empty()?"":demos[selectedDemo]);break;
     case 2:Refresh();if(demos.empty()){Status("NO RECORDED DEMOS");return false;}request=2;requestStartNs=Now();return true;
     case 4:ghost=!ghost;break;
     case 5:duration=duration==30?(direction>0?60:120):duration==60?(direction>0?120:30):(direction>0?30:60);break;
     case 6:recordingGhost=!recordingGhost;break;
     case 8:routeAssistance=!routeAssistance;break;
     case 9:forwardView=!forwardView;break;
-    case 10:renderdocCapture=!renderdocCapture;break;
-    case 11:captureAtUs=direction<0?(captureAtUs?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;break;
+    case 10:if(!captureSettings.baseline){Status("COMPLETE ONE PLAYBACK BEFORE AUTO CAPTURE");break;}
+        if(!renderdocCapture && MatchedProfile::active){Status("EXIT MATCHED PROFILE BEFORE AUTO CAPTURE");break;}
+        renderdocCapture=!renderdocCapture;
+        if(renderdocCapture && matchedWorkload){matchedWorkload=false;Status("AUTO CAPTURE ON - MATCHED WORKLOAD DISABLED");}
+        SaveCaptureSettings();break;
+    case 11:if(!captureSettings.baseline){Status("CAPTURE AT IS ZERO UNTIL ONE PLAYBACK COMPLETES");break;}
+        captureAtUs=direction<0?(captureAtUs>=500000?captureAtUs-500000:119500000):(captureAtUs+500000)%120000000;
+        captureSettings.customTime=true;SaveCaptureSettings();break;
     case 12:matchedWorkload=!matchedWorkload;break;
     case 13:repeatCount=direction<0?(repeatCount==1?10:repeatCount-1):(repeatCount==10?1:repeatCount+1);break;
     case 7:{
@@ -562,7 +681,7 @@ bool SimulationReplayMenuAction(int row,int direction){
         if(deleteArmed!=name){deleteArmed=name;Status("PRESS DELETE AGAIN TO REMOVE THE SELECTED DEMO");break;}
         deleteArmed.clear();
         if(std::remove(Path(name+".sim.csv").c_str())!=0) Status("COULD NOT DELETE THE SELECTED DEMO");
-        else{Refresh();Status("DEMO DELETED - PERFORMANCE REPORTS KEPT");}
+        else{for(const char *suffix:{".capture.csv",".capture.csv.bak",".capture.csv.tmp"})std::remove(Path(name+suffix).c_str());Refresh();Status("DEMO DELETED - PERFORMANCE REPORTS KEPT");}
         break;
     }
     }

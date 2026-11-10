@@ -12,6 +12,8 @@ int QuestProfilerGetDisplayMode();
 // Transient desktop observer; preserves the display and recording preferences.
 void QuestProfilerSetDesktopObserver(bool enabled);
 const char *QuestProfilerRenderingDetails();
+// Completed-frame display snapshot; null means the map is unavailable.
+const unsigned char *QuestProfilerOcclusionMap(int eye,int *size);
 bool QuestProfilerIsRecording();
 // 0 restores the preference, 1 suspends for preparation, 2 forces playback capture.
 void QuestProfilerSetReplayProfiling(int state);

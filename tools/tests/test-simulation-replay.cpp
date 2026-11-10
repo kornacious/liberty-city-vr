@@ -200,7 +200,8 @@ static void CoreTests(){
         Check(!C::IgnorePair(false,a!=0,b!=0,da!=0,db!=0),"ghost off always retains collision");
     }
 }
-static void Frame(bool after=true){androidgame::SimulationReplayBeginFrame();androidgame::SimulationReplayInputs(&car);androidgame::SimulationReplayInputs(&car);androidgame::SimulationReplayEndFrame();fakeNs+=10000000ULL;if(after)androidgame::SimulationReplayAfterAppFrame();}
+static double testFrameIntervalMs=10;
+static void Frame(bool after=true){androidgame::SimulationReplayBeginFrame();androidgame::SimulationReplayInputs(&car);androidgame::SimulationReplayInputs(&car);androidgame::SimulationReplayEndFrame();fakeNs+=static_cast<unsigned long long>(testFrameIntervalMs*1000000);androidgame::SimulationReplayObserveFrame(fakeNs,testFrameIntervalMs);if(after)androidgame::SimulationReplayAfterAppFrame();}
 static void Stop(){androidgame::SimulationReplayMenuAction(3,1);androidgame::SimulationReplayAfterAppFrame();}
 static void Prepare(){for(int i=0;i<220 && androidgame::mode!=androidgame::Playing;++i)Frame();Check(androidgame::mode==androidgame::Playing,"preparation transitions to live physics playback");}
 static void RuntimeTests(){
@@ -422,6 +423,68 @@ static void RenderDocReplayTests(){
     Check(captureResult=="not_reached","early stop reports target not reached");
     renderdocCapture=false;rdocAvailable=false;captureAtUs=37000000;
 }
+static void CaptureSettingsTests(){
+    using namespace androidgame;
+    selectedCar=&car;car.m_vecMoveSpeed=CVector(0,0,0);car.up=CVector(0,0,1);
+    ghost=routeAssistance=forwardView=true;matchedWorkload=false;repeatCount=1;
+    const std::string first="20990101T000000Z-701",second="20990101T000000Z-702";
+    for(const auto &name:{first,second}){
+        FILE *f=std::fopen(Path(name+".sim.csv").c_str(),"wx");Check(f!=nullptr,"new per-demo fixture");
+        auto state=Initial(&car);Check(Core::Header(f,state)&&Core::Write(f,MakeSample(0))&&Core::Write(f,MakeSample(1000000)),"baseline tape writes");
+        std::fputs("END,2000000\n",f);std::fclose(f);
+    }
+    Refresh();selectedDemo=int(std::find(demos.begin(),demos.end(),first)-demos.begin());LoadCaptureSettings(first);
+    Check(!renderdocCapture&&captureAtUs==0&&!captureSettings.baseline,"new demo has auto OFF, time zero and no baseline");
+    SimulationReplayMenuAction(10,1);SimulationReplayMenuAction(11,1);
+    Check(!renderdocCapture&&captureAtUs==0,"auto capture and time edit locked until completed baseline");
+    SimulationReplayMenuAction(2,1);Frame();Prepare();
+    const auto expectedAt=previousMeasureUs;testFrameIntervalMs=50;Frame();testFrameIntervalMs=10;
+    Check(runWorstIntervalMs==50&&runWorstAtUs==expectedAt,"slow frame uses exact previous simulation timestamp");
+    CTimer::step=0;testFrameIntervalMs=500;Frame();CTimer::step=.01f;testFrameIntervalMs=10;Frame();
+    Check(runWorstIntervalMs==50,"paused interval and first resumed interval excluded");
+    while(mode==Playing)Frame();
+    Check(captureSettings.baseline&&captureSettings.completed==1&&captureSettings.worstIntervalMs==50&&captureAtUs==expectedAt&&!renderdocCapture,"completion stores lowest FPS and defaults exact target while keeping auto OFF");
+    std::ifstream report(Path(runId+".run.csv"));const std::string reportText((std::istreambuf_iterator<char>(report)),{});
+    Check(reportText.find("lowest_fps,20\n")!=std::string::npos&&reportText.find("lowest_fps_at_us,"+std::to_string(expectedAt)+"\n")!=std::string::npos,"run report stores FPS minimum and precise time");
+    SimulationReplayMenuAction(10,1);Check(renderdocCapture,"auto becomes available after first completed playback");
+    SimulationReplayMenuAction(11,1);const auto edited=expectedAt+500000;
+    Check(captureAtUs==edited&&captureSettings.customTime,"explicit target edit retains timestamp precision");
+    SimulationReplayMenuAction(1,1);Check(settingsDemo==second&&!renderdocCapture&&captureAtUs==0,"next demo has independent defaults");
+    SimulationReplayMenuAction(1,-1);Check(settingsDemo==first&&renderdocCapture&&captureAtUs==edited,"selection reloads saved per-demo auto and target");
+    settingsDemo.clear();LoadCaptureSettings(first);
+    Check(renderdocCapture&&captureAtUs==edited&&captureSettings.worstAtUs==expectedAt,"settings survive process-style reload");
+    // Manual requests operate while idle or playing and never consume the auto trigger.
+    rdocAvailable=true;const unsigned starts=rdocStarts;const bool attempted=captureAttempted;
+    Check(SimulationReplayMenuAction(14,1)&&manualPending,"idle manual capture queues and closes menu");
+    Check(!SimulationReplayMenuAction(14,1),"duplicate pending manual request rejected");
+    SimulationReplayBeginCaptureFrame(&car);Check(captureFrameActive&&captureIsManual&&rdocStarts==starts+1,"manual begins at next full XR frame without playback");
+    SimulationReplayEndCaptureFrame(true);Check(manualResult=="saved"&&captureAttempted==attempted&&captureAtUs==edited,"manual save leaves auto attempt and time untouched");
+    SimulationReplayBeginCaptureFrame(&car);Check(rdocStarts==starts+1,"manual request is one-shot");
+    captureAtUs=1000000;SaveCaptureSettings();SimulationReplayMenuAction(2,1);Frame();Prepare();
+    Check(SimulationReplayMenuAction(14,1),"manual works during auto-enabled playback before target");
+    SimulationReplayBeginCaptureFrame(&car);SimulationReplayEndCaptureFrame(true);
+    Check(!captureAttempted&&runCaptureAtUs==1000000,"manual capture does not consume scheduled auto target");
+    while(elapsed<runCaptureAtUs)Frame();SimulationReplayBeginCaptureFrame(&car);
+    Check(captureFrameActive&&!captureIsManual&&captureAttempted,"scheduled auto capture still starts at its target");SimulationReplayEndCaptureFrame(true);Stop();
+    renderdocCapture=false;SaveCaptureSettings();matchedWorkload=true;
+    SimulationReplayMenuAction(2,1);Frame();Prepare();
+    Check(SimulationReplayMenuAction(14,1)&&runDiagnostic&&MatchedProfile::dirty,"manual works with auto OFF and marks matched run diagnostic");
+    SimulationReplayBeginCaptureFrame(&car);SimulationReplayEndCaptureFrame(false);
+    Check(manualResult=="discarded","manual owns and discards a non-rendered frame");
+    const auto completed=captureSettings.completed;while(mode==Playing)Frame();
+    Check(captureSettings.completed==completed&&captureAtUs==1000000,"manual diagnostic run cannot replace clean FPS baseline or custom target");
+    // A busy external capture remains externally owned; a failed request can retry.
+    rdocBusy=true;const unsigned ends=rdocEnds;SimulationReplayMenuAction(14,1);SimulationReplayBeginCaptureFrame(&car);SimulationReplayEndCaptureFrame(true);
+    Check(!captureFrameActive&&manualResult=="busy"&&rdocEnds==ends,"manual never ends an external capture");rdocBusy=false;
+    rdocAvailable=false;Check(!SimulationReplayMenuAction(14,1)&&!manualPending,"unattached manual request reports failure without a stranded request");
+    // A partial first playback never unlocks auto capture.
+    SimulationReplayMenuAction(1,1);SimulationReplayMenuAction(2,1);Frame();Prepare();Stop();
+    Check(!captureSettings.baseline&&!renderdocCapture&&captureAtUs==0,"aborted first playback leaves auto locked and target zero");
+    // Malformed settings fail closed instead of enabling automatic capture.
+    {std::ofstream f(Path(second+".capture.csv"));f<<"LCVR_SIM_CAPTURE_V1\nauto,1\nat_us,999999999\ncustom,1\ncompleted,1\nworst_interval_ms,nan\nworst_at_us,0\n";}
+    settingsDemo.clear();LoadCaptureSettings(second);Check(!captureSettings.baseline&&!renderdocCapture&&captureAtUs==0,"malformed persisted settings restore safe defaults");
+    matchedWorkload=false;testFrameIntervalMs=10;
+}
 static void ExternalTape(const char *path){
     FILE *f=std::fopen(path,"r");SimulationReplayCore::Tape input;
     Check(f&&input.Load(f),"external replay tape loads");if(f)std::fclose(f);
@@ -469,4 +532,4 @@ static void LegacyUpgradeTests(){
     file=std::fopen(Path(label+".sim.csv").c_str(),"r");Core::Tape upgraded;Check(file&&upgraded.Load(file)&&upgraded.initial.portableHandling,"portable copy loads completely");if(file)std::fclose(file);
     Check(upgraded.samples.size()==original.samples.size()&&upgraded.endUs==original.endUs,"upgrade retains route samples and duration");Stop();
 }
-int main(int argc,char **argv){Check(androidgame::matchedWorkload,"matched benchmark defaults on");androidgame::matchedWorkload=false;CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();RenderDocReplayTests();LegacyUpgradeTests();MatchedRuntimeTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}
+int main(int argc,char **argv){Check(androidgame::matchedWorkload,"matched benchmark defaults on");androidgame::matchedWorkload=false;CoreTests();RuntimeTests();LongRoute();PlaybackHudTests();RenderDocReplayTests();LegacyUpgradeTests();MatchedRuntimeTests();CaptureSettingsTests();androidgame::LayoutTests();for(int i=1;i<argc;++i)ExternalTape(argv[i]);std::printf("PASS: %u simulation replay checks\n",checks);}

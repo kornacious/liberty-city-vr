@@ -17,6 +17,7 @@ InputState input;
 bool quit = false, resize = true, uiActive = false;
 bool renderingDetails = false;
 const char *(*renderingDetailsProvider)(bool) = nullptr;
+const unsigned char *(*occlusionMapProvider)(int,int *) = nullptr;
 ImGuiContext *context = nullptr;
 RECT saved{100, 100, 1060, 1060};
 std::string config;
@@ -206,6 +207,9 @@ Options &Settings() { return options; }
 bool RenderingDetailsVisible() { return renderingDetails; }
 void SetRenderingDetailsProvider(const char *(*provider)(bool)) {
   renderingDetailsProvider = provider;
+}
+void SetOcclusionMapProvider(const unsigned char *(*provider)(int,int *)) {
+  occlusionMapProvider = provider;
 }
 const InputState &Input() { return input; }
 void *WindowHandle() { return window; }
@@ -457,11 +461,37 @@ void BeginUi() {
   }
   const char *details = renderingDetailsProvider ? renderingDetailsProvider(renderingDetails) : nullptr;
   if (renderingDetails) {
-    ImGui::SetNextWindowSize(ImVec2(560, 660), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(560, 820), ImGuiCond_FirstUseEver);
     ImGui::Begin("Rendering diagnostics (F12)", &renderingDetails);
     ImGui::TextWrapped("%s. Timings measure this PC. CPU counters and completed GPU samples cover different frames.",
                        MatchedProfile::active ? "Quest compatibility workload" : "Native PCVR workload");
     ImGui::TextUnformatted(details ? details : "Game rendering telemetry unavailable in the synthetic diagnostic.");
+    for (int eye=0;eye<2;++eye) {
+      if (eye) ImGui::SameLine();
+      ImGui::BeginGroup();
+      ImGui::TextUnformatted(eye ? "Right occlusion map" : "Left occlusion map");
+      int size=0;
+      const auto *map=occlusionMapProvider ? occlusionMapProvider(eye,&size) : nullptr;
+      if (map && size>0 && size<=64) {
+        const auto origin=ImGui::GetCursorScreenPos();
+        auto *draw=ImGui::GetWindowDrawList();
+        const float scale=144.f/size;
+        for (int y=0;y<size;++y) for (int x=0;x<size;) {
+          // Coalesce equal display shades; the exact proof grid is unchanged.
+          const unsigned shade=map[y*size+x] ? 1+map[y*size+x]/18 : 0;
+          int end=x+1;
+          while(end<size && (map[y*size+end] ? 1+map[y*size+end]/18 : 0)==shade) ++end;
+          const unsigned depth=shade*17;
+          draw->AddRectFilled(ImVec2(origin.x+x*scale,origin.y+y*scale),
+                              ImVec2(origin.x+end*scale,origin.y+(y+1)*scale),
+                              IM_COL32(depth/4,depth,shade?128+depth/2:0,255));
+          x=end;
+        }
+        ImGui::Dummy(ImVec2(144,144));
+      } else ImGui::TextUnformatted("Map unavailable");
+      ImGui::EndGroup();
+    }
+    ImGui::TextUnformatted("Black: no proven depth. Brighter: nearer (nonlinear).");
     ImGui::End();
   }
   if (options.statistics) {

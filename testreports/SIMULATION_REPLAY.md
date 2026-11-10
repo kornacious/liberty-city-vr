@@ -229,12 +229,37 @@ and analyzer tests cover both effective states and legacy CSV compatibility.
 ## Replay-timed RenderDoc capture
 
 Launch the debug APK through RenderDoc Meta Fork, then open Simulation Replay.
-Set RENDERDOC CAPTURE ON and choose CAPTURE AT (default 37.0 seconds, adjusted
-in 0.5-second steps from 0 to 119.5 seconds). Start the selected demo normally.
+Use RENDERDOC CAPTURE CURRENT FRAME for a one-shot capture of the next complete
+rendered XR frame. It closes the overlay and works in ordinary gameplay or during
+recording, preparation and playback, independently of RENDERDOC AUTO CAPTURE and
+CAPTURE AT. It leaves the scheduled auto trigger intact. An unavailable API or
+busy external capture reports failure without taking ownership of that capture.
+
+Each new demo starts with RENDERDOC AUTO CAPTURE OFF and CAPTURE AT zero. Complete
+at least one playback before enabling auto capture or editing the target. A
+completed playback with valid non-capture samples stores its lowest instantaneous
+app FPS (1000 divided by the largest raw frame-start interval), with the preceding
+frame's exact simulation timestamp in microseconds. Preparation, pauses and the
+first resumed interval are excluded. Capture runs and manually captured runs do
+not update the baseline; aborted runs do not unlock auto capture. The minimum FPS
+and time are visible below the menu and recorded in each `.run.csv` report.
+
+The default CAPTURE AT becomes the worst measured timestamp across completed
+baseline playbacks, displayed to six decimal places. Auto capture remains OFF
+until explicitly enabled. Target edits use 0.5-second steps; a custom target is
+preserved when a later baseline finds a slower frame. A per-demo `.capture.csv`
+sidecar stores auto mode, target, custom/default selection, completed baseline
+count, worst frame interval and timestamp. Selection and application restart
+reload it; old demos without a sidecar start with the same safe defaults. Deleting
+a demo removes its settings but retains performance reports. Writes use a
+temporary file and backup replacement; invalid settings restore the defaults.
+
+Set RENDERDOC AUTO CAPTURE ON and start the selected demo normally. Enabling
+it disables the menu's Matched workload option, since captured runs are diagnostic;
+exit an active imported matched profile first. Auto options are latched per run.
 One capture is attempted on the first rendered, unpaused playback frame whose
 pre-step simulation clock reaches that time. Preparation time is excluded.
 The target must precede the loaded demo's actual end, including short demos.
-The option defaults OFF on application startup and is latched per run.
 
 The integration passively obtains API 1.4+ from an already injected RenderDoc
 module; it does not load or enable a capture layer in normal gameplay. If that
@@ -250,7 +275,7 @@ integration. Replay completion/stop cleanup waits for capture finalization.
 The standalone bring-up renderer has no replay capture hooks.
 
 Files remain in the app-local `files/renderdoc-captures/` directory, prefixed by
-the run identifier. RenderDoc's previous capture filename template is restored
+the run identifier (or `manual-` plus a unique identifier). RenderDoc's previous capture filename template is restored
 after success, failure or discard. A saved capture appears in the connected
 RenderDoc capture list; use its normal save/copy workflow to retain it on this
 computer. Captures contain game resources and must remain local.
@@ -262,7 +287,7 @@ the captured source CPU frame. Session metadata also records `renderdoc_attached
 session is marked diagnostic even with the timed capture option OFF.
 The analyzer marks these as diagnostic runs;
 capture interception and file writing can affect neighboring frames too. Use
-RENDERDOC CAPTURE OFF in an unhooked game session for ordinary performance
+RENDERDOC AUTO CAPTURE OFF in an unhooked game session for ordinary performance
 comparisons. The capture flag does not attempt to label individual delayed GPU
 results as originating from the delivery row. Schema 6 remains supported.
 

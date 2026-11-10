@@ -1078,6 +1078,7 @@ int RunWindowsGame(unsigned frameLimit)
         androidgame::QuestProfilerSetDesktopObserver(visible);
         return visible ? androidgame::QuestProfilerRenderingDetails() : nullptr;
     });
+    Desktop::SetOcclusionMapProvider(androidgame::QuestProfilerOcclusionMap);
     while(!platform::exitRequested() && !Desktop::QuitRequested() && !androidgame::WantsToQuit() && (!frameLimit || frames<frameLimit)) {
         Desktop::Pump(); Desktop::BeginUi(); Desktop::UpdateGameInput();
         if(!xrvk::pollEvents()) break;
@@ -1087,6 +1088,7 @@ int RunWindowsGame(unsigned frameLimit)
     }
     LOGI("Windows game frames completed: %u",frames);
     Desktop::SetRenderingDetailsProvider(nullptr);
+    Desktop::SetOcclusionMapProvider(nullptr);
     androidgame::QuestProfilerSetDesktopObserver(false);
     xrvk::setFrameRenderer(nullptr);
     // Frontend sprites are static objects. Release their textures while librw

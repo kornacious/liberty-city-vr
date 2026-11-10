@@ -11,6 +11,22 @@ time only, **ON** for the full live diagnostic display, **DETAILED** for renderi
 diagnostics, or **OFF** to hide it. PCVR also has an independent F12 ImGui window.
 These display modes never start or stop recording.
 
+DETAILED and the PCVR F12 window show two rows of sampled GPU milliseconds:
+`GPU MS SCENE / POST` and `WRIST / SCOPE / OTHER`. `GPU SAMPLE` identifies the
+source frame and its total GPU interval. These five exclusive intervals use
+the same delayed sample (one frame per eight-frame block); they are not the
+latest CPU frame or the independently updated Vulkan GPU headline. `--` means
+unavailable, not zero. POST excludes its nested SCOPE interval. OTHER is GPU
+time outside the named brackets, including gaps, not the other draw buckets.
+
+SCENE includes all logical scene phases and the native pass's resolve/store.
+Roads, world, fading and the other top draw buckets show submissions, not
+individual GPU costs: they share a tiled native render pass. In-pass timestamps
+would not isolate those costs reliably on Quest. The instrumentation does not
+split the scene pass or add query waits. Existing `gpu_pass_*_ms` capture columns
+contain these timings; use their valid mask/status and deduplicate by GPU source
+frame ID when comparing samples. Logical scene buckets retain `-1` GPU times.
+
 Use **Graphics → Active Performance Profiling → ON** to record the existing
 performance metrics. It defaults to **OFF**. Select **OFF** after the route to
 drain accepted samples and close the files. Display changes preserve a running
@@ -19,6 +35,14 @@ capture session, frame IDs, events and vehicle-speed peaks.
 Replay Simulation always enables profiling during demo playback. Preparation is
 excluded; completion, manual stop and abort restore the prior profiling preference.
 The temporary override is never saved and does not change the stats display.
+
+Simulation Replay also records each playback's lowest instantaneous app FPS and
+its exact simulation timestamp in `.run.csv`. A completed playback without a
+RenderDoc capture establishes the demo's default automatic capture point. Per-demo
+`.capture.csv` settings persist the target and auto toggle; new demos use zero and
+OFF until a baseline completes. Manual **RenderDoc Capture Current Frame** captures
+the next complete rendered XR frame independently of the toggle and target. See
+[the replay capture workflow](../../testreports/SIMULATION_REPLAY.md#replay-timed-renderdoc-capture).
 The former Auto Profile Playback switch has been removed.
 
 Recording keeps the existing one-second `quest_perf.csv` and also writes
@@ -280,6 +304,75 @@ left unprepared after reaching the 32-source cap. Uncertain is an overlapping
 diagnostic, not an exclusive rejection category; capacity-skipped candidates
 have not necessarily passed material/cache eligibility. These counters and
 total build/query times expose whether the added bounds work is worthwhile.
+
+Clipped opaque-mesh occlusion (`world_occlusion_policy` ending in `v5`) adds
+`world_occlusion_source_geometry_rejected`, `world_occlusion_source_no_opaque`,
+`world_occlusion_mesh_opaque`, `world_occlusion_mesh_alpha`,
+`world_occlusion_mesh_unsupported`, `world_occlusion_source_clipped`,
+`world_occlusion_clip_triangles`, `world_occlusion_query_invalid`, and
+`world_occlusion_cells_per_eye` (2304). Coverage percentages are
+`100 * left_cells / cells_per_eye` and the equivalent right-eye expression.
+Selected triangles now count clipped triangle parts; sampled source triangles
+still count original input faces. The analyzer includes the new columns when
+present and accepts older captures. See the
+[diagnostic field guide](QUEST_VISUALIZATION_DEBUG.md) for counter meanings.
+
+The convex-polygon policy (`v6`) adds `world_occlusion_polygon_candidates`,
+`world_occlusion_selected_polygons`, `world_occlusion_selection_dropped`,
+`world_occlusion_raster_budget_skipped`, `world_occlusion_no_depth_polygons` and
+`world_occlusion_edge_tests`. These distinguish shortlist loss, raster work
+limits and zero-depth contribution. Under this policy, the legacy
+`world_occlusion_clip_triangles` and `world_occlusion_selected_triangles`
+columns describe triangle-fan equivalents, not emitted raster primitives.
+Actual selection is capped at 256 convex source polygons. Depth-map previews
+are displayed live and are not appended to each CSV row.
+
+The depth-reuse policy (`v7`) adds `world_occlusion_redundancy_tests`,
+`world_occlusion_redundancy_budget_stops` (0/1 fallback flag),
+`world_occlusion_redundant_polygons`, `world_occlusion_redundant_eyes`,
+`world_occlusion_tile_skipped_cells` and `world_occlusion_depth_skipped_cells`.
+These measure skipped occluder-map work, independently of object rejection and
+GPU draw counts. The analyzer includes these fields when present. Cheap tile
+checks share an 8,192-check budget across both eyes; exhaustion falls back to
+detailed raster checks rather than skipping potentially useful depth.
+
+The certified-row policy (`v8`) appends `world_occlusion_span_rows`,
+`world_occlusion_span_cells`, `world_occlusion_span_fallback_rows` and
+`world_occlusion_span_edge_tests`. Certified rows and fallback rows can overlap:
+a row can use endpoint coverage proof for its interior and per-cell checks at
+its boundaries. Endpoint evaluations are already included in
+`world_occlusion_edge_tests`; do not add the two counters together. The live
+WORK C/R/E row exposes raster cell/row/edge usage to identify which unchanged
+budget is reached after reducing repeated edge work.
+
+Instrumentation tag `exclusive_phases_top3_zero_depth_v1` adds
+`world_occlusion_build_phases_valid`, `world_occlusion_phase_clock_reads` and
+`world_occlusion_build_{setup,gather,bounds,materials,cache,projection,selection,raster,finalize}_ms`.
+The exclusive phase sum reconciles with the existing build bracket within CSV
+rounding. Untimed rows have a false validity flag; the analyzer excludes them
+from phase distributions. Extra phase clocks are enabled with profiler
+collection and their cost is included in the timings.
+
+For ranks 1–3, `world_occlusion_zero_source_<rank>_` columns contain `slot`,
+`model`, `selected`, `attempted`, `no_depth`, `improved`, `budget`, `redundant`
+and `updates`. An unused rank has slot/model -1 and zero counters. Rank is by
+zero-depth attempt count, then selected work, with stable slot ties. Slots
+identify prepared source instances only in the current frame; model IDs can
+repeat across instances. These rows represent the top three observations, not
+all model work. The analyzer labels this scope when aggregating by model.
+See the [diagnostic field guide](QUEST_VISUALIZATION_DEBUG.md) for phase scopes
+and overlapping contribution counters. The instrumentation tag is separate from
+the rendering-policy version and does not itself change culling rules.
+
+The clip-code policy (`v9`) appends `world_occlusion_clip_inside`,
+`world_occlusion_clip_outside`, `world_occlusion_clip_crossing`,
+`world_occlusion_clip_boundary`, `world_occlusion_clip_invalid` and
+`world_occlusion_clip_plane_visits`. Route counters classify each eye's clipper
+invocation; boundary fallbacks retain the full reference implementation. Plane
+visits count polygon traversals, excluding initial classification arithmetic.
+Compare the projection phase time alongside these counters; fewer traversals
+alone do not establish a frame-time improvement. The analyzer includes these
+columns when present and continues to accept older captures.
 
 Replay **OFF -> ON -> OFF -> ON**, keeping World Model LOD AGGRESSIVE, World
 Backface Cull OFF, Static Instancing and all remaining settings fixed. Use a
