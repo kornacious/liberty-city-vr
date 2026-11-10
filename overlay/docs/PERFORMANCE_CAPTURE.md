@@ -7,7 +7,8 @@
 # Recording and comparing performance
 
 In **Graphics → Show FPS and Rendering Stats** select **MINIMAL** for FPS/frame
-time only, **ON** for the full live diagnostic display, or **OFF** to hide it.
+time only, **ON** for the full live diagnostic display, **DETAILED** for rendering
+diagnostics, or **OFF** to hide it. PCVR also has an independent F12 ImGui window.
 These display modes never start or stop recording.
 
 Use **Graphics → Active Performance Profiling → ON** to record the existing
@@ -77,7 +78,7 @@ gameplay coordinates, but no device identifiers or original game assets.
   engine derives them from handling/drag; they are not the original unconverted
   handling-file value or guaranteed road top speed. Slopes, collisions, tuning
   and cheats can change achieved speed. Vehicle values are `-1` when unavailable.
-- `profiler_display_mode` records `0=OFF` / `1=ON` / `2=MINIMAL` per frame, so display
+- `profiler_display_mode` records `0=OFF` / `1=ON` / `2=MINIMAL` / `3=DETAILED` per frame, so display
   changes can be identified without splitting the session.
 - Entity-render call counts for vehicles, pedestrians and static objects.
   These are **not** Vulkan draw-call counts or final visible-object counts.

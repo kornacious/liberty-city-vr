@@ -27,6 +27,9 @@ const InputState &Input();
 void SetMode(WindowMode mode);
 void ResetWindow();
 void BeginUi();
+// Game supplies telemetry without linking re3 into the synthetic diagnostic.
+void SetRenderingDetailsProvider(const char *(*provider)(bool visible));
+bool RenderingDetailsVisible();
 void EndUi();
 void *WindowHandle();
 void ClientSize(unsigned &width, unsigned &height);
@@ -38,7 +41,7 @@ void ShutdownGpu();
 void Present(VkImage image, VkImageView view, unsigned width, unsigned height,
              float theaterAspect = 0);
 void SetGameOverlay(const unsigned char *rgba, int width, int height,
-                    bool menu);
+                    bool menu, bool detailedStats = false);
 Picture CurrentPicture();
 void RequestSnapshot(const std::string &path);
 unsigned PresentedFrames();

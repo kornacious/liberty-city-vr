@@ -34,7 +34,7 @@ struct ProfilingState {
     bool active = false;
     int replay = 0; // 0: normal, 1: preparing, 2: playing
     bool Recording() const { return replay ? replay == 2 : active; }
-    bool Collecting() const { return Recording() || display == 1; }
+    bool Collecting() const { return Recording() || display == 1 || display == 3; }
 };
 
 inline float SpeedKmh(float engineSpeed)

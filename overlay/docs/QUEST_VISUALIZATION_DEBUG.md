@@ -48,6 +48,41 @@ surfaces, each visibility toggle and reset, then compare the default view with
 normal gameplay. Host topology, pipeline isolation, and menu-layout tests do
 not replace headset visual QA.
 
+Select **Graphics > Show FPS and Rendering Stats > DETAILED** for a rendering
+focused view. On PCVR, **F12** independently toggles a resizable ImGui window
+with the same telemetry; opening it releases mouse capture. The desktop preview
+suppresses the mirrored DETAILED stats while F12 is open, leaving one readable
+copy on the monitor. Closing F12 restores those stats. The headset stats and
+interactive settings menus remain visible.
+The preview panel has a **Reset preview options** button. Neither diagnostics control starts a
+performance recording or changes optimization settings.
+
+The view shows CPU render/list costs, Vulkan GPU time when available, entity
+list counts, authored occlusion mode, CPU geometry-occlusion candidates and
+rejections, conservative fail-open cases, stereo coverage cells, and occlusion
+build/query cost. It also shows batching/instancing saved draws, backface state,
+LOD selections, and completed GPU draw/triangle samples broken down by pass.
+LOD modes are 0=Off, 1=On, 2=Performance, 3=Aggressive. Backend counters describe
+the latest completed app frame; timing values are smoothed and entity-list
+counts update at the profiler's one-second diagnostic cadence. GPU command
+samples arrive separately every eight frames; their source frame ID is shown.
+When rendering pauses, the last completed measurements remain on screen.
+
+To assess occlusion, hold the viewpoint and settings fixed and compare
+**Optimizations > World occlusion** OFF/ON separately from authored occlusion.
+Behind a large opaque building, look for geometry rejections and fewer submitted
+draws/triangles, then compare GPU time against the extra CPU build/query cost.
+Check both eyes, doorways, near-plane crossings, transparent surfaces and moving
+head positions for missing surfaces or popping. A zero rejection count can be
+correct in an open scene. Invalid/budget cases keep geometry visible. Counters
+show activity, not proof of correct visibility or a net speedup.
+
+Use wireframe, overdraw and category toggles above to inspect the remaining
+workload. For per-draw pipelines, textures, depth/blend state and mesh inspection,
+use the existing RenderDoc capture workflow. Debug views change the workload;
+return to normal shading before timing comparisons. PCVR can inspect shared
+rendering decisions, but PC timings do not measure Quest GPU performance.
+
 **Overdraw - depth tested** uses the same accumulation colors but retains each
 mesh draw's normal depth test/write rules, including transparent materials.
 It shows fragments that pass depth in submission order. A far surface drawn

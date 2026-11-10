@@ -12,6 +12,10 @@ void require(bool value, const char *message) { if(!value) throw std::runtime_er
 bool near(float a, float b) { return std::abs(a-b) < 0.0001f; }
 int main() {
     try {
+        for(bool menu : {false,true}) for(bool detailed : {false,true}) for(bool diagnostics : {false,true})
+            require(Desktop::ShowGameOverlay(menu,detailed,diagnostics) ==
+                    !(detailed && diagnostics && !menu),
+                    "Only duplicate detailed stats are suppressed; menus and other stats remain visible");
         MatchedProfile::Values profile{{"schema",1},{"quest3",1},{"width",1872},{"height",2016},{"scale",100},{"hz",72},
             {"anisotropy",1},{"atomics",1},{"bc",0},{"astc",1},{"etc2",1},{"max_anisotropy",16},
             {"setting_MsaaSamples",4},{"setting_RenderScalePercent",100}};

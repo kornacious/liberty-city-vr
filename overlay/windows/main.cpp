@@ -577,6 +577,11 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false,
         auto leftVP = XrMath::multiply(projection,XrMath::viewFromPose(left));
         auto rightVP = XrMath::multiply(projection,XrMath::viewFromPose(right));
         const int greys[]={0,1,2,8,18,64,128,192,255};
+        static bool diagnosticVisible = false;
+        if(mirror) Desktop::SetRenderingDetailsProvider([](bool visible) -> const char * {
+            diagnosticVisible = visible;
+            return "SYNTHETIC DIAGNOSTICS TEST\nNo game performance measurements";
+        });
         for(int i = 0; i < (mirror ? 60 : burst ? 1 : colour ? 9 : 5); ++i) {
             if(mirror){
                 Desktop::Pump();
@@ -588,8 +593,13 @@ int vulkanProbe(bool render = false, bool colour = false, bool textures = false,
                 if(i==25)key(VK_F5);
                 if(i==30)key(VK_F6);
                 if(i==35)key(VK_F4);
+                if(i==40){Desktop::Settings().capture=true;key(VK_F12);}
+                if(i==50)key(VK_F12);
                 if(i==45){std::filesystem::create_directories(".cache");Desktop::RequestSnapshot(".cache/desktop-preview-probe.bmp");}
                 Desktop::BeginUi();
+                if(i==40 && (!diagnosticVisible || Desktop::Settings().capture || Desktop::Settings().eye!=1))
+                    throw std::runtime_error("F12 did not open diagnostics, release capture and preserve preview options.");
+                if(i==50 && diagnosticVisible) throw std::runtime_error("F12 did not close diagnostics.");
             }
             rw::Raster *sampleTexture=nullptr;
             rw::vulkan::setStereoViewProjection(leftVP.m,rightVP.m); rw::vulkan::setClearColour(18,24,38);

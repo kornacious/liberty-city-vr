@@ -9,6 +9,9 @@ void QuestProfilerCountPlayerWeaponUse(void);
 // Display selection never starts or stops recording.
 void QuestProfilerSetDisplayMode(int mode);
 int QuestProfilerGetDisplayMode();
+// Transient desktop observer; preserves the display and recording preferences.
+void QuestProfilerSetDesktopObserver(bool enabled);
+const char *QuestProfilerRenderingDetails();
 bool QuestProfilerIsRecording();
 // 0 restores the preference, 1 suspends for preparation, 2 forces playback capture.
 void QuestProfilerSetReplayProfiling(int state);

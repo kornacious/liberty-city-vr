@@ -4,6 +4,10 @@
 namespace Desktop {
 enum class WindowMode { Windowed, Borderless, Fullscreen };
 enum class Framing { Square, Cropped };
+// The desktop diagnostics replace only the mirrored detailed stats, never menus.
+inline bool ShowGameOverlay(bool menu, bool detailedStats, bool diagnostics) {
+  return menu || !detailedStats || !diagnostics;
+}
 struct Picture {
   float x = 0, y = 0, width = 0, height = 0, u = 0, v = 0, du = 1, dv = 1;
 };

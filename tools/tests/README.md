@@ -511,7 +511,7 @@ c++ -std=c++17 -I/path/to/openxr/include -Ioverlay/android/app/src/main/cpp \
 /tmp/test-minimal-profiler
 ```
 
-The graphics menu layout suite covers OFF, ON and MINIMAL labels.
+The graphics menu layout suite covers OFF, ON, MINIMAL and DETAILED labels.
 
 `test-wheel-hand-basis.ps1 -StageRoot <assembled-source>` extracts the actual
 tracked-hand render basis after the IK override and the production controller

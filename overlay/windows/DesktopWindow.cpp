@@ -15,6 +15,8 @@ HWND window = nullptr;
 Options options;
 InputState input;
 bool quit = false, resize = true, uiActive = false;
+bool renderingDetails = false;
+const char *(*renderingDetailsProvider)(bool) = nullptr;
 ImGuiContext *context = nullptr;
 RECT saved{100, 100, 1060, 1060};
 std::string config;
@@ -95,8 +97,7 @@ void Shortcut(unsigned key) {
     options.statistics = !options.statistics;
     break;
   case VK_F12:
-    options = Options{};
-    ResetWindow();
+    renderingDetails = !renderingDetails;
     break;
   }
   Cursor();
@@ -202,6 +203,10 @@ LRESULT CALLBACK Procedure(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
 }
 } // namespace
 Options &Settings() { return options; }
+bool RenderingDetailsVisible() { return renderingDetails; }
+void SetRenderingDetailsProvider(const char *(*provider)(bool)) {
+  renderingDetailsProvider = provider;
+}
 const InputState &Input() { return input; }
 void *WindowHandle() { return window; }
 bool QuitRequested() { return quit; }
@@ -403,7 +408,7 @@ void BeginUi() {
   ImGui::NewFrame();
   uiActive = true;
   if (options.panel) {
-    ImGui::SetNextWindowSize(ImVec2(390, 410), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(390, 460), ImGuiCond_FirstUseEver);
     ImGui::Begin("Desktop preview (F1)", &options.panel);
     ImGui::Text("Graphics: %s", MatchedProfile::active ? "Quest 3 compatibility" : "Native PCVR");
     if(MatchedProfile::active) ImGui::TextWrapped("Restart via the manager to change profile. Timings measure this PC.");
@@ -434,10 +439,29 @@ void BeginUi() {
     if (ImGui::Checkbox("Gamepad / F10", &options.gamepad))
       Save();
     ImGui::Checkbox("Preview statistics / F11", &options.statistics);
-    ImGui::TextUnformatted("F12: reset preview options");
+    ImGui::Checkbox("Rendering diagnostics / F12", &renderingDetails);
+    if (ImGui::Button("Reset preview options")) {
+      options = Options{};
+      ResetWindow();
+      Cursor();
+      Save();
+    }
     ImGui::TextUnformatted("Always downscale to fit; never upscale.");
     ImGui::TextUnformatted("Input requires preview focus. Alt+F4: quit.");
     ImGui::Text("Gamepad: %s", input.pad ? "connected" : "not active");
+    ImGui::End();
+  }
+  if (renderingDetails && options.capture) {
+    options.capture = false;
+    Cursor();
+  }
+  const char *details = renderingDetailsProvider ? renderingDetailsProvider(renderingDetails) : nullptr;
+  if (renderingDetails) {
+    ImGui::SetNextWindowSize(ImVec2(560, 660), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Rendering diagnostics (F12)", &renderingDetails);
+    ImGui::TextWrapped("%s. Timings measure this PC. CPU counters and completed GPU samples cover different frames.",
+                       MatchedProfile::active ? "Quest compatibility workload" : "Native PCVR workload");
+    ImGui::TextUnformatted(details ? details : "Game rendering telemetry unavailable in the synthetic diagnostic.");
     ImGui::End();
   }
   if (options.statistics) {

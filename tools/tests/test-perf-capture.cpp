@@ -22,17 +22,17 @@ int main()
     using namespace questperf;
     ProfilingState state;
     assert(!state.Recording() && !state.Collecting());
-    for(int mode : {0, 1, 2, 1, 2, 0}) {
+    for(int mode : {0, 1, 2, 3, 2, 1, 3, 0}) {
         state.display = mode;
         assert(!state.Recording());
-        assert(state.Collecting() == (mode == 1));
+        assert(state.Collecting() == (mode == 1 || mode == 3));
     }
     for(bool active : {false, true}) {
         state.active = active;
         state.replay = 1;
         assert(!state.Recording());
         state.replay = 2;
-        for(int mode : {0, 1, 2}) {
+        for(int mode : {0, 1, 2, 3}) {
             state.display = mode;
             assert(state.Recording() && state.Collecting());
         }

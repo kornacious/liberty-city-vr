@@ -46,7 +46,7 @@ of the VR view. These shortcuts work while the preview has focus:
 | F9 | Toggle desktop keyboard/mouse controls |
 | F10 | Toggle PC gamepad controls |
 | F11 | Toggle preview statistics |
-| F12 | Reset preview options |
+| F12 | Toggle rendering diagnostics window |
 
 Square framing selects a centered square from the eye. Cropped framing selects a
 centered region matching the window aspect ratio. Both downscale only; smaller

@@ -119,9 +119,11 @@ int main(){
   }
  rw::vulkan::DebugVisualization::Reset();
  for(int scenario=0;scenario<4;scenario++)for(int selected=0;selected<VR_GRAPHICS_ITEM_COUNT;selected++){
-  Clear();gOpaqueWorldAlphaFastPath=scenario%2;gMaskedAlphaPassSkip=scenario%2;gOpaqueMeshBatch=scenario%2;gStaticInstances=scenario%2;gProfilerDisplayMode=scenario%3;gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
+  Clear();gOpaqueWorldAlphaFastPath=scenario%2;gMaskedAlphaPassSkip=scenario%2;gOpaqueMeshBatch=scenario%2;gStaticInstances=scenario%2;gProfilerDisplayMode=scenario%4;gVrGraphicsSelection=selected;xrvk::valid=scenario!=0;
   xrvk::status.fallbackReason=scenario==3?1:0;xrvk::status.previousFallbackReason=scenario>=2?1:0;VrCullViz::active=scenario==2;
   DrawQuestGraphicsPage();Verify();
+  const char *labels[]={"OFF","ON","MINIMAL","DETAILED"};
+  Check(drawnRows[VR_GRAPHICS_PROFILER].text.find(labels[gProfilerDisplayMode])!=std::string::npos,"all profiler modes labeled");
  }
  for(int context=0;context<4;++context)for(int mode=0;mode<WorldLodPolicy::Count;++mode)for(int state=0;state<2;++state)
   for(int selection=0;selection<VR_OPT_ITEM_COUNT;++selection){

@@ -43,6 +43,8 @@ namespace androidgame {
 namespace {
 
 bool gProfilerEnabled;
+bool gDesktopObserver;
+char gRenderingDetails[4096] = "WAITING FOR A RENDERED FRAME";
 bool gRecordingEnabled;
 questperf::ProfilingState gProfilingState;
 int gCaptureDisplayMode;
@@ -854,9 +856,9 @@ static void UpdateProfilerRecording(bool enabled);
 void
 QuestProfilerSetDisplayMode(int mode)
 {
-	gCaptureDisplayMode = mode == 1 || mode == 2 ? mode : 0;
+	gCaptureDisplayMode = mode >= 0 && mode <= 3 ? mode : 0;
 	gProfilingState.display = gCaptureDisplayMode;
-	gProfilerEnabled = gProfilingState.Collecting();
+	gProfilerEnabled = gProfilingState.Collecting() || gDesktopObserver;
 	rw::vulkan::setGpuFrameTimingEnabled(gProfilerEnabled ? 1 : 0);
 	xrvk::setPerformanceMetricsEnabled(gProfilerEnabled);
 }
@@ -875,6 +877,60 @@ void QuestProfilerSetReplayProfiling(int state)
 }
 
 int QuestProfilerGetDisplayMode(){ return gCaptureDisplayMode; }
+void QuestProfilerSetDesktopObserver(bool enabled)
+{
+	if(gDesktopObserver == enabled) return;
+	gDesktopObserver = enabled;
+	QuestProfilerSetDisplayMode(gCaptureDisplayMode);
+}
+
+const char *QuestProfilerRenderingDetails() { return gRenderingDetails; }
+
+static void UpdateRenderingDetails()
+{
+	std::string lines;
+	char row[160];
+	const auto &p = gSnapshot;
+	snprintf(row,sizeof(row),"FPS %.1f CPU STEP %.2f BUDGET %.2f MS\n",p.appFps,p.cpuStepMs,p.frameBudgetMs); lines += row;
+	if(p.gpuVulkanValid){
+		snprintf(row,sizeof(row),"VULKAN GPU %.2f MS\n",p.gpuVulkanMs); lines += row;
+	}else lines += "VULKAN GPU N/A\n";
+	snprintf(row,sizeof(row),"CPU LIST %.2f PRE %.2f RENDER %.2f MS\n",p.cpuWorldListMs,p.cpuPreRenderMs,p.cpuWorldRenderMs); lines += row;
+	snprintf(row,sizeof(row),"ENTITY LIST VISIBLE %d INVISIBLE %d\n",p.visibleEntities,p.invisibleEntities); lines += row;
+	snprintf(row,sizeof(row),"AUTHORED OCCLUSION %s\n",CRenderer::GetVrOcclusionCullingModeName()); lines += row;
+	const auto o = rw::vulkan::getWorldOcclusionStats();
+	snprintf(row,sizeof(row),"GEOMETRY OCCLUSION %s (CPU)\n",rw::vulkan::getWorldOcclusionEnabled()?"ON":"OFF"); lines += row;
+	snprintf(row,sizeof(row),"TESTED %u CULLED %u VISIBLE %u\n",o.candidates,o.rejected,o.visible); lines += row;
+	snprintf(row,sizeof(row),"FAIL OPEN INVALID %u BUDGET %u\n",o.invalid,o.budget); lines += row;
+	snprintf(row,sizeof(row),"OCCLUDERS %u CELLS L/R %u/%u\n",o.occluders,o.leftCells,o.rightCells); lines += row;
+	snprintf(row,sizeof(row),"OCC BUILD %.3f QUERY %.3f MS\n",o.buildMs,o.queryMs); lines += row;
+	const auto b = rw::vulkan::getOpaqueMeshBatchStats();
+	snprintf(row,sizeof(row),"MESH BATCH %s MERGED %u SAVED %u\n",rw::vulkan::getOpaqueMeshBatchEnabled()?"ON":"OFF",b.merged,b.savedDraws); lines += row;
+	const auto i = rw::vulkan::getStaticInstancesStats();
+	snprintf(row,sizeof(row),"INSTANCING %s GROUPS %u SAVED %u\n",rw::vulkan::getStaticInstancesEnabled()?"ON":"OFF",i.groups,i.savedDraws); lines += row;
+	snprintf(row,sizeof(row),"WORLD BACKFACE %s\n",rw::vulkan::getWorldBackfaceEnabled()?"ON":"OFF"); lines += row;
+	const auto lod = VrWorldLod::GetStats();
+	snprintf(row,sizeof(row),"LOD MODE %d HIGH %u LOWER %u LOD %u\n",VrWorldLod::Mode(),lod.highSelections,lod.lowerSelections,lod.lodSelections); lines += row;
+	GpuPassProfile::Result sample;
+	if(rw::vulkan::getGpuPassProfile(&sample) && sample.status==GpuPassProfile::Complete && sample.geometry){
+		unsigned long long draws=0,triangles=0,alpha=0;
+		for(const auto &pass:sample.geometry->passes){
+			draws+=pass[DrawProfile::Draws]; triangles+=pass[DrawProfile::Triangles]; alpha+=pass[DrawProfile::Alpha];
+		}
+		snprintf(row,sizeof(row),"GPU SAMPLE %llu EVERY %u FRAMES\n",(unsigned long long)sample.frameId,GpuPassProfile::SampleInterval); lines += row;
+		snprintf(row,sizeof(row),"DRAWS %llu TRI %.1fK ALPHA %llu\n",draws,double(triangles)/1000,alpha); lines += row;
+		for(unsigned pass=0;pass<DrawProfile::PassCount;++pass){
+			const auto *c=sample.geometry->passes[pass];
+			if(!c[DrawProfile::Draws]) continue;
+			snprintf(row,sizeof(row),"%s: %u DRAWS %.1fK TRI\n",GpuPassProfile::Name(pass),c[DrawProfile::Draws],double(c[DrawProfile::Triangles])/1000); lines += row;
+		}
+	}else lines += "GPU DRAW SAMPLE N/A - WAITING\n";
+	lines += "CPU COUNTERS: LATEST FRAME; GPU: SAMPLED\n"
+		"MULTIVIEW COMMANDS COUNT ONCE\n"
+		"COMPARE SAME VIEW WITH CULLING OFF\n"
+		"CHECK BOTH EYES FOR MISSING SURFACES\n";
+	snprintf(gRenderingDetails,sizeof(gRenderingDetails),"%s",lines.c_str());
+}
 const char *QuestProfilerGetCaptureStem(){ return gLastCaptureStem.c_str(); }
 void QuestProfilerSetCaptureContext(const char *context){
 	gCaptureContext = context ? context : "";
@@ -887,7 +943,7 @@ UpdateProfilerRecording(bool enabled)
 	if(gRecordingEnabled == enabled)
 		return;
 	gRecordingEnabled = enabled;
-	gProfilerEnabled = gProfilingState.Collecting();
+	gProfilerEnabled = gProfilingState.Collecting() || gDesktopObserver;
 	if(enabled) StartFrameCapture();
 	else gCaptureWriter.Stop();
 	if(gLogFile != nil){
@@ -2216,6 +2272,8 @@ QuestProfilerEndAppFrame(void)
 	gVkBeginOpen = false;
 	gVkEndOpen = false;
 	ResetOpenPhases();
+	// Cache before BeginFrame clears LOD and backend counters; both UIs use it.
+	if(gCaptureDisplayMode == 3 || gDesktopObserver) UpdateRenderingDetails();
 }
 
 void

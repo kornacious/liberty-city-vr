@@ -477,10 +477,12 @@ void Font() {
 } // namespace
 Picture CurrentPicture() { return g.picture; }
 void SetGameOverlay(const unsigned char *pixels, int width, int height,
-                    bool menu) {
+                    bool menu, bool detailedStats) {
   g.overlayPixels.clear();
   g.overlayW = g.overlayH = 0;
   g.menu = menu;
+  if (!ShowGameOverlay(menu, detailedStats, RenderingDetailsVisible()))
+    return;
   if (!pixels || width <= 0 || height <= 0 || width > 2048 || height > 2048)
     return;
   g.overlayW = unsigned(width);

@@ -365,7 +365,8 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 			androidgame::VrDebugPixels(&width, &height);
 		xrvk::setDebugOverlay(pixels, width, height, recordingPixels);
 #ifdef LIBERTYVR_WINDOWS
-        Desktop::SetGameOverlay(pixels,width,height,androidgame::VrMenuConsumesInput());
+        Desktop::SetGameOverlay(pixels,width,height,androidgame::VrMenuConsumesInput(),
+                                androidgame::QuestProfilerGetDisplayMode()==3);
 #endif
 	}
 
@@ -1073,6 +1074,10 @@ int RunWindowsGame(unsigned frameLimit)
     if(!androidgame::PrepareFrontendBeforeFrames()) { androidgame::Shutdown(); xrvk::destroy(); return 1; }
     xrvk::confirmRenderScaleRendererReady(); xrvk::setFrameRenderer(renderGameFrame);
     unsigned frames=0;
+    Desktop::SetRenderingDetailsProvider([](bool visible) -> const char * {
+        androidgame::QuestProfilerSetDesktopObserver(visible);
+        return visible ? androidgame::QuestProfilerRenderingDetails() : nullptr;
+    });
     while(!platform::exitRequested() && !Desktop::QuitRequested() && !androidgame::WantsToQuit() && (!frameLimit || frames<frameLimit)) {
         Desktop::Pump(); Desktop::BeginUi(); Desktop::UpdateGameInput();
         if(!xrvk::pollEvents()) break;
@@ -1081,6 +1086,8 @@ int RunWindowsGame(unsigned frameLimit)
         Desktop::EndUi();
     }
     LOGI("Windows game frames completed: %u",frames);
+    Desktop::SetRenderingDetailsProvider(nullptr);
+    androidgame::QuestProfilerSetDesktopObserver(false);
     xrvk::setFrameRenderer(nullptr);
     // Frontend sprites are static objects. Release their textures while librw
     // still exists, before the Windows CRT runs their destructors at process exit.

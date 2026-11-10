@@ -85,6 +85,7 @@ extern const char *GetVrWeaponName(int weaponType);
 enum {
 	VR_DEBUG_WIDTH = 512,
 	VR_DEBUG_HEIGHT = 482,
+	VR_DETAILS_HEIGHT = 768,
 	VR_FPS_HEIGHT = 128,
 	VR_MINIMAL_HEIGHT = 64,
 	VR_MENU_WIDTH = 1024,
@@ -127,14 +128,14 @@ static const DebugGlyph gDebugGlyphs[] = {
 };
 
 static bool gDebugVisible;
-static uint8 gDebugPixels[VR_DEBUG_WIDTH*VR_DEBUG_HEIGHT*4];
+static uint8 gDebugPixels[VR_DEBUG_WIDTH*VR_DETAILS_HEIGHT*4];
 static uint8 gVrMenuPixels[VR_MENU_WIDTH*VR_MENU_HEIGHT*4];
 #if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
 static QuestNativeSettings::Page *gNativeSettingsPage;
 #endif
 static int gDebugFps;
 // Keep legacy ShowProfiler=1 as the full diagnostic view.
-static int gProfilerDisplayMode; // 0: off, 1: full, 2: minimal
+static int gProfilerDisplayMode; // 0: off, 1: full, 2: minimal, 3: rendering details
 static double gDebugPreviousFrameMs;
 static float gDebugSmoothedFrameMs;
 static bool gTouchRecenterShortcutDown;
@@ -894,7 +895,7 @@ namespace androidgame { const unsigned char *VrRadioGlyph(char character) { retu
 static void
 PutDebugPixel(int x, int y, uint8 red, uint8 green, uint8 blue, uint8 alpha)
 {
-	if(x < 0 || y < 0 || x >= VR_DEBUG_WIDTH || y >= VR_DEBUG_HEIGHT) return;
+	if(x < 0 || y < 0 || x >= VR_DEBUG_WIDTH || y >= VR_DETAILS_HEIGHT) return;
 	// Vulkan images are top-down, same as the desktop's D3D12 branch.
 	const int offset = (y*VR_DEBUG_WIDTH+x)*4;
 	gDebugPixels[offset+0] = red; gDebugPixels[offset+1] = green;
@@ -1385,7 +1386,7 @@ LoadVrSettings(void)
 	// Remembered across launches so a build handed over for testing can
 	// come up already showing it. Off for everyone else.
 	gProfilerDisplayMode = clamp((int)(int32)GetPrivateProfileIntA("VR",
-		"ShowProfiler", 0, ".\\vr_settings.ini"), 0, 2);
+		"ShowProfiler", 0, ".\\vr_settings.ini"), 0, 3);
 	QuestProfilerSetDisplayMode(gProfilerDisplayMode);
 	QuestProfilerSetEnabled(GetPrivateProfileIntA("VR", "ActivePerformanceProfiling", 0, ".\\vr_settings.ini") != 0);
 	gSpatialAaMode = GetPrivateProfileIntA("VR", "AntiAliasing", 1,
@@ -3270,7 +3271,7 @@ VrDebugUpdate(const PadInput &in)
 				SaveViceCityColor();
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_PROFILER){
 				const int direction = decreasePulse ? -1 : 1;
-				gProfilerDisplayMode = (gProfilerDisplayMode+direction+3)%3;
+				gProfilerDisplayMode = (gProfilerDisplayMode+direction+4)%4;
 				QuestProfilerSetDisplayMode(gProfilerDisplayMode);
 				SaveVrInteger("ShowProfiler", gProfilerDisplayMode);
 			}else if(gVrGraphicsSelection == VR_GRAPHICS_CPU_PERFORMANCE){
@@ -4430,6 +4431,7 @@ DrawQuestGraphicsPage(void)
 		"COLOR FILTER  < %s >", gViceCityColorEnabled ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_PROFILER], sizeof(rows[0]),
 		"SHOW FPS AND RENDERING STATS  < %s >",
+		gProfilerDisplayMode == 3 ? "DETAILED" :
 		gProfilerDisplayMode == 2 ? "MINIMAL" :
 		gProfilerDisplayMode == 1 ? "ON" : "OFF");
 	snprintf(rows[VR_GRAPHICS_CPU_PERFORMANCE], sizeof(rows[0]),
@@ -5841,7 +5843,8 @@ VrDebugPixels(int *width, int *height)
 	}
 	*width = gVrMenuVisible ? VR_MENU_WIDTH : VR_DEBUG_WIDTH;
 	*height = gVrMenuVisible ? VR_MENU_HEIGHT :
-		(minimalProfiler ? VR_MINIMAL_HEIGHT :
+		(gProfilerDisplayMode == 3 ? VR_DETAILS_HEIGHT :
+		 minimalProfiler ? VR_MINIMAL_HEIGHT :
 		 profilerVisible ? VR_DEBUG_HEIGHT : VR_FPS_HEIGHT);
 	if(!gDebugVisible && !gVrMenuVisible && !profilerVisible)
 		return nil;
@@ -5870,6 +5873,24 @@ VrDebugPixels(int *width, int *height)
 		DrawDebugText(value, VR_DEBUG_WIDTH/2, 8, 3, 100, 230, 120);
 		snprintf(value, sizeof(value), "FRAME:%.2f MS", gDebugSmoothedFrameMs);
 		DrawDebugText(value, VR_DEBUG_WIDTH/2, 36, 3, 100, 230, 120);
+		return gDebugPixels;
+	}
+
+	if(gProfilerDisplayMode == 3){
+		const char *line = QuestProfilerRenderingDetails();
+		int y = 4;
+		while(*line && y+14 < *height){
+			const char *end = strchr(line, '\n');
+			if(!end) end = line+strlen(line);
+			char row[128];
+			// Wrap to the 512-pixel surface at the normal readable scale.
+			const size_t length = Min((size_t)(end-line), (size_t)41);
+			memcpy(row,line,length); row[length]=0;
+			DrawDebugText(row,VR_DEBUG_WIDTH/2,y,2,140,215,255);
+			y += 19;
+			line += length;
+			if(*line == '\n') ++line;
+		}
 		return gDebugPixels;
 	}
 
