@@ -48,6 +48,7 @@
 #include "VrBodyIK.h"
 #include "QuestHeadCalibration.h"
 #include "VrCheatMenu.h"
+#include "VrCheatWeapons.h"
 #include "VrWeaponCalibrationMenu.h"
 #include "VrCullViz.h"
 #include "VrWorldLod.h"
@@ -2274,15 +2275,7 @@ static void
 ActivateQuestCheatMenuSelection(void)
 {
 	if(gVrCheatCategory < 0){
-		if(gVrCheatCategorySelection == VrCheatMenu::WEAPONS){
-			const int source = VrCheatMenu::SourceIndex(VrCheatMenu::WEAPONS, 0, GetVrCheatCount());
-			const bool activated = source >= 0 && ActivateVrCheat(source);
-			snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
-				activated ? "CHEAT ACTIVATED" : "UNAVAILABLE RIGHT NOW");
-			gVrCheatStatusFrames = 120;
-			ResetMenuNavigationRepeat();
-			return;
-		}else if(gVrCheatCategorySelection == VrCheatMenu::CATEGORY_COUNT){
+		if(gVrCheatCategorySelection == VrCheatMenu::CATEGORY_COUNT){
 			gVrMenuPage = VR_MENU_PAGE_MISSIONS;
 			gVrMissionCategory = -1;
 			gVrMissionCategorySelection = 0;
@@ -2314,8 +2307,9 @@ ActivateQuestCheatMenuSelection(void)
 	}
 	const int source = VrCheatMenu::SourceIndex(gVrCheatCategory,
 		gVrCheatSelection, GetVrCheatCount());
-	if(source < 0) return;
-	const bool activated = ActivateVrCheat(source);
+	if(source < 0 && gVrCheatCategory != VrCheatMenu::WEAPONS) return;
+	const bool activated = gVrCheatCategory == VrCheatMenu::WEAPONS && gVrCheatSelection > 0 ?
+		VrCheatWeapons::Give(FindPlayerPed(), gVrCheatSelection-1) : ActivateVrCheat(source);
 	snprintf(gVrCheatStatus, sizeof(gVrCheatStatus), "%s",
 		activated ? "CHEAT ACTIVATED" : "UNAVAILABLE RIGHT NOW");
 	gVrCheatStatusFrames = 120;
@@ -2399,6 +2393,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_CHEATS:
 		return gVrCheatCategory == VrCheatMenu::VEHICLE_SELECTOR ? SpawnVehiclePageSize()+1 :
 			gVrCheatCategory < 0 ? VrCheatMenu::CATEGORY_COUNT+2 :
+			gVrCheatCategory == VrCheatMenu::WEAPONS ? 1+VrCheatWeapons::Count() :
 			VrCheatMenu::Count(gVrCheatCategory, GetVrCheatCount());
 	case VR_MENU_PAGE_MISSIONS:
 		return Max(1, gVrMissionCategory < 0 ?
@@ -5454,9 +5449,7 @@ DrawQuestCheatPage(void)
 		BeginFullVrMenuPage("CHEATS", "CHOOSE A CATEGORY");
 		for(int item = 0; item < VrCheatMenu::CATEGORY_COUNT+2; ++item){
 			char row[96];
-			if(item == VrCheatMenu::WEAPONS)
-				snprintf(row, sizeof(row), "WEAPONS");
-			else if(item < VrCheatMenu::CATEGORY_COUNT)
+			if(item < VrCheatMenu::CATEGORY_COUNT)
 				snprintf(row, sizeof(row), "%s  < OPEN >",
 					VrCheatMenu::CategoryName(item));
 			else
@@ -5498,7 +5491,8 @@ DrawQuestCheatPage(void)
 		gVrCheatCategory == VrCheatMenu::GENERAL ? "FLIGHT: STICK MOVE / A UP / B DOWN / R2 BOOST" : nullptr);
 	const int cheatCount = VrCheatMenu::Count(gVrCheatCategory,
 		GetVrCheatCount());
-	const int count = cheatCount;
+	const int count = gVrCheatCategory == VrCheatMenu::WEAPONS ?
+		1+VrCheatWeapons::Count() : cheatCount;
 	const int first = count > 0 ?
 		(gVrCheatSelection/VR_CHEAT_ITEMS_PER_PAGE)*
 			VR_CHEAT_ITEMS_PER_PAGE : 0;
@@ -5508,7 +5502,9 @@ DrawQuestCheatPage(void)
 		const int item = first+row;
 		const int source = VrCheatMenu::SourceIndex(gVrCheatCategory,
 			item, GetVrCheatCount());
-		const char *name = GetVrCheatName(source);
+		const char *name = gVrCheatCategory == VrCheatMenu::WEAPONS ?
+			(item == 0 ? "GIVE ALL WEAPONS" : VrCheatWeapons::kWeapons[item-1].name) :
+			GetVrCheatName(source);
 		bool toggleEnabled = false;
 		const bool isToggle = source >= 0 &&
 			GetVrCheatToggleState(source, &toggleEnabled);

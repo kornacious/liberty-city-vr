@@ -145,6 +145,15 @@ static bool IsVrRunWithoutLimitsEnabled() { return false; }
 struct CWanted { static bool bNoWantedCheat; };
 bool CWanted::bNoWantedCheat;
 }
+struct WeaponPlayer {
+ unsigned int ammo[14] = {};
+ bool owned[14] = {};
+ int grants[14] = {};
+ void GiveWeapon(int type, unsigned int amount) { owned[type]=true; ammo[type]+=amount; ++grants[type]; }
+};
+static WeaponPlayer weaponPlayer;
+static bool playerAvailable=true;
+static WeaponPlayer *FindPlayerPed() { return playerAvailable ? &weaponPlayer : nullptr; }
 #include "cheat-menu-production.inc"
 
 static const char *GetVrCheatName(int source)
@@ -246,16 +255,41 @@ int main()
 		Check((int)rows.size() == CATEGORY_COUNT+2, "draw has every root entry");
 		Check(!CycleQuestCheatMenuSelection(1), "cycling root cannot activate a cheat");
 		ActivateQuestCheatMenuSelection();
-		if(category == WEAPONS){
-			Check(rows[category].text == "WEAPONS", "root Weapons row is a direct action");
-			Check(gVrCheatCategory == -1 && gVrCheatCategorySelection == WEAPONS, "Weapons remains at root");
-			Check(activationCount == before+1 && activatedSource == 6, "root Weapons gives the weapon set exactly once");
-			Check(gVrCheatStatusFrames > 0 && std::strcmp(gVrCheatStatus, "CHEAT ACTIVATED") == 0, "root action reports activation");
-			++seen[6];
-			DrawQuestCheatPage();
-			CheckDrawSelection(WEAPONS);
-			continue;
-		}
+        if(category == WEAPONS){
+            Check(rows[category].text == "WEAPONS  < OPEN >", "Weapons row opens submenu");
+            Check(gVrCheatCategory == WEAPONS && activationCount == before, "opening Weapons grants nothing");
+            Check(CurrentMenuItemCount() == 12, "all handheld weapons and all-weapons action fit");
+            DrawQuestCheatPage();
+            Check(rows.size() == 12 && rows[0].text == "GIVE ALL WEAPONS", "original cheat comes first");
+            ActivateQuestCheatMenuSelection();
+            Check(activationCount == before+1 && activatedSource == 6, "Give all weapons calls original cheat once");
+            ++seen[6];
+            bool types[14] = {};
+            for(int item=1; item<CurrentMenuItemCount(); ++item){
+                gVrCheatSelection=item;
+                DrawQuestCheatPage();
+                CheckDrawSelection(item);
+                const auto &entry=VrCheatWeapons::kWeapons[item-1];
+                Check(!types[entry.type], "each weapon appears exactly once");
+                types[entry.type]=true;
+                Check(rows[item].text == entry.name, "weapon row matches granted weapon");
+                ActivateQuestCheatMenuSelection();
+                Check(weaponPlayer.owned[entry.type] && weaponPlayer.ammo[entry.type]==entry.ammo, "first grant obtains weapon with ammo");
+                ActivateQuestCheatMenuSelection();
+                Check(weaponPlayer.grants[entry.type]==2 && weaponPlayer.ammo[entry.type]==entry.ammo*2, "repeat grants same weapon ammo");
+                Check(activationCount==before+1, "individual grant never invokes all-weapons cheat");
+                Check(!CycleQuestCheatMenuSelection(1), "weapon grant cannot repeat through cycling");
+            }
+            for(int type=1; type<=11; ++type) Check(types[type], "every handheld weapon is present");
+            playerAvailable=false;
+            ActivateQuestCheatMenuSelection();
+            Check(std::strcmp(gVrCheatStatus,"UNAVAILABLE RIGHT NOW")==0, "missing player has feedback");
+            playerAvailable=true;
+            Check(!VrCheatWeapons::Give(&weaponPlayer,-1) && !VrCheatWeapons::Give(&weaponPlayer,11), "invalid weapon rows are rejected");
+            ReturnFromCurrentMenuPage();
+            Check(gVrCheatCategory==-1 && gVrCheatCategorySelection==WEAPONS, "Back returns to Weapons category");
+            continue;
+        }
 		Check(gVrCheatCategory == category && gVrCheatSelection == 0, "A opens the chosen category at its first row");
 		Check(activationCount == before, "opening a category never activates its first cheat");
 		Check(CurrentMenuSelection() == &gVrCheatSelection, "submenu has independent row selection");
