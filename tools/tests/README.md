@@ -6,6 +6,13 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-car-invincibility` runs through the manager with `-StageRoot` pointing
+to assembled sources. It compiles the production `Pad.cpp` protection functions
+and covers all 64 native protection flag combinations, disabling, exiting,
+switching vehicles, passenger seats, player loss, deletion and address reuse,
+and boats. Mission/model protection must survive each restoration. No game data
+is used; actual driving, mission vehicles and overlay toggling need headset QA.
+
 `test-scope-overlay-depth.cpp` compiles as C++17 with three extracted production
 includes from `librw/src/vulkan/vkim.cpp`: `scope-overlay-depth-production.inc`
 contains `const bool32 scopeOverlay` through `gstate.zWriteEnabled = savedZWrite;`;

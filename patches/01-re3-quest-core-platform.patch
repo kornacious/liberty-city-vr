@@ -642,7 +642,7 @@ index 2acb7991..1335ef9b 100644
  void BlowUpCarsCheat()
  {
  	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-@@ -348,6 +365,639 @@ void AltDodoCheat(void)
+@@ -348,6 +365,645 @@ void AltDodoCheat(void)
  }
  #endif
  
@@ -788,46 +788,45 @@ index 2acb7991..1335ef9b 100644
 +}
 +
 +static bool gVrCarInvincibilityEnabled = false;
++// The engine clears this registered reference if the vehicle is deleted.
++static CVehicle *gVrInvincibleVehicle = nil;
++static struct {
++	bool canBeDamaged, bulletProof, fireProof, collisionProof, meleeProof, explosionProof;
++} gVrVehicleProtection;
 +
 +static void
-+SetVrCarInvincibility(bool enabled)
++RestoreVrCarProtection(void)
 +{
-+	gVrCarInvincibilityEnabled = enabled;
-+	CVehicle *veh = FindPlayerVehicle();
++	CVehicle *veh = gVrInvincibleVehicle;
 +	if(!veh)
 +		return;
-+	if(enabled){
-+		veh->bCanBeDamaged = false;
-+		veh->bBulletProof = true;
-+		veh->bFireProof = true;
-+		veh->bCollisionProof = true;
-+		veh->bMeleeProof = true;
-+		veh->bExplosionProof = true;
-+		veh->m_fHealth = 1000.0f;
-+		veh->ExtinguishCarFire();
-+		if(veh->m_vehType == VEHICLE_TYPE_CAR){
-+			((CAutomobile*)veh)->Fix();
-+			((CAutomobile*)veh)->Damage.SetEngineStatus(0);
-+		}
-+	}else{
-+		veh->bCanBeDamaged = true;
-+		veh->bBulletProof = (veh->GetModelIndex() == MI_RHINO);
-+		veh->bFireProof = false;
-+		veh->bCollisionProof = false;
-+		veh->bMeleeProof = false;
-+		veh->bExplosionProof = (veh->GetModelIndex() == MI_RHINO);
-+	}
++	veh->bCanBeDamaged = gVrVehicleProtection.canBeDamaged;
++	veh->bBulletProof = gVrVehicleProtection.bulletProof;
++	veh->bFireProof = gVrVehicleProtection.fireProof;
++	veh->bCollisionProof = gVrVehicleProtection.collisionProof;
++	veh->bMeleeProof = gVrVehicleProtection.meleeProof;
++	veh->bExplosionProof = gVrVehicleProtection.explosionProof;
++	gVrInvincibleVehicle = nil;
++	veh->PruneReferences();
 +}
 +
 +static void
 +ApplyVrCarInvincibility(void)
 +{
-+	if(!gVrCarInvincibilityEnabled)
-+		return;
-+	CVehicle *veh = FindPlayerVehicle();
++	CPlayerPed *player = FindPlayerPed();
++	CVehicle *veh = gVrCarInvincibilityEnabled ? FindPlayerVehicle() : nil;
++	if(!player || (veh && veh->pDriver != player))
++		veh = nil;
++	if(veh != gVrInvincibleVehicle)
++		RestoreVrCarProtection();
 +	if(!veh)
 +		return;
-+	if(veh->bCanBeDamaged){
++	if(!gVrInvincibleVehicle){
++		// Preserve actual mission/model protection before the first override.
++		gVrVehicleProtection = {bool(veh->bCanBeDamaged), bool(veh->bBulletProof),
++			bool(veh->bFireProof), bool(veh->bCollisionProof), bool(veh->bMeleeProof), bool(veh->bExplosionProof)};
++		gVrInvincibleVehicle = veh;
++		veh->RegisterReference((CEntity**)&gVrInvincibleVehicle);
 +		if(veh->m_vehType == VEHICLE_TYPE_CAR)
 +			((CAutomobile*)veh)->Fix();
 +	}
@@ -842,6 +841,13 @@ index 2acb7991..1335ef9b 100644
 +	veh->ExtinguishCarFire();
 +	if(veh->m_vehType == VEHICLE_TYPE_CAR)
 +		((CAutomobile*)veh)->Damage.SetEngineStatus(0);
++}
++
++static void
++SetVrCarInvincibility(bool enabled)
++{
++	gVrCarInvincibilityEnabled = enabled;
++	ApplyVrCarInvincibility();
 +}
 +
 +static bool
@@ -1282,7 +1288,7 @@ index 2acb7991..1335ef9b 100644
  bool
  CControllerState::CheckForInput(void)
  {
-@@ -533,7 +1096,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -533,7 +1102,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  			state.WHEELUP = true;
  		}
  	}
@@ -1291,7 +1297,7 @@ index 2acb7991..1335ef9b 100644
  	// It seems there is no way to get number of buttons on mouse, so assign all buttons if we have mouse.
  	double xpos = 1.0f, ypos;
  	glfwGetCursorPos(PSGLOBAL(window), &xpos, &ypos);
-@@ -545,6 +1108,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -545,6 +1114,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  		state.WHEELDN = true;
  		state.WHEELUP = true;
  	}
@@ -1300,7 +1306,7 @@ index 2acb7991..1335ef9b 100644
  #endif
  
  	return state;
-@@ -592,7 +1157,7 @@ void CPad::UpdateMouse()
+@@ -592,7 +1163,7 @@ void CPad::UpdateMouse()
  			NewMouseControllerState = PCTempMouseControllerState;
  		}
  	}
@@ -1309,7 +1315,7 @@ index 2acb7991..1335ef9b 100644
  	if ( IsForegroundApp() && PSGLOBAL(cursorIsInWindow) )
  	{
  		double xpos = 1.0f, ypos;
-@@ -633,6 +1198,8 @@ void CPad::UpdateMouse()
+@@ -633,6 +1204,8 @@ void CPad::UpdateMouse()
  		OldMouseControllerState = NewMouseControllerState;
  		NewMouseControllerState = PCTempMouseControllerState;
  	}
@@ -1318,7 +1324,7 @@ index 2acb7991..1335ef9b 100644
  #endif
  }
  
-@@ -1125,6 +1692,9 @@ void CPad::UpdatePads(void)
+@@ -1125,6 +1698,9 @@ void CPad::UpdatePads(void)
  #else
  	CapturePad(0);
  #endif
@@ -1328,7 +1334,7 @@ index 2acb7991..1335ef9b 100644
  
  	// Improve keyboard input latency part 1
  #ifdef FIX_BUGS
-@@ -1166,6 +1736,9 @@ void CPad::UpdatePads(void)
+@@ -1166,6 +1742,9 @@ void CPad::UpdatePads(void)
  	NewKeyState = TempKeyState;
  #endif
  #endif
@@ -1338,7 +1344,7 @@ index 2acb7991..1335ef9b 100644
  }
  
  void CPad::ProcessPCSpecificStuff(void)
-@@ -1828,6 +2401,12 @@ bool CPad::GetLookBehindForPed(void)
+@@ -1828,6 +2407,12 @@ bool CPad::GetLookBehindForPed(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -1351,7 +1357,7 @@ index 2acb7991..1335ef9b 100644
  	return !!NewState.RightShock;
  }
  
-@@ -2246,6 +2825,11 @@ bool CPad::ChangeStationJustDown(void)
+@@ -2246,6 +2831,11 @@ bool CPad::ChangeStationJustDown(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -1363,7 +1369,7 @@ index 2acb7991..1335ef9b 100644
  	switch (CURMODE)
  	{
  		case 0:
-@@ -2635,6 +3219,11 @@ bool CPad::ForceCameraBehindPlayer(void)
+@@ -2635,6 +3225,11 @@ bool CPad::ForceCameraBehindPlayer(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
