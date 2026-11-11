@@ -11,14 +11,14 @@
 #include <stdexcept>
 namespace {
 void require(bool condition,const char *message) { if(!condition) throw std::runtime_error(message); }
-template<class Predicate> bool waitFor(Predicate predicate) {
-    for(int i=0;i<200;++i) { if(predicate()) return true; std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
+template<class Predicate> bool waitFor(Predicate predicate,int timeoutMs=2000) {
+    for(int i=0;i<timeoutMs/10;++i) { if(predicate()) return true; std::this_thread::sleep_for(std::chrono::milliseconds(10)); }
     return false;
 }
 std::atomic<unsigned> mixedFrames{0};
 int32_t silence(void*,void *data,int32_t frames) { memset(data,0,size_t(frames)*4); mixedFrames+=unsigned(frames); return 0; }
 }
-int main() {
+int main(int argc,char **argv) {
     bool configured=false;
     try {
         wchar_t executable[32768]{}; GetModuleFileNameW(nullptr,executable,32768);
@@ -41,13 +41,49 @@ int main() {
         require(waitFor([] {return mixedFrames>=2048;}),"PCM mixer callback did not execute");
         NativeAudioOutput::Close(); auto completed=mixedFrames.load();
         std::this_thread::sleep_for(std::chrono::milliseconds(30)); require(mixedFrames==completed,"PCM callback continued after Close");
+        require(platform::audioLoadStream(0,path.c_str(),0,false,true),"Autostart stream did not open");
+        // MusicManager checks this on the next frame and abandons a one-shot
+        // (including mission passed) if asynchronous preparation looks finished.
+        require(platform::audioIsStreamPlaying(0),"Pending autostart incorrectly reported as finished");
+        platform::audioSetStreamVolume(0,0,0);
+        require(waitFor([] {return platform::audioGetStreamPosition(0)>100;}),"Autostart stream did not advance");
+        require(platform::audioIsStreamPlaying(0),"One-shot ended prematurely");
+        require(waitFor([] {return !platform::audioIsStreamPlaying(0);}),"One-shot did not finish naturally");
+        platform::audioStopStream(0);
         require(platform::audioLoadStream(0,path.c_str(),0,false,false),"Windows media stream did not open");
+        require(!platform::audioIsStreamPlaying(0),"Preload incorrectly reported as playing");
         platform::audioSetStreamVolume(0,0,0);
         require(waitFor([] { return platform::audioGetStreamDuration(0)>=990; }),"Media stream was not prepared");
         platform::audioPlayStream(0); require(waitFor([] {return platform::audioIsStreamPlaying(0);}),"Media stream did not play");
         require(waitFor([] {return platform::audioGetStreamPosition(0)>0;}),"Media position did not advance");
         platform::audioPauseStream(0,true); require(waitFor([] {return !platform::audioIsStreamPlaying(0);}),"Media stream did not pause");
         platform::audioStopStream(0); require(!platform::audioIsStreamPlaying(0),"Stopped media stream remained active");
+        require(platform::audioLoadStream(0,path.c_str(),0,true,true),"Looped stream did not open");
+        platform::audioSetStreamVolume(0,0,0);
+        require(waitFor([] {return platform::audioGetStreamPosition(0)>100;}),"Looped stream did not advance");
+        for(int i=0;i<130;++i) {
+            require(platform::audioIsStreamPlaying(0),"Loop restart incorrectly reported as finished");
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        platform::audioSetStreamLoop(0,false);
+        require(waitFor([] {return !platform::audioIsStreamPlaying(0);}),"Disabled loop did not finish");
+        platform::audioStopStream(0);
+        // Optional local-only asset check, e.g. the imported Xbox mission cue.
+        // Never copy retail audio into a test fixture or log its contents.
+        if(argc==2) {
+            auto assetDuration=platform::audioProbeDuration(argv[1]);
+            require(assetDuration>1000 && assetDuration<60000,"Local audio duration outside test bounds");
+            auto started=std::chrono::steady_clock::now();
+            require(platform::audioLoadStream(0,argv[1],0,false,true),"Local audio did not open");
+            platform::audioSetStreamVolume(0,0,0);
+            require(platform::audioIsStreamPlaying(0),"Local audio preparation reported as finished");
+            require(waitFor([] {return platform::audioGetStreamPosition(0)>100;}),"Local audio did not advance");
+            require(waitFor([] {return !platform::audioIsStreamPlaying(0);},int(assetDuration)+2000),"Local audio did not finish");
+            auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
+            require(elapsed>=assetDuration-200,"Local audio was truncated");
+            platform::audioStopStream(0);
+            std::cerr<<"Local audio played through its full duration.\n";
+        }
         std::cerr<<"Windows PCM/media checks passed; checking IMA decoder.\n";
         // Two hundred silent stereo IMA blocks, 249 frames per block. This
         // exercises the original game's compressed radio format without assets.

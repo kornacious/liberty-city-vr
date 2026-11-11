@@ -71,7 +71,7 @@ void seek(IMFPMediaPlayer *player,int ms) {
 class MediaCallback final : public IMFPMediaPlayerCallback {
     std::atomic<ULONG> references{1};
 public:
-    std::atomic<bool> loop{false}, play{false}; int startMs=0;
+    std::atomic<bool> loop{false}, play{false}, cancelled{false}; int startMs=0;
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID id,void **out) override {
         if(!out) return E_POINTER; *out=nullptr;
         if(id==__uuidof(IUnknown) || id==__uuidof(IMFPMediaPlayerCallback)) { *out=static_cast<IMFPMediaPlayerCallback*>(this); AddRef(); return S_OK; }
@@ -80,15 +80,17 @@ public:
     ULONG STDMETHODCALLTYPE AddRef() override { return ++references; }
     ULONG STDMETHODCALLTYPE Release() override { auto count=--references; if(!count) delete this; return count; }
     void STDMETHODCALLTYPE OnMediaPlayerEvent(MFP_EVENT_HEADER *event) override {
-        if(FAILED(event->hrEvent)) { std::fprintf(stderr,"Windows media event failed: %08lx\n",event->hrEvent); return; }
+        if(cancelled) return;
+        if(FAILED(event->hrEvent)) { play=false; std::fprintf(stderr,"Windows media event failed: %08lx\n",event->hrEvent); return; }
         if(event->eEventType==MFP_EVENT_TYPE_MEDIAITEM_CREATED) {
             auto created=MFP_GET_MEDIAITEM_CREATED_EVENT(event);
             event->pMediaPlayer->SetMediaItem(created->pMediaItem);
         } else if(event->eEventType==MFP_EVENT_TYPE_MEDIAITEM_SET) {
             if(startMs) seek(event->pMediaPlayer,startMs);
             if(play) event->pMediaPlayer->Play();
-        } else if(event->eEventType==MFP_EVENT_TYPE_PLAYBACK_ENDED && loop && play) {
-            seek(event->pMediaPlayer,0); event->pMediaPlayer->Play();
+        } else if(event->eEventType==MFP_EVENT_TYPE_PLAYBACK_ENDED) {
+            if(loop && play) { seek(event->pMediaPlayer,0); event->pMediaPlayer->Play(); }
+            else play=false;
         }
     }
 };
@@ -162,7 +164,7 @@ bool audioLoadStream(int i,const char *path,int position,bool loop,bool autoStar
 }
 void audioPlayStream(int i) { auto s=stream(i); if(s && s->player) { s->callback->play=true; s->player->Play(); } }
 void audioPauseStream(int i,bool pause) { auto s=stream(i); if(s && s->player) { s->callback->play=!pause; if(pause) s->player->Pause(); else s->player->Play(); } }
-void audioStopStream(int i) { auto s=stream(i); if(s) { if(s->player) { if(s->callback) s->callback->play=false; s->player->Shutdown(); } s->player.Reset(); s->callback.Reset(); } }
+void audioStopStream(int i) { auto s=stream(i); if(s) { if(s->callback) { s->callback->cancelled=true; s->callback->play=false; } if(s->player) s->player->Shutdown(); s->player.Reset(); s->callback.Reset(); } }
 void audioSetStreamVolume(int i,float left,float right) {
     auto s=stream(i); if(s && s->player) {
         float volume=std::clamp(std::max(left,right),0.0f,1.0f); s->player->SetVolume(volume);
@@ -172,7 +174,13 @@ void audioSetStreamVolume(int i,float left,float right) {
 void audioSetStreamLoop(int i,bool loop) { auto s=stream(i); if(s && s->callback) s->callback->loop=loop; }
 int audioGetStreamPosition(int i) { auto s=stream(i); return s ? mediaTime(s->player.Get(),false) : 0; }
 int audioGetStreamDuration(int i) { auto s=stream(i); return s ? mediaTime(s->player.Get(),true) : 0; }
-bool audioIsStreamPlaying(int i) { auto s=stream(i); MFP_MEDIAPLAYER_STATE state=MFP_MEDIAPLAYER_STATE_EMPTY; return s && s->player && SUCCEEDED(s->player->GetState(&state)) && state==MFP_MEDIAPLAYER_STATE_PLAYING; }
+bool audioIsStreamPlaying(int i) {
+    auto s=stream(i);
+    // MF prepares and starts asynchronously. MusicManager interprets false as
+    // end-of-track, so include a requested start (and loop restart) until the
+    // completion/error callback clears it. Preloaded and paused streams stay idle.
+    return s && s->player && s->callback && s->callback->play.load();
+}
 }
 namespace NativeAudioOutput {
 namespace {
