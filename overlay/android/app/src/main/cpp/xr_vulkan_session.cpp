@@ -1,5 +1,6 @@
 #include "xr_vulkan_session.h"
 #include "XrMath.h"
+#include "TheaterAnchor.h"
 #include "VulkanPolicy.h"
 #include "LegacyColour.h"
 #ifdef LIBERTYVR_WINDOWS
@@ -254,9 +255,7 @@ struct State
 	VkPhysicalDeviceFeatures enabledFeatures{};
 	float maxSamplerAnisotropy = 1;
 	bool theaterMode = true;
-	bool theaterAnchorValid = false;
-	XrSpace theaterSpace = XR_NULL_HANDLE;
-	XrPosef theaterPose = {};
+	XrMath::TheaterAnchor theaterAnchor;
 
 	// XR_META_performance_metrics is the authoritative Quest-side app timing
 	// source. Vulkan timestamps remain useful because they isolate this
@@ -2745,8 +2744,7 @@ setTheaterMode(bool enabled)
 {
 	g.theaterMode = enabled;
 	if(!enabled){
-		g.theaterAnchorValid = false;
-		g.theaterSpace = XR_NULL_HANDLE;
+		g.theaterAnchor = {};
 	}
 }
 
@@ -3133,53 +3131,25 @@ renderFrame(void)
 		g.headPoseTrackedForFrame = XR_SUCCEEDED(located) && viewCount == 2 &&
 			g.sessionState == XR_SESSION_STATE_FOCUSED &&
 			(viewState.viewStateFlags & trackedHeadFlags) == trackedHeadFlags;
-		if(XR_SUCCEEDED(located) &&
+		if(XR_SUCCEEDED(located) && viewCount == 2 &&
 		   (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0 &&
 		   (locateControllerPoses(submitSpace,
 		                          frameState.predictedDisplayTime), true) &&
 		   renderLayer(views)){
 
 			if(g.theaterMode){
-				// Latch once on entry. Only yaw is retained, exactly like the
-				// desktop cinema layer, so the screen stays upright and fixed
-				// in the room while the player looks around.
-				if(!g.theaterAnchorValid || g.theaterSpace != submitSpace){
-					XrPosef head = views[0].pose;
-					head.position.x =
-						(views[0].pose.position.x +
-						 views[1].pose.position.x)*0.5f;
-					head.position.y =
-						(views[0].pose.position.y +
-						 views[1].pose.position.y)*0.5f;
-					head.position.z =
-						(views[0].pose.position.z +
-						 views[1].pose.position.z)*0.5f;
-					const XrQuaternionf &q = head.orientation;
-					const float fx = -(2.0f*(q.x*q.z + q.y*q.w));
-					const float fz =
-						-(1.0f - 2.0f*(q.x*q.x + q.y*q.y));
-					const float yaw = atan2f(-fx, -fz);
-					g.theaterPose = {};
-					g.theaterPose.orientation.y = sinf(yaw*0.5f);
-					g.theaterPose.orientation.w = cosf(yaw*0.5f);
-					const float forwardX = -sinf(yaw);
-					const float forwardZ = -cosf(yaw);
-					g.theaterPose.position.x =
-						head.position.x + forwardX*2.0f;
-					g.theaterPose.position.y = head.position.y;
-					g.theaterPose.position.z =
-						head.position.z + forwardZ*2.0f;
-					g.theaterSpace = submitSpace;
-					g.theaterAnchorValid = true;
-				}
-
-				theaterLayer.space = submitSpace;
+				// Latch yaw/eye height only after tracking and focus are ready.
+				// Until then, show an eye-level VIEW-space screen rather than
+				// freezing the startup runtime's provisional floor-level pose.
+				g.theaterAnchor.update(submitSpace, views, viewState.viewStateFlags,
+					g.sessionState == XR_SESSION_STATE_FOCUSED);
+				theaterLayer.space = g.theaterAnchor.layerSpace(g.viewSpace);
 				theaterLayer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
 				theaterLayer.subImage.swapchain = g.swapchain;
 				theaterLayer.subImage.imageRect.extent = {
 					(int32_t)g.renderWidth, (int32_t)g.renderHeight };
 				theaterLayer.subImage.imageArrayIndex = 0;
-				theaterLayer.pose = g.theaterPose;
+				theaterLayer.pose = g.theaterAnchor.layerPose();
 				// Keep the complete 16:9 frame comfortably inside the Quest
 				// binocular field of view. The old 3.2 m quad filled roughly
 				// 77 degrees horizontally at this two-metre distance.
@@ -3187,7 +3157,7 @@ renderFrame(void)
 				theaterLayer.size.height = 1.44f;
 				layers[0] =
 					(const XrCompositionLayerBaseHeader *)&theaterLayer;
-				layerCount = 1;
+				layerCount = theaterLayer.space != XR_NULL_HANDLE ? 1 : 0;
 			}else{
 				for(int eye = 0; eye < 2; eye++){
 					projectionViews[eye] = {

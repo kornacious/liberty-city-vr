@@ -1,4 +1,5 @@
 #include "XrMath.h"
+#include "TheaterAnchor.h"
 #include "VulkanPolicy.h"
 #include "VulkanPlatform.h"
 #include "MirrorPolicy.h"
@@ -12,6 +13,46 @@ void require(bool value, const char *message) { if(!value) throw std::runtime_er
 bool near(float a, float b) { return std::abs(a-b) < 0.0001f; }
 int main() {
     try {
+        const auto stage = reinterpret_cast<XrSpace>(uintptr_t(1));
+        const auto local = reinterpret_cast<XrSpace>(uintptr_t(2));
+        const auto view = reinterpret_cast<XrSpace>(uintptr_t(3));
+        XrMath::TheaterAnchor anchor;
+        XrView eyes[2] = {{XR_TYPE_VIEW}, {XR_TYPE_VIEW}};
+        for(auto &eye : eyes) eye.pose.orientation.w = 1;
+        const XrViewStateFlags validFlags = XR_VIEW_STATE_POSITION_VALID_BIT | XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+        const XrViewStateFlags tracked = validFlags | XR_VIEW_STATE_POSITION_TRACKED_BIT | XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
+        for(auto flags : {XrViewStateFlags(XR_VIEW_STATE_ORIENTATION_VALID_BIT), validFlags,
+                          tracked & ~XR_VIEW_STATE_POSITION_TRACKED_BIT,
+                          tracked & ~XR_VIEW_STATE_ORIENTATION_TRACKED_BIT}) {
+            anchor.update(stage, eyes, flags, true);
+            require(!anchor.valid && anchor.layerSpace(view) == view &&
+                    near(anchor.layerPose().position.y, 0) && near(anchor.layerPose().position.z, -2),
+                    "startup without full tracking stays eye-level in VIEW space");
+        }
+        anchor.update(stage, eyes, tracked, false);
+        require(!anchor.valid, "unfocused startup must not latch a provisional pose");
+        eyes[0].pose.position = {0.968f, 1.7f, 3};
+        eyes[1].pose.position = {1.032f, 1.7f, 3};
+        anchor.update(stage, eyes, tracked, true);
+        require(anchor.valid && anchor.layerSpace(view) == stage &&
+                near(anchor.pose.position.x, 1) && near(anchor.pose.position.y, 1.7f) && near(anchor.pose.position.z, 1),
+                "tracking arrival anchors startup menu at stereo eye height two metres ahead");
+        for(auto &eye : eyes) eye.pose.position.y = 1.2f;
+        anchor.update(stage, eyes, tracked, true);
+        anchor.update(stage, eyes, validFlags, false);
+        require(near(anchor.pose.position.y, 1.7f), "latched menu stays room-fixed through movement and tracking loss");
+        anchor.update(local, eyes, validFlags, true);
+        require(!anchor.valid && anchor.layerSpace(view) == view, "space change discards incompatible room anchor");
+        anchor.update(local, eyes, tracked, true);
+        require(anchor.valid && anchor.space == local && near(anchor.pose.position.y, 1.2f), "new space anchors once tracked");
+        anchor = {};
+        for(auto &eye : eyes) {
+            eye.pose.position.y = 1.8f;
+            eye.pose.orientation = {0, std::sin(0.4f), 0, std::cos(0.4f)};
+        }
+        anchor.update(stage, eyes, tracked, true);
+        require(near(anchor.pose.position.y, 1.8f) && near(anchor.pose.position.x, 1 - 2*std::sin(0.8f)) &&
+                near(anchor.pose.position.z, 3 - 2*std::cos(0.8f)), "menu reentry resets eye height and yaw");
         for(bool menu : {false,true}) for(bool detailed : {false,true}) for(bool diagnostics : {false,true})
             require(Desktop::ShowGameOverlay(menu,detailed,diagnostics) ==
                     !(detailed && diagnostics && !menu),
