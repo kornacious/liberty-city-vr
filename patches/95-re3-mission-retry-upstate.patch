@@ -1,0 +1,24 @@
+--- a/src/save/GenericGameStorage.cpp
++++ b/src/save/GenericGameStorage.cpp
+@@ -1252,7 +1252,11 @@
+ 	if (type != SAVE_TYPE_QUICKSAVE_FOR_MISSION_REPLAY && WaitForSave > CTimer::GetTimeInMilliseconds())
+ 		return false;
+ 	WaitForSave = 0;
+-	if (gGameState != GS_PLAYING_GAME || CTheScripts::IsPlayerOnAMission() || CStats::LastMissionPassedName[0] == '\0') {
++	// Upstate sets the mission flag before MAKE_PLAYER_SAFE_FOR_CUTSCENE.
++	// That command is the replay checkpoint; preserve the flag in its snapshot.
++	const bool missionReplay = type == SAVE_TYPE_QUICKSAVE_FOR_MISSION_REPLAY;
++	if (gGameState != GS_PLAYING_GAME || (!missionReplay && CTheScripts::IsPlayerOnAMission()) ||
++	    CStats::LastMissionPassedName[0] == '\0') {
+ 		DisplaySaveResult(3, CStats::LastMissionPassedName);
+ 		return false;
+ 	}
+@@ -1263,7 +1267,7 @@
+ 	PcSaveHelper.PopulateSlotInfo();
+ 	IsQuickSave = 0;
+ 	DisplaySaveResult(res, CStats::LastMissionPassedName);
+-	return true;
++	return res != 0;
+ }
+ 
+ #if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)

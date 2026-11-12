@@ -5,6 +5,9 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Fixed Upstate Liberty mission retry snapshots being skipped on Quest and
+  PCVR because its scripts set the mission flag before the cutscene checkpoint.
+  Replay saves now preserve that flag; ordinary quicksave restrictions remain.
 - Fixed lowered Porsche-family car horn pitch with Original Xbox audio. The
   shared Quest/PCVR horn path now scales the PC vehicle tuning to the loaded
   sample's authored rate (32 kHz for Xbox versus 11.025 kHz for Classic), while
