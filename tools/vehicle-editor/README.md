@@ -232,9 +232,20 @@ it is 1. Panel X/Y/Z are right/forward/up offsets in the dashboard frame;
 rotations use intrinsic pitch about right, yaw about up, roll about forward.
 DashSize scales the panel offsets and sizes about the dashboard anchor.
 
-For future release defaults, copy an exported template pack to
-`overlay/android/app/src/main/assets/vehicle_placements.bundled.ini` before
-building the APK. The APK refreshes only its bundled baseline. Installed
+Save writes only authored Template-layer fields to `vehicle_placements.template.ini`;
+it does not include values inherited from the bundled baseline. A smaller export
+containing only edited Xbox vehicles is therefore expected.
+
+For future release defaults, merge the exported template over the current
+`overlay/android/app/src/main/assets/vehicle_placements.bundled.ini` by section
+and field. Template fields take priority; retain all other bundled fields,
+including Classic entries. Do not replace the bundle with a partial template or
+concatenate the files (duplicate sections and fields are invalid). Keep personal
+overrides separate from release defaults.
+
+This tracked bundle supplies both targets: Android packages it as an APK asset,
+and the manager copies it to the prepared PCVR data directory when refreshing
+Windows port files. The APK refreshes only its bundled baseline. Installed
 templates, personal settings, game data and saves remain separate.
 The current release baseline includes manually calibrated Classic and Xbox
 wheel/radio entries. Xbox placements, including Speeder, are calibrated for
