@@ -36,6 +36,8 @@ dotnet run --project tools/manager -c Release
 ```
 
 Windows users can double-click `MANAGE.bat`; Linux users run `./MANAGE.sh`.
+The Windows launcher opens a new classic Console Host window so Virtual Desktop
+touch taps reach the TUI; it does not change the system's default terminal.
 Both launchers prefer the published executable in `out/manager-windows` or
 `out/manager-linux`, otherwise they use the .NET 10 SDK. The Linux launcher also
 works from another working directory and forwards command-line arguments.
