@@ -96,12 +96,23 @@ int32_t WritePrivateProfileStringA(const char *section, const char *key,
 
 #if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && !defined(LCVR_PROFILE_API_IMPLEMENTATION)
 #include "MatchedProfile.h"
+#include <string>
+inline std::string LcvrSettingsPath(const char *file) {
+    if(!file || file[0]=='/' || file[0]=='\\' || (file[0] && file[1]==':')) return file?file:"";
+    char path[2048];platform::resolveGamePath(path,sizeof(path),file);return path;
+}
 inline int32_t LcvrProfileInt(const char *section,const char *key,int32_t fallback,const char *file) {
-    return MatchedProfile::Read(section,key,(int32_t)GetPrivateProfileIntA(section,key,fallback,file));
+    const auto path=LcvrSettingsPath(file);
+    return MatchedProfile::Read(section,key,(int32_t)GetPrivateProfileIntA(section,key,fallback,path.c_str()));
 }
 inline int32_t LcvrProfileWrite(const char *section,const char *key,const char *value,const char *file) {
-    return MatchedProfile::Write(section,key,value) ? WritePrivateProfileStringA(section,key,value,file) : 1;
+    const auto path=LcvrSettingsPath(file);
+    return MatchedProfile::Write(section,key,value) ? WritePrivateProfileStringA(section,key,value,path.c_str()) : 1;
+}
+inline uint32_t LcvrProfileString(const char *section,const char *key,const char *fallback,char *out,uint32_t size,const char *file) {
+    const auto path=LcvrSettingsPath(file);return GetPrivateProfileStringA(section,key,fallback,out,size,path.c_str());
 }
 #define GetPrivateProfileIntA LcvrProfileInt
 #define WritePrivateProfileStringA LcvrProfileWrite
+#define GetPrivateProfileStringA LcvrProfileString
 #endif

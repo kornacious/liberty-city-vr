@@ -1,75 +1,82 @@
-# Classic and Original Xbox asset sources on Quest
+# Complete PC and Original Xbox variants
 
-**Appearance > Asset Source** offers **Classic** (the base PC installation) and **Original Xbox**.
-Original Xbox replaces the previous Modern (Xbox Version HD) profile. Its internal
-setting remains `ModelSet=1` and its storage folder remains `modelsets/modern` for
-compatibility. All world, vegetation, vehicle, pedestrian and weapon assets switch
-together, along with sound effects, speech, ambience and all nine radio stations.
-Fully close and restart the application after changing the source. The active
-audio source is displayed separately from the requested source so pending restart
-changes are clear. Custom music and saves are independent of this choice.
+See the [implementation validation record](ASSET_VARIANTS_VALIDATION.md) for the
+automated checks, confirmed Quest menus/opening scene and remaining acceptance scope.
 
-While Body IK controls Claude's arms, his opening prison jumpsuit keeps its own
-hand models with either asset source. Changing into his regular outfit restores
-the VR hand meshes automatically; no setting change or restart is needed.
+The shared Quest and Windows PCVR engine selects one complete game variant before
+loading assets. Installations live in `variants/pc` and `variants/xbox` below the
+game-data directory. An Xbox installation does not require a PC installation and
+never borrows missing files from it. `ModelSet=0` means PC; the persisted value
+`ModelSet=1` means Original Xbox. The old internal enum name is retained for
+settings compatibility; new installations do not use `modelsets/modern`.
 
-## Import from your own disc image
+In **Build and install**, select the target and enable **Install PC variant**,
+**Install Original Xbox variant**, or both. Each checkbox enables its folder or
+ISO field. PC requires a complete local PC installation; Xbox requires the user's
+local GTA III **Original Xbox US 1.0** `.iso`/`.xiso.iso`. The application builds
+once for the target and each selected variant is prepared independently. Neither
+checkbox means an application-only update. **Build only** skips data preparation
+and deployment. Original game files and conversion products remain local.
 
-Open **Original Xbox assets** in the .NET 10 Manager. Select your local GTA III
-**US 1.0 original Xbox** `.iso` or `.xiso.iso`, choose an output folder named
-`modern` (or leave it blank), and select **Perform**. **Build only** prepares and
-validates the local output without discovering or transferring to a headset.
+**Appearance > Asset Source** selects PC or Original Xbox and requires a full
+restart. The sole complete source is selected automatically. When both exist, the
+saved selection wins; when a requested source becomes incomplete, the remaining
+complete source is selected. An unavailable source is identified as **PC/Xbox base
+not installed**. If neither source is usable, an asset-independent startup notice
+explains how to install one before game rendering begins.
 
-The Manager never downloads a game image, game assets or a replacement mod pack.
-An ISO is required for each preparation run. Old saved extracted-source or download
-options are rejected; clear them in the action settings if upgrading from a legacy
-request. The current page clears those obsolete options when opened.
+Settings, saves, custom music, skins and mod storage remain outside variant
+content. Existing legacy PC data is recognized as a separate PC source until
+reimported. Old visual/audio Xbox overlays are preserved but are not complete
+variants: reimport the ISO through Build and install. No application uninstall,
+save deletion or original-data replacement is part of this migration.
 
-Conversion requires FFmpeg/ffprobe, CMake 3.22+, Ninja and a C++17 compiler. Windows uses Visual
-Studio C++ Build Tools; Linux uses the installed C/C++ toolchain. The bundled
-librw source and MIT-licensed lzokay decoder are compiled locally. Python and
-extract-xiso are not required. The image is opened read-only; the built-in XDVDFS
-reader supports a full Xbox DVD game partition and trimmed XISO layouts.
+## Preparation and integrity
 
-The importer verifies file sizes and SHA256 values against the supported retail
-baseline in `tools/modelsets/xbox-disc.json`. It identifies the asset revision by
-file content, so repacking the same files into an XISO does not invalidate it.
-Other regions, revisions and modified images fail before conversion. The Xbox
-executable is fingerprinted for identification and is never installed or executed.
+The importer reads full Xbox DVD and trimmed XISO layouts directly through the
+read-only XDVDFS reader. It fingerprints the supported executable and all consumed
+retail inputs against `tools/modelsets/xbox-disc.json`; the executable is never
+installed or run. Unsupported or modified revisions fail before conversion. It
+never downloads a game image or replacement asset pack.
 
-## Preparation and installation
+Conversion requires FFmpeg/ffprobe, CMake 3.22+, Ninja and a C++17 compiler. The
+bundled librw and MIT-licensed lzokay decoder are built locally. Xbox LZO wrappers
+are decompressed, native geometry becomes portable RenderWare geometry, and native
+textures become D3D8 TXDs. Dimensions, mip levels, skinning and supported materials
+are retained. Output models and dictionaries are reopened for structural checks.
+Claude's `playa5` texture is exported to `models/generic/player.bmp`.
 
-Default output: `<workplace>/original-xbox/modelsets/modern`. Generated temporary
-source copies are local and cleaned after success, failure or cancellation. The
-converter decompresses the archive's Xbox LZO wrappers, converts native geometry
-into portable RenderWare geometry, and converts native textures to D3D8 TXDs.
-It retains original texture dimensions and mip levels; DXT textures use librw's
-compressed conversion path. There is no HD replacement, resolution cap, texture
-recompression or HD-mod wheel repair. Node names, skinning, UVs and supported
-RenderWare material effects are carried through librw's serializers. Every output
-model and dictionary is reopened for structural validation before activation.
+The complete Xbox variant includes the disc mission script, gameplay/path data,
+vehicle and world collision, standard animations and cutscene archives, text,
+converted models/textures, particles, Neo resources and converted audio. The
+`rwfilemaker.rws` tool marker and unused console executable/UI runtime are omitted.
+See the [dependency audit](XBOX_STANDALONE_DEPENDENCY_AUDIT.md) for the evidence and
+scope of compatibility.
 
-Claude's `playa5` texture is exported as `models/generic/player.bmp` for re3's
-player-skin renderer. Matching Xbox `data/default.ide`, map IDE/IPL/COL files,
-shared textures, loose models and archive entries accompany the profile.
-The retail archive's `rwfilemaker.rws` tool marker is omitted.
+Our custom settings layout remains in use. Missing legacy frontend icons have
+port-owned generated replacements; Xbox radio choices use numbered badges with
+station labels rather than the original PC station-logo textures. The port's
+settings backgrounds and controller resources accompany each variant. Required
+port menu keys are merged into each supported Xbox GXT without replacing existing
+Xbox strings. Unsupported extra locales are not imported as playable translations.
+This does not reproduce the original Xbox animated frontend.
 
-A checksummed manifest covers the complete generated output. A staged replacement
-is verified before it replaces an existing marked output. Unmarked folders are
-refused. Installation verifies every uploaded file and activates the complete
-folder with rollback on activation failure. Base PC data and saves are preserved.
-Old HD overlays are preserved until a successful replacement; the new game build
-falls back to Classic while only an old HD overlay is installed.
+Preparation uses unique local directories under `<workplace>/prepared-variants`.
+Each variant has a full SHA256 inventory, plus `VARIANT_INFO.txt` with its identity
+and file sizes. Sources and staged copies are checked before activation; Quest
+uploads are also checked remotely. Activation replaces only a marked variant and
+retains previous versions in sibling backups. Startup checks the complete runtime
+inventory for missing/size-changed files. Quest activation is performed by the
+app-owned storage bridge, since scoped storage can reject shell chmod/rename.
+Reinstall a selected variant to repair it; same-size corruption is detected by manager checksum validation, not startup's
+size check. The other variant and shared user state are preserved.
 
 ## Scope and acceptance
 
 ### Audio comparison
 
-Reimport the ISO with the updated Manager to add audio to an existing Xbox
-visual collection. Older visual-only collections still work, with Classic audio;
-the menu identifies this and asks for reimport. No base PC audio is overwritten.
-The entire audio inventory is checked at startup. An incomplete collection uses
-Classic audio as a whole rather than mixing an Xbox bank with PC speech/radio.
+The entire Xbox audio inventory is prepared and installed with its complete
+variant. No PC audio fallback is needed or selected for an Xbox installation.
 
 The Manager fingerprints all 197 retail audio files. It decodes Xbox ADPCM sound
 effects to mono PCM16 and rebuilds the SDT offsets, lengths and loop points while
@@ -81,12 +88,11 @@ between every source and FLAC output before the
 staged collection can replace an existing output. Generated audio is included in
 the checksummed installation manifest and atomic installation/rollback workflow.
 
-Xbox FLAC streams take precedence over the base PC WAV/MP3 and compressed radio
-siblings only when Xbox is active. Classic uses the existing base installation,
+Xbox FLAC streams are used only when Xbox is active. PC uses its own complete installation,
 including any previously converted PC radio. FLAC streams play through Android's
 media framework; their exact durations are read from STREAMINFO at startup.
 
-To compare, select Classic, fully restart, and listen to a repeatable scene or
+To compare, select PC, fully restart, and listen to a repeatable scene or
 station. Select Original Xbox and fully restart before repeating it at the same
 volume. This changes visuals as well as audio. The import preserves the decoded
 retail sources; it does not assert that every Xbox sound is better. All nine Xbox
@@ -111,7 +117,7 @@ be switched live. It enables authored second-UV world lightmaps, skinned-charact
 rim lighting, the 13 road-gloss masks, and vehicle diffuse/specular/Fresnel tuning.
 Hour and weather blending use the three retail tuning tables. The Manager
 fingerprints the raw inputs, converts the DDS effect textures to a portable TXD,
-and writes a bounded binary tuning table. Classic never enables these effects.
+and writes a bounded binary tuning table. PC never enables these effects.
 Physical scopes capture and replay each draw's lightmap/gloss descriptors too.
 
 **XBOX RAIN DROPLETS** is a separate opt-in, off by default. This uses the retail
@@ -131,19 +137,17 @@ console pixel parity and performance acceptance require headset comparison.
 Effects require both the updated APK and the newly prepared asset collection.
 Neo controls apply live; Asset Source changes still require a full restart.
 
-PC mission scripts, handling/gameplay data, save formats, cutscene animation
-archives and the Quest frontend remain on the existing foundation. Xbox ANM
-cutscene-hand extensions and the Xbox console frontend are not imported. Original
-Xbox actor models are included, but exact console cutscene presentation is outside
-this importer. PC vehicle collision remains active, including train/boat records.
-The inspected retail `anim/ped.ifp`, `anim/cuts.img` and `anim/cuts.dir` are
-byte-identical between Xbox and PC; copying them would not change animations.
-Xbox's extra cutscene hand models/ANM/XML remain outside the supported runtime.
+Xbox missions, gameplay data, collision and standard animations come from the ISO.
+The inspected standard animation archives and collision files match the local PC
+specimen byte for byte; the script has the same structure with one integer-value
+difference. Xbox ANM hand animation and console cutscene-hand XML are outside the
+supported runtime. Port-generated saves retain the engine's existing format;
+importing original Xbox console saves is not supported.
 Existing Xbox calibration offsets are selected as a starting point and need visual
 verification against the retail models in VR.
 
 The first-person camera recognizes Xbox Claude through his posed skin hierarchy,
-including its head and torso bones. Classic retains its rigid-frame eligibility
+including its head and torso bones. PC retains its rigid-frame eligibility
 rules. Original Xbox first-person gameplay derives camera position from the
 native head bone, including train boarding, standing passengers, vehicle
 transitions, crouching and knockdowns. The pose is captured before VR IK/head
@@ -158,7 +162,7 @@ transitions still follow the live head immediately. Eye placement uses the Xbox
 head/body fit settings described below, without legacy seat/train offsets or
 crouch/knockdown easing. Existing
 seat calibration is bypassed in this mode; tracked headset movement and stereo
-eyes remain relative to the bone anchor. Classic and third-person retain their
+eyes remain relative to the bone anchor. PC and third-person retain their
 existing camera paths.
 
 For Original Xbox train passengers, the camera follows the authored boarding
@@ -174,7 +178,7 @@ lock until the exit state ends, including after vehicle occupancy clears. The
 ordinary on-foot camera then resumes, with Claude and its gameplay heading
 initialized to the same outward direction after native exit placement. During
 boarding and alighting, connected native animated hands replace the tracked VR
-hands; tracking resumes when the animation state ends. Classic train behavior
+hands; tracking resumes when the animation state ends. PC train behavior
 is unchanged.
 
 Head hiding, body IK, tracked weapons and holsters share the resulting view
@@ -191,7 +195,7 @@ Extra physical crouch is limited by leg length and does not add lowering already
 supplied by the game's crouch animation. Recenter while comfortably upright to
 establish the physical reference. This layer does not change the camera, collision
 capsule or game crouch rules. Vehicles, train passengers, jumps, transitions and
-knockdowns retain their existing handling. Classic retains its existing solver.
+knockdowns retain their existing handling. PC retains its existing solver.
 The body uses the camera's pre-eye-offset anatomical head target, then adds live
 tracked displacement. Spine reach is resolved by moving the pelvis rather than
 pulling the head short of that target. This also keeps backwards leaning from
@@ -213,7 +217,7 @@ collision-checked substeps over static ground, preserve native velocity and upda
 animated bones. The tracking origin consumes accepted horizontal movement to
 prevent double camera motion. Paused/disabled controls, vehicles, airborne and
 incapacitated states do not transfer roomscale into gameplay movement. This root
-synchronization also works with Body IK disabled; Classic behavior is unchanged.
+synchronization also works with Body IK disabled; PC behavior is unchanged.
 
 Button crouch is a separate fixed Xbox stance: toggle to lower the camera 45 cm
 vertically from its standing reference, keeping its horizontal position. Physical
@@ -238,7 +242,7 @@ the standing view. Head rotation remains tracked. HEAD BONE view follows native
 head orientation only while down/getting up; routine walking retains the level
 comfort orientation. The existing Locomotion KNOCKDOWN VIEW row controls the same
 Xbox option. Busted letterboxing alone does not select the director/theater camera;
-formal cutscenes retain their existing ownership. Classic retains its prior
+formal cutscenes retain their existing ownership. PC retains its prior
 knockdown settings and movement policy.
 
 Host checks and complete compilation do not establish visual headset acceptance.

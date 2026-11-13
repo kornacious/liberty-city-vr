@@ -31,27 +31,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 else if (options.MusicRevision.Length == 0) log.Write("No imports or playlist changes selected. Use Refresh to load the headset library.");
                 break;
             case ManagerAction.InstallModernModels:
-                if(!Enum.IsDefined(options.Target))throw new InvalidDataException("Select a valid game target.");
-                if(options.Target==GameTarget.WindowsPcvr)
-                    PcvrXboxAssets.ValidateOutput(settings,string.IsNullOrWhiteSpace(options.ModelOutput)?Path.Combine(settings.Workplace,"original-xbox/modelsets/modern"):Path.GetFullPath(options.ModelOutput));
-                var models = new ModernModels(settings, runner, log);
-                string output;
-                if(options.UsePreparedModels) {
-                    output=string.IsNullOrWhiteSpace(options.ModelOutput)?Path.Combine(settings.Workplace,"original-xbox/modelsets/modern"):Path.GetFullPath(options.ModelOutput);
-                    OriginalXboxModels.ValidateOverlay(output);
-                    log.Write("Prepared Original Xbox overlay verified locally; ISO conversion skipped.");
-                } else output = await models.Prepare(options, token);
-                if (!options.BuildOnly)
-                {
-                    if(options.Target==GameTarget.WindowsPcvr) {
-                        PcvrXboxAssets.Install(settings,output,token);
-                        log.Write("Original Xbox visuals and audio installed in isolated PCVR data. Select Original Xbox under Appearance > Asset Source and restart. Existing placements and saves preserved.");
-                    } else {
-                        var device = await Connect(token) ?? throw new IOException("Models built, but no eligible Quest 3 is available for installation.");
-                        await models.Install(device, output, token);
-                    }
-                }
-                break;
+                throw new InvalidDataException("Original Xbox installation is now part of BuildAndInstall. Set InstallXboxVariant and XboxIsoPath in the request.");
             case ManagerAction.RepairGameFiles: await Repair(options, token); break;
             case ManagerAction.ManageMods:
                 if (!Enum.IsDefined(options.Target)) throw new InvalidDataException("Select a valid game target.");
@@ -114,7 +94,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         if (updateOnly && File.Exists(Path.Combine(settings.Repository, "tools/update-required-assets.txt")))
             throw new IOException("This version needs updated bundled assets. Use Build and install instead of Update.");
         // Validate requested retail inputs before changing anything on a device.
-        var gameDirectories = options.CopyGameData && !options.BuildOnly && !updateOnly ? ValidateGameDirectory(settings.GameDirectory) : [];
+        if(!options.BuildOnly && !updateOnly) VariantInstaller.ValidateSource(settings,options);
         await tools.EnsureJava(token);
         await tools.EnsureSdk(options.AcceptSdkLicenses, token);
         var git = await tools.Git(token);
@@ -123,6 +103,9 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         if (Directory.Exists(assembled) || File.Exists(assembled)) assembled += "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
         log.Write("Assembling private Quest source. Previous build directories are preserved.");
         await Assemble(settings.Repository, source, assembled, git, runner, log, token);
+        var variants = !options.BuildOnly && !updateOnly
+            ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token)
+            : new Dictionary<string,string>();
         var gradle = await tools.Gradle(token);
         var variant = options.Release ? "release" : "debug";
         await runner.Run(tools.Java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradle", "-classpath",
@@ -141,12 +124,12 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         if (updateOnly) { log.Write("Update complete. Launch the game from the headset when ready."); return; }
         await device.Bootstrap(token);
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
-        if (options.ConvertRadioStations)
+        if (options.ConvertRadioStations && !VariantInstaller.WantsAny(options))
             await new RadioStations(settings, runner, log).ConvertAndInstall(device,
-                options.CopyGameData ? gameDirectories.Single(d => Path.GetFileName(d).Equals("Audio", StringComparison.OrdinalIgnoreCase)) : null, token);
-        foreach (var directory in gameDirectories)
-            await PushGameTree(device, directory, Path.GetFileName(directory), token, options.ConvertRadioStations);
-        await CopyPortAssets(device, Path.Combine(assembled, "gamefiles"), includeHands: true, token);
+                null, token);
+        foreach(var (id,prepared) in variants) await VariantInstaller.InstallQuest(device,id,prepared,token);
+        // Preserve the legacy-root repair path for application-only updates.
+        if(variants.Count==0) await CopyPortAssets(device,Path.Combine(assembled,"gamefiles"),includeHands:true,token);
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
         log.Write("Installation complete. Launch Liberty City VR from the headset.");
     }
@@ -258,6 +241,10 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         foreach (var relative in PortAssets(false))
             if (!File.Exists(Paths.Child(source, relative))) throw new IOException("Selected gamefiles directory lacks " + relative);
         var device = await Connect(token) ?? throw new IOException("Repair needs an authorized Quest 3.");
+        var variants=await device.Shell("test -f "+QuestDevice.Quote(QuestDevice.GameData+"/variants/MANAGED.txt")+" && echo COMPLETE_VARIANTS",token,check:false);
+        if(variants.Output.Contains("COMPLETE_VARIANTS",StringComparison.Ordinal)) {
+            log.Write("Repair complete variants through Build and install: select the PC/Xbox variant to reinstall. The other variant and saves are preserved.");return;
+        }
         await device.Shell("test -f " + QuestDevice.Quote(QuestDevice.GameData + "/models/gta3.img"), token);
         await device.Bootstrap(token);
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);

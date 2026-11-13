@@ -165,6 +165,35 @@ static void convert(const fs::path &input,const fs::path &output) {
 int main(int argc,char **argv) {
     try {
         if(argc==2 && std::strcmp(argv[1],"--self-test")==0) {decoderTest();return 0;}
+        if(argc==3 && std::strcmp(argv[1],"--frontend")==0) {
+            // Port-owned fallback artwork, independent of retail PC menu art.
+            // Settings layout, fonts and backgrounds remain in the presenter.
+            init();auto dict=rw::TexDictionary::create();
+            const char *names[]={"fe2_mainpanel_ul","fe2_mainpanel_ur","fe2_mainpanel_dl","fe2_mainpanel_dr","fe2_mainpanel_dr2",
+                "fe2_tabactive","fe_iconbrief","fe_iconstats","fe_iconcontrols","fe_iconsave","fe_iconaudio","fe_icondisplay",
+                "fe_iconlanguage","fe_controller","fe_controllersh","fe_arrows1","fe_arrows2","fe_arrows3","fe_arrows4",
+                "fe_radio1","fe_radio2","fe_radio3","fe_radio4","fe_radio5","fe_radio6","fe_radio7","fe_radio8","fe_radio9"};
+            const char *digits[]={"010110010010111","110001010100111","110001010001110","101101111001001","111100110001110",
+                "011100110101010","111001010010010","010101010101010","010101011001110"};
+            for(const char *name:names) {
+                auto image=rw::Image::create(64,64,32);image->allocate();
+                const bool radio=std::strncmp(name,"fe_radio",8)==0;
+                const bool arrow=std::strncmp(name,"fe_arrows",9)==0;
+                for(int y=0;y<64;y++)for(int x=0;x<64;x++) {
+                    auto pixel=image->pixels+y*image->stride+x*4;
+                    bool mark=false;
+                    if(radio&&x>=20&&x<44&&y>=12&&y<52)mark=digits[name[8]-'1'][(y-12)/8*3+(x-20)/8]=='1';
+                    else if(arrow)mark=x>=16&&x<48&&std::abs(y-32)<(x-16)/2;
+                    else if(!radio)mark=x<2||x>61||y<2||y>61;
+                    pixel[0]=mark?230:16;pixel[1]=mark?169:24;pixel[2]=mark?64:32;pixel[3]=radio||mark?255:200;
+                }
+                auto raster=rw::Raster::createFromImage(image,rw::PLATFORM_D3D8);image->destroy();
+                if(!raster)throw std::runtime_error("Cannot create frontend raster");
+                auto texture=rw::Texture::create(raster);std::strcpy(texture->name,name);texture->setFilter(rw::Texture::LINEAR);dict->add(texture);
+            }
+            rw::StreamFile output;if(!output.open(argv[2],"wb"))throw std::runtime_error("Cannot write frontend dictionary");
+            dict->streamWrite(&output);output.close();dict->destroy();verify(argv[2]);return 0;
+        }
         if(argc==4 && std::strcmp(argv[1],"--neo")==0) {
             init(); auto dict=rw::TexDictionary::create();unsigned count=0;
             for(auto &entry:fs::directory_iterator(argv[2])) {

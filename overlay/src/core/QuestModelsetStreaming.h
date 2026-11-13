@@ -31,7 +31,7 @@ QuestOverlayEntrySelected(const char *directory, const char *entry)
     using namespace ModelSets;
     const eModelSet set = IsXboxAssetPath(directory) ? MODEL_SET_XBOX :
         IsModernAssetPath(directory) ? MODEL_SET_MODERN : MODEL_SET_CLASSIC;
-    if(set == MODEL_SET_CLASSIC) return true; // Always keep retail fallbacks.
+    if(set == MODEL_SET_CLASSIC) return true; // Selected PC or a separately ranked mod archive.
     char name[24];
     strncpy(name, entry, sizeof(name)-1);
     name[sizeof(name)-1] = '\0';

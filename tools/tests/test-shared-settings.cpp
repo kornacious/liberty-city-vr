@@ -46,9 +46,11 @@ using HANDLE=int;
 static constexpr int INVALID_HANDLE_VALUE=0;
 struct WIN32_FIND_DATA {char cFileName[260];};
 static std::vector<std::string> skinFiles;
+static std::string skinPattern;
+namespace platform { char *resolveGamePath(char *out,size_t size,const char *relative){std::snprintf(out,size,"/shared/%s",relative);return out;} }
 static size_t skinIndex;
 bool FindNextFile(HANDLE,WIN32_FIND_DATA *data){if(skinIndex==skinFiles.size())return false;std::strcpy(data->cFileName,skinFiles[skinIndex++].c_str());return true;}
-HANDLE FindFirstFile(const char*,WIN32_FIND_DATA *data){skinIndex=0;return FindNextFile(1,data)?1:0;}
+HANDLE FindFirstFile(const char *pattern,WIN32_FIND_DATA *data){skinPattern=pattern;skinIndex=0;return FindNextFile(1,data)?1:0;}
 void FindClose(HANDLE){}
 
 enum {MENUPAGE_OPTIONS=1,MENUPAGE_START_MENU=2,MENUPAGE_PAUSE_MENU=3,NUM_MENUROWS=18};
@@ -96,6 +98,7 @@ int main()
     installed.clear(); LanguageAction(Language,1);Check(FrontEndMenuManager.m_PrefsLanguage==0,"missing resources preserve working language");
     LanguageAction(Subtitles,1);Check(!FrontEndMenuManager.m_PrefsShowSubtitles,"subtitles update saved engine preference");
     CycleSkin(1);Check(std::strcmp(SkinName(),"DEFAULT")==0,"empty skins folder keeps default");
+    Check(skinPattern=="/shared/skins/*.bmp","skin discovery stays outside the selected content variant");
     skinFiles={"z.bmp","a.bmp"};CycleSkin(1);
     Check(std::strcmp(SkinName(),"a")==0&&CWorld::Players[0].changes==0,"skin selection is sorted and safe before game init");
     FrontEndMenuManager.m_bGameNotLoaded=false; CycleSkin(-1);

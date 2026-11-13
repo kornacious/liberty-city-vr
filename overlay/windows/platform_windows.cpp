@@ -3,6 +3,7 @@
 #include "platform_android.h"
 #include "NativeAudioOutput.h"
 #include "WaveDecode.h"
+#include "AssetVariants.h"
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfplay.h>
@@ -109,8 +110,13 @@ int mediaTime(IMFPMediaPlayer *player,bool duration) {
 namespace platform {
 bool configureWindows(const std::string &data,const std::string &user) {
     if(!std::filesystem::is_regular_file(std::filesystem::u8path(data)/".libertyvr-pcvr-data")) return false;
-    if(!std::filesystem::is_directory(std::filesystem::u8path(data)/"models") ||
-       !std::filesystem::is_directory(std::filesystem::u8path(data)/"data")) return false;
+    std::string content=data;
+    if(std::filesystem::is_directory(std::filesystem::u8path(data)/"variants")) {
+        const int selected=assetvariants::Select(data);if(selected<0)return false;
+        content=assetvariants::ContentRoot(data,selected);
+    }
+    if(!std::filesystem::is_directory(std::filesystem::u8path(content)/"models") ||
+       !std::filesystem::is_directory(std::filesystem::u8path(content)/"data")) return false;
     dataRoot=std::filesystem::absolute(std::filesystem::u8path(data)).u8string();
     userRoot=std::filesystem::absolute(std::filesystem::u8path(user)).u8string();
     std::filesystem::create_directories(std::filesystem::u8path(userRoot));
@@ -131,7 +137,7 @@ void startStallWatchdog() {}
 const char *storageRoot() { return userRoot.c_str(); }
 const char *gameDataRoot() { return dataRoot.c_str(); }
 char *resolveGamePath(char *out,size_t capacity,const char *relative) {
-    std::string path=(std::filesystem::u8path(dataRoot)/std::filesystem::u8path(relative)).u8string();
+    std::string path=assetvariants::Resolve(dataRoot,relative);
     if(path.size()+1>capacity) { if(capacity) *out=0; return out; }
     memcpy(out,path.c_str(),path.size()+1); return out;
 }

@@ -28,9 +28,7 @@ int main()
  using namespace ModelSets;
  auto root=std::filesystem::temp_directory_path()/("lcvr-upstate-source-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
  QuestUpstate::root=root.generic_string();
- for(const char *name:{"models/gta3.img","models/gta3.dir","data/maps/landne/landne.ipl","data/maps/landsw/landsw.ipl","data/maps/generic.ide","models/coll/generic.col"})
-  touch(root/"modelsets/modern"/name);
- touch(root/"modelsets/modern/BUILD_INFO.txt","Source=ORIGINAL_XBOX_US_1_0\n");
+ variant(root,0);variant(root,1);
  settings={{"ModelSet",1}};reset(root);
  require(GetActive()==MODEL_SET_MODERN&&GetRequested()==MODEL_SET_MODERN,"Upstate honors saved Xbox source");
  require(GetCalibrationSetForCategory(MODEL_CATEGORY_PEDS)==MODEL_SET_XBOX,"Xbox rig calibration stays active");
@@ -41,7 +39,7 @@ int main()
  for(const char *name:{"data/maps/generic.ide","data/maps/generic.ide "," \tDATA\\MAPS\\GENERIC.IDE\r\n","models/coll/generic.col"})
   require(IsModernAssetPath(ResolveAssetPath(name,out,sizeof(out))),"remaining definitions and collisions use Xbox, including DAT whitespace");
  const char *base="data/maps/comse/missing.col";
- require(ResolveAssetPath(base,out,sizeof(out))==base,"missing Xbox files retain base fallback");
+ require(std::string(ResolveAssetPath(base,out,sizeof(out))).find("variants/xbox/")!=std::string::npos,"missing Xbox files remain scoped to Xbox base");
  const char *save="userfiles/upstate-liberty-1.1.2/GTA3sf1.b";
  require(ResolveAssetPath(save,out,sizeof(out))==save,"save paths never become asset overrides");
  SetRequested(MODEL_SET_CLASSIC);
@@ -53,7 +51,7 @@ int main()
  require(GetActive()==MODEL_SET_MODERN&&!IsRestartRequired(),"Xbox source can be re-enabled with Upstate active");
 
  std::string mod=QuestUpstate::root+"/mods/upstate-liberty/data/maps/UL/ul.dir";
- std::string xbox=(root/"modelsets/modern/models/gta3.dir").generic_string();
+ std::string xbox=(root/"variants/xbox/models/gta3.dir").generic_string();
  const std::string baseDir="models/gta3.dir";
  require(GetArchivePriority(mod.c_str())==2&&GetArchivePriority(xbox.c_str())==1&&GetArchivePriority(baseDir.c_str())==0,"archive layers identify mod, Xbox and base");
  require(GetArchivePriority((QuestUpstate::root+"/mods/upstate-liberty-other/ul.dir").c_str())==0,"similar package prefix is not a mod archive");
@@ -86,7 +84,7 @@ int main()
  order.clear();QuestVisitStreamingImages(0,[](int){return 0;},[&](int i){order.push_back(i);});
  require(order.empty(),"empty archive list is safe");
  SetRequested(MODEL_SET_MODERN);
- std::filesystem::remove(root/"modelsets/modern/models/gta3.dir");reset(root);
+ std::filesystem::remove(root/"variants/xbox/models/gta3.dir");reset(root);
  require(GetActive()==MODEL_SET_CLASSIC,"incomplete Xbox source falls back while retaining Upstate");
  require(QuestUpstate::IsAssetPath(ResolveAssetPath("data/main.scm",out,sizeof(out))),"mod remains active after Xbox fallback");
  std::filesystem::remove_all(root);

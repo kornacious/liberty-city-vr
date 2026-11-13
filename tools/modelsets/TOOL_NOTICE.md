@@ -1,6 +1,6 @@
 # Original Xbox asset converter notice
 
-The Manager prepares a local visual overlay from the user's own original Xbox
+The Manager prepares a complete local game variant from the user's own original Xbox
 GTA III US 1.0 ISO. It never downloads game data. The XDVDFS reader is implemented
 in C#; extract-xiso and Python are not required.
 
@@ -12,7 +12,7 @@ The CMake target runs headlessly and requires a C++17 compiler.
 
 `xbox-disc.json` contains only file sizes and hashes identifying the supported
 retail asset baseline, not original files. Source images, extracted files and
-converted overlays remain local and must never be redistributed or committed.
+converted variants remain local and must never be redistributed or committed.
 
 The obsolete HD-pack builder, `xbox-pack.json`, texture compressor source/binary
 and their regression adapters have been removed. The Original Xbox importer does

@@ -186,6 +186,15 @@ public final class SaveProvider extends ContentProvider {
     @Override
     public Bundle call(String method, String arg, Bundle extras) {
         enforceAdbOrAppCaller();
+        if("activate-variant".equals(method)) {
+            Bundle result = new Bundle();
+            try {
+                if(getContext()==null || getContext().getExternalFilesDir(null)==null) throw new java.io.IOException("Application storage unavailable");
+                VariantFiles.activate(new File(getContext().getExternalFilesDir(null),"gamedata"),arg);
+                result.putString("status","activated");
+            } catch(java.io.IOException error) { result.putString("error",error.getMessage()); }
+            return result;
+        }
         if ("mkdir".equals(method) && arg != null && !arg.isEmpty()) {
             if (getContext() != null) {
                 final File externalRoot = getContext().getExternalFilesDir(null);

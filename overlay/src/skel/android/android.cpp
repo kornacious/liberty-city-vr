@@ -2625,6 +2625,10 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 		return false;
 	}
 	ModelSets::InitializeStartup(dataRoot);
+	if(!ModelSets::ContentRoot()[0] || chdir(ModelSets::ContentRoot()) != 0){
+		ALOGE("PC/Xbox base not installed or incomplete. Install a variant using the manager.");
+		return false;
+	}
 
 	if(RsEventHandler(rsINITIALIZE, nil) == rsEVENTERROR){
 		ALOGE("rsINITIALIZE failed");

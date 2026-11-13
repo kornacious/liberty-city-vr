@@ -39,12 +39,12 @@ internal static class UiChecks
                 if (store.Load().Workplace != settings.Workplace) throw new Exception("Settings did not persist.");
                 File.WriteAllText(Path.Combine(directory, "settings.txt"), app.ToString());
                 Button("Mods").InvokeCommand(Command.Accept);
-                var modChoices = Descendants(ui.Window).OfType<OptionSelector>().Single();
+                var modChoices = Descendants(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==6);
                 if (modChoices.Labels?.Count != 6 || modChoices.Height != 6)
                     throw new Exception("Mod lifecycle options are missing or clipped.");
                 modChoices.Value = (int)ModOperation.Delete;
                 Button("_Cancel").InvokeCommand(Command.Accept);
-                if (Descendants(ui.Window).OfType<OptionSelector>().Single().Value != 0 || ui.Window.MostFocused?.Text != "Mods")
+                if (Descendants(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==6).Value != 0 || ui.Window.MostFocused?.Text != "Mods")
                     throw new Exception("Mod Cancel did not discard the destructive action and restore navigation focus.");
                 File.WriteAllText(Path.Combine(directory, "mods.txt"), app.ToString());
                 Button("Manage music").InvokeCommand(Command.Accept);

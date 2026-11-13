@@ -82,6 +82,11 @@ public enum SaveTransferDirection { QuestToPc, PcToQuest }
 
 public sealed record ActionOptions
 {
+    public bool InstallPcVariant { get; set; }
+    public bool InstallXboxVariant { get; set; }
+    public string XboxIsoPath { get; set; } = "";
+    // Internal preparation mode; legacy overlay commands remain readable.
+    public bool CompleteVariant { get; set; }
     public GameTarget Target { get; set; }
     public bool PcvrBuildOnly { get; set; }
     public bool PcvrPrepareData { get; set; }

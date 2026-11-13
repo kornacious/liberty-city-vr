@@ -32,7 +32,10 @@ internal static class Program
                          InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods,
                          LaunchPcvr, DiagnosePcvr.
                 BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr.
-                PCVR options: PcvrBuildOnly, PcvrPrepareData, PcvrGpuTests, PcvrAudioTests.
+                Variant options: InstallPcVariant, InstallXboxVariant, XboxIsoPath.
+                Both variants may be selected. PC uses Settings.GameDirectory.
+                Leave both unchecked for an application-only build/update.
+                PCVR options: PcvrBuildOnly, PcvrGpuTests, PcvrAudioTests.
                 ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
                                     Target 0 Quest (default), 1 WindowsPcvr,
                                     ModOperation 0 Status, 1 Install, 2 Enable, 3 Disable,

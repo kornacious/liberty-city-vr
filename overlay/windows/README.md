@@ -1,5 +1,10 @@
 # Windows OpenXR/Vulkan development builds
 
+Build and install now prepares independent PC and Original Xbox variants. Either
+can be the sole installation; see the [asset guide](../docs/QUEST_MODELSETS.md).
+`libertyvr-game --game-data DATA --user-data USER --check-assets` checks startup
+variant selection/inventory without creating an OpenXR session.
+
 The developer executables use the same librw Vulkan backend and shaders as Quest:
 `libertyvr-pcvr` renders a diagnostic scene without game data; `libertyvr-game`
 is an experimental playable GTA III port using the shared re3/VR integration.

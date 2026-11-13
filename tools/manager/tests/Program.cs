@@ -213,6 +213,7 @@ await Test("Original Xbox import rejects downloads and extracted mod sources bef
 await XboxChecks.Run(Test, Assert, root);
 await XboxAudioChecks.Run(Test, Assert, root);
 await XboxEffectChecks.Run(Test, Assert);
+await VariantChecks.Run(Test, value => Assert(value), root);
 
 await Test("Game data copy rejects incomplete retail folders", () =>
 { Throws<IOException>(() => Workflows.ValidateGameDirectory(root)); return Task.CompletedTask; });

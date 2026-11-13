@@ -6,6 +6,12 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+The Windows `text-tokens` CTest uses the shared `QuestTextTokens.h` production
+helper. It covers Xbox/PC controller-action aliases, unknown and unfinished
+actions, formatting tokens, every buffer-edge truncation, Japanese delimiters
+and NUL-bounded font scanning. It needs no game assets. This guards the camera
+tutorial freeze caused by an Xbox-only action leaving an unmatched `~`.
+
 `test-car-invincibility` runs through the manager with `-StageRoot` pointing
 to assembled sources. It compiles the production `Pad.cpp` protection functions
 and covers all 64 native protection flag combinations, disabling, exiting,
@@ -538,19 +544,27 @@ no game assets; the final visual fit still needs a headset check.
 
 ### Model-set routing
 
-`test-modelset-profiles.ps1` tests Liberty City's production ModelSets and
-streaming category filter and remains in `test-current-sources.ps1`. Its checks
-cover complete-pack routing, ignored old category mixes, map/loose paths, Classic
-fallback, restart behavior and retained calibration identity. Native manager
-Xbox checks and the converter CTest cover the current retail ISO workflow;
-retired HD-pack downloader tests are not validation for that workflow.
+`test-modelset-profiles.ps1` tests the production complete-variant selector,
+content paths, unavailable/incomplete sources, restart behavior and Xbox rig
+calibration. Upstate checks keep mod archives above the selected variant without
+borrowing from the unselected variant. It remains in the current-source gate.
+The Windows `asset-variants` CTest covers selection, shared state, malformed/missing
+inventories and CRLF/LF portability without game data. Manager tests cover atomic
+local replacement, source independence, checksum failure, cancellation and GXT
+merging that preserves authored Xbox strings.
+
+`VariantFilesChecks.java` exercises the app-owned scoped-storage activation
+transaction without Android dependencies. Compile it alongside
+`overlay/android/app/src/main/java/com/libertyvr/quest/VariantFiles.java` with the
+JDK and run `com.libertyvr.quest.VariantFilesChecks` with a new local fixture root.
+It checks variant identity, traversal, incomplete content, retained backups,
+unmanaged folders and PC/Xbox coexistence. No retail assets are used.
 
 `test-hd-texture-loading.ps1` covers the production shared generic lookup
 (model-local precedence, missing names, repeated installation and shutdown),
 and the production vehicle alpha depth policy for opaque bodywork and glass.
 It is included in the current-source gate. `test-modelset-profiles.ps1` now
-checks two selectable profiles, legacy Xbox migration, complete-pack routing,
-ignored old category mixes and the internal Xbox calibration identity.
+checks independently complete PC/Xbox sources and the retained Xbox calibration identity.
 
 `test-perf-capture.ps1` validates the production per-frame writer: raw timing
 precision, CSV schema, event transitions, queue overflow accounting, shutdown

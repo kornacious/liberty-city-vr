@@ -3,6 +3,7 @@
 
 #include "ModelSets.h"
 #include "QuestUpstate.h"
+#include "AssetVariants.h"
 #include "crossplatform.h"
 
 #if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
@@ -44,6 +45,8 @@ int gNumVegetationModels[MODEL_SET_COUNT];
 bool gVegetationManifestAvailable[MODEL_SET_COUNT];
 char gGameRoot[1024] = {};
 char gSettingsPath[1024] = {};
+std::string gContentRoot;
+bool gPcAvailable;
 
 const char *const gCategoryNames[MODEL_CATEGORY_COUNT] = {
 	"WORLD / BUILDINGS",
@@ -100,35 +103,8 @@ void NormalizeRoot(const char *root)
 
 void FindSettingsPath()
 {
-#ifdef LIBERTYVR_WINDOWS
-	// The VR menu's relative INI reads use the active game-data directory.
-	// An EXE-relative choice would leak asset selection between isolated targets
-	// and disagree with the menu after restart.
-	snprintf(gSettingsPath, sizeof(gSettingsPath), "%svr_settings.ini", gGameRoot);
-	return;
-#elif defined(_WIN32)
-	const DWORD length = GetModuleFileNameA(nil, gSettingsPath,
-		(DWORD)ARRAY_SIZE(gSettingsPath));
-	if(length > 0 && length < ARRAY_SIZE(gSettingsPath)){
-		char *separator = strrchr(gSettingsPath, '\\');
-		if(!separator)
-			separator = strrchr(gSettingsPath, '/');
-		if(separator){
-			strcpy(separator+1, "vr_settings.ini");
-			return;
-		}
-	}
-#endif
-	// Android's Win32-profile shim resolves relative paths against the active
-	// game-data directory. Keep the same portable filename used by the Quest VR
-	// menu instead of baking an app-specific storage path into this subsystem.
-#ifdef _WIN32
-	snprintf(gSettingsPath, sizeof(gSettingsPath), "%svr_settings.ini", gGameRoot);
-#else
-	strcpy(gSettingsPath, ".\\vr_settings.ini");
-#endif
+    snprintf(gSettingsPath, sizeof(gSettingsPath), "%svr_settings.ini", gGameRoot);
 }
-
 bool IsSafeModelsPath(const char *path)
 {
 	if(!path || path[0] == '\0' || path[1] == ':')
@@ -150,42 +126,12 @@ bool IsSafeModelsPath(const char *path)
 		MODELSET_STRNICMP(path, "data/maps/", 10) == 0;
 }
 
-void BuildOverlayPath(eModelSet modelSet, const char *relativePath, char *destination,
-	size_t destinationSize)
+void BuildOverlayPath(eModelSet modelSet, const char *relativePath, char *destination, size_t size)
 {
-	char normalized[512];
-	strncpy(normalized, relativePath, sizeof(normalized)-1);
-	normalized[sizeof(normalized)-1] = '\0';
-	for(char *cursor = normalized; *cursor; cursor++)
-		#ifdef _WIN32
-		if(*cursor == '/') *cursor = '\\';
-		#else
-		if(*cursor == '\\') *cursor = '/';
-		#endif
-	const char *setName = modelSet == MODEL_SET_XBOX ? "xbox" : "modern";
-#ifdef _WIN32
-	snprintf(destination, destinationSize, "%smodelsets\\%s\\%s", gGameRoot, setName, normalized);
-#else
-	snprintf(destination, destinationSize, "%smodelsets/%s/%s", gGameRoot, setName, normalized);
-	char *real = casepath(destination, false);
-	if(real){
-		strncpy(destination, real, destinationSize-1);
-		destination[destinationSize-1] = '\0';
-		free(real);
-	} else if(!FileExists(destination)){
-		char rel[512];
-		snprintf(rel, sizeof(rel), "modelsets/%s/%s", setName, normalized);
-		char *realRel = casepath(rel, false);
-		if(realRel){
-			strncpy(destination, realRel, destinationSize-1);
-			destination[destinationSize-1] = '\0';
-			free(realRel);
-		} else if(FileExists(rel))
-			strncpy(destination, rel, destinationSize-1);
-	}
-#endif
+    const std::string root=assetvariants::ContentRoot(gGameRoot,modelSet==MODEL_SET_CLASSIC?0:1);
+    snprintf(destination,size,"%s/%s",root.c_str(),relativePath);
+    for(char *p=destination;*p;++p)if(*p=='\\')*p='/';
 }
-
 bool IsGta3ArchivePath(const char *relative)
 {
 	return MODELSET_STRICMP(relative, "models\\gta3.img") == 0 ||
@@ -277,54 +223,33 @@ void LoadVegetationManifest(eModelSet set)
 
 void InitializeStartup(const char *gameRoot)
 {
-	if(gInitialized)
-		return;
-	NormalizeRoot(gameRoot);
-	FindSettingsPath();
-	char path[1024];
-	BuildOverlayPath(MODEL_SET_MODERN, "models/gta3.img", path, sizeof(path));
-	gModernArchivePairAvailable = FileExists(path);
-	BuildOverlayPath(MODEL_SET_MODERN, "models/gta3.dir", path, sizeof(path));
-	gModernArchivePairAvailable = gModernArchivePairAvailable && FileExists(path);
-	// One complete retail Xbox profile. Never register the duplicate legacy Xbox image
-	// or combine its geometry with independent category texture choices.
-	gXboxAvailable = false;
-	LoadPackIdentity(MODEL_SET_MODERN);
-	gModernArchivePairAvailable = gModernArchivePairAvailable && gOriginalXboxProfiles[MODEL_SET_MODERN];
-	LoadAudioInventory();
-	BuildOverlayPath(MODEL_SET_MODERN, "data/particle.cfg", path, sizeof(path));
-	gXboxParticlesAvailable = FileExists(path);
-	LoadVegetationManifest(MODEL_SET_MODERN);
-	int requested = (int)(int32)GetPrivateProfileIntA("VR", "ModelSet",
-		MODEL_SET_MODERN, gSettingsPath);
-	const bool legacyXbox = requested == MODEL_SET_XBOX;
-	if(legacyXbox) requested = MODEL_SET_MODERN;
-	if(requested < MODEL_SET_CLASSIC || requested > MODEL_SET_MODERN ||
-	   !IsAvailable((eModelSet)requested)) requested = MODEL_SET_CLASSIC;
-	gRequestedModelSet = (eModelSet)requested;
-	gActiveModelSet = gRequestedModelSet;
-	if(legacyXbox)
-		WritePrivateProfileStringA("VR", "ModelSet", "1", gSettingsPath);
-	gInitialized = true;
-	ALOG("Asset audio source: %s", IsOriginalXboxAudioActive() ? "Original Xbox" : "Classic PC");
-	ALOG("ModelSets::InitializeStartup: root='%s' modern=%d xbox=%d active=%s (vehicles=%s world=%s)",
-		gGameRoot, (int)gModernArchivePairAvailable, (int)gXboxAvailable,
-		GetName(gActiveModelSet),
-		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)),
-		GetName(GetActiveForCategory(MODEL_CATEGORY_WORLD)));
-	debug("Model sets: preset=%s modern=%d xbox=%d vehicles=%s world=%s\n",
-		GetName(gActiveModelSet), gModernArchivePairAvailable, gXboxAvailable,
-		GetName(GetActiveForCategory(MODEL_CATEGORY_VEHICLES)),
-		GetName(GetActiveForCategory(MODEL_CATEGORY_WORLD)));
+    if(gInitialized) return;
+    NormalizeRoot(gameRoot);
+    FindSettingsPath();
+    gPcAvailable = assetvariants::Complete(gGameRoot,0) || assetvariants::LegacyPc(gGameRoot);
+    gModernArchivePairAvailable = assetvariants::Complete(gGameRoot,1);
+    const int selected = assetvariants::Select(gGameRoot);
+    gActiveModelSet = gRequestedModelSet = selected == 1 ? MODEL_SET_MODERN : MODEL_SET_CLASSIC;
+    gContentRoot = selected < 0 ? "" : assetvariants::ContentRoot(gGameRoot,selected);
+    gOriginalXboxProfiles[MODEL_SET_MODERN] = gModernArchivePairAvailable;
+    gXboxAvailable = false;
+    if(gModernArchivePairAvailable) {
+        LoadAudioInventory();
+        char path[1024]; BuildOverlayPath(MODEL_SET_MODERN,"data/particle.cfg",path,sizeof(path));
+        gXboxParticlesAvailable = FileExists(path);
+        LoadVegetationManifest(MODEL_SET_MODERN);
+    }
+    gInitialized = true;
+    ALOG("Complete asset variant selected: %s", selected < 0 ? "none" : GetSourceName(gActiveModelSet));
 }
-
+const char *ContentRoot() { return gContentRoot.c_str(); }
 eModelSet GetActive() { return gActiveModelSet; }
 eModelSet GetRequested() { return gRequestedModelSet; }
 
 void SetRequested(eModelSet modelSet)
 {
 	if(!IsAvailable(modelSet))
-		modelSet = MODEL_SET_CLASSIC;
+		return;
 	gRequestedModelSet = modelSet;
 	char value[16];
 	sprintf(value, "%d", (int)modelSet);
@@ -382,18 +307,18 @@ bool IsRestartRequired() { return gRequestedModelSet != gActiveModelSet; }
 
 bool IsAvailable(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_CLASSIC ||
+	return (modelSet == MODEL_SET_CLASSIC && gPcAvailable) ||
 		(modelSet == MODEL_SET_MODERN && gModernArchivePairAvailable);
 }
 
 const char *GetName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "ORIGINAL XBOX";
+	return modelSet == MODEL_SET_CLASSIC ? "PC" : "ORIGINAL XBOX";
 }
 
 const char *GetSourceName(eModelSet modelSet)
 {
-	return modelSet == MODEL_SET_CLASSIC ? "CLASSIC" : "ORIGINAL XBOX";
+	return modelSet == MODEL_SET_CLASSIC ? "PC" : "ORIGINAL XBOX";
 }
 
 eModelSet GetActiveForCategory(eModelCategory category)
@@ -465,6 +390,8 @@ bool IsVegetationModel(const char *modelName)
 bool GetModernAssetPath(const char *relativePath, char *resolvedPath,
 	size_t resolvedPathSize)
 {
+	// A complete variant is image zero, never an additional overlay archive.
+	if(relativePath && IsGta3ArchivePath(relativePath)) return false;
 	if(!relativePath || !resolvedPath || resolvedPathSize == 0 ||
 	   !gModernArchivePairAvailable)
 		return false;
@@ -493,62 +420,33 @@ int GetArchivePriority(const char *path)
 	return IsModernAssetPath(path) || IsXboxAssetPath(path) ? 1 : 0;
 }
 
-const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
-	size_t resolvedPathSize)
+const char *ResolveAssetPath(const char *originalPath, char *resolvedPath, size_t size)
 {
 #ifdef LCVR_UPSTATE_ENGINE
-	const char *modPath = QuestUpstate::Resolve(originalPath, resolvedPath, resolvedPathSize);
-	if(modPath != originalPath) return modPath;
+    const char *mod = QuestUpstate::Resolve(originalPath,resolvedPath,size);
+    if(mod != originalPath) return mod;
 #endif
-	if(!originalPath || !resolvedPath || resolvedPathSize == 0 ||
-	   !gInitialized || (!IsModernActive() && !IsXboxActive()))
-		return originalPath;
-	const char *relative = originalPath;
-	// DAT LoadLine converts line endings to spaces. Apply the same trimming
-	// as fcaseopen before checking the Xbox overlay, just as Upstate does.
-	while(*relative == ' ' || *relative == '\t' || *relative == '\r' || *relative == '\n') ++relative;
-	size_t length = strlen(relative);
-	while(length && (relative[length-1] == ' ' || relative[length-1] == '\t' ||
-	      relative[length-1] == '\r' || relative[length-1] == '\n')) --length;
-	char normalized[1024];
-	if(!length || length >= sizeof(normalized)) return originalPath;
-	memcpy(normalized, relative, length);
-	normalized[length] = '\0';
-	relative = normalized;
-	while(relative[0] == '.' &&
-	      (relative[1] == '\\' || relative[1] == '/'))
-		relative += 2;
-	if(!IsSafeModelsPath(relative))
-		return originalPath;
-	// GTA3 is special: keep the base archive as image zero and let the
-	// streaming directory register selected entries from a second Modern image.
-	// Loose TXDs still use the ordinary Modern fallback behavior.
-	if(IsGta3ArchivePath(relative))
-		return originalPath;
-	// Preserve complete retail vehicle collisions (train/boats included).
-	// World collision and map definitions travel with their matching geometry.
-	if(MODELSET_STRICMP(relative, "models\\coll\\vehicles.col") == 0 ||
-	   MODELSET_STRICMP(relative, "models/coll/vehicles.col") == 0)
-		return originalPath;
-	eModelCategory cat = MODEL_CATEGORY_WORLD;
-	if(MODELSET_STRICMP(relative, "models\\generic\\wheels.dff") == 0 ||
-	   MODELSET_STRICMP(relative, "models/generic/wheels.dff") == 0 ||
-	   MODELSET_STRICMP(relative, "models\\generic\\wheels.txd") == 0 ||
-	   MODELSET_STRICMP(relative, "models/generic/wheels.txd") == 0)
-		cat = MODEL_CATEGORY_VEHICLES;
-	// generic.txd is shared by roads/props and trees; it follows World.
-
-	eModelSet active = GetActiveForCategory(cat);
-	if(active == MODEL_SET_XBOX && gXboxAvailable){
-		BuildOverlayPath(MODEL_SET_XBOX, relative, resolvedPath, resolvedPathSize);
-		if(FileExists(resolvedPath))
-			return resolvedPath;
-	}
-	if(active == MODEL_SET_MODERN && gModernArchivePairAvailable){
-		BuildOverlayPath(MODEL_SET_MODERN, relative, resolvedPath, resolvedPathSize);
-		if(FileExists(resolvedPath))
-			return resolvedPath;
-	}
-	return originalPath;
+    if(!gInitialized || !originalPath || !resolvedPath || !size || gContentRoot.empty()) return originalPath;
+    std::string relative=originalPath;
+    for(char &c:relative) if(c=='\\') c='/';
+    const auto first=relative.find_first_not_of(" \t\r\n");
+    if(first==std::string::npos) return originalPath;
+    relative=relative.substr(first,relative.find_last_not_of(" \t\r\n")-first+1);
+    std::string root=gGameRoot; for(char &c:root) if(c=='\\') c='/';
+    if(relative.compare(0,root.size(),root)==0) relative.erase(0,root.size());
+    while(relative.compare(0,2,"./")==0) relative.erase(0,2);
+    if(!assetvariants::Safe(relative)) return originalPath;
+    std::string lower=relative; for(char &c:lower) if(c>='A'&&c<='Z') c+=32;
+    if(lower.compare(0,6,"skins/")==0) {
+        snprintf(resolvedPath,size,"%s%s",gGameRoot,relative.c_str());return resolvedPath;
+    }
+    // Only retail-content paths are redirected. Saves, INIs, captures and mods
+    // retain the installation root; bare names use the active CFileMgr directory.
+    bool content=false;
+    for(const char *prefix:{"data/","models/","anim/","text/","audio/","txd/","neo/","movies/"})
+        if(lower.compare(0,strlen(prefix),prefix)==0) content=true;
+    if(!content) return originalPath;
+    snprintf(resolvedPath,size,"%s/%s",gContentRoot.c_str(),relative.c_str());
+    return resolvedPath;
 }
 }

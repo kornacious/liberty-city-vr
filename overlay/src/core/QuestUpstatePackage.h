@@ -36,6 +36,9 @@ inline const char *RelativeFile(const std::string &root,const std::string &cwd,c
         relative.erase(0,base.size());
     }
     while(relative.compare(0,2,"./")==0) relative.erase(0,2);
+    // Content lives below a selected complete variant; mods remain shared.
+    for(const char *prefix:{"variants/pc/","variants/xbox/"})
+        if(relative.compare(0,strlen(prefix),prefix)==0) { relative.erase(0,strlen(prefix)); break; }
     for(const auto &file:UpstateFiles) if(Normalized(file.path)==relative) return file.path;
     return nullptr;
 }

@@ -53,8 +53,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     {
         Paths.NoLinks(path);
         if (!File.Exists(Path.Combine(path,".libertyvr-pcvr-data")) ||
-            !Directory.Exists(Path.Combine(path,"data")) || !Directory.Exists(Path.Combine(path,"models")))
-            throw new IOException("No prepared PCVR data copy. Enable Prepare local PCVR data under Build and install, or choose an existing prepared directory.");
+            (!Directory.Exists(Path.Combine(path,"variants")) && (!Directory.Exists(Path.Combine(path,"data")) || !Directory.Exists(Path.Combine(path,"models")))))
+            throw new IOException("No prepared PCVR data directory. Use Build and install to prepare a PC or Original Xbox variant, or choose an existing prepared directory.");
     }
     // Versioned installs avoid replacing a running EXE. Publish the pointer only
     // after CMake installation and all required files have been verified.
@@ -142,8 +142,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         RequireWindows(); var paths=Layout();
         if (!options.PcvrBuildOnly)
         {
-            if (options.PcvrPrepareData && !Directory.Exists(paths.Data) && !File.Exists(paths.Data)) Workflows.ValidateGameDirectory(settings.GameDirectory);
-            else ValidatePreparedData(paths.Data);
+            VariantInstaller.ValidateSource(settings,options);
+            // An application-only installation is allowed before importing assets.
         }
         var found=await FindTools(token);
         var tools=new Toolchain(settings,runner,log);
@@ -153,6 +153,7 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         var work=Path.Combine(settings.Workplace,"windows-pcvr-builds",id);
         var assembled=Path.Combine(work,"source"); var build=Path.Combine(work,"build");
         await Workflows.Assemble(settings.Repository,source,assembled,git,runner,log,token);
+        var variants = !options.PcvrBuildOnly ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token) : new Dictionary<string,string>();
         await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"windows"),"-B",build,"-G","Ninja",
             "-DCMAKE_BUILD_TYPE=Release","-DCMAKE_MAKE_PROGRAM="+found.Ninja,"-DLIBERTYVR_RE3_ROOT="+assembled,
             "-DVulkan_INCLUDE_DIR="+found.Include,"-DVulkan_LIBRARY="+found.Library,"-DGLSLC="+found.Shader,
@@ -164,9 +165,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         await runner.Run(ctest,["--test-dir",build,"--output-on-failure"],token:token);
         log.Write("Windows Release build and selected checks passed: "+build);
         if (options.PcvrBuildOnly) { log.Write("Build only: installation and game-data preparation skipped."); return; }
-        if (options.PcvrPrepareData && !Directory.Exists(paths.Data))
-            Workflows.PrepareWindowsData(settings.Repository,settings.GameDirectory,paths.Data,token);
-        ValidatePreparedData(paths.Data);
+        Directory.CreateDirectory(paths.Data);
+        Directory.CreateDirectory(Path.Combine(paths.Data,"variants"));
+        foreach(var (variant,prepared) in variants)VariantInstaller.InstallLocal(paths.Data,variant,prepared,token);
+        File.WriteAllText(Path.Combine(paths.Data,".libertyvr-pcvr-data"),"Liberty City VR local Windows data v1\n");
         Workflows.RefreshWindowsPortFiles(settings.Repository,paths.Data,token);
         Directory.CreateDirectory(paths.Install);
         var relative="versions/"+id; var install=Paths.Child(paths.Install,relative);

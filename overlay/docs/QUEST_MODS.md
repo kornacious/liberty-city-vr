@@ -57,7 +57,9 @@ Classic or Original Xbox source. Source changes save immediately and apply on a
 full process restart. Changing the asset source does not change the save format.
 
 Both loose files and streamed archive entries use the same precedence:
-Upstate, then the selected Original Xbox source, then the Classic base fallback.
+Upstate, then the selected complete PC or Original Xbox variant. Missing files
+never borrow from the unselected variant. Mod storage and expanded saves remain
+shared outside the variant directories.
 Archive directories are visited by layer before registering their first-wins
 model, texture and cutscene-extra entries; registration order cannot let Xbox
 overwrite Upstate. Within a layer the native reverse archive order is preserved.

@@ -43,13 +43,21 @@ are never printed or saved in settings/logs.
 
 ## Build and install
 
-Choose **Build and install**, configure the options on the right, then
-**Perform**. Build only skips installation. Release requires your private
-signing configuration; debug uses the local Android debug key. Optional retail
-copying requires a complete local GTA III PC installation containing `data`,
-`TEXT`, `anim`, `models`, `movies`, and `Audio`, including `sfx.RAW` and `sfx.SDT`.
-The manager copies only the required folders and optional `mp3`, `skins`, `txd`.
-Game files and saves remain local and must never be committed or uploaded.
+Choose **Build and install**, select Quest or Windows PCVR, and enable **Install
+PC variant**, **Install Original Xbox variant**, or both. The PC checkbox enables
+its installation-folder field; Xbox enables the supported US 1.0 ISO field.
+Each is prepared as a complete independent installation under `variants/pc` or
+`variants/xbox`. The engine automatically selects the sole complete variant, or
+uses the saved choice when both are available. Switching requires restart.
+Leaving both unchecked updates only the application. Build only skips installation
+and data preparation. Release APKs require your private signing configuration;
+debug uses the existing local Android debug key. PC files and ISO conversion
+products remain local, and saves/shared settings are preserved.
+
+The PC folder must contain `data`, `TEXT`, `anim`, `models`, `movies` and `Audio`,
+including `sfx.RAW` and `sfx.SDT`. Xbox needs no PC installation. See the
+[asset guide](overlay/docs/QUEST_MODELSETS.md) for completeness, frontend resources
+and migration from legacy installations.
 
 **Convert and compress radio stations** is optional and off by default. It uses
 local FFmpeg/ffprobe (configure their executable paths in Settings) to encode the
@@ -138,13 +146,12 @@ transfer. Validation only needs no headset. Imports use provider staging and
 SHA256-verified commits, skip duplicates and preserve existing tracks. Optional
 radio-board export requires a new output filename.
 
-**Original Xbox assets** accepts only your local GTA III US 1.0 original Xbox
-`.iso` or `.xiso.iso`. No game image or asset pack is downloaded. The Manager
-reads the disc filesystem, verifies retail file fingerprints, decompresses and
-converts native assets using the bundled converter source, and validates a
-complete `modern` overlay. CMake, Ninja and C++ build tools are required.
-Build only skips headset access. Installation verifies staged files and activates
-the profile with rollback. See [the asset guide](overlay/docs/QUEST_MODELSETS.md).
+**Original Xbox installation** is included in **Build and install**. Supply your
+local GTA III US 1.0 original Xbox `.iso`/`.xiso.iso`. The manager verifies retail
+fingerprints and prepares a complete standalone variant, with converted visuals,
+audio, scripts, animation and gameplay data. CMake, Ninja, C++ and FFmpeg/ffprobe
+are required. No game image or asset pack is downloaded. Reinstall a selected
+variant to repair its checksummed content; the other variant and saves survive.
 
 **Repair game files** replaces the port's allowlisted GXT and frontend/shared
 TXD files when menu entries show missing labels. It requires existing game data

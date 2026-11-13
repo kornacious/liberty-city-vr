@@ -8,6 +8,7 @@
 #include "MusicManager.h"
 #include "Renderer.h"
 #include "crossplatform.h"
+#include "platform_android.h"
 #include <algorithm>
 #include <stdio.h>
 #include <string.h>
@@ -160,7 +161,8 @@ void CycleSkin(int direction)
 {
     std::vector<std::string> skins;
     WIN32_FIND_DATA found;
-    HANDLE handle = FindFirstFile("skins\\*.bmp", &found);
+    char pattern[2048];platform::resolveGamePath(pattern,sizeof(pattern),"skins/*.bmp");
+    HANDLE handle = FindFirstFile(pattern, &found);
     if(handle != INVALID_HANDLE_VALUE) {
         do {
             const size_t length = strlen(found.cFileName);

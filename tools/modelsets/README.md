@@ -1,7 +1,8 @@
 # Local Original Xbox asset conversion
 
-Use the manager's Original Xbox model action with your own supported GTA III
-US 1.0 ISO. `XboxIso.cs` reads XDVDFS directly; no extract-xiso, 7-Zip, Python or
+Select Install Original Xbox variant under the manager's Build and install action
+with your own supported GTA III US 1.0 ISO. This prepares a complete standalone
+variant under `variants/xbox`, independently of PC data. `XboxIso.cs` reads XDVDFS directly; no extract-xiso, 7-Zip, Python or
 external ISO extractor is invoked. `OriginalXboxModels.cs` validates the retail
 manifest and builds the C++17 converter with CMake, librw and lzokay. CTest runs
 the synthetic LZO validation test. Only source, hashes and sizes ship here.

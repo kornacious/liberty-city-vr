@@ -59,6 +59,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 
     public void Initialize(int page = 0)
     {
+        if(page == (int)ManagerAction.InstallModernModels)page=0;
         Window.SetScheme(Theme());
         output.SetScheme(Theme());
         cancel.ShadowStyle = perform.ShadowStyle = ShadowStyles.None;
@@ -70,7 +71,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
-            var button = new Button { Text = pages[i], X = 0, Y = i, Width = Dim.Fill(), ShadowStyle = ShadowStyles.None };
+            var button = new Button { Text = pages[i], X = 0, Y = i > 3 ? i-1 : i, Width = Dim.Fill(), ShadowStyle = ShadowStyles.None, Visible = i != 3 };
             button.Accepting += (_, e) => { e.Handled = true; Render(index); form?.SetFocus(); };
             navigation.Add(button); navigationButtons.Add(button);
         }
@@ -114,6 +115,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 
     private void Render(int page, bool preserveDraft = false)
     {
+        if(page == (int)ManagerAction.InstallModernModels) page = 0;
         if (running is { IsCompleted: false }) return;
         selected = page;
         if (!preserveDraft)
@@ -146,10 +148,9 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 {
                     Note("Windows x64 Release build, checks and local install. No Android tools.");
                     Toggle("Build only (skip install and data copy)", options.PcvrBuildOnly, v => options.PcvrBuildOnly = v);
-                    Toggle("Prepare local PCVR data (first installation)", options.PcvrPrepareData, v => options.PcvrPrepareData = v);
                     Toggle("Run Vulkan GPU tests (requires an active GPU)", options.PcvrGpuTests, v => options.PcvrGpuTests = v);
                     Toggle("Run audio tests (requires an audio endpoint)", options.PcvrAudioTests, v => options.PcvrAudioTests = v);
-                    Field("Owned GTA III PC installation", draft.GameDirectory, v => draft.GameDirectory = v, OpenMode.Directory);
+                    VariantFields();
                     PcvrDirectories();
                     Note("Existing prepared data and saves are preserved. Use Launch PCVR after installation.");
                     break;
@@ -157,10 +158,9 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Build a personal Quest APK from the pinned source.");
                 Toggle("Build only (skip installation)", options.BuildOnly, v => options.BuildOnly = v);
                 Toggle("Release (requires your signing configuration)", options.Release, v => options.Release = v);
-                Toggle("Copy my GTA III game data", options.CopyGameData, v => options.CopyGameData = v);
+                VariantFields();
                 Toggle("Convert and compress radio stations", options.ConvertRadioStations, v => options.ConvertRadioStations = v);
                 Note("AAC radio: converts PC stations when copying, otherwise existing headset WAVs. Requires FFmpeg.");
-                Field("GTA III PC installation", draft.GameDirectory, v => draft.GameDirectory = v, OpenMode.Directory);
                 Licenses(); break;
             case 1:
                 Note("Build, test and install the native vehicle editor.");
@@ -173,22 +173,6 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 music.RefreshRequested = () => { musicRefresh = true; Start(); };
                 if (loadMusicOnOpen) app.Invoke(() => { if (!disposed && selected == 2 && running is not { IsCompleted: false }) { musicRefresh = true; Start(); } });
                 break;
-            case 3:
-                var assetTarget=new OptionSelector {X=1,Y=row,Labels=["Quest standalone","Windows PCVR"],Value=(int)options.Target,Width=Dim.Fill(2),Height=2};
-                assetTarget.SetScheme(Theme());form.Add(assetTarget);row+=3;
-                readFields.Add(()=>options.Target=(GameTarget)(assetTarget.Value??0));
-                assetTarget.ValueChanged+=(_,_)=>{
-                    foreach(var read in readFields.ToArray())read();
-                    app.Invoke(()=>{if(!disposed && selected==3)Render(3,preserveDraft:true);});
-                };
-                if(options.Target==GameTarget.WindowsPcvr)Note("PCVR destination: "+PcvrPaths.From(draft).Data);
-                options.DownloadModels = false; options.ModelSource = "";
-                Note("Import Xbox US 1.0 visuals, particles, Neo effects and audio from your local ISO. Requires FFmpeg/ffprobe. No game downloads.");
-                Note("Conversion requires CMake, Ninja and C++ build tools (Visual Studio C++ on Windows).");
-                Toggle("Use verified prepared output (skip ISO conversion)",options.UsePreparedModels,v=>options.UsePreparedModels=v);
-                Field("Xbox disc image (.iso or .xiso.iso)", options.ModelArchive, v => options.ModelArchive = v, OpenMode.File, false);
-                Field("Output folder named modern (blank: workplace)", options.ModelOutput, v => options.ModelOutput = v, OpenMode.Directory, false);
-                Toggle("Build only (skip asset installation)", options.BuildOnly, v => options.BuildOnly = v); break;
             case 4:
                 Note("Repair replacement text and frontend assets on an existing installation.");
                 Field("Port gamefiles folder (blank: pinned source cache)", options.GameFiles, v => options.GameFiles = v, OpenMode.Directory);
@@ -298,12 +282,13 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         Field("PCVR data (blank: workplace/windows-pcvr/data)", draft.PcvrDataDirectory, v => draft.PcvrDataDirectory = v, OpenMode.Directory, false);
         Field("PCVR saves (blank: workplace/windows-pcvr/user)", draft.PcvrUserDirectory, v => draft.PcvrUserDirectory = v, OpenMode.Directory, false);
     }
-    private void Field(string label, string value, Action<string> set, OpenMode mode, bool mustExist = true)
+    private void Field(string label, string value, Action<string> set, OpenMode mode, bool mustExist = true, bool enabled = true)
     {
         form!.Add(new Label { Text = label, X = 1, Y = row, Width = Dim.Fill(2) });
         var field = new TextField { Text = value, X = 1, Y = row + 1, Width = Dim.Fill(13) };
         field.SetScheme(Theme());
         var browse = new Button { Text = "Browse", X = Pos.AnchorEnd(11), Y = row + 1, ShadowStyle = ShadowStyles.None };
+        field.Enabled = browse.Enabled = enabled;
         browse.Accepting += (_, e) =>
         {
             e.Handled = true;
@@ -328,12 +313,28 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         form.Add(field, browse); row += 3;
         readFields.Add(() => set(field.Text.Trim()));
     }
-    private void Toggle(string label, bool value, Action<bool> set)
+    private CheckBox Toggle(string label, bool value, Action<bool> set)
     {
         var check = new CheckBox { Text = label, Value = value ? CheckState.Checked : CheckState.UnChecked, X = 1, Y = row, Width = Dim.Fill(2) };
         check.SetScheme(Theme());
         form!.Add(check); row += 2;
         readFields.Add(() => set(check.Value == CheckState.Checked));
+        return check;
+    }
+    private void VariantFields()
+    {
+        // Read old saved requests without retaining a second installation page.
+        options.InstallPcVariant = VariantInstaller.WantsPc(options);
+        options.CopyGameData = options.PcvrPrepareData = false;
+        if(string.IsNullOrWhiteSpace(options.XboxIsoPath) && settings.Actions.TryGetValue(ManagerAction.InstallModernModels,out var old))
+            options.XboxIsoPath = old.ModelArchive;
+        var pc=Toggle("Install PC variant",options.InstallPcVariant,v=>options.InstallPcVariant=v);
+        Field("Owned GTA III PC installation",draft.GameDirectory,v=>draft.GameDirectory=v,OpenMode.Directory,true,options.InstallPcVariant);
+        var xbox=Toggle("Install Original Xbox variant",options.InstallXboxVariant,v=>options.InstallXboxVariant=v);
+        Field("Original Xbox US 1.0 ISO",options.XboxIsoPath,v=>options.XboxIsoPath=v,OpenMode.File,true,options.InstallXboxVariant);
+        void Refresh() {foreach(var read in readFields.ToArray())read();app.Invoke(()=>{if(!disposed && selected==0)Render(0,preserveDraft:true);});}
+        pc.ValueChanged+=(_,_)=>Refresh();xbox.ValueChanged+=(_,_)=>Refresh();
+        Note("Select either or both variants. Leave both unchecked to update only the application. Saves and existing variants are preserved.");
     }
     private void Licenses()
     {

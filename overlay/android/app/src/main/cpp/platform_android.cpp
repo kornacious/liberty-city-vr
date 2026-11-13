@@ -1,5 +1,6 @@
 #define LCVR_PROFILE_API_IMPLEMENTATION
 #include "platform_android.h"
+#include "core/AssetVariants.h"
 
 #include <android/native_activity.h>
 #include <android/asset_manager.h>
@@ -12,6 +13,8 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #include <algorithm>
 #include <atomic>
@@ -910,7 +913,8 @@ resolveGamePath(char *buffer, size_t bufferSize, const char *relative)
 {
 	while(*relative == '\\' || *relative == '/')
 		relative++;
-	snprintf(buffer, bufferSize, "%s/%s", gGameDataRoot, relative);
+	const std::string selected=assetvariants::Resolve(gGameDataRoot,relative);
+	snprintf(buffer, bufferSize, "%s", selected.c_str());
 	for(char *p = buffer; *p; p++)
 		if(*p == '\\')
 			*p = '/';
@@ -993,7 +997,9 @@ profilePath(const char *fileName)
 	for(char &c : path)
 		if(c == '\\')
 			c = '/';
-	return path;
+	if(!path.empty() && path[0]!='/' && !(path.size()>1 && path[1]==':'))
+        path=std::string(platform::gameDataRoot())+"/"+path;
+    return std::filesystem::u8path(path).lexically_normal().generic_u8string();
 }
 
 char *
@@ -1184,13 +1190,22 @@ WritePrivateProfileStringA(const char *section, const char *key,
 	}
 
 	const std::string path = profilePath(fileName);
-	FILE *f = fopen(path.c_str(), "wb");
+	static std::atomic<unsigned> sequence{0};
+	const std::string temporary=path+".incoming-"+std::to_string(getpid())+"-"+std::to_string(sequence.fetch_add(1));
+	const int descriptor=open(temporary.c_str(),O_WRONLY|O_CREAT|O_EXCL,0660);
+	FILE *f=descriptor>=0?fdopen(descriptor,"wb"):nullptr;
 	if(f == nullptr){
-		LOGE("WritePrivateProfileStringA: cannot open %s", path.c_str());
+		if(descriptor>=0){close(descriptor);unlink(temporary.c_str());}
+		LOGE("WritePrivateProfileStringA: cannot open %s: %s", path.c_str(), strerror(errno));
 		return 0;
 	}
+	bool written=true;
 	for(const std::string &line : lines)
-		fprintf(f, "%s\n", line.c_str());
-	fclose(f);
+		if(fprintf(f, "%s\n", line.c_str())<0)written=false;
+	if(fclose(f)!=0)written=false;
+	if(!written || rename(temporary.c_str(),path.c_str())!=0){
+		LOGE("WritePrivateProfileStringA: cannot replace shared settings: %s",strerror(errno));
+		unlink(temporary.c_str());return 0;
+	}
 	return 1;
 }

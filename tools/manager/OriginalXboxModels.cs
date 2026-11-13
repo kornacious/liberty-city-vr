@@ -54,9 +54,9 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             throw new InvalidDataException("Original Xbox preparation accepts only a user-provided US 1.0 .iso or .xiso.iso. Downloads and extracted mod packs are not supported.");
         if (string.IsNullOrWhiteSpace(options.ModelArchive) || !File.Exists(options.ModelArchive))
             throw new IOException("Select your local Original Xbox GTA III US 1.0 .iso or .xiso.iso; the Manager never downloads game assets.");
-        var output = string.IsNullOrWhiteSpace(options.ModelOutput) ? Path.Combine(settings.Workplace, "original-xbox/modelsets/modern") : Path.GetFullPath(options.ModelOutput);
-        if (Path.GetFileName(Path.TrimEndingDirectorySeparator(output)) != "modern" || Paths.Within(settings.Repository, output) || Paths.Within(output, settings.Repository) || Paths.Within(output, options.ModelArchive))
-            throw new IOException("Choose a separate output folder named modern outside the repository and source ISO.");
+        var output = string.IsNullOrWhiteSpace(options.ModelOutput) ? Path.Combine(settings.Workplace, options.CompleteVariant ? "prepared-variants/xbox" : "original-xbox/modelsets/modern") : Path.GetFullPath(options.ModelOutput);
+        if (Path.GetFileName(Path.TrimEndingDirectorySeparator(output)) != (options.CompleteVariant ? "xbox" : "modern") || Paths.Within(settings.Repository, output) || Paths.Within(output, settings.Repository) || Paths.Within(output, options.ModelArchive))
+            throw new IOException("Choose a separate prepared output folder outside the repository and source ISO.");
         Paths.NoLinks(output);
         if (Directory.Exists(output) && (!File.Exists(Path.Combine(output, "BUILD_INFO.txt")) || !File.ReadAllLines(Path.Combine(output, "BUILD_INFO.txt")).Contains("Profile=MODERN")))
             throw new IOException("Refusing to replace an unmarked folder.");
@@ -95,13 +95,18 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
                     var target = Paths.Child(raw, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
                 }
                 else if (relative.StartsWith("data/maps/", StringComparison.Ordinal) || relative == "data/default.ide" ||
-                         relative.StartsWith("models/coll/", StringComparison.Ordinal) && !relative.EndsWith("vehicles.col", StringComparison.Ordinal))
+                         relative.StartsWith("models/coll/", StringComparison.Ordinal) && (options.CompleteVariant || !relative.EndsWith("vehicles.col", StringComparison.Ordinal)) ||
+                         options.CompleteVariant && (relative.StartsWith("data/", StringComparison.Ordinal) || relative.StartsWith("text/", StringComparison.Ordinal) || relative.StartsWith("anim/", StringComparison.Ordinal)))
                 {
                     var target = Paths.Child(stage, relative); Directory.CreateDirectory(Path.GetDirectoryName(target)!); File.Copy(file, target);
                 }
             }
             File.WriteAllText(Path.Combine(stage, "data/particle.cfg"), OriginalXboxParticles.Normalize(File.ReadAllText(Path.Combine(discRoot, "data/particle.cfg"))));
             var converter = await Converter(token);
+            if(options.CompleteVariant) {
+                await runner.Run(converter,["--frontend",Path.Combine(stage,"models/frontend.txd")],token:token);
+                File.WriteAllText(Path.Combine(stage,"PORT_FRONTEND.txt"),"Liberty City VR generated frontend icons v1\n");
+            }
             await OriginalXboxEffects.Prepare(settings, runner, discRoot, stage, scratch, converter, token);
             log.Write($"Converting {selected.Length} archived assets and loose dictionaries/models; preserving original dimensions and mip levels.");
             var conversion = await runner.Run(converter, [raw, stage], showOutput: false, check: false, token: token);
@@ -132,7 +137,8 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             File.WriteAllText(Path.Combine(stage, "asset_categories.json"), JsonSerializer.Serialize(new {
                 source = Disc.Disc, entries = selected.Length, vehicles = vehicles.Count, vegetation = vegetation.Count,
                 audio = "Xbox SFX decoded to PCM16 with rebuilt SDT; speech and nine radio stations decoded to lossless FLAC at their authored rates",
-                excluded = "Xbox executable, scripts, console frontend, cutscene ANM/hand extensions; identical PC gameplay and cutscene animation archives retained",
+                excluded = options.CompleteVariant ? "Xbox executable, console frontend runtime and cutscene ANM/hand extensions; scripts, gameplay data, collision and standard animations are included from the disc" :
+                    "Xbox executable, scripts, console frontend, cutscene ANM/hand extensions; identical PC gameplay and cutscene animation archives retained",
                 rendering = "Quest Vulkan Neo adaptation: Xbox particles, world lightmaps, rim lighting, road gloss and vehicle highlights; optional stereo visor rain droplets; Quest reflection source retained"
             }, new JsonSerializerOptions { WriteIndented = true }));
             List<string> manifest = ["Profile=MODERN", "Source=" + Identity, "BuilderVersion=" + Disc.BuilderVersion];
@@ -141,7 +147,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             var existed = Directory.Exists(output); if (existed) Directory.Move(output, backup);
             try { Directory.Move(stage, output); } catch { if (existed) Directory.Move(backup, output); throw; }
             if (existed) Directory.Delete(backup, true);
-            log.Write("Original Xbox overlay converted and verified: " + output); return output;
+            log.Write((options.CompleteVariant ? "Complete Original Xbox game content" : "Original Xbox overlay") + " converted and verified: " + output); return output;
         }
         finally
         {

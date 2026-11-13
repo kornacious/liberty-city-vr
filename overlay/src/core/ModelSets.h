@@ -8,12 +8,12 @@ namespace ModelSets
 enum eModelSet
 {
 	MODEL_SET_CLASSIC = 0,
-	MODEL_SET_MODERN,
+	MODEL_SET_MODERN, // Persisted value 1: complete Original Xbox variant.
 	MODEL_SET_XBOX, // Legacy saved value and Xbox calibration identity; never selectable.
 	MODEL_SET_COUNT
 };
 
-// Select the complete Classic or Original Xbox source. Categories share one selection.
+// Select a complete PC or Original Xbox variant. Categories share one selection.
 // Changes require a restart so loaded RenderWare objects are not replaced.
 enum eModelCategory
 {
@@ -28,6 +28,7 @@ enum eModelCategory
 // The active set is captured before RenderWare and the game assets start
 // loading.  Menu changes only update the requested set for the next process.
 void InitializeStartup(const char *gameRoot);
+const char *ContentRoot();
 eModelSet GetActive();
 eModelSet GetRequested();
 void SetRequested(eModelSet modelSet);
@@ -36,8 +37,7 @@ bool IsModernActive();
 bool IsXboxActive();
 bool IsOriginalXboxAudioActive();
 bool UseXboxParticles();
-// Resolves only the complete, verified Xbox audio collection captured at startup.
-// Legacy visual-only profiles keep all audio on the base PC installation.
+// Resolves audio only within the complete Xbox variant captured at startup.
 bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size);
 bool IsRestartRequired();
 bool IsAvailable(eModelSet modelSet);
@@ -64,8 +64,8 @@ const char *GetCategoryName(eModelCategory category);
 bool HasVegetationManifest();
 bool IsVegetationModel(const char *modelName);
 
-// Keep the base GTA3 archive open and register selected entries from the
-// optional overlays. Missing models retain their base archive entries.
+// Compatibility helpers used by render/gameplay patches. A complete variant's
+// GTA3 archive is image zero; GetModernAssetPath never adds it a second time.
 bool GetModernAssetPath(const char *relativePath, char *resolvedPath,
 	size_t resolvedPathSize);
 bool IsModernAssetPath(const char *path);
@@ -75,9 +75,8 @@ bool IsXboxAssetPath(const char *path);
 // Streaming directories are first-wins: mod (2), selected source (1), base (0).
 int GetArchivePriority(const char *path);
 
-// A Modern install mirrors the original relative layout below
-// modelsets\modern.  Missing files deliberately fall through to the classic
-// game directory.  gta3.img and gta3.dir are selected only as a complete pair.
+// Resolve retail reads into the selected complete variant; missing content never
+// borrows from the other variant. Personal state and mod storage remain shared.
 const char *ResolveAssetPath(const char *originalPath, char *resolvedPath,
 	size_t resolvedPathSize);
 }

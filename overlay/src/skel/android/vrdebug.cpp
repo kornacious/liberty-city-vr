@@ -4881,6 +4881,10 @@ DrawQuestModelAssetsPage(void)
 		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
 	if(QuestUpstate::Active())
 		DrawVrMenuText("UPSTATE OVERRIDES THE SELECTED BASE ASSETS", VR_MENU_WIDTH/2, 570, 2, 245, 205, 90);
+	if(!ModelSets::IsAvailable(ModelSets::MODEL_SET_CLASSIC))
+		DrawVrMenuText("PC BASE NOT INSTALLED", VR_MENU_WIDTH/2, 530, 2, 210, 190, 145);
+	if(!ModelSets::IsAvailable(ModelSets::MODEL_SET_MODERN))
+		DrawVrMenuText("XBOX BASE NOT INSTALLED", VR_MENU_WIDTH/2, 550, 2, 210, 190, 145);
 	DrawVrMenuText("ASSET SOURCE CHANGES REQUIRE A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
 }
 

@@ -48,6 +48,7 @@ void PrintString(float x,float y,const wchar*s){float width=GetStringWidth(s,tru
 static void AsciiToUnicode(const char *text,wchar*out){while(*text)*out++=(unsigned char)*text++;*out=0;}
 static void RwRenderStateSet(int,void*){}
 static QuestNativeSettings::Page suppliedPage;
+namespace ModelSets {static bool xbox;bool IsModernActive(){return xbox;}}
 namespace androidgame {bool VrCollectNativeSettings(QuestNativeSettings::Page &page){page=suppliedPage;return true;}}
 static bool gVrMenuVisible=true;
 static int gVrMenuPage=VR_MENU_PAGE_SETTINGS,gVrMenuSelection=0,menuCount=32;
@@ -160,5 +161,9 @@ int main(){
  gVrMenuVisible=true;
  for(int frame=0;frame<30;++frame)PlaySharedSettingsFeedback(VR_MENU_PAGE_SETTINGS,0,13,false,false,false);
  Check(menuSounds.size()==5,"idle and held inputs without pulses emit no repeated sounds");
+ ModelSets::xbox=true;suppliedPage=Page();suppliedPage.heading="AUDIO";suppliedPage.radioStation=0;texts.clear();
+ androidgame::VrDrawNativeSettings();
+ Check(std::any_of(texts.begin(),texts.end(),[](const Text &t){return t.value==u"HEAD";}),"Xbox radio badges retain readable station labels");
+ ModelSets::xbox=false;
  std::printf("Native settings: %u policy, column, pagination and renderer checks PASS.\n",checks);
 }

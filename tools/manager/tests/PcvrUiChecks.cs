@@ -18,7 +18,7 @@ internal static class PcvrUiChecks
         using var app=Application.Create().Init();
         using var ui=new ManagerUi(app,new SettingsStore(Path.Combine(directory,"settings")),initial,loadMusicOnOpen:false);
         ui.Initialize(); Exception? failure=null; var phase=0;
-        CheckBox Prepare()=>All(ui.Window).OfType<CheckBox>().Single(c=>c.Text.Contains("Prepare local PCVR data"));
+        CheckBox Prepare()=>All(ui.Window).OfType<CheckBox>().Single(c=>c.Text=="Install PC variant");
         Button Button(string name)=>All(ui.Window).OfType<Button>().Single(b=>b.Text==name);
         void Check(bool value,string message) { if(!value) throw new Exception(message); }
         app.AddTimeout(TimeSpan.FromMilliseconds(250),()=>
@@ -29,15 +29,20 @@ internal static class PcvrUiChecks
                 {
                     case 0:
                         Check(!All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Windows page contains Quest radio controls.");
+                        Check(!All(ui.Window).OfType<Button>().Single(b=>b.Text=="Original Xbox assets").Visible,"Separate Xbox action remains visible.");
+                        Check(All(ui.Window).OfType<TextField>().Take(2).All(f=>!f.Enabled),"Unselected variant paths are enabled.");
                         Prepare().Value=CheckState.Checked;
+                        All(ui.Window).OfType<CheckBox>().Single(c=>c.Text=="Install Original Xbox variant").Value=CheckState.Checked;
                         All(ui.Window).OfType<OptionSelector>().Single().Value=0;
                         break;
                     case 1:
                         Check(All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Quest controls did not return after switching target.");
+                        Check(All(ui.Window).OfType<TextField>().Take(2).All(f=>f.Enabled),"Selected variant paths did not become editable.");
                         All(ui.Window).OfType<OptionSelector>().Single().Value=1;
                         break;
                     case 2:
                         Check(Prepare().Value==CheckState.Checked,"Target switching lost unsaved PCVR options.");
+                        Check(All(ui.Window).OfType<CheckBox>().Single(c=>c.Text=="Install Original Xbox variant").Value==CheckState.Checked,"Both variant choices were not retained.");
                         Button("_Cancel").InvokeCommand(Command.Accept);
                         Check(Prepare().Value==CheckState.UnChecked,"Cancel did not discard PCVR option edits.");
                         File.WriteAllText(Path.Combine(directory,"pcvr-build.txt"),app.ToString());

@@ -7,11 +7,12 @@ read the Android version code (**805**) from the source kit. See the
 save-transfer and game changes since 0.8.0; earlier changes have their own entries.
 
 Build and install includes an optional **Convert and compress radio stations**
-checkbox. Configure FFmpeg and ffprobe in Settings. It converts locally to
-AAC-LC/M4A for direct Quest playback, either from your PC game folder alongside
-Copy game data or from the installed headset WAVs when Copy is off. Original PC
-files are preserved; headset WAVs are removed after verified replacement.
-Copy alone restores WAV playback. See [the build guide](../../BUILDING.md#build-and-install).
+checkbox. Configure FFmpeg and ffprobe in Settings. Selecting Install PC variant
+prepares AAC-LC/M4A radio in that variant before sealing and installation. Reimport
+the PC variant without conversion to restore WAVs. Original PC files are preserved.
+Conversion-only from an installed headset remains a legacy-root workflow; complete
+variants must be reimported so their checksums and inventory stay coherent.
+See [the build guide](../../BUILDING.md#build-and-install).
 
 The interactive manager builds Quest or experimental Windows PCVR. Windows has
 versioned local installation, isolated data preparation, launch and runtime diagnostics.
@@ -80,9 +81,11 @@ CPU/CLI checks. GPU and audio checks are opt-in because they require an active
 Vulkan GPU/audio endpoint. Build only skips installation and data preparation.
 It does not request Android licenses, build an APK, or invoke ADB.
 
-For the first playable install, enable **Prepare local PCVR data** and select
-your owned GTA III PC installation. Alternatively select an existing copy made
-with `--prepare-windows-data`. The default directories are separate:
+For a first playable install, select **Install PC variant**, **Install Original Xbox
+variant**, or both in **Build and install**, and provide the enabled folder/ISO
+paths. Leave both unchecked for an application-only update. Each complete source
+is installed under `variants/pc` or `variants/xbox`; selection applies after restart.
+An existing legacy PC data copy is preserved during migration. The default directories are separate:
 
 | Contents | Default under workplace |
 | --- | --- |
@@ -130,22 +133,21 @@ These operations require local headset access and must never run against cloud
 storage or publish original assets.
 
 CLI callers use `--run BuildAndInstall REQUEST.json` with `Options.Target: 1` and
-PCVR-specific flags `PcvrBuildOnly`, `PcvrPrepareData`, `PcvrGpuTests` and
+PCVR-specific flags `PcvrBuildOnly`, `PcvrGpuTests` and
 `PcvrAudioTests`. `BuildOnly`, `Release`, `CopyGameData` and radio flags remain
-Quest options. Use the same Settings object with `--run DiagnosePcvr REQUEST.json`
+Quest options. Select either or both `InstallPcVariant` / `InstallXboxVariant` and
+provide `XboxIsoPath` for Xbox; PC uses `Settings.GameDirectory`. The old
+`CopyGameData` and `PcvrPrepareData` flags are retained as PC-import aliases.
+Use the same Settings object with `--run DiagnosePcvr REQUEST.json`
 or `--run LaunchPcvr REQUEST.json`; launch optionally accepts `PcvrFrameLimit`
 (0 means unlimited). Relevant settings are `VulkanSdk`, `PcvrShaderCompiler`,
 `PcvrOpenXrSource`, `PcvrInstallDirectory`, `PcvrDataDirectory` and `PcvrUserDirectory`.
 Old JSON requests without Target continue to build Quest.
 
-**Original Xbox assets** also offers Quest/Windows target selection. Conversion
-still accepts only the supported locally owned Xbox disc image; **Use verified
-prepared output** rechecks the complete collection and skips conversion. Windows
-installs it under the prepared data directory's `modelsets/modern`, with verified
-staging and retained backups. Quest retains previous collections too. Staging and
-backups live outside active asset roots, so they do not alter matched fingerprints.
-No asset downloads, save replacement or automatic asset-source switch occurs.
-PCVR builds/data preparation also install the same bundled vehicle defaults as Quest.
+Original Xbox installation is now part of **Build and install**, using the same
+target selection as PC assets. The supported local ISO supplies a complete variant,
+including scripts, gameplay data, animation and audio. It no longer installs an
+overlay in `modern`. See the [asset guide](../../overlay/docs/QUEST_MODELSETS.md).
 
 The vehicle editor shares authored templates across Quest/PCVR and keeps personal
 overrides separate. Its bridge resolves manager PCVR paths and configured ADB;
@@ -160,7 +162,6 @@ see the [target transfer workflow](../vehicle-editor/README.md#quest-and-pcvr-ta
 | PCVR diagnostics | Check the active x64 runtime manifest/library and run Vulkan and OpenXR session probes. Does not change runtime selection or require game assets. Each probe has a 60-second timeout. |
 | Vehicle editor | Output folder and ZIP packaging. Configures CMake, builds the editor and three native test targets, runs CTest, installs and optionally packages. Includes the manager runtime for its device bridge. |
 | Manage music | Browse headset music and file details. Ctrl-click selects an inclusive range; Range end then an ordinary click also selects a range. Shift-click is supported where the terminal forwards it; Windows Terminal consumes it for text selection. Plain click selects one. Drag or Up/Down moves the selected group; Delete queues selected files for removal. Perform applies order/deletion and Cancel discards them. The import browser supports multiple files/folders with Ctrl-click or Space (Alt-click for ranges), plus validation only and radio board export. Imports use ffprobe validation, duplicate hashes and verified atomic commits. |
-| Original Xbox assets | User-provided GTA III US 1.0 `.iso`/`.xiso.iso` only; no asset downloads. Verifies retail fingerprints and converts visuals, particles, Neo effect textures/tuning and audio locally using CMake/Ninja/C++ and FFmpeg/ffprobe. Sound banks become PCM with rebuilt loop/offset metadata; speech and radio become lossless FLAC at authored rates. Installs the checksummed `modern` collection with staging/rollback. Select Classic / Original Xbox under Appearance > Asset Source and fully restart. Neo materials and optional rain droplets have live controls on the same page. Reimport older collections to add the new effects. Build only skips headset access. See [asset guide](../../overlay/docs/QUEST_MODELSETS.md). |
 | Repair game files | Optional port `gamefiles` folder; otherwise obtains the pinned source. Requires an existing game installation and repairs the allowlisted replacement text/frontend files. |
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean main, fetches official main, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
 | Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |

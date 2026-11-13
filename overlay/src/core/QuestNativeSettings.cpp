@@ -5,6 +5,7 @@
 #include "Font.h"
 #include "Sprite2d.h"
 #include "Text.h"
+#include "ModelSets.h"
 #include <stdio.h>
 
 namespace androidgame {
@@ -91,6 +92,10 @@ void VrDrawNativeSettings()
             auto &sprite = station == 9 ? FrontEndMenuManager.m_aMenuSprites[MENUSPRITE_MP3LOGO] :
                 FrontEndMenuManager.m_aFrontEndSprites[sprites[station]];
             sprite.Draw(CRect(X(x),Y(130),X(x+size),Y(130+size)),tint);
+            if(ModelSets::IsModernActive()) {
+                static const char *stations[]={"HEAD","DOUBLE","K-JAH","RISE","LIPS","GAME","MSX","FLASH","CHAT","USER"};
+                NativeText(stations[station],x+size*0.5f,174,0.22f,0.45f,CRGBA(235,170,50,255),false,true);
+            }
         }
     }
     CFont::SetFontStyle(FONT_BANK);

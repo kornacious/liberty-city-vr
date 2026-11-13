@@ -4,6 +4,8 @@
 #include "MatchedProfile.h"
 #include "QuestUpstatePackage.h"
 #include "QuestUpstate.h"
+#include "AssetVariants.h"
+#include <windows.h>
 #include "common.h"
 #include "CdStream.h"
 #include <filesystem>
@@ -18,12 +20,13 @@ int RunWindowsGame(unsigned frameLimit);
     std::cout.flush(); std::cerr.flush(); std::_Exit(code);
 }
 int main(int argc,char **argv) {
-    std::string data,user,questProfile; unsigned frames=0; bool configured=false,checkUpstateArchive=false;
+    std::string data,user,questProfile; unsigned frames=0; bool configured=false,checkUpstateArchive=false,checkAssets=false;
     try {
         for(int i=1;i<argc;++i) {
             std::string argument=argv[i];
             if(argument=="--help") { std::cout<<"Liberty City VR Windows game (experimental)\n--game-data DIRECTORY --user-data DIRECTORY [--frames N] [--quest-profile FILE]\nQuest profile matches captured rendering workload; PC timings are not Quest timings. Restart without the option for native PCVR.\nUse an isolated locally prepared PCVR game directory; original game assets are not supplied.\n"; FinishStartup(0); }
             if(argument=="--check-upstate-archive") { checkUpstateArchive=true; continue; }
+            if(argument=="--check-assets") { checkAssets=true; continue; }
             if(i+1>=argc) throw std::runtime_error("Missing option value.");
             if(argument=="--game-data") data=argv[++i];
             else if(argument=="--user-data") user=argv[++i];
@@ -52,6 +55,16 @@ int main(int argc,char **argv) {
         if(checkUpstateArchive) throw std::runtime_error("Use the Upstate executable for --check-upstate-archive.");
         if(questpackage::Enabled(data)) throw std::runtime_error("Upstate is enabled. Use Launch PCVR in the manager to select its engine.");
 #endif
+        const int selected=assetvariants::Select(data);
+        if(selected<0) {
+            if(!checkAssets) MessageBoxW(nullptr,L"PC/Xbox base not installed or incomplete. Use Build and install in the Liberty City VR Manager to install a complete variant.",L"Liberty City VR - game assets required",MB_OK|MB_ICONINFORMATION);
+            throw std::runtime_error("PC/Xbox base not installed or incomplete.");
+        }
+        if(checkAssets) {
+            if(!platform::configureWindows(data,user))throw std::runtime_error("Windows content root or media services unavailable.");
+            platform::shutdownWindows();
+            std::cout<<(selected==0?"PC":"Original Xbox")<<" complete asset variant and Windows platform ready.\n"; FinishStartup(0);
+        }
         if(!questProfile.empty()) { MatchedProfile::Load(questProfile); std::cout<<"Quest 3 compatibility workload profile active. Timings measure this PC, not Quest hardware.\n"; }
         if(!platform::configureWindows(data,user)) throw std::runtime_error("Local data or Windows media services unavailable.");
         configured=true;

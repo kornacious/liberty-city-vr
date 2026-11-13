@@ -14,8 +14,32 @@ public sealed class RadioStations(ManagerSettings settings, ICommandRunner runne
 
     public static string CompressedPath(string path) => path[..^4] + ".m4a";
 
+    public async Task ConvertLocal(string audio,CancellationToken token)
+    {
+        foreach(var source in Directory.EnumerateFiles(audio).Where(p=>IsStation(p,".wav"))) {
+            var output=Path.ChangeExtension(source,".m4a");var temporary=Path.Combine(audio,".radio-"+Guid.NewGuid().ToString("N")+".m4a");
+            var original=await runner.Run(settings.Ffprobe,["-v","error","-show_format","-show_streams","-of","json",source],showOutput:false,token:token);
+            using var metadata=JsonDocument.Parse(original.StandardOutput);
+            var seconds=double.Parse(metadata.RootElement.GetProperty("format").GetProperty("duration").GetString()!,CultureInfo.InvariantCulture);
+            if(!double.IsFinite(seconds)||seconds<=0)throw new IOException("Invalid PC radio duration.");
+            try {
+                await runner.Run(settings.Ffmpeg,["-nostdin","-v","error","-xerror","-i",source,"-map","0:a:0","-vn","-map_metadata","-1","-c:a","aac","-profile:a","aac_low","-b:a","128k","-ar","48000","-ac","2","-movflags","+faststart","-n",temporary],showOutput:false,token:token);
+                var probe=await runner.Run(settings.Ffprobe,["-v","error","-show_format","-show_streams","-of","json",temporary],showOutput:false,token:token);
+                var duration=MusicImporter.ValidateProbe(".m4a",new FileInfo(temporary).Length,probe.StandardOutput);
+                if(Math.Abs(duration-seconds*1000)>250)throw new IOException("Converted PC radio duration differs from source.");
+                await runner.Run(settings.Ffmpeg,["-nostdin","-v","error","-xerror","-i",temporary,"-f","null","-"],showOutput:false,token:token);
+                File.Move(temporary,output,true);File.Delete(source);
+            } finally {if(File.Exists(temporary))File.Delete(temporary);}
+        }
+        log.Write("PC radio prepared locally; retail source files preserved.");
+    }
+
     public async Task ConvertAndInstall(QuestDevice device, string? localAudio, CancellationToken token)
     {
+        if(localAudio is null) {
+            var variant=await device.Shell("test -f "+QuestDevice.Quote(QuestDevice.GameData+"/variants/pc/VARIANT_INFO.txt")+" && echo COMPLETE_PC_VARIANT",token,check:false);
+            if(variant.Output.Contains("COMPLETE_PC_VARIANT",StringComparison.Ordinal))throw new IOException("Select Install PC variant to change its radio conversion. Complete variants are replaced and revalidated together; installed assets were preserved.");
+        }
         // Fail before touching headset audio if either local dependency is missing.
         await runner.Run(settings.Ffmpeg, ["-version"], showOutput: false, token: token);
         await runner.Run(settings.Ffprobe, ["-version"], showOutput: false, token: token);
