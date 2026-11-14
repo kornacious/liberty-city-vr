@@ -52,6 +52,16 @@ need no reconversion. This adapts animation to re3's available textures; it
 does not implement additional console animation textures. No game data is used
 by this test. Repeated vehicle explosions still require headset QA.
 
+`test-particle-alpha.ps1 -StageRoot <assembled-tree>` compiles the production
+particle blend-selection and alpha-test save/restore blocks. It checks Xbox
+additive texture coverage and lifetime fades, Classic blend compatibility,
+opaque/dark/additive transitions and buffer flushing. Xbox additive particles
+use SRC_ALPHA/ONE so invisible texture RGB cannot wash out the effect; their
+soft alpha ramp bypasses world cutout testing during the particle pass only.
+Existing assets need no reconversion. No game data is used by this test.
+On 2026-11-14, the maintainer confirmed correct fire-particle appearance on
+Windows PCVR and the standalone Quest variant using Original Xbox assets.
+
 `test-jump-heading.ps1 -StageRoot <assembled-tree>` compiles the production Quest
 jump-heading helper, walk-direction calculation and launch-impulse branch. It
 checks standing and moving jumps after physical quarter/half turns, independent

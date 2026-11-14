@@ -1,0 +1,42 @@
+diff --git a/src/renderer/Particle.cpp b/src/renderer/Particle.cpp
+index 84af9ca..2b7583b 100644
+--- a/src/renderer/Particle.cpp
++++ b/src/renderer/Particle.cpp
+@@ -1532,6 +1532,15 @@ void CParticle::Render()
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void *)rwBLENDINVSRCALPHA);
+ 	
++	const bool xboxParticles = ModelSets::UseXboxParticles();
++#ifdef RW_VULKAN
++	// Alpha carries coverage in Xbox fire textures. Keep its soft ramp instead
++	// of inheriting the world's cutout threshold. Restore after the last flush.
++	const uint32 savedAlphaTest = rw::GetRenderState(rw::ALPHATESTFUNC);
++	if(xboxParticles)
++		rw::SetRenderState(rw::ALPHATESTFUNC, rw::ALPHAALWAYS);
++#endif
++
+ 	CSprite::InitSpriteBuffer2D();
+ 	
+ 	uint32 flags = DRAW_OPAQUE;
+@@ -1578,7 +1587,10 @@ void CParticle::Render()
+ 				}
+ 				else
+ 				{
+-					if ( psystem->Flags & DRAW_DARK )
++					// Classic additive textures encode coverage in RGB. Xbox
++					// textures also carry alpha: ONE would add invisible RGB and
++					// ignore the particle's lifetime alpha fade.
++					if ( xboxParticles || (psystem->Flags & DRAW_DARK) )
+ 						RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDSRCALPHA);
+ 					else
+ 						RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDONE);
+@@ -1846,5 +1858,9 @@ void CParticle::Render()
+ 	RwRenderStateSet(rwRENDERSTATESRCBLEND, (void *)rwBLENDSRCALPHA);
+ 	RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void *)rwBLENDINVSRCALPHA);
+ 
++#ifdef RW_VULKAN
++	rw::SetRenderState(rw::ALPHATESTFUNC, savedAlphaTest);
++#endif
++
+ 	POP_RENDERGROUP();
+ }
