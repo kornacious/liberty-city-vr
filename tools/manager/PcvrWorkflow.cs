@@ -176,6 +176,24 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             if (!File.Exists(Paths.Child(source,file))) throw new IOException("Choose the complete OpenXR-SDK 1.1.58 source directory, or leave it blank for the pinned download.");
         return source;
     }
+    private async Task EnsureDependencies(CancellationToken token)
+    {
+        bool Available() => Directory.Exists(Path.Combine(Prefix,"include","SDL3")) &&
+            Directory.Exists(Path.Combine(Prefix,"include","libavcodec")) &&
+            File.Exists(Path.Combine(Prefix,"share","libertyvr-dependencies","config.mak"));
+        if (Available()) return;
+        if (!Linux || !string.IsNullOrWhiteSpace(settings.LinuxPcvrDependencyPrefix))
+            throw new IOException("Desktop dependencies are missing or incomplete at " + Prefix +
+                ". Build them with tools/desktop/build-deps.sh CACHE PREFIX linux (Linux) or tools/desktop/build-deps.ps1 (Windows). On Linux, clear the dependency prefix setting to build them automatically at the default location. See overlay/desktop/README.md for prerequisites.");
+        var bash=Paths.FindExecutable("bash") ?? throw new IOException("Install Bash to build Linux desktop dependencies.");
+        foreach (var command in new[] { "curl", "tar", "sha256sum", "make", "pkg-config", "nasm" })
+            if (Paths.FindExecutable(command) is null)
+                throw new IOException("Install " + command + " to build Linux desktop dependencies. See overlay/desktop/README.md for prerequisites.");
+        log.Write("Building pinned SDL3 and FFmpeg dependencies. The first build downloads verified source archives and can take several minutes. Linux X11, Wayland/EGL and audio development packages must already be installed; see overlay/desktop/README.md.");
+        await runner.Run(bash,[Path.Combine(settings.Repository,"tools","desktop","build-deps.sh"),
+            Path.Combine(settings.Repository,".cache","desktop-deps"),Prefix,"linux"],settings.Repository,token:token);
+        if (!Available()) throw new IOException("Desktop dependency build did not produce a complete prefix at " + Prefix + ". See the preceding build output.");
+    }
     public async Task Build(ActionOptions options,CancellationToken token)
     {
         RequireHost(); var paths=Layout();
@@ -184,8 +202,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             VariantInstaller.ValidateSource(settings,options);
             // An application-only installation is allowed before importing assets.
         }
-        if(!Directory.Exists(Path.Combine(Prefix,"include","SDL3")) || !Directory.Exists(Path.Combine(Prefix,"include","libavcodec")))throw new IOException("Build pinned desktop dependencies first with tools/desktop/build-deps.sh or build-deps.ps1, or configure the desktop dependency prefix.");
         var found=await FindTools(token);
+        await EnsureDependencies(token);
         var tools=new Toolchain(settings,runner,log);
         var sdk=await OpenXrSource(tools,token);
         var source=await tools.Re3(token); var git=await tools.Git(token);
@@ -224,6 +242,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         if (!File.Exists(path)) throw new IOException("The selected OpenXR runtime manifest does not exist. Select a PC OpenXR runtime in its own application.");
         try
         {
+            // Linux runtime selection commonly links to a vendor manifest whose
+            // library path is relative to that manifest's actual location.
+            var manifest=new FileInfo(path);
+            path=manifest.ResolveLinkTarget(true)?.FullName ?? manifest.FullName;
             using var document=JsonDocument.Parse(File.ReadAllText(path));
             var library=document.RootElement.GetProperty("runtime").GetProperty("library_path").GetString();
             if (string.IsNullOrWhiteSpace(library)) throw new InvalidDataException("OpenXR runtime manifest has no library path.");

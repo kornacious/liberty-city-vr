@@ -55,7 +55,11 @@ inline double Milliseconds(uint64_t begin,uint64_t end,unsigned bits,double peri
     return double(delta)*period/1000000.0;
 }
 struct Recording {
-    struct Segment {unsigned pass=Other,begin=0,end=0;};
+    struct Segment {
+        unsigned pass,begin,end;
+        Segment(unsigned pass=Other,unsigned begin=0,unsigned end=0)
+            :pass(pass),begin(begin),end(end){}
+    };
     Segment segments[MaxMarkers+1];
     unsigned stack[StackSize]={},depth=0,active=Other,timingActive=Other,markers=0,lastQuery=0;
     uint32_t seen=uint32_t(1)<<Other,status=NoSample,draws[Count]={};

@@ -299,6 +299,12 @@ bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size
 		if(size_t(extension - relative) + 6 > sizeof(converted)) return false;
 		snprintf(converted, sizeof(converted), "%.*s.flac", int(extension - relative), relative);
 	}
+	// The importer writes lowercase filenames; engine audio tables use mixed
+	// case (including sfx.RAW/SDT). Normalize only the relative audio path.
+	for(char *p=converted;*p;++p){
+		if(*p>='A' && *p<='Z') *p += 'a'-'A';
+		if(*p=='\\') *p='/';
+	}
 	BuildOverlayPath(MODEL_SET_MODERN, converted, resolvedPath, size);
 	return FileExists(resolvedPath);
 }

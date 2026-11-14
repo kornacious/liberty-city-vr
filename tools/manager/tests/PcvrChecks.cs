@@ -107,6 +107,21 @@ internal static class PcvrChecks
             File.WriteAllText(manifest,"{}"); Reject(()=>PcvrWorkflow.ValidateRuntimeManifest(manifest));
             return Task.CompletedTask;
         });
+        await test("Linux OpenXR selection resolves relative libraries from the linked vendor manifest",()=>
+        {
+            if(!OperatingSystem.IsLinux()) return Task.CompletedTask;
+            var vendor=Path.Combine(fixture,"vendor-runtime"); Directory.CreateDirectory(vendor);
+            var library=Path.Combine(vendor,"runtime.so"); File.WriteAllText(library,"synthetic");
+            var manifest=Path.Combine(vendor,"runtime.json");
+            var contents="{\"runtime\":{\"library_path\":\"runtime.so\"}}";
+            File.WriteAllText(manifest,contents);
+            var selection=Path.Combine(fixture,"active-runtime.json");
+            File.CreateSymbolicLink(selection,Path.GetRelativePath(fixture,manifest));
+            Check(PcvrWorkflow.ValidateRuntimeManifest(selection)==Path.GetFullPath(library));
+            Check(new FileInfo(selection).LinkTarget is not null && File.ReadAllText(manifest)==contents);
+            File.Delete(library); Reject(()=>PcvrWorkflow.ValidateRuntimeManifest(selection));
+            return Task.CompletedTask;
+        });
         await test("PCVR diagnostics report an unavailable headset without game or ADB calls",async()=>
         {
             using var log=new PrivateLog(); var commands=new ProbeRunner { MissingHeadset=true };

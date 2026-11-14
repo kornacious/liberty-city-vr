@@ -91,7 +91,10 @@ inline std::array<int32_t,TopSourceCount> TopNoDepthSources(const Stats &stats){
     }
     return result;
 }
-struct Point {double x=0,y=0,z=0;}; // screen x/y in cells, Vulkan depth [0,1]
+struct Point { // screen x/y in cells, Vulkan depth [0,1]
+    double x,y,z;
+    Point(double x=0,double y=0,double z=0):x(x),y(y),z(z){}
+};
 // Object-space scheduling cache only. Never merges faces or caches visibility.
 // An axis quota prevents broad roofs/roads from excluding all wall orientations.
 struct SourceCache {
@@ -301,7 +304,10 @@ inline bool ContainsFace(const MeshRange &range,unsigned face){
     const uint64_t first=uint64_t(face)*3;
     return first>=range.first && first+3<=uint64_t(range.first)+range.count;
 }
-struct Footprint {double area=0;bool valid=false;};
+struct Footprint {
+    double area;bool valid;
+    Footprint(double area=0,bool valid=false):area(area),valid(valid){}
+};
 // Scheduling only: these bounds never write depth or hide a rendered object.
 // Uncertain near/far crossings receive a full-screen scheduling estimate.
 // Only clipped real opaque triangles can subsequently contribute depth.

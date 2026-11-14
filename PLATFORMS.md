@@ -8,7 +8,7 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Implemented; release candidate | Manager source assembly, APK build and local headset installation. |
 | Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
-| Linux PCVR, x64, OpenXR + Vulkan | Shared SDL/FFmpeg implementation; native headset acceptance pending | Separate manager target, build/install/data/save settings and XDG runtime discovery. GCC/Clang and native desktop/headset results are recorded separately. |
+| Linux PCVR, x64, OpenXR + Vulkan | Validated on native CachyOS with WiVRn | Manager build/install/launch, PC and Original Xbox audio, first-mission completion and saving confirmed locally. Separate target data/save settings and XDG runtime discovery. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
@@ -18,8 +18,14 @@ The shared [desktop implementation](overlay/desktop/README.md) uses SDL3 for
 windows, input, Vulkan surfaces and audio output, plus FFmpeg audio decoding.
 Windows and Linux reuse the same game, renderer, XR integration and spatial
 mixer. The previous Windows backend remains available as a migration fallback
-until native Linux X11/Wayland and WiVRn acceptance is complete. Linux builds
+while broader desktop/runtime coverage is assessed. Linux builds
 under WSL do not establish native Linux VR support.
+
+Native Linux PCVR validation was confirmed by the maintainer on 2026-11-14
+using CachyOS and WiVRn: the game builds and launches, PC and Original Xbox
+audio play correctly, and the first mission can be completed and saved.
+This validates the tested configuration; other distributions, display backends,
+runtimes, controllers, later missions and save loading need separate coverage.
 
 Development after the 0.8.5 scope preparation adds a standalone
 [Windows bring-up executable](overlay/windows/README.md). It compiles the same

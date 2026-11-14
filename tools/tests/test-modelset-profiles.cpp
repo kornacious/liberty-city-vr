@@ -70,6 +70,10 @@ int main(){
  require(GetCalibrationSetForCategory(MODEL_CATEGORY_PEDS)==MODEL_SET_XBOX,"Xbox calibration retained");
  require(!IsAvailable(MODEL_SET_CLASSIC)&&!IsAvailable(MODEL_SET_XBOX),"uninstalled PC and legacy third value unavailable");
  char out[1024];const char *path="data/main.scm";
+ require(GetOriginalXboxAudioPath("audio/sfx.SDT",out,sizeof(out)),"mixed-case SDT resolves imported lowercase bank");
+ require(GetOriginalXboxAudioPath("AUDIO\\SFX.RAW",out,sizeof(out)),"mixed-case RAW and separators resolve imported bank");
+ require(GetOriginalXboxAudioPath("Audio/TEST0.WAV",out,sizeof(out)),"mixed-case speech resolves imported FLAC");
+ require(!GetOriginalXboxAudioPath("audio/../sfx.RAW",out,sizeof(out)),"audio traversal remains rejected");
  require(std::string(ResolveAssetPath(path,out,sizeof(out))).find("variants/xbox/data/main.scm")!=std::string::npos,"script uses complete Xbox base");
  require(std::string(ResolveAssetPath("models/coll/vehicles.col",out,sizeof(out))).find("variants/xbox/")!=std::string::npos,"vehicle collision never borrows PC files");
  require(std::string(ResolveAssetPath("data/missing.dat",out,sizeof(out))).find("variants/xbox/")!=std::string::npos,"missing files remain scoped to selected base");

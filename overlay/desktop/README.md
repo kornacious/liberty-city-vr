@@ -113,7 +113,11 @@ they contain no game data. Tests exercise seek, pause, loop, output replacement,
 stream replacement and shutdown. Audio callback counters are diagnostics, not
 measurements of headset latency.
 
-Native acceptance must cover Windows/VirtualDesktopXR and Linux/WiVRn,
+Native Linux gameplay validation was confirmed on CachyOS/WiVRn on 2026-11-14:
+build and launch, PC and Original Xbox audio, first-mission completion and saving.
+See [platform status](../../PLATFORMS.md) for the tested scope.
+
+Broader native acceptance must cover Windows/VirtualDesktopXR and Linux/WiVRn,
 both X11 and native Wayland, controller bindings, audio routing, session/focus
 recovery, Classic/Xbox/Upstate and clean shutdown. WSL builds do not establish
 native Linux display or VR acceptance. Keep the migration fallback until that

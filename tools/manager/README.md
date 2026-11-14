@@ -76,6 +76,12 @@ data and save settings; defaults use `workplace/linux-pcvr` and
 `repository/.cache/desktop-deps/linux`. Target numbers in JSON requests remain
 0 Quest, 1 Windows PCVR, with 2 added for Linux PCVR.
 
+With the Linux dependency prefix left blank, Build and install builds the pinned
+SDL3 and FFmpeg dependencies automatically when missing, reusing verified source
+archives in `repository/.cache/desktop-deps`. Install the Linux development
+prerequisites listed in [desktop dependencies](../../overlay/desktop/README.md#dependencies)
+first. A custom dependency prefix must already contain a complete dependency build.
+
 Build and install assembles fresh sources, builds Release, runs native checks
 and publishes a versioned installation. Launch and diagnostics honor
 `XR_RUNTIME_JSON` or XDG OpenXR runtime configuration without changing runtime

@@ -31,7 +31,7 @@ Vulkan renderer. The project covers **standalone Meta Quest 3** and experimental
 | --- | --- |
 | Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
 | Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable build; manager builds, installs locally, launches and diagnoses the PC runtime. |
-| Linux PCVR / x64 / OpenXR + Vulkan | Shared SDL3/FFmpeg game and manager implementation; native Linux/WiVRn acceptance pending. |
+| Linux PCVR / x64 / OpenXR + Vulkan | Validated on native CachyOS/WiVRn: build, launch, PC/Xbox audio, first mission and saving. See [validation scope](PLATFORMS.md). |
 
 Manager/editor host support and PCVR game support are validated separately.
 See [platform scope and roadmap](PLATFORMS.md)

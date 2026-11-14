@@ -5,6 +5,9 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 
 ## Unreleased — Windows OpenXR/Vulkan game integration
 
+- Recorded maintainer validation of native Linux PCVR on CachyOS/WiVRn:
+  successful build and launch, PC and Original Xbox audio, first-mission
+  completion and saving (2026-11-14).
 - Fixed Upstate Liberty mission retry snapshots being skipped on Quest and
   PCVR because its scripts set the mission flag before the cutscene checkpoint.
   Replay saves now preserve that flag; ordinary quicksave restrictions remain.
