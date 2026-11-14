@@ -25,7 +25,7 @@ $code += 'namespace OculusVR {' + "`n" + $handEnabled + "`n}`n"
  }
  [IO.File]::WriteAllText((Join-Path $fixture $name),$runner)
 }
-$patch=[IO.File]::ReadAllText((Join-Path $KitRoot 'patches/77-re3-quest-xbox-train-exit-facing.patch'))
+$patch=[IO.File]::ReadAllText((Join-Path $KitRoot 'patches/01-re3-liberty-vr.patch'))
 if($patch -notmatch '(?s)ped->SetPosition\(posAfterExit\).*?veh->RemovePassenger\(ped\).*?OculusVR::FinishQuestXboxTrainExit\(ped, veh\)'){
  throw 'Exit heading handoff must run after native platform placement and passenger removal.'
 }

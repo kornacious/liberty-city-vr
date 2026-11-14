@@ -1,10 +1,11 @@
 # Liberty City VR Manager
 
-Included with **Liberty City VR 0.8.5 — release candidate**, ready for public
+Included with **Liberty City VR 0.9.0 — release candidate**, ready for public
 testing and playing with finishable main missions. Quest build/install and update
-read the Android version code (**805**) from the source kit. See the
-[release changelog](../../CHANGELOG.md#085--release-candidate) for manager, music,
-save-transfer and game changes since 0.8.0; earlier changes have their own entries.
+read the Android version code (**900**) from the source kit. See the
+[release changelog](../../CHANGELOG.md#090--release-candidate) for Windows/Linux
+PCVR builds, the shared SDL3/FFmpeg backend, asset variants, portable installations
+and all changes since 0.8.5; earlier changes have their own entries.
 
 Build and install includes an optional **Convert and compress radio stations**
 checkbox. Configure FFmpeg and ffprobe in Settings. Selecting Install PC variant
@@ -14,7 +15,7 @@ Conversion-only from an installed headset remains a legacy-root workflow; comple
 variants must be reimported so their checksums and inventory stay coherent.
 See [the build guide](../../BUILDING.md#build-and-install).
 
-The interactive manager builds Quest or experimental Windows PCVR. Windows has
+The interactive manager builds Quest or experimental Windows/Linux PCVR. Windows has
 versioned local installation, isolated data preparation, launch and runtime diagnostics.
 Developer CLI commands `--assemble RE3 OUTPUT` and
 `--prepare-windows-data GTA OUTPUT` prepare sources and an isolated local asset

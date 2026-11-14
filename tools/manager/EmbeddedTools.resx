@@ -7585,7 +7585,7 @@ if($LASTEXITCODE -ne 0){throw 'Native head attachment regression failed.'}
  [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('lcvr-shared-settings-'+[Guid]::NewGuid().ToString('N')))
 )
 $ErrorActionPreference='Stop'
-$patch=[IO.File]::ReadAllText((Join-Path $KitRoot 'patches/78-re3-quest-shared-settings.patch'))
+$patch=[IO.File]::ReadAllText((Join-Path $KitRoot 'patches/01-re3-liberty-vr.patch'))
 if($patch -notmatch 'QuestGameSettings::ServiceFrontendAudioFrame\(\)'){throw 'Shared frontend must service audio before returning'}
 $source=[IO.File]::ReadAllText((Join-Path $KitRoot 'overlay/src/core/QuestGameSettings.cpp'))
 $source=[regex]::Replace($source,'(?m)^#include [^\r\n]+\r?\n','')

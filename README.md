@@ -27,7 +27,7 @@ Vulkan renderer. The project covers **standalone Meta Quest 3** and experimental
 **Windows/Linux PCVR targets** in one source repository:
 [github.com/kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
-| Target | Status in 0.8.5 |
+| Target | Status in 0.9.0 |
 | --- | --- |
 | Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
 | Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable build; manager builds, installs locally, launches and diagnoses the PC runtime. |
@@ -62,12 +62,12 @@ population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version: **v0.8.5 — release candidate**.
+Current source-kit version: **v0.9.0 — release candidate**.
 
 **The Quest build is ready for public testing and playing, with finishable main missions.** Please
 report mission progression issues, VR comfort problems and compatibility bugs
-in the Flat2VR community. See [the changelog](CHANGELOG.md#085--release-candidate)
-for changes since 0.8.0; earlier release changes remain documented below it.
+in the Flat2VR community. See [the changelog](CHANGELOG.md#090--release-candidate)
+for changes since 0.8.5 (`6fbb67dd29`); earlier release changes remain documented below it.
 
 The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
 foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
@@ -82,7 +82,14 @@ speedometers, train/camera/mission fixes, and expanded graphics/profiling tools.
 hands-up surrender, shared native/VR settings, curated Upstate Liberty management
 and engine integration, Neo materials/particles/audio, rendering debug views and
 sniper overlay fixes. It also establishes the planned Windows PCVR scope and
-updates the official repository URL. PCVR remains future work.
+updates the official repository URL. PCVR was planned at that release.
+**v0.9.0** adds buildable Windows and Linux PCVR games, sharing SDL3 window/input/
+audio output and FFmpeg media decoding for maintainability alongside the existing
+shared game, OpenXR integration and Vulkan renderer. It adds portable versioned
+PCVR installations, independent PC/Original Xbox asset variants, PCVR Upstate
+Liberty, matched replay benchmarks, vehicle authoring improvements and gameplay,
+audio, rendering and manager fixes through `6f13a4b`. See the
+[0.9.0 release notes](CHANGELOG.md#090--release-candidate) for the complete changes.
 See the [gameplay guide](overlay/docs/QUEST_GAMEPLAY.md),
 [spatial audio notes](overlay/docs/SPATIAL_AUDIO.md),
 [model guide](overlay/docs/QUEST_MODELSETS.md),
@@ -112,9 +119,9 @@ manual slots, calibration, retail data and optional model overlays stay in place
 
 | Path | Contents |
 |---|---|
-| `overlay/` | Current Android/OpenXR, VR integration and tooling files; common/platform separation planned |
-| `patches/` | Changes applied to a user-supplied re3 checkout |
-| `librw/` | MIT-licensed librw fork with the Quest Vulkan backend |
+| `overlay/` | Shared VR/OpenXR integration, Android and SDL3/FFmpeg desktop services, and tooling |
+| `patches/` | One consolidated diff applied to the pinned user-supplied re3 checkout |
+| `librw/` | MIT-licensed librw fork with the shared Quest/PCVR Vulkan backend |
 | `tools/` | Cross-platform .NET manager, embedded auxiliary tools and native fixtures |
 
 Modified upstream re3 files are distributed as patches, not as a second copy
@@ -146,8 +153,10 @@ The exact patch base comes from the public upstream re3 project:
 
 The tested public `master` commit is
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The assembly action never modifies
-that checkout: they copy it to a new directory, apply all patches in
-`patches/` in filename order, and add the port overlay and bundled librw fork.
+that checkout: it copies it to a new directory, applies the consolidated
+`patches/01-re3-liberty-vr.patch`, and adds the port overlay and bundled librw fork.
+The single patch contains shared and platform-guarded changes for every target;
+see [patch maintenance](patches/README.md).
 No private repository is required or referenced.
 
 Complete prerequisites and copy-paste commands are in
@@ -278,7 +287,7 @@ removed; active build compatibility aliases remain where required.
 ## Planned development with Codex
 
 Codex is planned to take over the ongoing coding-assistance role for Liberty
-City VR across its Quest and planned PCVR targets, with priorities and changes
+City VR across its Quest and Windows/Linux PCVR targets, with priorities and changes
 directed and reviewed by the project maintainer. Planned work includes:
 
 - Fixing reported gameplay, audio, save-system and VR interaction issues.

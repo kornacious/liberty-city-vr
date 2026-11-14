@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(LibertyVRWindows VERSION 0.8.5 LANGUAGES C CXX)
+project(LibertyVRWindows VERSION 0.9.0 LANGUAGES C CXX)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()

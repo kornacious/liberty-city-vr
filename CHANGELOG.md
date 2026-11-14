@@ -3,7 +3,108 @@
 The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
 port from GTA Vice City to GTA III. Later entries describe Liberty City VR releases.
 
-## Unreleased — Windows OpenXR/Vulkan game integration
+## 0.9.0 — Release candidate
+
+Source-build release covering all 31 commits after the 0.8.5 baseline
+`6fbb67dd29`, beginning with Windows game integration `136ca86ef0` and ending
+with `6f13a4b` (2026-11-14), plus the version and patch consolidation below.
+Quest remains playable with finishable main missions; Windows and Linux PCVR
+are available to build and play, with experimental desktop compatibility scope.
+No APK, desktop binary release or original game assets are supplied.
+
+### PCVR builds and shared maintenance
+
+- Build Windows x64 PCVR on Windows and Linux x64 PCVR on Linux through the
+  manager's Build and install, Launch PCVR and PCVR diagnostics pages, or the
+  shared desktop CMake workflow. Outputs, dependencies, installations, game data,
+  preferences and saves are isolated by target; desktop workflows do not use ADB.
+- Migrated both desktop targets to **SDL3** for windowing, Vulkan surfaces,
+  keyboard/mouse/gamepad input and audio output, and **FFmpeg** for media
+  decoding. The game, OpenXR integration, librw Vulkan renderer, shaders and
+  spatial/HRTF mixer remain shared; Quest retains its Android platform services.
+  This replaces duplicated Windows-specific desktop services with a common
+  implementation for maintainability. The old Windows backend remains an
+  explicit CMake fallback while broader desktop acceptance continues.
+- Added pinned, checksummed SDL3/FFmpeg source dependency builds and local
+  packaging with libraries, notices, FFmpeg configuration and matching archives.
+  Linux builds missing dependencies automatically at the default prefix;
+  custom prefixes require a complete build. FFmpeg playback links its libraries
+  directly, supports the existing ADPCM/ADF radio formats and common audio
+  formats, and disables network protocols and unnecessary codecs.
+- Added shared audio-output selection, OS-default routing, disconnected-device
+  fallback/reconnection and silent recovery when no output exists. Fixed Linux
+  build/header compatibility, linked OpenXR runtime manifest resolution and
+  imported Xbox audio filename casing. Keep native X11/Wayland, other runtimes
+  and device-routing acceptance distinct from compilation and dummy-audio tests.
+- Recorded Windows/VirtualDesktopXR stereo, tracking, input and audio validation.
+  Native Linux CachyOS/WiVRn build, launch, PC/Xbox audio, first-mission completion
+  and saving were confirmed on 2026-11-14. This does not establish all Linux
+  distributions, X11/Wayland combinations, later missions or save-loading coverage.
+- Added portable `app/current` PCVR installations, recoverable archival/rollback,
+  migration from legacy current pointers, build IDs and executable-relative
+  data/save configuration. Installed-version selection, manual launch paths and
+  optional Windows/Linux desktop shortcuts support launching outside the manager;
+  enabled Upstate dispatch and separate expansion saves are preserved.
+
+### Assets, gameplay, rendering and tools
+
+- Added independent complete PC and Original Xbox asset variants on Quest and
+  PCVR, imported from locally owned sources. Selection shares personal settings
+  and saves within a target while preserving target isolation, verified staging,
+  retained backups and existing legacy data. Required Xbox content comes from a
+  local disc image. Updated bundled Xbox vehicle placement defaults.
+- Fixed the Xbox camera tutorial freeze with controller-action aliases, bounded
+  message substitution and bounded font token scanning.
+- Fixed skinned hands and holstered weapons during vehicle entry/exit for PC and
+  Xbox Claude; preserved native jumpsuit hands outside those transitions. Steering
+  grips now survive dashboard interaction. Latest Neo road-gloss lighting uses
+  the world sun direction instead of rotating highlights with the player's body.
+- Fixed Xbox additive particle alpha/lifetime fades and render-state restoration;
+  existing assets need no reconversion. Fixed car horn sample-rate pitch and
+  asynchronously starting/looping PCVR music being cancelled prematurely,
+  including the truncated Xbox mission-passed cue. The SDL/FFmpeg backend now
+  supplies the common desktop media path; earlier Windows backends are described
+  in the detailed integration record below.
+- Fixed PCVR startup menus appearing at the wrong height before tracking is ready;
+  the theatre remains view-relative until a focused valid head pose can anchor it.
+- Restored the Weapons cheat submenu with individual weapon grants. Vehicle
+  invincibility now applies to Claude's driven vehicle and restores its saved
+  protection on disable, exit, vehicle change or deletion, preserving native
+  mission/model protection. Fixed Upstate mission-retry checkpoint handling.
+- Added both-grips + Y Simulation Replay and in-car both-grips + B cheats shortcuts,
+  consuming held chords until release. Replay can prepare the recorded vehicle,
+  seat the player, restore its start state and repeat 1–10 passes with independent
+  reports/captures; stopping or failure cancels the remaining passes.
+- Separated the FPS overlay from performance recording and removed duplicated
+  PCVR statistics. Added detailed rendering/occlusion diagnostics, sampled native
+  pass GPU timings, conservative clipped-polygon coverage, depth reuse and clipping
+  fast paths, stereo previews, Quest depth-rejection/LRZ transition diagnostics,
+  manual RenderDoc capture and persistent per-demo automatic capture at completed
+  playback FPS minima. These diagnostics do not imply measured Quest speedups.
+- Added target-aware PCVR Upstate Liberty installation/activation, matched
+  Quest/PCVR replay benchmarks and workload profiles, cross-target vehicle-editor
+  templates/transfers and live acknowledgement, desktop preview/input, color-space
+  fixes and texture upload/streaming fixes, detailed below.
+- Improved manager file-browser roots and synchronized tree navigation, and opened
+  the Windows launcher in classic Console Host for Virtual Desktop touch taps.
+  Updated agent guidance to separate host/target validation and local-only data.
+- Set Android version name, shared native/menu version, desktop CMake and
+  diagnostic text to **0.9.0**, and Android/OpenXR application version codes to
+  **900**. Historical release entries and synthetic legacy-version fixtures stay
+  unchanged.
+- Consolidated all **90** build patches into `patches/01-re3-liberty-vr.patch`.
+  Both the old stack and the flat patch produce byte-identical upstream source
+  trees (678 files). Every target already uses the same guarded engine source,
+  so a single diff avoids overlapping common/platform patch dependencies.
+  Source fingerprints include patch bytes/names and versioned native inputs;
+  regenerate matched benchmark captures on both targets for 0.9.0 rather than
+  comparing them as source-identical to pre-consolidation builds.
+
+### Detailed integration record
+
+The following records the desktop integration work and validation as it landed;
+shared SDL3/FFmpeg services and portable current installations above supersede
+initial Windows-only backends and installation pointers.
 
 - Recorded maintainer validation of native Linux PCVR on CachyOS/WiVRn:
   successful build and launch, PC and Original Xbox audio, first-mission
@@ -203,9 +304,9 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
   treating successful command submission as proof of rendered geometry.
 - Added Windows build/validation documentation and pinned, SHA256-checked
   Khronos OpenXR loader source fallback. Original game data is not required.
-- Interactive manager target selection, desktop packaging and the Quest
-  compatibility profile remain planned; Windows game support is experimental.
-  The diagnostic deliberately serializes GPU submissions and is not a benchmark.
+- The initial diagnostic deliberately serializes GPU submissions and is not a
+  benchmark. Manager target selection, desktop packaging and captured Quest
+  workload profiles were subsequently implemented as recorded above.
 
 ## 0.8.5 — Release candidate
 

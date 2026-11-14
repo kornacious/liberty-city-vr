@@ -1,17 +1,18 @@
 # Build and manage Liberty City VR
 
-This guide builds **0.8.5**, the release candidate ready for public testing and
-playing with finishable main missions. Android uses version code **805**; the
-APK and native About/menu version strings are **0.8.5**. See the
-[changelog](CHANGELOG.md#085--release-candidate) for the release changes.
+This guide builds **0.9.0**, the release candidate ready for public testing and
+playing with finishable main missions. Android uses version code **900**; the
+APK and native About/menu version strings are **0.9.0**. See the
+[changelog](CHANGELOG.md#090--release-candidate) for the release changes.
 
-These instructions build the **Quest Android application**. Windows and Linux
-are build-host platforms here. An experimental [Windows PCVR game and renderer
-diagnostic](overlay/windows/README.md) now have a separate CMake workflow with
-local source/data preparation commands. The manager also supports Windows target
-selection, build/checks, versioned local installation, launch and runtime diagnostics;
-see the [PCVR workflow](tools/manager/README.md#windows-pcvr). These Quest instructions
-and their deployment steps remain separate from the Windows target.
+The manager builds the **Quest Android application**, **Windows PCVR** and
+**Linux PCVR**. Select the desktop target matching your native host to build,
+check, install locally, launch and diagnose it. Both desktop targets use the
+[shared SDL3/FFmpeg CMake workflow](overlay/desktop/README.md), with isolated
+data/save locations and pinned dependencies. See the
+[PCVR workflow](tools/manager/README.md#windows-pcvr), including Linux prerequisites
+and automatic default-prefix dependency builds. Quest APK installation and its
+ADB steps below apply only to the Quest target.
 
 The supported entrypoint on Windows and Linux is the .NET 10 console manager:
 

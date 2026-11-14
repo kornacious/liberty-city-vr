@@ -1,6 +1,6 @@
 # Liberty City VR platform scope
 
-Liberty City VR 0.8.5 is a source-only GTA III VR project built on re3,
+Liberty City VR 0.9.0 is a source-only GTA III VR project built on re3,
 OpenXR and the bundled librw Vulkan renderer. Its official repository is
 [kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
@@ -27,23 +27,23 @@ audio play correctly, and the first mission can be completed and saved.
 This validates the tested configuration; other distributions, display backends,
 runtimes, controllers, later missions and save loading need separate coverage.
 
-Development after the 0.8.5 scope preparation adds a standalone
-[Windows bring-up executable](overlay/windows/README.md). It compiles the same
+Version 0.9.0 includes a standalone
+[desktop diagnostic executable](overlay/desktop/README.md) for Windows and Linux. It compiles the same
 librw Vulkan sources and shaders as Quest, uses shared stereo transforms, and
 implements runtime/device negotiation, stereo diagnostic rendering and basic
 controller grip/select actions. A separate experimental game target reuses the re3
 game loop, tracked VR interactions, menus and spatial audio mixer. Neither bundles game assets.
 
-## Shared architecture and planned implementation
+## Shared architecture and implementation
 
-Keep both game targets in this repository, sharing re3 patches, VR gameplay,
+Keep all game targets in this repository, sharing re3 patches, VR gameplay,
 menus, semantic input actions, librw Vulkan rendering, shaders and diagnostics.
-As Windows support is implemented, extract reusable build/shader definitions
+Maintain reusable build/shader definitions
 and common OpenXR frame, view and action handling from the Android integration.
 Keep platform startup, logging, file paths, audio-device integration and optional
 runtime extensions behind platform-specific boundaries.
 
-The intended sequence is:
+The implemented sequence is:
 
 1. Extract shared build, renderer and OpenXR functionality while keeping Quest working.
 2. Bring up a Windows OpenXR/Vulkan stereo scene and tracked controller input.
@@ -94,6 +94,6 @@ synthetic frame pressure and estimated timings must be labeled accordingly.
 Measure Quest improvements on Quest and PCVR improvements on the tested PC/runtime.
 
 Run target-appropriate compilation and automated checks when implementation
-changes. Continue Quest deployment rules in [AGENTS.md](AGENTS.md); future
-Windows validation must be reported separately. All original game data stays
+changes. Continue Quest deployment rules in [AGENTS.md](AGENTS.md); each
+target's validation must be reported separately. All original game data stays
 local, and personal device identifiers remain private on both targets.
