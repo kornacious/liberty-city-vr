@@ -942,6 +942,29 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		}
 	}
 
+	// Neo road gloss needs a world light even on prelit geometry. The normal
+	// lighting path above requires LIGHT and NORMALS; enumerateLights also
+	// omits directionals without normals. Leaving the default (0,0,1) here
+	// pins the gloss highlight to the player's play-space forward direction.
+	// RenderRoads disables LIGHTATOMICS on the sun to suppress base lighting,
+	// so this lookup must also ignore that flag. LightsCreate registers the
+	// primary sun before the extra directionals; its frame stays world aligned.
+	// Read only the direction: unlit geometry must keep black diffuse/ambient.
+	if(gvk.neoEnabled && push.lightDirColour[3] == 0.0f && engine->currentWorld != nil){
+		World *world = (World*)engine->currentWorld;
+		FORLIST(lnk, world->globalLights){
+			Light *sun = Light::fromWorld(lnk);
+			if(sun->getType() != Light::DIRECTIONAL)
+				continue;
+			const V3d &at = sun->getFrame()->getLTM()->at;
+			const float32 *wp = gvk.worldToPlay;
+			push.lightDirColour[0] = wp[0]*at.x + wp[4]*at.y + wp[8]*at.z;
+			push.lightDirColour[1] = wp[1]*at.x + wp[5]*at.y + wp[9]*at.z;
+			push.lightDirColour[2] = wp[2]*at.x + wp[6]*at.y + wp[10]*at.z;
+			break;
+		}
+	}
+
 	// Which of the frame's dynamic lights are worth this atomic's pixels,
 	// decided once per draw so the fragment loop is only ever paid where a
 	// light can actually land: a sphere overlap for the surface term, and for
