@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "content": "classic",
+  "settings": {
+    "width": 1280,
+    "height": 720,
+    "views": 1,
+    "weather": 0,
+    "next_weather": 0,
+    "hour": 12,
+    "traffic": false,
+    "pedestrians": false,
+    "profiling": true
+  },
+  "camera": {
+    "position": [1000, -500, 40],
+    "rotation": [0, 0, 0, 1],
+    "fov": 90
+  },
+  "path": [
+    {"time": 0, "camera": {"position": [1000, -500, 40], "rotation": [0, 0, 0, 1], "fov": 90}},
+    {"time": 10, "camera": {"position": [1000, -300, 60], "rotation": [0, 0, 0, 1], "fov": 90}}
+  ],
+  "timestep": 0.016666666666666666,
+  "duration": 10,
+  "warmup_frames": 120,
+  "repetitions": 3,
+  "screenshots": [0, 300, 599]
+}

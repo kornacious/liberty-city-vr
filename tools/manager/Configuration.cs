@@ -79,7 +79,7 @@ public sealed class SettingsStore(string? directory = null)
     }
 }
 
-public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, LaunchPcvr = 10, DiagnosePcvr = 11, ImportMusic = ManageMusic }
+public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, LaunchPcvr = 10, DiagnosePcvr = 11, LaunchRenderDebug = 12, ImportMusic = ManageMusic }
 public enum GameTarget { Quest = 0, WindowsPcvr = 1, LinuxPcvr = 2 }
 
 public enum ModOperation { Status, Install, Enable, Disable, Delete, Validate }
@@ -105,6 +105,8 @@ public sealed record ActionOptions
     public bool PcvrAudioTests { get; set; }
     public int PcvrFrameLimit { get; set; }
     public string PcvrQuestProfile { get; set; } = "";
+    public string RenderDebugScenario { get; set; } = "";
+    public string RenderDebugOutput { get; set; } = "";
     public string ModId { get; set; } = "upstate-liberty";
     public string ModArchive { get; set; } = "";
     public ModOperation ModOperation { get; set; }

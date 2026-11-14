@@ -22,6 +22,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                 break;
             case ManagerAction.LaunchPcvr: await new PcvrWorkflow(settings, runner, log, options.Target==GameTarget.Quest?PcvrWorkflow.HostTarget:options.Target).Launch(options, token); break;
             case ManagerAction.DiagnosePcvr: await new PcvrWorkflow(settings, runner, log, options.Target==GameTarget.Quest?PcvrWorkflow.HostTarget:options.Target).Diagnose(token); break;
+            case ManagerAction.LaunchRenderDebug: await new PcvrWorkflow(settings, runner, log, options.Target==GameTarget.Quest?PcvrWorkflow.HostTarget:options.Target).LaunchRenderDebug(options, token); break;
             case ManagerAction.BuildVehicleEditor: await Editor(options, token); break;
             case ManagerAction.ManageMusic:
                 if (!options.ValidateMusicOnly && options.MusicRevision.Length > 0)

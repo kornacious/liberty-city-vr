@@ -12,7 +12,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 {
     public const int SettingsPage = 8;
     public const int ToolsPage = 9;
-    public const int LastPage = 11;
+    public const int LastPage = (int)ManagerAction.LaunchRenderDebug;
     private static bool IsActionPage(int page) => page < SettingsPage || page > ToolsPage;
     // GTA III menu cyan, amber HUD, cream lettering and the dark blue of its cover art.
     public static readonly Color Midnight = new(16, 24, 32);
@@ -67,7 +67,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         activity.Add(output);
         var footer = new Label { Text = "Tab: move  |  Enter: select  |  Ctrl+Q: quit", Y = Pos.AnchorEnd(1), Width = Dim.Fill() };
         Window.Add(footer);
-        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Mods", "Settings", "Tools and tests", "Launch PCVR", "PCVR diagnostics"];
+        string[] pages = ["Build and install", "Vehicle editor", "Manage music", "Original Xbox assets", "Repair game files", "Update", "Transfer save", "Mods", "Settings", "Tools and tests", "Launch PCVR", "PCVR diagnostics", "Renderer debug viewer"];
         for (var i = 0; i < pages.Length; i++)
         {
             var index = i;
@@ -130,7 +130,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
         perform.Text = page == SettingsPage ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS", "LAUNCH PCVR", "PCVR DIAGNOSTICS"];
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS", "LAUNCH PCVR", "PCVR DIAGNOSTICS", "RENDERER DEBUG VIEWER"];
         configuration.Title = titles[page];
         switch (page)
         {
@@ -271,6 +271,15 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Check the active OpenXR runtime, Vulkan GPU and headset session.");
                 PcvrDirectories();
                 Note("Requires a PCVR install. No game assets or ADB. Each probe times out after 60 seconds.");
+                break;
+            case (int)ManagerAction.LaunchRenderDebug:
+                DesktopTarget();
+                Field("Quest workload profile (optional)", options.PcvrQuestProfile, v => options.PcvrQuestProfile = v, OpenMode.File);
+                Field("Batch scenario JSON (blank: interactive)", options.RenderDebugScenario, v => options.RenderDebugScenario = v, OpenMode.File);
+                Field("Batch output directory (optional)", options.RenderDebugOutput, v => options.RenderDebugOutput = v, OpenMode.Directory);
+                PcvrLaunchDirectories();
+                Note("No headset or OpenXR runtime required. F1 opens the collapsible ImGui tools.");
+                Note("Viewer settings are isolated under a render-debug child of the selected user directory.");
                 break;
         }
         if (page != 2) form.SetContentHeight(row + 1);

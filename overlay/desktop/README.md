@@ -81,6 +81,11 @@ release or Linux distribution package is established by this change.
 
 ## Runtime and controls
 
+For headset-independent world inspection, use the separate
+[renderer debug viewer](RENDER_DEBUG.md). It provides an ImGui flycam, rendering
+visualizations, synthetic stereo and automated camera-path benchmarks, sharing
+the game renderer without creating a player or executing missions.
+
 Use a working OpenXR runtime with Vulkan support. WiVRn is the initial Linux
 headset validation target. The manager honors `XR_RUNTIME_JSON` and otherwise
 checks the user/system XDG OpenXR configuration, or the Windows registry.

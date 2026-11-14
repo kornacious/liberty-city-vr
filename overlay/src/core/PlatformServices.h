@@ -96,12 +96,20 @@ int32_t WritePrivateProfileStringA(const char *section, const char *key,
 
 #if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && !defined(LCVR_PROFILE_API_IMPLEMENTATION)
 #include "MatchedProfile.h"
+#include "WorldSession.h"
 #include <string>
 inline std::string LcvrSettingsPath(const char *file) {
     if(!file || file[0]=='/' || file[0]=='\\' || (file[0] && file[1]==':')) return file?file:"";
+    if(WorldSession::IsViewer()) {
+        std::string relative=file;for(char &c:relative)if(c=='\\')c='/';
+        return std::string(platform::storageRoot())+"/"+relative;
+    }
     char path[2048];platform::resolveGamePath(path,sizeof(path),file);return path;
 }
 inline int32_t LcvrProfileInt(const char *section,const char *key,int32_t fallback,const char *file) {
+    if(WorldSession::IsViewer() && section && std::string(section)=="VR") {
+        auto found=WorldSession::settings.find(key);if(found!=WorldSession::settings.end())return found->second;
+    }
     const auto path=LcvrSettingsPath(file);
     return MatchedProfile::Read(section,key,(int32_t)GetPrivateProfileIntA(section,key,fallback,path.c_str()));
 }

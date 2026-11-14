@@ -12,6 +12,10 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
+The shared desktop build also includes a headset-independent
+[renderer debug viewer](overlay/desktop/RENDER_DEBUG.md), with flycam, ImGui
+controls and batch camera-path rendering. Its measurements describe the desktop
+device; native runtime validation must be reported separately for each host.
 Existing `QUEST_*.md` guides document the implemented headset target.
 
 The shared [desktop implementation](overlay/desktop/README.md) uses SDL3 for

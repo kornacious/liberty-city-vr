@@ -10,6 +10,8 @@ struct Options {
   WindowMode mode = WindowMode::Windowed;
   bool panel = false, keyboard = true, gamepad = true, capture = false,
        statistics = false;
+  bool vsync = false, sideBySide = false;
+  bool fitSource = false;
 };
 struct InputState {
   bool focused = false, keys[512]{}, buttons[5]{}, wantMouse = false,
@@ -44,7 +46,10 @@ bool InitializeGpu(VkInstance instance, VkPhysicalDevice physical,
                    VkDevice device, VkQueue queue, unsigned family);
 void ShutdownGpu();
 void Present(VkImage image, VkImageView view, unsigned width, unsigned height,
-             float theaterAspect = 0);
+             float theaterAspect = 0, unsigned layers = 2);
+// A tool can supply its own UI while retaining SDL input and Vulkan UI drawing.
+void SetToolUi(void (*draw)());
+void SetToolCameraCapture(bool captured);
 void SetGameOverlay(const unsigned char *rgba, int width, int height,
                     bool menu, bool detailedStats = false);
 Picture CurrentPicture();

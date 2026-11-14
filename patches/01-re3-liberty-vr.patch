@@ -994,17 +994,18 @@ diff --git a/src/core/Camera.cpp b/src/core/Camera.cpp
 index 68bc3c491db19d958ccadc285119df14b58c03e6..a732e2f5165801e7683cb966fd7af1831f3281fb 100644
 --- a/src/core/Camera.cpp
 +++ b/src/core/Camera.cpp
-@@ -32,6 +32,9 @@
+@@ -32,6 +32,10 @@
  #include "GenericGameStorage.h"
  #include "MemoryCard.h"
  #include "Camera.h"
++#include "WorldLodPolicy.h"
 +#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(GTA_VR_WEAPONS)
 +#include "OculusVR.h"
 +#endif
  
  enum
  {
-@@ -728,6 +731,13 @@ CCamera::Process(void)
+@@ -728,6 +732,13 @@ CCamera::Process(void)
  #if GTA_VERSION > GTA3_PS2_160
  	GenerationDistMultiplier = LODDistMultiplier;
  	LODDistMultiplier *= CRenderer::ms_lodDistScale;
@@ -1012,8 +1013,8 @@ index 68bc3c491db19d958ccadc285119df14b58c03e6..a732e2f5165801e7683cb966fd7af183
 +	// A headset exposes much more of the world than the narrow 2003 camera.
 +	// Keep small props and vegetation alive farther away, and create traffic
 +	// far enough out that head turns cannot reveal the old spawn boundary.
-+	LODDistMultiplier = Max(LODDistMultiplier, 2.2f);
-+	GenerationDistMultiplier = Max(GenerationDistMultiplier, 2.0f);
++	LODDistMultiplier = WorldLodPolicy::DetailDistanceMultiplier(LODDistMultiplier);
++	GenerationDistMultiplier = WorldLodPolicy::GenerationDistanceMultiplier(GenerationDistMultiplier);
 +#endif
  #else
  	GenerationDistMultiplier = 1.0f;	// temporary

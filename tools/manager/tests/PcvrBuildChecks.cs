@@ -18,6 +18,21 @@ internal static class PcvrBuildChecks
     }
     public static async Task Run(string root,Func<string,Func<Task>,Task> test)
     {
+        await test("Renderer viewer installation does not require an OpenXR loader or game executable",()=>
+        {
+            foreach(var target in new[]{GameTarget.WindowsPcvr,GameTarget.LinuxPcvr})
+            {
+                var directory=Path.Combine(root,"viewer-only-"+target);Directory.CreateDirectory(directory);
+                var names=target==GameTarget.LinuxPcvr
+                    ? new[]{"libertyvr-render-debug","libSDL3.so.0","libavformat.so.63","libavcodec.so.63","libavutil.so.61","libswresample.so.7"}
+                    : new[]{"libertyvr-render-debug.exe","SDL3.dll","avformat-63.dll","avcodec-63.dll","avutil-61.dll","swresample-7.dll"};
+                foreach(var name in names.Concat(new[]{"IMGUI_LICENSE.txt","LIBRW_LICENSE.txt","desktop-backend.txt","dependency-notices/SDL_LICENSE.txt","dependency-notices/FFMPEG_LICENSE.txt","dependency-notices/config.mak"}))
+                {var file=Path.Combine(directory,name);Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllText(file,"synthetic");}
+                Check(PcvrWorkflow.ResolveInstallation(directory,target,viewer:true)==Path.GetFullPath(directory));
+                Reject(()=>PcvrWorkflow.ResolveInstallation(directory,target));
+            }
+            return Task.CompletedTask;
+        });
         await test("Physical current publication preserves archives, relative paths, saves and legacy builds",()=>
         {
             var fixture=Path.GetFullPath(Path.Combine(root,"physical-current"));

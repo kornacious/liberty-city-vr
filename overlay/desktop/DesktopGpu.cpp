@@ -318,7 +318,8 @@ bool Recreate() {
   vkGetPhysicalDeviceSurfacePresentModesKHR(g.physical, g.surface, &count,
                                             modes.data());
   auto mode = VK_PRESENT_MODE_FIFO_KHR;
-  for (auto want : {VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR})
+    for (auto want : {VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR})
+      if(!Settings().vsync)
     if (std::find(modes.begin(), modes.end(), want) != modes.end()) {
       mode = want;
       break;
@@ -579,7 +580,7 @@ bool InitializeGpu(VkInstance instance, VkPhysicalDevice physical,
   return Recreate();
 }
 void Present(VkImage source, VkImageView view, unsigned sourceW,
-             unsigned sourceH, float theaterAspect) {
+               unsigned sourceH, float theaterAspect, unsigned layers) {
   EndUi();
   if (!g.device || !source || !view)
     return;
@@ -718,7 +719,7 @@ void Present(VkImage source, VkImageView view, unsigned sourceW,
   }
   VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
   barrier.image = source;
-  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 2};
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, layers};
   barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
       VK_QUEUE_FAMILY_IGNORED;
   barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -745,6 +746,11 @@ void Present(VkImage source, VkImageView view, unsigned sourceW,
           : FitPicture(float(sourceW), float(sourceH), float(g.width),
                        float(g.height), Settings().framing);
   auto &p = g.picture;
+  if(Settings().fitSource){
+    const float w=float(sourceW)*(Settings().sideBySide && layers==2?2.f:1.f),h=float(sourceH);
+    const float scale=std::min(float(g.width)/w,float(g.height)/h);
+    p={};p.width=std::floor(w*scale);p.height=std::floor(h*scale);p.x=std::floor((g.width-p.width)*.5f);p.y=std::floor((g.height-p.height)*.5f);
+  }
   VkViewport viewport{p.x, p.y, p.width, p.height, 0, 1};
   VkRect2D scissor{{0, 0}, {g.width, g.height}};
   vkCmdSetViewport(frame.command, 0, 1, &viewport);
@@ -753,7 +759,7 @@ void Present(VkImage source, VkImageView view, unsigned sourceW,
   vkCmdBindDescriptorSets(frame.command, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           g.layout, 0, 1, &frame.eye, 0, nullptr);
   float push[8] = {
-      p.u, p.v, p.du, p.dv, float(Settings().eye), g.srgb ? 1.f : 0.f, 0, 0};
+      p.u, p.v, p.du, p.dv, float(std::min(Settings().eye,int(layers)-1)), g.srgb ? 1.f : 0.f, Settings().sideBySide && layers==2 ? 1.f : 0.f, 0};
   vkCmdPushConstants(frame.command, g.layout,
                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), push);

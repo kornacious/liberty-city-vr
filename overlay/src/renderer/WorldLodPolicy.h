@@ -9,6 +9,10 @@ struct Stats {
     uint32_t suppressedLod=0,missingSelections=0,pairedModels=0,unpairedLodModels=0;
 };
 inline int ClampMode(int mode){return mode>=0&&mode<Count?mode:On;}
+// Keep the production free-look distance floors shared with observation cameras.
+// Performance/Aggressive deliberately use unscaled model distances elsewhere.
+inline float DetailDistanceMultiplier(float scaledCameraDistance){return scaledCameraDistance>2.2f?scaledCameraDistance:2.2f;}
+inline float GenerationDistanceMultiplier(float cameraDistance){return cameraDistance>2.0f?cameraDistance:2.0f;}
 // Only choose within the intact OR damaged family. A damaged atomic is not
 // a low-detail substitute, and big-building related-model pointers are not
 // atomic slots. Caller supplies the safe end of the atomic array.

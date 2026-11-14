@@ -1,5 +1,40 @@
 # Shared desktop validation — 2026-11-14
 
+## Renderer debug viewer follow-up — local Windows
+
+The separate renderer viewer was built with MSVC alongside the normal Windows
+PCVR client, Upstate client and diagnostic. A fresh manager source assembly
+applied both patches and matched the tested build's source identity.
+
+- Desktop CTest: **15/15 passed** with the default GPU-test option disabled.
+- Focused manager desktop checks: **36/36 passed**, including viewer installation
+  without an OpenXR loader or gameplay executable.
+- Local Classic, Original Xbox and Upstate viewer batches completed, including
+  mono/stereo, 2x MSAA, side-by-side output and repeated world resets.
+- A cross-island camera path completed two passes with 360 measured frames.
+- Rainy ambient stereo completed two 20-second simulation passes: 2,400 measured
+  frames and 300 source-associated GPU samples. Player absence was asserted.
+- An existing Quest profile completed at its captured 1512x1584 stereo extent.
+  These are desktop workload checks, not measurements of Quest performance.
+- ImGui sections, live shading changes, preference saving, independent F1/F2
+  windows and fullscreen Quit were inspected locally. Hold-to-fly capture,
+  release, focus loss and UI gesture ownership have automated regression checks.
+- The Xbox World LOD On comparison verified the viewer's corrected production
+  distance floor of 2.2x: detailed-model selections rose from 117 to 583 at the
+  same camera position. The user subsequently confirmed the viewer fix and
+  comparable Quest/PCVR LOD transitions; no separate PCVR fault was established.
+- The packaged viewer rendered two passes with its OpenXR loader temporarily
+  absent and `XR_RUNTIME_JSON` pointing to a nonexistent manifest.
+- The normal client's asset/platform startup check passed with isolated user
+  data. Headset gameplay was not rerun for this viewer change.
+
+The package uses existing prepared local content and a separate viewer user
+root; it does not bundle original game assets. Native Linux viewer compilation,
+X11/Wayland operation and gamepad hardware acceptance remain unvalidated in this
+follow-up. No Quest build, device discovery or deployment was performed.
+
+The earlier shared-desktop validation record follows.
+
 Execution was local Windows x64 and local CachyOS Linux under WSL. Original
 game data stayed on this computer. No original assets were downloaded, uploaded
 or added to source/dependency bundles.

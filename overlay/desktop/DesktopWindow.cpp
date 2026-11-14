@@ -2,6 +2,7 @@
 #include "DesktopAudio.h"
 #include "MatchedProfile.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
@@ -18,11 +19,13 @@ Options options;
 InputState input;
 bool quit=false,resize=true,uiActive=false,renderingDetails=false;
 ImGuiContext *context=nullptr;
+void (*toolUi)()=nullptr;
+std::string toolLayout;
 const char *(*renderingDetailsProvider)(bool)=nullptr;
 const unsigned char *(*occlusionMapProvider)(int,int*)=nullptr;
 std::string config;
 void Cursor() {
-  if(window) SDL_SetWindowRelativeMouseMode(window,input.focused && options.capture && !options.panel);
+  if(window) SDL_SetWindowRelativeMouseMode(window,input.focused && options.capture && (toolUi || !options.panel));
 }
 void Save() {
   if(config.empty())return;
@@ -32,6 +35,11 @@ void Save() {
   out.close();if(out)SDL_RenamePath((config+".partial").c_str(),config.c_str());
 }
 void Shortcut(unsigned key) {
+  if(toolUi){
+    if(key==Key_F1){options.panel=!options.panel;return;}
+    if(key==Key_F2){options.statistics=!options.statistics;return;}
+    if(key==Key_F8)return;
+  }
   switch(key) {
   case Key_F1:options.panel=!options.panel;if(options.panel)options.capture=false;break;
   case Key_F2:options.eye^=1;break;
@@ -78,6 +86,18 @@ void OpenGamepad() {
 }
 Options &Settings(){return options;}
 const InputState &Input(){return input;}
+void SetToolUi(void (*draw)()){
+  if(toolUi && !draw)SetToolCameraCapture(false);
+  toolUi=draw;
+  if(context && draw){toolLayout=(std::filesystem::u8path(config).parent_path()/"viewer-layout.ini").u8string();ImGui::GetIO().IniFilename=toolLayout.c_str();}
+}
+void SetToolCameraCapture(bool captured){
+  if(options.capture!=captured){
+    options.capture=captured;input.deltaX=input.deltaY=0;
+    if(captured && toolUi && context){ImGui::ClearActiveID();ImGui::SetWindowFocus(nullptr);}
+    Cursor();
+  }
+}
 void *WindowHandle(){return window;}
 const char *const *VulkanExtensions(unsigned &count){return SDL_Vulkan_GetInstanceExtensions(&count);}
 bool QuitRequested(){return quit;}
@@ -151,11 +171,14 @@ void BeginUi() {
   io.MouseWheel = input.wheel;
   for (int i = 0; i < 5; ++i)
     io.MouseDown[i] = input.focused && input.buttons[i];
+  if(toolUi){for(unsigned i=0;i<512;++i)io.KeysDown[i]=input.focused&&input.keys[i];}
+  if(toolUi && options.capture){io.MousePos=ImVec2(-10000,-10000);for(auto &down:io.MouseDown)down=false;for(auto &down:io.KeysDown)down=false;}
   io.KeyCtrl = input.keys[Key_Control];
   io.KeyShift = input.keys[Key_Shift];
   io.KeyAlt = input.keys[Key_Alt];
   ImGui::NewFrame();
   uiActive = true;
+  if(toolUi){toolUi();return;}
   if (options.panel) {
     ImGui::SetNextWindowSize(ImVec2(390, 460), ImGuiCond_FirstUseEver);
     ImGui::Begin("Desktop preview (F1)", &options.panel);

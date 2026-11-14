@@ -11,6 +11,9 @@
 // Shared by the engine and its asset-independent launchers. The content root is
 // selected once per process; personal state and mods stay at the installation root.
 namespace assetvariants {
+// Process-local tools may explicitly choose content without rewriting the
+// installation's gameplay preference. Set before any asset roots are cached.
+inline int sessionSelection = -1;
 inline bool Safe(const std::string &p) {
     return !p.empty() && p[0]!='/' && p.find('\\')==std::string::npos &&
         p.find(':')==std::string::npos && p.find("..")==std::string::npos;
@@ -88,6 +91,7 @@ inline int Requested(const std::string &root) {
 }
 inline int Select(const std::string &root) {
     const bool pc=Complete(root,0)||LegacyPc(root),xbox=Complete(root,1);
+    if(sessionSelection>=0)return sessionSelection==0?(pc?0:-1):(xbox?1:-1);
     if(pc&&xbox)return Requested(root);return pc?0:xbox?1:-1;
 }
 inline std::string ContentRoot(const std::string &root,int selected) {

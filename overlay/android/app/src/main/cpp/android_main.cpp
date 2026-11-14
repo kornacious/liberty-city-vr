@@ -26,6 +26,7 @@
 #include "Game.h"
 #include "PlayerInfo.h"
 #include "QuestProfiler.h"
+#include "RendererSettings.h"
 #include "SimulationReplay.h"
 #include "crossplatform.h"
 #include "VehiclePlacement.h"
@@ -446,52 +447,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 	// camera-raster implementation on Vulkan. This final-image implementation
 	// is independent of it and reproduces the default POSTFX_NORMAL path
 	// directly, using the colour filter and alpha populated by Liberty City's timecycle.
-	const bool cutsceneFrame =
-		CGame::playingIntro ||
-		CCutsceneMgr::IsCutsceneProcessing() ||
-		CCutsceneMgr::IsRunning() ||
-		TheCamera.m_WideScreenOn;
-	const uint32 colourMode =
-		(androidgame::VrColorFilterEnabled() &&
-		 (!theaterFrame || cutsceneFrame) &&
-		 TheCamera.m_BlurType != MOTION_BLUR_NONE ? 1u : 0u);
-	uint32 r = (uint32)TheCamera.m_BlurRed;
-	uint32 g = (uint32)TheCamera.m_BlurGreen;
-	uint32 b = (uint32)TheCamera.m_BlurBlue;
-	uint32 a = (uint32)TheCamera.m_motionBlur;
-	switch(TheCamera.m_BlurType)
-	{
-	case MOTION_BLUR_SECURITY_CAM:
-		r = 0; g = 255; b = 0; a = 128;
-		break;
-	case MOTION_BLUR_INTRO:
-		r = 100; g = 220; b = 230; a = 158;
-		break;
-	case MOTION_BLUR_INTRO2:
-		r = 80; g = 255; b = 230; a = 138;
-		break;
-	case MOTION_BLUR_INTRO3:
-		r = 255; g = 60; b = 60; a = 200;
-		break;
-	case MOTION_BLUR_INTRO4:
-		r = 255; g = 180; b = 180; a = 128;
-		break;
-	}
-	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
-	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
-	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
-	rw::vulkan::setOpaqueOrderEnabled(androidgame::VrOpaqueOrderExperiment());
-	rw::vulkan::setWorldOcclusionEnabled(androidgame::VrWorldOcclusion());
-	rw::vulkan::setFxaaIntegerStencilEnabled(androidgame::VrFxaaIntegerStencil());
-	rw::vulkan::setWorldBackfaceEnabled(androidgame::VrWorldBackface());
-	rw::vulkan::setStaticInstancesEnabled(androidgame::VrStaticInstances());
-	rw::vulkan::setOpaqueMeshBatchEnabled(androidgame::VrOpaqueMeshBatch());
-	rw::vulkan::setMaskedAlphaPassSkipEnabled(androidgame::VrMaskedAlphaPassSkip());
-	rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(androidgame::VrOpaqueWorldAlphaFastPath());
-	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
-	rw::vulkan::setRenderDiagnostics(androidgame::VrRenderDiagnostics());
-	rw::vulkan::setMaskedMipBias(
-		(rw::uint32)androidgame::VrFoliageSoftness());
+	const auto [colourMode,r,g,b,a] = RendererSettings::ApplyFrame(theaterFrame);
 	static uint32 lastColourMode = ~0u;
 	if(colourMode != lastColourMode){
 		__android_log_print(ANDROID_LOG_INFO, "LibertyVR",
@@ -1050,7 +1006,7 @@ EndVrWristPanel(void)
 
 }  // namespace androidgame
 
-#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+#if (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)) && !defined(LIBERTYVR_RENDER_DEBUG)
 #ifdef LIBERTYVR_DESKTOP
 #include "platform_desktop.h"
 #define RunWindowsGame RunDesktopGame

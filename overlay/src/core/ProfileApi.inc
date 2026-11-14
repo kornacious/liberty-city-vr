@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include "WorldSession.h"
 #include <fcntl.h>
 #include <unistd.h>
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ profilePath(const char *fileName)
 		if(c == '\\')
 			c = '/';
 	if(!path.empty() && path[0]!='/' && !(path.size()>1 && path[1]==':'))
-        path=std::string(platform::gameDataRoot())+"/"+path;
+		path=std::string(WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot())+"/"+path;
     return std::filesystem::u8path(path).lexically_normal().generic_u8string();
 }
 

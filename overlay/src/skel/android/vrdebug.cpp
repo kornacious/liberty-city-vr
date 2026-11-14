@@ -1067,7 +1067,7 @@ GetBodyIKSettingsPath(char *out, size_t outSize)
 	if(out == nil || outSize == 0)
 		return false;
 
-	const char *root = platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
 	if(root == nil || root[0] == '\0')
 		return false;
 
@@ -1082,7 +1082,7 @@ GetCutsceneModeSettingsPath(char *out, size_t outSize)
 	if(out == nil || outSize == 0)
 		return false;
 
-	const char *root = platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
 	if(root == nil || root[0] == '\0')
 		return false;
 
@@ -1097,7 +1097,7 @@ static int
 ReadLegacyCutsceneMode(int fallback)
 {
 	char iniPath[512];
-	const char *root = platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
 	if(root == nil || root[0] == '\0')
 		return clamp(fallback, 0, 1);
 
@@ -6725,4 +6725,107 @@ VrScopeZoomFactor(void)
 	return 1.0f;
 }
 
+}
+
+#include "RendererSettings.h"
+namespace RendererSettings {
+using namespace androidgame;
+const Control *Controls(size_t &count) {
+static const Control controls[]={
+{"ColorFilter",0,1,false,[](){LoadVrSettings();return int(gViceCityColorEnabled);},[](int value){gViceCityColorEnabled=static_cast<decltype(gViceCityColorEnabled)>(value);}},
+{"GenerateMipmaps",0,1,true,[](){LoadVrSettings();return int(gGenerateMipmaps);},[](int value){gGenerateMipmaps=static_cast<decltype(gGenerateMipmaps)>(value);}},
+{"Ps2AlphaTest",0,1,false,[](){LoadVrSettings();return int(gPs2AlphaTest);},[](int value){gPs2AlphaTest=static_cast<decltype(gPs2AlphaTest)>(value);}},
+{"LodFadeTransitions",0,1,false,[](){LoadVrSettings();return int(gLodFadeTransitions);},[](int value){gLodFadeTransitions=static_cast<decltype(gLodFadeTransitions)>(value);}},
+{"WorldLodMode",0,3,false,[](){LoadVrSettings();return int(gWorldLodMode);},[](int value){gWorldLodMode=static_cast<decltype(gWorldLodMode)>(value);}},
+{"AntiAliasing",0,1,false,[](){LoadVrSettings();return int(gSpatialAaMode);},[](int value){gSpatialAaMode=static_cast<decltype(gSpatialAaMode)>(value);}},
+{"FxaaIntegerStencil",0,1,false,[](){LoadVrSettings();return int(gFxaaIntegerStencil);},[](int value){gFxaaIntegerStencil=static_cast<decltype(gFxaaIntegerStencil)>(value);}},
+{"OpaqueOrderExperiment",0,1,false,[](){LoadVrSettings();return int(gOpaqueOrderExperiment);},[](int value){gOpaqueOrderExperiment=static_cast<decltype(gOpaqueOrderExperiment)>(value);}},
+{"WorldOcclusion",0,1,false,[](){LoadVrSettings();return int(gWorldOcclusion);},[](int value){gWorldOcclusion=static_cast<decltype(gWorldOcclusion)>(value);}},
+{"WorldBackface",0,1,false,[](){LoadVrSettings();return int(gWorldBackface);},[](int value){gWorldBackface=static_cast<decltype(gWorldBackface)>(value);}},
+{"StaticInstances",0,1,false,[](){LoadVrSettings();return int(gStaticInstances);},[](int value){gStaticInstances=static_cast<decltype(gStaticInstances)>(value);}},
+{"OpaqueMeshBatch",0,1,false,[](){LoadVrSettings();return int(gOpaqueMeshBatch);},[](int value){gOpaqueMeshBatch=static_cast<decltype(gOpaqueMeshBatch)>(value);}},
+{"MaskedAlphaPassSkip",0,1,false,[](){LoadVrSettings();return int(gMaskedAlphaPassSkip);},[](int value){gMaskedAlphaPassSkip=static_cast<decltype(gMaskedAlphaPassSkip)>(value);}},
+{"OpaqueWorldAlphaFastPath",0,1,false,[](){LoadVrSettings();return int(gOpaqueWorldAlphaFastPath);},[](int value){gOpaqueWorldAlphaFastPath=static_cast<decltype(gOpaqueWorldAlphaFastPath)>(value);}},
+{"DynamicLights",0,2,false,[](){LoadVrSettings();return int(gDynamicLights);},[](int value){gDynamicLights=static_cast<decltype(gDynamicLights)>(value);}},
+{"DynamicLightIntensity",25,200,false,[](){LoadVrSettings();return int(gDynamicLightIntensity);},[](int value){gDynamicLightIntensity=static_cast<decltype(gDynamicLightIntensity)>(value);}},
+{"DynamicLightGlowIntensity",25,200,false,[](){LoadVrSettings();return int(gDynamicLightGlowIntensity);},[](int value){gDynamicLightGlowIntensity=static_cast<decltype(gDynamicLightGlowIntensity)>(value);}},
+{"DynamicLightMax",2,8,false,[](){LoadVrSettings();return int(gDynamicLightMax);},[](int value){gDynamicLightMax=static_cast<decltype(gDynamicLightMax)>(value);}},
+{"XboxNeoEffects",0,1,false,[](){LoadVrSettings();return int(gNeoEffects);},[](int value){gNeoEffects=static_cast<decltype(gNeoEffects)>(value);}},
+{"XboxNeoDroplets",0,1,false,[](){LoadVrSettings();return int(gNeoDroplets);},[](int value){gNeoDroplets=static_cast<decltype(gNeoDroplets)>(value);}},
+{"CarReflections",0,1,false,[](){LoadVrSettings();return int(gCarReflections);},[](int value){gCarReflections=static_cast<decltype(gCarReflections)>(value);}},
+{"CarReflectionIntensity",10,200,false,[](){LoadVrSettings();return int(gCarReflectionIntensity);},[](int value){gCarReflectionIntensity=static_cast<decltype(gCarReflectionIntensity)>(value);}},
+{"CarReflectionSsr",0,150,false,[](){LoadVrSettings();return int(gCarReflectionSsr);},[](int value){gCarReflectionSsr=static_cast<decltype(gCarReflectionSsr)>(value);}},
+{"CarReflectionScale",1,8,true,[](){LoadVrSettings();return int(gCarReflectionScale);},[](int value){gCarReflectionScale=static_cast<decltype(gCarReflectionScale)>(value);}},
+{"CarReflectionSsrDistance",0,150,false,[](){LoadVrSettings();return int(gCarReflectionSsrDistance);},[](int value){gCarReflectionSsrDistance=static_cast<decltype(gCarReflectionSsrDistance)>(value);}},
+{"ModernWater",0,1,false,[](){LoadVrSettings();return int(gModernWater);},[](int value){gModernWater=static_cast<decltype(gModernWater)>(value);}},
+{"WaterWaves",0,200,false,[](){LoadVrSettings();return int(gWaterWaves);},[](int value){gWaterWaves=static_cast<decltype(gWaterWaves)>(value);}},
+{"WaterSpeed",0,200,false,[](){LoadVrSettings();return int(gWaterSpeed);},[](int value){gWaterSpeed=static_cast<decltype(gWaterSpeed)>(value);}},
+{"WaterDistortion",0,200,false,[](){LoadVrSettings();return int(gWaterDistortion);},[](int value){gWaterDistortion=static_cast<decltype(gWaterDistortion)>(value);}},
+{"WaterReflection",0,200,false,[](){LoadVrSettings();return int(gWaterReflection);},[](int value){gWaterReflection=static_cast<decltype(gWaterReflection)>(value);}},
+{"WaterSheen",0,200,false,[](){LoadVrSettings();return int(gWaterSheen);},[](int value){gWaterSheen=static_cast<decltype(gWaterSheen)>(value);}},
+{"WaterGlint",0,200,false,[](){LoadVrSettings();return int(gWaterGlint);},[](int value){gWaterGlint=static_cast<decltype(gWaterGlint)>(value);}},
+{"WaterSparks",0,200,false,[](){LoadVrSettings();return int(gWaterSparks);},[](int value){gWaterSparks=static_cast<decltype(gWaterSparks)>(value);}},
+{"FoliageSoftness",0,3,false,[](){LoadVrSettings();return int(gFoliageSoftness);},[](int value){gFoliageSoftness=static_cast<decltype(gFoliageSoftness)>(value);}},
+{"OcclusionCullingModeV2",0,3,false,[](){LoadVrSettings();return int(gOcclusionCullingMode);},[](int value){gOcclusionCullingMode=static_cast<decltype(gOcclusionCullingMode)>(value);}},
+{"DistanceFog",0,1,false,[](){LoadVrSettings();return int(gDistanceFog);},[](int value){gDistanceFog=value!=0;}},
+{"ShadowsEnabled",0,1,false,[](){LoadVrSettings();return CShadows::IsRenderEnabled()?1:0;},[](int value){CShadows::SetRenderEnabled(value!=0);}},
+};count=sizeof(controls)/sizeof(*controls);return controls;
+}
+void ApplySideEffects(){
+    CRenderer::SetVrOcclusionCullingMode(gOcclusionCullingMode);
+    VrWorldLod::SetMode(gWorldLodMode);
+    VrWorldLod::SetFadeTransitions(gLodFadeTransitions!=0);
+}
+}
+
+namespace RendererSettings {
+Frame ApplyFrame(bool theaterFrame){
+	const bool cutsceneFrame =
+		CGame::playingIntro ||
+		CCutsceneMgr::IsCutsceneProcessing() ||
+		CCutsceneMgr::IsRunning() ||
+		TheCamera.m_WideScreenOn;
+	const uint32 colourMode =
+		(androidgame::VrColorFilterEnabled() &&
+		 (!theaterFrame || cutsceneFrame) &&
+		 TheCamera.m_BlurType != MOTION_BLUR_NONE ? 1u : 0u);
+	uint32 r = (uint32)TheCamera.m_BlurRed;
+	uint32 g = (uint32)TheCamera.m_BlurGreen;
+	uint32 b = (uint32)TheCamera.m_BlurBlue;
+	uint32 a = (uint32)TheCamera.m_motionBlur;
+	switch(TheCamera.m_BlurType)
+	{
+	case MOTION_BLUR_SECURITY_CAM:
+		r = 0; g = 255; b = 0; a = 128;
+		break;
+	case MOTION_BLUR_INTRO:
+		r = 100; g = 220; b = 230; a = 158;
+		break;
+	case MOTION_BLUR_INTRO2:
+		r = 80; g = 255; b = 230; a = 138;
+		break;
+	case MOTION_BLUR_INTRO3:
+		r = 255; g = 60; b = 60; a = 200;
+		break;
+	case MOTION_BLUR_INTRO4:
+		r = 255; g = 180; b = 180; a = 128;
+		break;
+	}
+	rw::vulkan::setPostFx(colourMode, r, g, b, a, 1.0f);
+	rw::vulkan::setSpatialAaMode((RwUInt32)androidgame::VrSpatialAaMode());
+	rw::vulkan::setGenerateMipmaps(androidgame::VrGenerateMipmaps());
+	rw::vulkan::setOpaqueOrderEnabled(androidgame::VrOpaqueOrderExperiment());
+	rw::vulkan::setWorldOcclusionEnabled(androidgame::VrWorldOcclusion());
+	rw::vulkan::setFxaaIntegerStencilEnabled(androidgame::VrFxaaIntegerStencil());
+	rw::vulkan::setWorldBackfaceEnabled(androidgame::VrWorldBackface());
+	rw::vulkan::setStaticInstancesEnabled(androidgame::VrStaticInstances());
+	rw::vulkan::setOpaqueMeshBatchEnabled(androidgame::VrOpaqueMeshBatch());
+	rw::vulkan::setMaskedAlphaPassSkipEnabled(androidgame::VrMaskedAlphaPassSkip());
+	rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(androidgame::VrOpaqueWorldAlphaFastPath());
+	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
+	rw::vulkan::setRenderDiagnostics(androidgame::VrRenderDiagnostics());
+	rw::vulkan::setMaskedMipBias(
+		(rw::uint32)androidgame::VrFoliageSoftness());
+	return {colourMode,r,g,b,a};
+}
 }

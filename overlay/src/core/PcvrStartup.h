@@ -103,9 +103,17 @@ inline int DispatchSibling(const std::filesystem::path &executable,int argc,char
 inline int DispatchUpstate(int argc,char **argv,const std::string &data,const std::string &user) {
     return DispatchSibling(ExecutableDirectory()/
 #ifdef _WIN32
+        #ifdef LIBERTYVR_RENDER_DEBUG
+        "libertyvr-render-debug-upstate.exe",
+        #else
         "libertyvr-upstate.exe",
+        #endif
 #else
+        #ifdef LIBERTYVR_RENDER_DEBUG
+        "libertyvr-render-debug-upstate",
+        #else
         "libertyvr-upstate",
+        #endif
 #endif
         argc,argv,data,user);
 }

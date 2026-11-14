@@ -68,24 +68,27 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     // Versioned installs avoid replacing a running EXE. Publish the pointer only
     // after CMake installation and all required files have been verified.
-    public static string ResolveInstallation(string root, GameTarget target = GameTarget.WindowsPcvr)
+    public static string ResolveInstallation(string root, GameTarget target = GameTarget.WindowsPcvr, bool viewer = false)
     {
         Paths.NoLinks(root);
-        var executable = target == GameTarget.LinuxPcvr ? "libertyvr-game" : "libertyvr-game.exe";
-        if (File.Exists(Paths.Child(root, executable))) { ValidateBinaries(root,target); return Path.GetFullPath(root); }
+        var executable = (viewer ? "libertyvr-render-debug" : "libertyvr-game") + (target == GameTarget.LinuxPcvr ? "" : ".exe");
+        if (File.Exists(Paths.Child(root, executable))) { ValidateBinaries(root,target,viewer); return Path.GetFullPath(root); }
         var physical = Paths.Child(root,"current");
-        if (Directory.Exists(physical)) { ValidateBinaries(physical,target); return physical; }
+        if (Directory.Exists(physical)) { ValidateBinaries(physical,target,viewer); return physical; }
         var manifest=Paths.Child(root,"current.json");
         if (!File.Exists(manifest)) throw new IOException("No PCVR build installed. Select Windows PCVR under Build and install first.");
         var current=JsonSerializer.Deserialize<PcvrInstallation>(File.ReadAllText(manifest)) ?? throw new InvalidDataException("Invalid PCVR installation record.");
         if (current.Version is not (1 or 2) || (current.Version==1 && target!=GameTarget.WindowsPcvr) || (current.Version==2 && current.Target!=target) || !current.Directory.StartsWith("versions/",StringComparison.Ordinal)) throw new InvalidDataException("Unsupported PCVR installation record.");
         var directory=Paths.Child(root,current.Directory);
-        ValidateBinaries(directory,target);
+        ValidateBinaries(directory,target,viewer);
         return directory;
     }
-    public static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr)
+    public static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr, bool viewer = false)
     {
-        foreach (var name in target==GameTarget.LinuxPcvr ? new[] { "libertyvr-game", "libertyvr-pcvr", "libopenxr_loader.so.1", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt", "desktop-backend.txt" } : new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" })
+        var requiredFiles=viewer
+            ? new[] {target==GameTarget.LinuxPcvr?"libertyvr-render-debug":"libertyvr-render-debug.exe","IMGUI_LICENSE.txt","LIBRW_LICENSE.txt","desktop-backend.txt"}
+            : target==GameTarget.LinuxPcvr ? new[] { "libertyvr-game", "libertyvr-pcvr", "libopenxr_loader.so.1", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt", "desktop-backend.txt" } : new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" };
+        foreach (var name in requiredFiles)
             if(name=="libopenxr_loader.so.1") ValidateBundledLibrary(directory,Path.Combine(directory,name));
             else if (!File.Exists(Paths.Child(directory,name))) throw new IOException("PCVR installation is incomplete: " + name);
         if(File.Exists(Path.Combine(directory,"desktop-backend.txt"))) {
@@ -323,6 +326,22 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         Paths.NoLinks(questProfile);
         if(!File.Exists(questProfile) || new FileInfo(questProfile).Length>32768) throw new InvalidDataException("Choose a local Quest profile exported by a profiler capture (maximum 32 KiB).");
         return [..arguments,"--quest-profile",Path.GetFullPath(questProfile)];
+    }
+    public async Task LaunchRenderDebug(ActionOptions options,CancellationToken token)
+    {
+        RequireHost();var paths=Layout();
+        if(!string.IsNullOrWhiteSpace(options.PcvrLaunchApp))paths=paths with {Install=Path.GetFullPath(options.PcvrLaunchApp)};
+        if(!string.IsNullOrWhiteSpace(options.PcvrLaunchData))paths=paths with {Data=Path.GetFullPath(options.PcvrLaunchData)};
+        if(!string.IsNullOrWhiteSpace(options.PcvrLaunchUser))paths=paths with {User=Path.GetFullPath(options.PcvrLaunchUser)};
+        paths.Validate(settings);ValidatePreparedData(paths.Data);var install=ResolveInstallation(paths.Install,target,viewer:true);
+        var executable=Path.Combine(install,Executable("libertyvr-render-debug"));
+        if(!File.Exists(executable))throw new IOException("This installation predates the renderer viewer. Build and install the desktop target first.");
+        var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile).ToList();
+        if(!string.IsNullOrWhiteSpace(options.RenderDebugScenario)) {Paths.NoLinks(options.RenderDebugScenario);if(!File.Exists(options.RenderDebugScenario))throw new IOException("Scenario file is missing.");arguments.AddRange(["--scenario",Path.GetFullPath(options.RenderDebugScenario)]);}
+        if(!string.IsNullOrWhiteSpace(options.RenderDebugOutput)) {Paths.NoLinks(options.RenderDebugOutput);arguments.AddRange(["--output",Path.GetFullPath(options.RenderDebugOutput)]);}
+        log.Write("Starting renderer debug viewer. No runtime probe or headset connection is required.");
+        var previous=runner.CommandTimeout;runner.CommandTimeout=Timeout.InfiniteTimeSpan;
+        try {await runner.Run(executable,arguments,paths.Data,token:token);}finally {runner.CommandTimeout=previous;}
     }
     public async Task Launch(ActionOptions options,CancellationToken token)
     {

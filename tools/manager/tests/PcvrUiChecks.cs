@@ -16,6 +16,7 @@ internal static class PcvrUiChecks
         var initial=new ManagerSettings {Workplace=Path.GetFullPath(Path.Combine(directory,"work"))};
         initial.Actions[ManagerAction.BuildAndInstall]=new ActionOptions { Target=GameTarget.WindowsPcvr };
         initial.Actions[ManagerAction.LaunchPcvr]=new ActionOptions { Target=GameTarget.WindowsPcvr };
+        initial.Actions[ManagerAction.LaunchRenderDebug]=new ActionOptions { Target=GameTarget.WindowsPcvr };
         var paths=PcvrPaths.From(initial);
         PcvrBuilds.Publish(paths.Install,PcvrBuildChecks.Package(directory,"ui-first"),"ui-first",paths,default);
         PcvrBuilds.Publish(paths.Install,PcvrBuildChecks.Package(directory,"ui-second"),"ui-second",paths,default);
@@ -96,6 +97,16 @@ internal static class PcvrUiChecks
                         break;
                     case 7:
                         Check(All(ui.Window).OfType<TextField>().Count()==1,"Quest Mods retained desktop directory fields.");
+                        Button("Renderer debug viewer").InvokeCommand(Command.Accept);
+                        Check(ManagerUi.LastPage>=(int)ManagerAction.LaunchRenderDebug,"Renderer viewer is outside the valid page range.");
+                        Check(All(ui.Window).OfType<FrameView>().Any(v=>v.Title=="RENDERER DEBUG VIEWER"),"Renderer viewer page title is missing.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==7,"Renderer viewer lacks profile, scenario, output or launch path fields.");
+                        Check(All(ui.Window).OfType<Label>().Any(v=>v.Text.Contains("No headset or OpenXR runtime required")),"Renderer viewer instructions are missing.");
+                        Button("_Cancel").InvokeCommand(Command.Accept);
+                        Check(ui.Window.MostFocused?.Text=="Renderer debug viewer","Renderer viewer Cancel did not return navigation focus.");
+                        Button("Build and install").InvokeCommand(Command.Accept);
+                        Button("Renderer debug viewer").InvokeCommand(Command.Accept);
+                        Check(All(ui.Window).OfType<TextField>().Count()==7,"Reopening the renderer viewer page failed.");
                         app.RequestStop(); return false;
                 }
             }
@@ -103,7 +114,7 @@ internal static class PcvrUiChecks
             return true;
         });
         app.Run(ui.Window);
-        Console.WriteLine(failure is null ? "PASS PCVR UI: target switching, draft preservation, Cancel, launch and diagnostics" : "FAIL PCVR UI: "+failure.Message);
+        Console.WriteLine(failure is null ? "PASS PCVR UI: target switching, draft preservation, Cancel, launch, diagnostics and renderer viewer navigation" : "FAIL PCVR UI: "+failure.Message);
         return failure is null ? 0 : 1;
     }
 }
