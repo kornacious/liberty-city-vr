@@ -39,6 +39,7 @@ async Task ThrowsAsync<T>(Func<Task> body) where T : Exception
 if(args is ["--desktop"])
 {
     await PcvrChecks.Run(root,Test);
+    await PcvrBuildChecks.Run(root,Test);
     await PcvrModChecks.Run(root,Test);
     await BenchmarkChecks.Run(root,Test);
     await BenchmarkAssetChecks.Run(root,Test);
@@ -381,6 +382,7 @@ await SaveTransferChecks.Run(root, Test);
 await ModChecks.Run(root, Test);
 await PcvrModChecks.Run(root, Test);
 await PcvrChecks.Run(root, Test);
+await PcvrBuildChecks.Run(root, Test);
 await BenchmarkChecks.Run(root, Test);
 await BenchmarkAssetChecks.Run(root, Test);
 Console.WriteLine($"{total - failures}/{total} manager checks passed.");

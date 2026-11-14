@@ -71,6 +71,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     public static string ResolveInstallation(string root, GameTarget target = GameTarget.WindowsPcvr)
     {
         Paths.NoLinks(root);
+        var executable = target == GameTarget.LinuxPcvr ? "libertyvr-game" : "libertyvr-game.exe";
+        if (File.Exists(Paths.Child(root, executable))) { ValidateBinaries(root,target); return Path.GetFullPath(root); }
+        var physical = Paths.Child(root,"current");
+        if (Directory.Exists(physical)) { ValidateBinaries(physical,target); return physical; }
         var manifest=Paths.Child(root,"current.json");
         if (!File.Exists(manifest)) throw new IOException("No PCVR build installed. Select Windows PCVR under Build and install first.");
         var current=JsonSerializer.Deserialize<PcvrInstallation>(File.ReadAllText(manifest)) ?? throw new InvalidDataException("Invalid PCVR installation record.");
@@ -79,7 +83,7 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         ValidateBinaries(directory,target);
         return directory;
     }
-    private static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr)
+    public static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr)
     {
         foreach (var name in target==GameTarget.LinuxPcvr ? new[] { "libertyvr-game", "libertyvr-pcvr", "libopenxr_loader.so.1", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt", "desktop-backend.txt" } : new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" })
             if(name=="libopenxr_loader.so.1") ValidateBundledLibrary(directory,Path.Combine(directory,name));
@@ -229,12 +233,20 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         File.WriteAllText(Path.Combine(paths.Data,".libertyvr-pcvr-data"),"Liberty City VR local Windows data v1\n");
         Workflows.RefreshWindowsPortFiles(settings.Repository,paths.Data,token);
         Directory.CreateDirectory(paths.Install);
-        var relative="versions/"+id; var install=Paths.Child(paths.Install,relative);
+        var install=Path.Combine(work,"package");
         await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
         foreach (var notice in new[] { "LICENSE", "NOTICE.md" })
             File.Copy(Path.Combine(settings.Repository,notice),Path.Combine(install,notice),true);
-        token.ThrowIfCancellationRequested(); PublishInstallation(paths.Install,relative,target);
-        log.Write(Name+" installed: "+install+". Previous versions, game data and saves preserved.");
+        File.WriteAllText(Path.Combine(install,PcvrBuilds.Identity),id+"\n");
+        PcvrBuilds.WritePaths(install,Path.Combine(paths.Install,"current"),paths.Data,paths.User);
+        PcvrBuilds.Publish(paths.Install,install,id,paths,token);
+        if (options.PcvrDesktopShortcut)
+        {
+            try { await PcvrShortcuts.Create(paths,token); }
+            catch (Exception error)
+            { log.Write("Build installed; desktop shortcut was not updated: "+error.Message); }
+        }
+        log.Write(Name+" installed: "+Path.Combine(paths.Install,"current")+". Previous versions, game data and saves preserved.");
         log.Write("Use Launch PCVR to play, or PCVR diagnostics to check the active runtime.");
     }
     public static string ValidateRuntimeManifest(string path)
@@ -314,7 +326,12 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     public async Task Launch(ActionOptions options,CancellationToken token)
     {
-        RequireHost(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
+        RequireHost(); var paths=Layout();
+        if (!string.IsNullOrWhiteSpace(options.PcvrLaunchApp)) paths=paths with {Install=Path.GetFullPath(options.PcvrLaunchApp)};
+        if (!string.IsNullOrWhiteSpace(options.PcvrLaunchData)) paths=paths with {Data=Path.GetFullPath(options.PcvrLaunchData)};
+        if (!string.IsNullOrWhiteSpace(options.PcvrLaunchUser)) paths=paths with {User=Path.GetFullPath(options.PcvrLaunchUser)};
+        paths.Validate(settings);
+        var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
         ValidatePreparedData(paths.Data); var install=ResolveInstallation(paths.Install,target); Runtime();
         var engine=PcvrMods.SelectEngine(paths);
         await Probe(runner,Path.Combine(install,Executable("libertyvr-pcvr")),log,token);

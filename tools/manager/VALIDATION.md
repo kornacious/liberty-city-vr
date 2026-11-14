@@ -450,3 +450,27 @@ been exercised end to end. Headset visual/gameplay QA was not performed.
   No uninstall, data clearing or retail audio conversion was performed.
 - Actual station playback timing/listening validation remains a headset check
   after selecting conversion in the manager.
+
+## 2026-11-14 — Physical PCVR current directory and portable launch paths
+
+Local Windows x64 validation:
+
+- Manager Release compilation passed with zero warnings/errors.
+- All 139 manager regression checks passed, including legacy migration, physical
+  current/archive publication, archive path rebasing, interrupted-publication
+  recovery, cancellation, archive collisions, relocation, Linux package fixtures,
+  Windows desktop shortcut creation and cross-volume/copy-failure preservation.
+- PCVR UI checks passed for the shortcut/build-only controls, version selection,
+  three-path population, manual deselection, refresh, Cancel and target switching.
+- A fresh manager-assembled native Windows Release build passed. Recompilation
+  with the final startup helper and all 12 CTest checks passed, including config
+  precedence/rejection and Unicode/quoted argument dispatch with exit propagation.
+- A disposable CMake installation launched from an unrelated working directory
+  with adjacent relative path configuration and no data/user CLI arguments,
+  reaching the expected missing-assets validation using empty synthetic data.
+
+Original game data and personal saves were not used or changed. No live PCVR
+installation was replaced, no headset gameplay was performed, and no ADB or
+Quest deployment occurred. Native Linux runtime/desktop-entry behavior and Unix
+library-link/permission branches require native Linux validation; Windows fixture
+checks do not establish those results.

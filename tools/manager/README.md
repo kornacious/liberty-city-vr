@@ -119,8 +119,8 @@ An existing legacy PC data copy is preserved during migration. The default direc
 
 | Contents | Default under workplace |
 | --- | --- |
-| Versioned executables, loader and notices | `windows-pcvr/app/versions/<build-id>` |
-| Current installation record | `windows-pcvr/app/current.json` |
+| Current executables, loader and notices | `windows-pcvr/app/current` |
+| Archived builds | `windows-pcvr/app/versions/<build-id>` |
 | Local prepared game data and preferences | `windows-pcvr/data` |
 | Saves, audio cache and game diagnostics | `windows-pcvr/user` |
 | Private assembled sources and build outputs | `windows-pcvr-builds/<build-id>` |
@@ -130,9 +130,36 @@ retail data and source/build trees, and contain no linked paths. Data preparatio
 requires a new destination and writes its readiness marker last. If interrupted,
 inspect the partial copy locally and select a new destination; nothing is erased
 automatically. Routine installs reuse prepared data and refresh only authored port
-assets. They preserve preferences, saves and previous versions. The current install
-record changes only after the new binaries and notices are validated. These
+assets. They preserve preferences, saves and previous versions. The new package is
+assembled in the workspace and copied into a private incoming directory before
+publication. Only after validation does the manager archive the old `current` and
+promote the incoming package. Failed publication rolls back; interrupted publication
+is recovered on the next installation attempt. Close the game before updating.
+Existing `current.json` installations remain readable and migrate on the next
+successful install, retaining all old versions. These
 folders are local builds; no public binary package or Windows system installer is provided.
+
+Both desktop targets use the same layout (substitute `linux-pcvr` on Linux).
+Each new installed build includes `build-id.txt` and UTF-8 `pcvr-paths.ini`:
+
+```ini
+version=1
+data=../../data
+user=../../user
+```
+
+Paths are relative to the executable directory when on the same volume, absolute
+otherwise. Archiving rebases these paths without changing their destinations.
+Moving the whole workspace preserves relative paths. Explicit `--game-data` and
+`--user-data` independently override the configuration. The normal game executable
+selects the enabled Upstate engine, preserving package checks and separate saves.
+Older binaries still require the manager or explicit path arguments.
+
+The optional **Create/update desktop shortcut to current build** checkbox creates
+a Windows `.lnk` or Linux `.desktop` file pointing at the stable current executable.
+It defaults off and is disabled for build-only requests. A shortcut failure is a
+warning after installation; leaving the option off leaves existing shortcuts alone.
+Recreate the shortcut after moving the workspace to another location.
 
 **PCVR diagnostics** checks the environment override (`XR_RUNTIME_JSON`) or active
 x64 OpenXR registry runtime and its library, then runs Vulkan and XR session probes.
@@ -146,6 +173,15 @@ launching with the isolated data/save paths. The manager captures sanitized logs
 and waits until the game exits. Quit in-game for a normal exit; Cancel forcibly
 stops the game process. There is no manager-imposed playtime limit. The manager
 can also run without build tools once the local package is installed.
+
+The installed-version list reads `current` and `versions` from the configured app
+root (the workspace default when blank). Selecting a build fills its executable,
+data and save directories from its configuration; legacy entries use the configured
+data/save paths and are labelled accordingly. Editing or browsing any launch path
+clears selection. Refresh preserves manual paths. Launch overrides are saved
+separately from the installation roots, so choosing an archive never redirects
+future builds. JSON requests expose `PcvrDesktopShortcut`, `PcvrLaunchApp`,
+`PcvrLaunchData` and `PcvrLaunchUser` in `Options`.
 
 The game opens a desktop eye preview with ImGui controls and F1–F12 shortcuts,
 plus focused keyboard/mouse and XInput gamepad input. See the

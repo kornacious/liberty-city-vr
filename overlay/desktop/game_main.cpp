@@ -5,6 +5,7 @@
 #include "QuestUpstatePackage.h"
 #include "QuestUpstate.h"
 #include "AssetVariants.h"
+#include "PcvrStartup.h"
 #include <SDL3/SDL.h>
 #include "common.h"
 #include "CdStream.h"
@@ -20,21 +21,23 @@ int RunDesktopGame(unsigned frameLimit);
     std::cout.flush(); std::cerr.flush(); std::_Exit(code);
 }
 int main(int argc,char **argv) {
-    std::string data,user,questProfile; unsigned frames=0; bool configured=false,checkUpstateArchive=false,checkAssets=false;
+    std::string data,user,questProfile; bool explicitData=false,explicitUser=false; unsigned frames=0; bool configured=false,checkUpstateArchive=false,checkAssets=false;
     try {
+        pcvrstartup::Arguments utf8(argc,argv); argc=int(utf8.values.size()); argv=utf8.pointers.data();
         for(int i=1;i<argc;++i) {
             std::string argument=argv[i];
-            if(argument=="--help") { std::cout<<"Liberty City VR Desktop game (experimental)\n--game-data DIRECTORY --user-data DIRECTORY [--frames N] [--quest-profile FILE]\nQuest profile matches captured rendering workload; PC timings are not Quest timings. Restart without the option for native PCVR.\nUse an isolated locally prepared PCVR game directory; original game assets are not supplied.\n"; FinishStartup(0); }
+            if(argument=="--help") { std::cout<<"Liberty City VR Desktop game (experimental)\n--game-data DIRECTORY --user-data DIRECTORY [--frames N] [--quest-profile FILE]\nQuest profile matches captured rendering workload; PC timings are not Quest timings. Restart without the option for native PCVR.\nPaths default to pcvr-paths.ini beside the executable; CLI paths override it.\nUse an isolated locally prepared PCVR game directory; original game assets are not supplied.\n"; FinishStartup(0); }
             if(argument=="--check-upstate-archive") { checkUpstateArchive=true; continue; }
             if(argument=="--check-assets") { checkAssets=true; continue; }
             if(i+1>=argc) throw std::runtime_error("Missing option value.");
-            if(argument=="--game-data") data=argv[++i];
-            else if(argument=="--user-data") user=argv[++i];
+            if(argument=="--game-data") { data=argv[++i]; explicitData=true; }
+            else if(argument=="--user-data") { user=argv[++i]; explicitUser=true; }
             else if(argument=="--quest-profile") questProfile=argv[++i];
             else if(argument=="--frames") { size_t used=0; auto value=std::stoul(argv[++i],&used); if(used!=strlen(argv[i]) || value>1000000) throw std::runtime_error("Invalid frame limit."); frames=unsigned(value); }
             else throw std::runtime_error("Unknown option.");
         }
-        if(data.empty() || user.empty()) throw std::runtime_error("Explicit --game-data and --user-data directories are required.");
+        pcvrstartup::Defaults(pcvrstartup::ExecutableDirectory(),data,user,explicitData,explicitUser);
+        if(data.empty() || user.empty()) throw std::runtime_error("Provide --game-data and --user-data or pcvr-paths.ini beside the executable.");
 #ifdef LCVR_UPSTATE_ENGINE
         // Verify the pinned inventory before any engine state or save files open.
         if(!questpackage::CanActivate(data)) throw std::runtime_error("Upstate package is disabled or changed. Reinstall or enable it in the manager.");
@@ -53,7 +56,7 @@ int main(int argc,char **argv) {
         }
 #else
         if(checkUpstateArchive) throw std::runtime_error("Use the Upstate executable for --check-upstate-archive.");
-        if(questpackage::Enabled(data)) throw std::runtime_error("Upstate is enabled. Use Launch PCVR in the manager to select its engine.");
+        if(questpackage::Enabled(data)) FinishStartup(pcvrstartup::DispatchUpstate(argc,argv,data,user));
 #endif
         const int selected=assetvariants::Select(data);
         if(selected<0) {

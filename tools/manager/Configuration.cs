@@ -95,6 +95,11 @@ public sealed record ActionOptions
     public bool CompleteVariant { get; set; }
     public GameTarget Target { get; set; }
     public bool PcvrBuildOnly { get; set; }
+    public bool PcvrDesktopShortcut { get; set; }
+    public string PcvrLaunchApp { get; set; } = "";
+    public string PcvrLaunchData { get; set; } = "";
+    public string PcvrLaunchUser { get; set; } = "";
+    public bool PcvrManualLaunch { get; set; }
     public bool PcvrPrepareData { get; set; }
     public bool PcvrGpuTests { get; set; }
     public bool PcvrAudioTests { get; set; }

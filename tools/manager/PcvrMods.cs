@@ -34,7 +34,9 @@ public static class PcvrMods
         var marker = Enabled(paths.Data, mod);
         var enabled = File.Exists(marker) && File.ReadAllText(marker) == Marker(mod);
         var supported = false;
-        if (File.Exists(Paths.Child(paths.Install, "current.json")))
+        if (Directory.Exists(paths.Install) &&
+            (Directory.Exists(Paths.Child(paths.Install,"current")) || File.Exists(Paths.Child(paths.Install,"current.json")) ||
+             File.Exists(Paths.Child(paths.Install,paths.Target==GameTarget.LinuxPcvr?"libertyvr-game":"libertyvr-game.exe"))))
         {
             var install = PcvrWorkflow.ResolveInstallation(paths.Install,paths.Target);
             var capabilities = Paths.Child(install, Capabilities);

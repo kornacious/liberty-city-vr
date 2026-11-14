@@ -13,8 +13,12 @@ internal static class PcvrUiChecks
     public static int Run(string directory)
     {
         Directory.CreateDirectory(directory);
-        var initial=new ManagerSettings();
+        var initial=new ManagerSettings {Workplace=Path.GetFullPath(Path.Combine(directory,"work"))};
         initial.Actions[ManagerAction.BuildAndInstall]=new ActionOptions { Target=GameTarget.WindowsPcvr };
+        initial.Actions[ManagerAction.LaunchPcvr]=new ActionOptions { Target=GameTarget.WindowsPcvr };
+        var paths=PcvrPaths.From(initial);
+        PcvrBuilds.Publish(paths.Install,PcvrBuildChecks.Package(directory,"ui-first"),"ui-first",paths,default);
+        PcvrBuilds.Publish(paths.Install,PcvrBuildChecks.Package(directory,"ui-second"),"ui-second",paths,default);
         using var app=Application.Create().Init();
         using var ui=new ManagerUi(app,new SettingsStore(Path.Combine(directory,"settings")),initial,loadMusicOnOpen:false);
         ui.Initialize(); Exception? failure=null; var phase=0;
@@ -29,6 +33,12 @@ internal static class PcvrUiChecks
                 {
                     case 0:
                         Check(!All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Windows page contains Quest radio controls.");
+                        var buildOnly=All(ui.Window).OfType<CheckBox>().Single(c=>c.Text.StartsWith("Build only"));
+                        var shortcut=All(ui.Window).OfType<CheckBox>().Single(c=>c.Text.StartsWith("Create/update desktop"));
+                        Check(shortcut.Enabled && shortcut.Value==CheckState.UnChecked,"Shortcut default is incorrect.");
+                        buildOnly.Value=CheckState.Checked;
+                        Check(!shortcut.Enabled,"Build-only did not disable shortcuts.");
+                        buildOnly.Value=CheckState.UnChecked;
                         Check(!All(ui.Window).OfType<Button>().Single(b=>b.Text=="Original Xbox assets").Visible,"Separate Xbox action remains visible.");
                         Check(All(ui.Window).OfType<TextField>().Take(2).All(f=>!f.Enabled),"Unselected variant paths are enabled.");
                         Prepare().Value=CheckState.Checked;
@@ -47,7 +57,16 @@ internal static class PcvrUiChecks
                         Check(Prepare().Value==CheckState.UnChecked,"Cancel did not discard PCVR option edits.");
                         File.WriteAllText(Path.Combine(directory,"pcvr-build.txt"),app.ToString());
                         Button("Launch PCVR").InvokeCommand(Command.Accept);
-                        Check(All(ui.Window).OfType<TextField>().Count()==(OperatingSystem.IsLinux()?6:5),"Launch page lacks profile, dependencies or isolated PCVR directories.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==5,"Launch page lacks profile, dependencies or isolated PCVR directories.");
+                        var versions=All(ui.Window).OfType<ListView>().Single();
+                        Check(versions.Source?.Count==2 && versions.SelectedItem==0,"Current build was not selected.");
+                        versions.SelectedItem=1;
+                        var fields=All(ui.Window).OfType<TextField>().ToArray();
+                        Check(fields[1].Text.EndsWith("ui-first") && fields[2].Text==paths.Data && fields[3].Text==paths.User,"Version selection did not populate launch paths.");
+                        fields[2].Text=paths.Data+"-manual";
+                        Check(versions.SelectedItem is null,"Manual path edit did not clear version selection.");
+                        Button("Refresh versions").InvokeCommand(Command.Accept);
+                        Check(All(ui.Window).OfType<ListView>().Single().SelectedItem is null && All(ui.Window).OfType<TextField>().ElementAt(2).Text.EndsWith("-manual"),"Refresh lost manual paths.");
                         Button("_Cancel").InvokeCommand(Command.Accept);
                         Check(ui.Window.MostFocused?.Text=="Launch PCVR","Launch Cancel did not return navigation focus.");
                         Button("PCVR diagnostics").InvokeCommand(Command.Accept);

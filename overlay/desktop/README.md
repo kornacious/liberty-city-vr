@@ -66,7 +66,13 @@ For the game, first assemble a clean pinned re3 checkout using the manager's
 `--assemble RE3 OUTPUT` command, with OUTPUT outside both source repositories.
 Configure the assembled `desktop` directory and set `LIBERTYVR_RE3_ROOT` to
 the assembled root. Keep original game data outside the source tree and use
-explicit `--game-data` and `--user-data` directories when launching.
+explicit `--game-data` and `--user-data` directories when launching, or provide
+`pcvr-paths.ini` beside the game executable. Manager installations generate this
+UTF-8 file with `version=1`, `data=PATH` and `user=PATH`, one key per line. Relative
+paths resolve against the executable directory, allowing direct launch from any
+working directory; each explicit CLI path overrides its corresponding default.
+The base executable forwards to the sibling Upstate engine when enabled, retaining
+package validation and separate saves. `--help` works without configuration.
 
 Local installations include the SDL/FFmpeg shared libraries and notices,
 FFmpeg build configuration and matching source archives. Linux uses `$ORIGIN`
