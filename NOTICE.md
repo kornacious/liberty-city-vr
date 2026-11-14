@@ -9,6 +9,15 @@
 - **librw** — MIT License, copyright aap. The `librw/` directory is a fork;
   its original license is preserved at `librw/LICENSE`. The Vulkan backend
   (`librw/src/vulkan/`) was written for this project.
+- **SDL3** — zlib License, copyright Sam Lantinga and contributors. Desktop
+  builds obtain SHA256-pinned SDL 3.4.16 sources; local installations retain
+  `SDL_LICENSE.txt` and the matching source archive in `dependency-notices`.
+- **FFmpeg** — desktop audio decoding/resampling uses SHA256-pinned FFmpeg
+  9.0.2 shared libraries, configured without GPL or nonfree components under
+  the upstream LGPL-2.1-or-later terms. Local installations retain the LGPL
+  text, matching source archive and build configuration in `dependency-notices`.
+  These desktop dependencies are not added to the Quest APK. See
+  [desktop dependency/build notes](overlay/desktop/README.md).
 - **OpenXR** — the loader is fetched at build time as the official Khronos
   `org.khronos.openxr:openxr_loader_for_android` package. The repository also
   includes Khronos OpenXR 1.1.58 headers. Both are Apache License 2.0; the

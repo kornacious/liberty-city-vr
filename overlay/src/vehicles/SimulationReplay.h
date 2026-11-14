@@ -3,7 +3,7 @@
 class CEntity;
 class CAutomobile;
 namespace androidgame {
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 void SimulationReplayBeginFrame();
 void SimulationReplayEndFrame();
 void SimulationReplayInputs(CAutomobile *car);

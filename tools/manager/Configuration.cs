@@ -24,6 +24,12 @@ public sealed record ManagerSettings
     public string PcvrInstallDirectory { get; set; } = "";
     public string PcvrDataDirectory { get; set; } = "";
     public string PcvrUserDirectory { get; set; } = "";
+    public string PcvrDependencyPrefix { get; set; } = "";
+    public string LinuxPcvrDependencyPrefix { get; set; } = "";
+    public string LinuxPcvrOpenXrSource { get; set; } = "";
+    public string LinuxPcvrInstallDirectory { get; set; } = "";
+    public string LinuxPcvrDataDirectory { get; set; } = "";
+    public string LinuxPcvrUserDirectory { get; set; } = "";
     public bool AllowToolDownloads { get; set; } = true;
     public Dictionary<ManagerAction, ActionOptions> Actions { get; set; } = [];
     public static string DefaultWorkplace(bool windows) => windows ? @"C:\LCVRBuild" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "LCVRBuild");
@@ -74,7 +80,7 @@ public sealed class SettingsStore(string? directory = null)
 }
 
 public enum ManagerAction { BuildAndInstall, BuildVehicleEditor, ManageMusic, InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods, LaunchPcvr = 10, DiagnosePcvr = 11, ImportMusic = ManageMusic }
-public enum GameTarget { Quest, WindowsPcvr }
+public enum GameTarget { Quest = 0, WindowsPcvr = 1, LinuxPcvr = 2 }
 
 public enum ModOperation { Status, Install, Enable, Disable, Delete, Validate }
 

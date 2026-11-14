@@ -2,6 +2,7 @@
 *.cs text eol=lf
 *.resx text eol=lf
 MANAGE.sh text eol=lf
+tools/desktop/*.sh text eol=lf
 # Patches must be authored with LF and survive checkout byte-exact everywhere.
 # Validate with the manager's embedded patch-series test, including on Windows.
 patches/*.patch -text

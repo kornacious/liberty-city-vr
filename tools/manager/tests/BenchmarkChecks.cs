@@ -79,6 +79,7 @@ internal static class BenchmarkChecks
             Check(first==BenchmarkReports.SourceIdentity(repo));File.WriteAllText(source,"second");Check(first!=BenchmarkReports.SourceIdentity(repo));
             File.WriteAllText(source,"same line\n");var lf=BenchmarkReports.SourceIdentity(repo);
             File.WriteAllText(source,"same line\r\n");Check(lf==BenchmarkReports.SourceIdentity(repo));
+            File.WriteAllText(Path.Combine(repo,"overlay/profile.inc"),"shared INI code");Check(lf!=BenchmarkReports.SourceIdentity(repo));
             return Task.CompletedTask;
         });
         await test("Benchmark collection allows only generated diagnostic filenames",()=>{

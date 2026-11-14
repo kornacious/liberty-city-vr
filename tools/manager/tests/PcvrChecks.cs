@@ -130,10 +130,62 @@ internal static class PcvrChecks
             else Check(!runner.EnvironmentOverrides.ContainsKey("PATH"));
             return Task.CompletedTask;
         });
+        await test("Linux PCVR settings preserve existing targets and isolate all desktop roots",()=>
+        {
+            Check((int)GameTarget.Quest==0 && (int)GameTarget.WindowsPcvr==1 && (int)GameTarget.LinuxPcvr==2);
+            var windows=PcvrPaths.From(settings,GameTarget.WindowsPcvr);
+            var linux=PcvrPaths.From(settings,GameTarget.LinuxPcvr);
+            windows.Validate(settings);linux.Validate(settings);
+            Check(windows.Install!=linux.Install && windows.Data!=linux.Data && windows.User!=linux.User);
+            var configured=settings with {LinuxPcvrUserDirectory=Path.Combine(fixture,"linux-saves"),PcvrUserDirectory=Path.Combine(fixture,"windows-saves")};
+            Check(PcvrPaths.From(configured,GameTarget.LinuxPcvr).User==Path.GetFullPath(configured.LinuxPcvrUserDirectory));
+            Check(PcvrPaths.From(configured,GameTarget.WindowsPcvr).User==Path.GetFullPath(configured.PcvrUserDirectory));
+            var copy=JsonSerializer.Deserialize<ManagerSettings>(JsonSerializer.Serialize(configured))!;
+            Check(copy.LinuxPcvrUserDirectory==configured.LinuxPcvrUserDirectory && copy.PcvrUserDirectory==configured.PcvrUserDirectory);
+            return Task.CompletedTask;
+        });
+        await test("Linux desktop installation rejects Windows packages and preserves the previous pointer",()=>
+        {
+            var install=Path.Combine(fixture,"linux-install");var version=Path.Combine(install,"versions/linux");
+            foreach(var name in new[]{"libertyvr-game","libertyvr-pcvr","libopenxr_loader.so.1","IMGUI_LICENSE.txt","LIBRW_LICENSE.txt","desktop-backend.txt"}){
+                Directory.CreateDirectory(version);File.WriteAllText(Path.Combine(version,name),"synthetic");
+            }
+            foreach(var (name,major) in new[]{("SDL3","0"),("avformat","63"),("avcodec","63"),("avutil","61"),("swresample","7")})File.WriteAllText(Path.Combine(version,"lib"+name+".so."+major),"synthetic");
+            Directory.CreateDirectory(Path.Combine(version,"dependency-notices"));
+            foreach(var name in new[]{"SDL_LICENSE.txt","FFMPEG_LICENSE.txt","config.mak"})File.WriteAllText(Path.Combine(version,"dependency-notices",name),"synthetic");
+            PcvrWorkflow.PublishInstallation(install,"versions/linux",GameTarget.LinuxPcvr);
+            Check(PcvrWorkflow.ResolveInstallation(install,GameTarget.LinuxPcvr)==Path.GetFullPath(version));
+            Reject(()=>PcvrWorkflow.ResolveInstallation(install,GameTarget.WindowsPcvr));
+            var before=File.ReadAllText(Path.Combine(install,"current.json"));
+            Reject(()=>PcvrWorkflow.PublishInstallation(install,"versions/incomplete",GameTarget.LinuxPcvr));
+            Check(File.ReadAllText(Path.Combine(install,"current.json"))==before);
+            if(OperatingSystem.IsLinux()) {
+                var link=Path.Combine(version,"libavcodec.so.63");File.Delete(link);
+                File.WriteAllText(Path.Combine(version,"libavcodec.so.63.1"),"synthetic");
+                File.CreateSymbolicLink(link,"libavcodec.so.63.1");
+                Check(PcvrWorkflow.ResolveInstallation(install,GameTarget.LinuxPcvr)==Path.GetFullPath(version));
+                File.Delete(link);var outside=Path.Combine(fixture,"outside-library");File.WriteAllText(outside,"synthetic");
+                File.CreateSymbolicLink(link,outside);Reject(()=>PcvrWorkflow.ResolveInstallation(install,GameTarget.LinuxPcvr));File.Delete(link);
+            }
+            File.Delete(Path.Combine(version,"libavcodec.so.63"));
+            Reject(()=>PcvrWorkflow.ResolveInstallation(install,GameTarget.LinuxPcvr));
+            return Task.CompletedTask;
+        });
+        await test("Linux runtime discovery follows user and configured system manifest precedence",()=>
+        {
+            var home=Path.Combine(fixture,"runtime-home");var user=Path.Combine(home,".config");var system=Path.Combine(fixture,"runtime-system");
+            Directory.CreateDirectory(Path.Combine(system,"openxr/1"));var manifest=Path.Combine(system,"openxr/1/active_runtime.json");File.WriteAllText(manifest,"{}");
+            Check(PcvrWorkflow.FindLinuxRuntimeManifest(home,null,system)==manifest);
+            Directory.CreateDirectory(Path.Combine(user,"openxr/1"));var overrideFile=Path.Combine(user,"openxr/1/active_runtime.x86_64.json");File.WriteAllText(overrideFile,"{}");
+            Check(PcvrWorkflow.FindLinuxRuntimeManifest(home,null,system)==overrideFile);
+            return Task.CompletedTask;
+        });
         await test("PCVR requests cannot enter the Quest updater or an undefined build target",async()=>
         {
             using var log=new PrivateLog(); var workflow=new Workflows(settings,new CommandRunner(log),log);
             try { await workflow.Perform(ManagerAction.Update,new ActionOptions { Target=GameTarget.WindowsPcvr },default); throw new Exception("PCVR entered the Quest updater."); }
+            catch(InvalidDataException error) { Check(error.Message.Contains("updater targets Quest")); }
+            try { await workflow.Perform(ManagerAction.Update,new ActionOptions { Target=GameTarget.LinuxPcvr },default); throw new Exception("Linux PCVR entered Quest updater."); }
             catch(InvalidDataException error) { Check(error.Message.Contains("updater targets Quest")); }
             try { await workflow.Perform(ManagerAction.BuildAndInstall,new ActionOptions { Target=(GameTarget)99 },default); throw new Exception("Undefined target accepted."); }
             catch(InvalidDataException error) { Check(error.Message.Contains("valid game target")); }

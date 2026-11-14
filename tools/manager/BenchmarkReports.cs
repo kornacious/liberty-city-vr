@@ -24,7 +24,7 @@ public static partial class BenchmarkReports
     {
         using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         hash.AppendData(Encoding.UTF8.GetBytes("LCVR_WORKLOAD_SOURCE_V1;re3="+Toolchain.Re3Commit+"\n"));
-        var extensions=new HashSet<string>([".c",".cc",".cpp",".cxx",".h",".hpp",".inl",".in",".vert",".frag",".comp",".glsl",".patch",".cmake",".kts",".gradle",".java",".xml"],StringComparer.OrdinalIgnoreCase);
+        var extensions=new HashSet<string>([".c",".cc",".cpp",".cxx",".h",".hpp",".inc",".inl",".in",".vert",".frag",".comp",".glsl",".patch",".cmake",".kts",".gradle",".java",".xml"],StringComparer.OrdinalIgnoreCase);
         foreach(var directory in new[] {"overlay","librw","patches"})
         {
             var root=Path.Combine(repository,directory);

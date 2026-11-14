@@ -3,7 +3,7 @@
 #include "TheaterAnchor.h"
 #include "VulkanPolicy.h"
 #include "LegacyColour.h"
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 #include "DesktopMirror.h"
 #endif
 #include "platform_android.h"
@@ -491,7 +491,7 @@ createInstance(android_app *app)
 	info.applicationInfo.applicationVersion = 1;
 	strcpy(info.applicationInfo.engineName, "re3");
 	info.applicationInfo.engineVersion = 1;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     info.applicationInfo.apiVersion = XR_MAKE_VERSION(1,0,0);
 #else
 	info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
@@ -647,9 +647,13 @@ createVulkan(void)
 
 	VkInstanceCreateInfo vkInstanceInfo = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 	vkInstanceInfo.pApplicationInfo = &appInfo;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+    #ifdef LIBERTYVR_DESKTOP
+    unsigned extensionCount=0;vkInstanceInfo.ppEnabledExtensionNames=Desktop::VulkanExtensions(extensionCount);vkInstanceInfo.enabledExtensionCount=extensionCount;
+#else
     const char *surfaceExtensions[]={VK_KHR_SURFACE_EXTENSION_NAME,"VK_KHR_win32_surface"};
     vkInstanceInfo.enabledExtensionCount=2;vkInstanceInfo.ppEnabledExtensionNames=surfaceExtensions;
+#endif
 #endif
 
 	XrVulkanInstanceCreateInfoKHR xrVkInstanceInfo = {
@@ -748,7 +752,7 @@ createVulkan(void)
 	deviceInfo.queueCreateInfoCount = 1;
 	deviceInfo.pQueueCreateInfos = &queueInfo;
 	deviceInfo.pEnabledFeatures = &deviceFeatures;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     const char *desktopExtensions[]={VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     deviceInfo.enabledExtensionCount=1;deviceInfo.ppEnabledExtensionNames=desktopExtensions;
 #endif
@@ -1225,7 +1229,7 @@ createSwapchain(void)
 	// Preserve the established Android path. Windows runtimes interpret UNORM
 	// swapchains as linear, so encoded game colours need an sRGB swapchain
 	// with a mutable UNORM attachment view (no second encoding on write).
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	g.swapchainFormat = LegacyColour::selectSrgb(formats.data(), formats.size());
 	g.attachmentFormat = LegacyColour::attachmentFormat((VkFormat)g.swapchainFormat);
 #else
@@ -1976,7 +1980,7 @@ renderLayer(const XrView trackedViews[2])
 		g.frameRenderer(image.image, image.view, matrices, im2dWorld.m,
 		                im2dDistance, headPos, headYaw, headQuat, eyeFovDeg,
 		                eyePos, eyeQuat);
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
         if(!MatchedProfile::benchmark)
             Desktop::Present(image.image,image.view,g.renderWidth,g.renderHeight,g.theaterMode ? androidgame::VrTheaterAspectRatio() : 0.f);
 #endif
@@ -2356,8 +2360,10 @@ create(android_app *app)
 	// required by XR_KHR_android_thread_settings (not pthread_t).
 #ifdef __ANDROID__
 	g.applicationMainThreadId = (uint32_t)syscall(SYS_gettid);
-#else
+#elif defined(_WIN32)
     g.applicationMainThreadId = GetCurrentThreadId();
+#else
+    g.applicationMainThreadId = 0; // Only the Android extension consumes a kernel TID.
 #endif
 	LOGI("OpenXR application-main candidate tid=%u (game/render thread)",
 	     g.applicationMainThreadId);
@@ -3023,12 +3029,12 @@ renderFrame(void)
 
 	XrFrameWaitInfo waitInfo = { XR_TYPE_FRAME_WAIT_INFO };
 	XrFrameState frameState = { XR_TYPE_FRAME_STATE };
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	const int64_t pacingStart = monotonicTimeNs();
 #endif
 	if(XR_FAILED(xrWaitFrame(g.session, &waitInfo, &frameState)))
 		return;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	const int64_t pacingWaitEnd = monotonicTimeNs();
 #endif
 	g.predictedDisplayTime = frameState.predictedDisplayTime;
@@ -3071,7 +3077,7 @@ renderFrame(void)
 	XrFrameBeginInfo beginInfo = { XR_TYPE_FRAME_BEGIN_INFO };
 	if(XR_FAILED(xrBeginFrame(g.session, &beginInfo)))
 		return;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	const int64_t pacingBeginEnd = monotonicTimeNs();
 #endif
 
@@ -3256,11 +3262,11 @@ renderFrame(void)
 	endInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 	endInfo.layerCount = layerCount;
 	endInfo.layers = layers;
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	const int64_t pacingEndStart = monotonicTimeNs();
 #endif
 	const XrResult ended = xrEndFrame(g.session, &endInfo);
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 	// Keep runtime scheduling separate from local game/GPU work and display Hz.
 	// Bounded aggregate logging avoids per-frame console I/O in measurements.
 	const int64_t pacingEnd = monotonicTimeNs();

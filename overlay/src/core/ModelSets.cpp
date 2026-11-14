@@ -6,7 +6,7 @@
 #include "AssetVariants.h"
 #include "crossplatform.h"
 
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "platform_android.h"
 #include "RuntimeLog.h"
 #define ALOG(...) __android_log_print(ANDROID_LOG_INFO, "LibertyVR", __VA_ARGS__)

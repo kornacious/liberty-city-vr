@@ -22,7 +22,7 @@ internal static class BenchmarkAssetChecks
         });
         var baseRoot=Path.Combine(root,"benchmark-alignment");Directory.CreateDirectory(baseRoot);
         var settings=new ManagerSettings {Workplace=Path.Combine(baseRoot,"work"),Repository=Path.Combine(baseRoot,"repo"),GameDirectory=Path.Combine(baseRoot,"retail")};
-        var paths=PcvrPaths.From(settings);Directory.CreateDirectory(Path.Combine(paths.Data,"data"));Directory.CreateDirectory(Path.Combine(paths.Data,"models"));Directory.CreateDirectory(paths.User);
+        var paths=PcvrPaths.From(settings,PcvrWorkflow.HostTarget);Directory.CreateDirectory(Path.Combine(paths.Data,"data"));Directory.CreateDirectory(Path.Combine(paths.Data,"models"));Directory.CreateDirectory(paths.User);
         File.WriteAllText(Path.Combine(paths.Data,".libertyvr-pcvr-data"),"fixture");
         File.WriteAllText(Path.Combine(paths.Data,"data/handling.cfg"),"old");File.WriteAllText(Path.Combine(paths.Data,"models/test.dff"),"same");
         File.WriteAllText(Path.Combine(paths.Data,"models/pc-only.dff"),"extra");File.WriteAllText(Path.Combine(paths.User,"GTA3sf1.b"),"save unchanged");

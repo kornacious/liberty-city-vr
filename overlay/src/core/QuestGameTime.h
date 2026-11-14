@@ -7,7 +7,7 @@
 namespace QuestGameTime {
 inline uint32 Count()
 {
-#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(FIX_BUGS)
 	return CTimer::GetGameFramesPassed();
 #else
 	return 1;
@@ -15,7 +15,7 @@ inline uint32 Count()
 }
 inline uint64 Tick(uint32 index)
 {
-#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(FIX_BUGS)
+#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(FIX_BUGS)
 	return CTimer::GetGameFrameCounter() - Count() + 1 + index;
 #else
 	(void)index;

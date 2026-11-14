@@ -1,5 +1,11 @@
 # Windows OpenXR/Vulkan development builds
 
+The default build now uses the [shared SDL3/FFmpeg desktop layer](../desktop/README.md).
+Build its pinned dependencies first and configure `LIBERTYVR_DESKTOP_PREFIX`.
+The earlier Win32/WASAPI/Media Foundation implementation remains available with
+`LIBERTYVR_LEGACY_WINDOWS_BACKEND=ON` during native acceptance. Historical
+Windows validation below applies to the implementation tested at that time.
+
 Build and install now prepares independent PC and Original Xbox variants. Either
 can be the sole installation; see the [asset guide](../docs/QUEST_MODELSETS.md).
 `libertyvr-game --game-data DATA --user-data USER --check-assets` checks startup
@@ -80,7 +86,7 @@ Use a CMake version that supports your installed Visual Studio, or build with
 Ninja inside its x64 developer terminal. From the source-kit root:
 
 ```text
-cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIBERTYVR_DESKTOP_PREFIX=PATH_TO_DESKTOP_DEPENDENCIES
 cmake --build out/windows-pcvr --parallel
 ctest --test-dir out/windows-pcvr --output-on-failure
 out\windows-pcvr\libertyvr-pcvr.exe --help

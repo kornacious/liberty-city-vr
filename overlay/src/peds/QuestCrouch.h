@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+#if defined(GTA_VR_WEAPONS) && defined(RW_VULKAN) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)))
 namespace androidgame { bool VrUsesFixedButtonCrouch(); }
 // GTA III's ClearDuck is an NPC shooting transition, not a stand-up action.
 // Keep the animation, timer and camera's bIsDucking source in sync here.

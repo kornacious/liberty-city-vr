@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 #include "platform_android.h"
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 #include "DesktopMirror.h"
 #endif
 
@@ -2513,7 +2513,7 @@ CapturePad(RwInt32 padID)
 		state.DPadUp    = moveStickY >=  mirror ? 255 : 0;
 		state.DPadDown  = moveStickY <= -mirror ? 255 : 0;
 	}
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     Desktop::MergeGamepad(&state);
 #endif
 }
@@ -2565,7 +2565,7 @@ psInitialize(void)
 	     physical / (1024*1024), _dwMemAvailPhys / (1024*1024));
 
 	CFileMgr::Initialise();
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     Desktop::InitializeGameInput();
 #endif
 	InitialiseLanguage();

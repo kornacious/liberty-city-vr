@@ -12,7 +12,7 @@ inline bool QuestSkipAmbientCameraScript(const char *name, bool missionScript,
     bool missionFlag)
 {
     (void)missionScript;
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
     return !missionFlag && std::strncmp(name, "camera", 8) == 0;
 #else
     return false;
@@ -23,7 +23,7 @@ inline bool QuestSkipAmbientCameraScript(const char *name, bool missionScript,
 // Run those threads normally, but keep their fixed overview and fades out of VR.
 inline bool QuestKeepShopPlayerCamera(const char *name, bool missionFlag)
 {
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
     return !missionFlag && (std::strncmp(name, "i_ammu", 8) == 0 ||
         std::strncmp(name, "c_ammu", 8) == 0);
 #else

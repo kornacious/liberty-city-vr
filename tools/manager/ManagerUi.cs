@@ -130,23 +130,23 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         configuration.Add(form);
         if (cancel.SuperView is null) configuration.Add(cancel, perform);
         perform.Text = page == SettingsPage ? "_Save" : "_Perform";
-        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS", "LAUNCH WINDOWS PCVR", "PCVR DIAGNOSTICS"];
+        string[] titles = ["BUILD AND INSTALL", "BUILD VEHICLE EDITOR", "MANAGE MUSIC", "INSTALL MODERN MODELS", "REPAIR GAME FILES", "UPDATE", "TRANSFER SAVE", "CURATED MODS", "SETTINGS", "TOOLS AND TESTS", "LAUNCH PCVR", "PCVR DIAGNOSTICS"];
         configuration.Title = titles[page];
         switch (page)
         {
             case 0:
-                var target = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)"],
-                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 2 };
-                target.SetScheme(Theme()); form.Add(target); row += 3;
+                var target = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)", "Linux PCVR (experimental)"],
+                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 3 };
+                target.SetScheme(Theme()); form.Add(target); row += 4;
                 readFields.Add(() => options.Target = (GameTarget)(target.Value ?? 0));
                 target.ValueChanged += (_, _) =>
                 {
                     foreach (var read in readFields.ToArray()) read();
                     app.Invoke(() => { if (!disposed && selected == 0) Render(0, preserveDraft: true); });
                 };
-                if (options.Target == GameTarget.WindowsPcvr)
+                if (options.Target is GameTarget.WindowsPcvr or GameTarget.LinuxPcvr)
                 {
-                    Note("Windows x64 Release build, checks and local install. No Android tools.");
+                    Note((options.Target==GameTarget.LinuxPcvr?"Linux":"Windows")+" x64 Release build, checks and local install. No Android tools.");
                     Toggle("Build only (skip install and data copy)", options.PcvrBuildOnly, v => options.PcvrBuildOnly = v);
                     Toggle("Run Vulkan GPU tests (requires an active GPU)", options.PcvrGpuTests, v => options.PcvrGpuTests = v);
                     Toggle("Run audio tests (requires an audio endpoint)", options.PcvrAudioTests, v => options.PcvrAudioTests = v);
@@ -199,15 +199,15 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));
                 break;
             case (int)ManagerAction.ManageMods:
-                var modTarget = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)"],
-                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 2 };
-                modTarget.SetScheme(Theme()); form.Add(modTarget); row += 3;
+                var modTarget = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)", "Linux PCVR (experimental)"],
+                    Value = (int)options.Target, Width = Dim.Fill(2), Height = 3 };
+                modTarget.SetScheme(Theme()); form.Add(modTarget); row += 4;
                 readFields.Add(() => options.Target = (GameTarget)(modTarget.Value ?? 0));
                 modTarget.ValueChanged += (_, _) => {
                     foreach (var read in readFields.ToArray()) read();
                     app.Invoke(() => { if (!disposed && selected == (int)ManagerAction.ManageMods) Render(selected, preserveDraft: true); });
                 };
-                if (options.Target == GameTarget.WindowsPcvr) PcvrDirectories();
+                if (options.Target is GameTarget.WindowsPcvr or GameTarget.LinuxPcvr) PcvrDirectories();
                 options.ModId = CuratedMods.Upstate.Id;
                 Note("Upstate Liberty v1.1.2 — map expansion for Classic or Original Xbox assets.");
                 var modOperation = new OptionSelector { X = 1, Y = row, Labels = ["Status", "Install", "Enable", "Disable", "Delete", "Validate locally"],
@@ -255,7 +255,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 }
                 break;
             case (int)ManagerAction.LaunchPcvr:
-                Note("Launch the installed Windows PCVR game with separate local game data and saves.");
+                DesktopTarget();
+                Note("Launch the installed desktop PCVR game with separate local game data and saves.");
                 Field("Quest profile (blank: native PCVR; restart to change)", options.PcvrQuestProfile, v => options.PcvrQuestProfile = v, OpenMode.File);
                 Note("Matches captured Quest workload; PC timings are not Quest performance.");
                 PcvrDirectories();
@@ -263,6 +264,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Cancel stops the game process; use in-game Quit for a normal exit.");
                 break;
             case (int)ManagerAction.DiagnosePcvr:
+                DesktopTarget();
                 Note("Check the active OpenXR runtime, Vulkan GPU and headset session.");
                 PcvrDirectories();
                 Note("Requires a PCVR install. No game assets or ADB. Each probe times out after 60 seconds.");
@@ -276,11 +278,23 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         var label = new Label { Text = text, X = 1, Y = row, Width = Dim.Fill(2), Height = 2 };
         form!.Add(label); row += 3;
     }
+    private void DesktopTarget()
+    {
+        if(options.Target==GameTarget.Quest)options.Target=PcvrWorkflow.HostTarget;
+        var selector=new OptionSelector {X=1,Y=row,Labels=["Windows PCVR","Linux PCVR"],Value=options.Target==GameTarget.LinuxPcvr?1:0,Width=Dim.Fill(2),Height=2};
+        selector.SetScheme(Theme());form!.Add(selector);row+=3;
+        readFields.Add(()=>options.Target=selector.Value==1?GameTarget.LinuxPcvr:GameTarget.WindowsPcvr);
+        selector.ValueChanged+=(_,_)=>{foreach(var read in readFields.ToArray())read();app.Invoke(()=>{if(!disposed)Render(selected,preserveDraft:true);});};
+    }
     private void PcvrDirectories()
     {
-        Field("PCVR app (blank: workplace/windows-pcvr/app)", draft.PcvrInstallDirectory, v => draft.PcvrInstallDirectory = v, OpenMode.Directory, false);
-        Field("PCVR data (blank: workplace/windows-pcvr/data)", draft.PcvrDataDirectory, v => draft.PcvrDataDirectory = v, OpenMode.Directory, false);
-        Field("PCVR saves (blank: workplace/windows-pcvr/user)", draft.PcvrUserDirectory, v => draft.PcvrUserDirectory = v, OpenMode.Directory, false);
+        bool linux=options.Target==GameTarget.LinuxPcvr || (selected==SettingsPage && OperatingSystem.IsLinux());
+        var target=linux?"linux-pcvr":"windows-pcvr";
+        Field("PCVR app (blank: workplace/"+target+"/app)",linux?draft.LinuxPcvrInstallDirectory:draft.PcvrInstallDirectory,v=>{if(linux)draft.LinuxPcvrInstallDirectory=v;else draft.PcvrInstallDirectory=v;},OpenMode.Directory,false);
+        Field("PCVR data (blank: workplace/"+target+"/data)",linux?draft.LinuxPcvrDataDirectory:draft.PcvrDataDirectory,v=>{if(linux)draft.LinuxPcvrDataDirectory=v;else draft.PcvrDataDirectory=v;},OpenMode.Directory,false);
+        Field("PCVR saves (blank: workplace/"+target+"/user)",linux?draft.LinuxPcvrUserDirectory:draft.PcvrUserDirectory,v=>{if(linux)draft.LinuxPcvrUserDirectory=v;else draft.PcvrUserDirectory=v;},OpenMode.Directory,false);
+        Field("Desktop SDL3/FFmpeg prefix (blank: repository/.cache/desktop-deps/"+(linux?"linux":"windows")+")",linux?draft.LinuxPcvrDependencyPrefix:draft.PcvrDependencyPrefix,v=>{if(linux)draft.LinuxPcvrDependencyPrefix=v;else draft.PcvrDependencyPrefix=v;},OpenMode.Directory,false);
+        if(linux)Field("Linux OpenXR sources (blank: pinned cache)",draft.LinuxPcvrOpenXrSource,v=>draft.LinuxPcvrOpenXrSource=v,OpenMode.Directory,false);
     }
     private void Field(string label, string value, Action<string> set, OpenMode mode, bool mustExist = true, bool enabled = true)
     {

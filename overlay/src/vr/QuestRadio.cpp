@@ -1,5 +1,5 @@
 #include "common.h"
-#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS))
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)))
 #include "QuestRadio.h"
 #include "QuestGameSettings.h"
 #include "VehiclePlacement.h"

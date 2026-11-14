@@ -17,11 +17,11 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         {
             case ManagerAction.BuildAndInstall:
                 if (!Enum.IsDefined(options.Target)) throw new InvalidDataException("Select a valid game target.");
-                if (options.Target == GameTarget.WindowsPcvr) await new PcvrWorkflow(settings, runner, log).Build(options, token);
+                if (options.Target is GameTarget.WindowsPcvr or GameTarget.LinuxPcvr) await new PcvrWorkflow(settings, runner, log, options.Target).Build(options, token);
                 else await Build(options, false, token);
                 break;
-            case ManagerAction.LaunchPcvr: await new PcvrWorkflow(settings, runner, log).Launch(options, token); break;
-            case ManagerAction.DiagnosePcvr: await new PcvrWorkflow(settings, runner, log).Diagnose(token); break;
+            case ManagerAction.LaunchPcvr: await new PcvrWorkflow(settings, runner, log, options.Target==GameTarget.Quest?PcvrWorkflow.HostTarget:options.Target).Launch(options, token); break;
+            case ManagerAction.DiagnosePcvr: await new PcvrWorkflow(settings, runner, log, options.Target==GameTarget.Quest?PcvrWorkflow.HostTarget:options.Target).Diagnose(token); break;
             case ManagerAction.BuildVehicleEditor: await Editor(options, token); break;
             case ManagerAction.ManageMusic:
                 if (!options.ValidateMusicOnly && options.MusicRevision.Length > 0)
@@ -43,9 +43,9 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
                     prepared = await mods.Prepare(mod, options.ModArchive, token);
                 if (options.ModOperation == ModOperation.Validate)
                 { log.Write("Package verified and prepared locally. No device access. " + prepared); break; }
-                if (options.Target == GameTarget.WindowsPcvr)
+                if (options.Target is GameTarget.WindowsPcvr or GameTarget.LinuxPcvr)
                 {
-                    var modPaths = PcvrMods.Layout(settings);
+                    var modPaths = PcvrMods.Layout(settings,options.Target);
                     var status = options.ModOperation switch
                     {
                         ModOperation.Install => PcvrMods.Install(modPaths, mod, prepared!, token),

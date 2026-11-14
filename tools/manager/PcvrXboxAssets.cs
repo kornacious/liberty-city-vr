@@ -6,7 +6,7 @@ public static class PcvrXboxAssets
 {
     public static void ValidateOutput(ManagerSettings settings,string output)
     {
-        var paths=PcvrPaths.From(settings);paths.Validate(settings);
+        var paths=PcvrPaths.From(settings,PcvrWorkflow.HostTarget);paths.Validate(settings);
         foreach(var target in new[]{paths.Data,paths.User,paths.Install})
             if(Paths.Within(target,output) || Paths.Within(output,target))
                 throw new IOException("Prepare Xbox assets outside the live PCVR data, saves and installation directories.");
@@ -14,9 +14,9 @@ public static class PcvrXboxAssets
     public static void Install(ManagerSettings settings,string output,CancellationToken token)
     {
         ValidateOutput(settings,output);
-        var paths=PcvrPaths.From(settings);PcvrWorkflow.ValidatePreparedData(paths.Data);
+        var paths=PcvrPaths.From(settings,PcvrWorkflow.HostTarget);PcvrWorkflow.ValidatePreparedData(paths.Data);
         var hashes=OriginalXboxModels.ValidateOverlay(output);
-        if(OperatingSystem.IsWindows()) {
+        {
             var processes=Process.GetProcessesByName("libertyvr-game");
             try {if(processes.Length>0)throw new IOException("Quit PCVR before installing Xbox assets.");}
             finally {foreach(var process in processes)process.Dispose();}

@@ -151,7 +151,7 @@ static unsigned lateAdmissions, blastEvents;
 
 static void AdmissionEvent(const char *event, unsigned count, CPed *ped, int reason)
 {
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 	if(count <= 4 || (count & (count-1)) == 0)
 		__android_log_print(ANDROID_LOG_INFO,"QuestRagdoll",
 			"event=%s count=%u reason=%d active=%d taken=%d model=%d state=%d",

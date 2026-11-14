@@ -1,7 +1,7 @@
 #include "common.h"
 #include "VehicleDeformation.h"
 
-#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(LIBRW)
+#if defined(GTA_VR_WEAPONS) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(LIBRW)
 #include "VehicleDeformationMesh.h"
 #include "Vehicle.h"
 #include "Camera.h"

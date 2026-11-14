@@ -12,7 +12,7 @@
 #include <vector>
 #include <cstdio>
 #include <unistd.h>
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "RuntimeLog.h"
 #endif
 
@@ -61,7 +61,7 @@ bool Initialize(const char *root) {
         }
         fclose(f);
     }
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
     __android_log_print(ANDROID_LOG_INFO,"LibertyVR","Upstate overlay ready: %zu pinned files, %zu FXT entries; expanded save profile",sizeof(questpackage::UpstateFiles)/sizeof(questpackage::UpstateFiles[0]),text.size());
 #endif
     return true;

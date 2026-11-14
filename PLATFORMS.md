@@ -8,10 +8,18 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Implemented; release candidate | Manager source assembly, APK build and local headset installation. |
 | Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
+| Linux PCVR, x64, OpenXR + Vulkan | Shared SDL/FFmpeg implementation; native headset acceptance pending | Separate manager target, build/install/data/save settings and XDG runtime discovery. GCC/Clang and native desktop/headset results are recorded separately. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
 Existing `QUEST_*.md` guides document the implemented headset target.
+
+The shared [desktop implementation](overlay/desktop/README.md) uses SDL3 for
+windows, input, Vulkan surfaces and audio output, plus FFmpeg audio decoding.
+Windows and Linux reuse the same game, renderer, XR integration and spatial
+mixer. The previous Windows backend remains available as a migration fallback
+until native Linux X11/Wayland and WiVRn acceptance is complete. Linux builds
+under WSL do not establish native Linux VR support.
 
 Development after the 0.8.5 scope preparation adds a standalone
 [Windows bring-up executable](overlay/windows/README.md). It compiles the same
@@ -41,8 +49,9 @@ The intended sequence is:
 
 The shared Vulkan/game source builds, logging/timing boundary, stereo math,
 OpenXR game lifecycle/input and Windows diagnostic/game entry points are implemented.
-Windows services provide local data/save paths, WASAPI effects output, Media
-Foundation music and local ACM ADPCM conversion. Menus, New Game, tracking and
+The original Windows services provided local data/save paths, WASAPI effects
+output, Media Foundation music and local ACM ADPCM conversion; those audio
+services now remain in the optional legacy backend. Menus, New Game, tracking and
 music and clean engine/siren playback have been confirmed through VirtualDesktopXR.
 Manager target selection, Windows toolchain checks, versioned local installation,
 launch and runtime diagnostics are implemented. Windows builds never invoke APK

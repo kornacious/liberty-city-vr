@@ -36,6 +36,15 @@ void Throws<T>(Action body) where T : Exception
 { try { body(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
 async Task ThrowsAsync<T>(Func<Task> body) where T : Exception
 { try { await body(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
+if(args is ["--desktop"])
+{
+    await PcvrChecks.Run(root,Test);
+    await PcvrModChecks.Run(root,Test);
+    await BenchmarkChecks.Run(root,Test);
+    await BenchmarkAssetChecks.Run(root,Test);
+    Console.WriteLine($"{total-failures}/{total} desktop checks passed.");
+    return failures==0?0:1;
+}
 var repository = Path.Combine(root, "source");
 Directory.CreateDirectory(Path.Combine(repository, "patches")); Directory.CreateDirectory(Path.Combine(repository, "overlay/android/app"));
 File.WriteAllText(Path.Combine(repository, "overlay/android/app/build.gradle.kts"), "versionCode = 600\n");
@@ -186,7 +195,7 @@ await Test("Overlay manifests detect modified and unmanifested files", () =>
     var manifest = new List<string> { "Profile=MODERN", "BuilderVersion=" + OriginalXboxModels.Disc.BuilderVersion, "Source=" + OriginalXboxModels.Identity };
     foreach (var file in Directory.GetFiles(overlay, "*", SearchOption.AllDirectories)) manifest.Add("SHA256 " + Path.GetRelativePath(overlay, file).Replace('\\', '/') + "=" + Digests.Sha256(file));
     File.WriteAllLines(Path.Combine(overlay, "BUILD_INFO.txt"), manifest); Assert(ModernModels.ValidateOverlay(overlay).Count == 209);
-    var pcvr=PcvrPaths.From(config);Directory.CreateDirectory(Path.Combine(pcvr.Data,"data"));Directory.CreateDirectory(Path.Combine(pcvr.Data,"models"));
+    var pcvr=PcvrPaths.From(config,PcvrWorkflow.HostTarget);Directory.CreateDirectory(Path.Combine(pcvr.Data,"data"));Directory.CreateDirectory(Path.Combine(pcvr.Data,"models"));
     File.WriteAllText(Path.Combine(pcvr.Data,".libertyvr-pcvr-data"),"fixture");
     File.WriteAllText(Path.Combine(pcvr.Data,"vehicle_placements.personal.ini"),"preserve-personal");
     PcvrXboxAssets.Install(config,overlay,default);

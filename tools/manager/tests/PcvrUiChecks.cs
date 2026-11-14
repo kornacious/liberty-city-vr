@@ -47,22 +47,36 @@ internal static class PcvrUiChecks
                         Check(Prepare().Value==CheckState.UnChecked,"Cancel did not discard PCVR option edits.");
                         File.WriteAllText(Path.Combine(directory,"pcvr-build.txt"),app.ToString());
                         Button("Launch PCVR").InvokeCommand(Command.Accept);
-                        Check(All(ui.Window).OfType<TextField>().Count()==4,"Launch page lacks profile choice and isolated PCVR directories.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==(OperatingSystem.IsLinux()?6:5),"Launch page lacks profile, dependencies or isolated PCVR directories.");
                         Button("_Cancel").InvokeCommand(Command.Accept);
                         Check(ui.Window.MostFocused?.Text=="Launch PCVR","Launch Cancel did not return navigation focus.");
                         Button("PCVR diagnostics").InvokeCommand(Command.Accept);
                         File.WriteAllText(Path.Combine(directory,"pcvr-diagnostics.txt"),app.ToString());
                         Button("Mods").InvokeCommand(Command.Accept);
                         Check(All(ui.Window).OfType<OptionSelector>().Count()==2,"Mods lacks target selector.");
-                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==2).Value=1;
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==3).Value=1;
                         break;
                     case 3:
-                        Check(All(ui.Window).OfType<TextField>().Count()==4,"PCVR Mods lacks isolated directories and package field.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==5,"PCVR Mods lacks dependencies, isolated directories and package field.");
                         File.WriteAllText(Path.Combine(directory,"pcvr-mods.txt"),app.ToString());
-                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==2).Value=0;
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==3).Value=2;
                         break;
                     case 4:
-                        Check(All(ui.Window).OfType<TextField>().Count()==1,"Quest Mods retained PCVR directory fields.");
+                        Check(All(ui.Window).OfType<TextField>().Count()==6,"Linux Mods lacks its separate directories/dependencies/OpenXR fields.");
+                        All(ui.Window).OfType<TextField>().First().Text=Path.GetFullPath(Path.Combine(directory,"linux-app-draft"));
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==3).Value=1;
+                        break;
+                    case 5:
+                        Check(All(ui.Window).OfType<TextField>().First().Text.Length==0,"Linux directory edits replaced Windows directories.");
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==3).Value=2;
+                        break;
+                    case 6:
+                        Check(All(ui.Window).OfType<TextField>().First().Text==Path.GetFullPath(Path.Combine(directory,"linux-app-draft")),"Linux target switching lost its directory draft.");
+                        File.WriteAllText(Path.Combine(directory,"linux-pcvr-mods.txt"),app.ToString());
+                        All(ui.Window).OfType<OptionSelector>().Single(s=>s.Labels?.Count==3).Value=0;
+                        break;
+                    case 7:
+                        Check(All(ui.Window).OfType<TextField>().Count()==1,"Quest Mods retained desktop directory fields.");
                         app.RequestStop(); return false;
                 }
             }

@@ -1,6 +1,6 @@
 #include "common.h"
 #include "VrPlayerTraversal.h"
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "VrTraversalRules.h"
 #include "PlayerPed.h"
 #include "World.h"

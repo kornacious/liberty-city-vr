@@ -23,22 +23,23 @@
 > and discussion of the mod take place in the Flat2VR community.
 
 Liberty City VR brings GTA III to VR using re3, OpenXR and the bundled librw
-Vulkan renderer. The project covers **standalone Meta Quest 3** and an **experimental
-Windows PCVR variant** in one source repository:
+Vulkan renderer. The project covers **standalone Meta Quest 3** and experimental
+**Windows/Linux PCVR targets** in one source repository:
 [github.com/kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
 | Target | Status in 0.8.5 |
 | --- | --- |
 | Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
 | Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable build; manager builds, installs locally, launches and diagnoses the PC runtime. |
+| Linux PCVR / x64 / OpenXR + Vulkan | Shared SDL3/FFmpeg game and manager implementation; native Linux/WiVRn acceptance pending. |
 
-Windows/Linux manager support and the desktop vehicle editor are host tools;
-they do not constitute a PCVR game build. See [platform scope and roadmap](PLATFORMS.md)
+Manager/editor host support and PCVR game support are validated separately.
+See [platform scope and roadmap](PLATFORMS.md)
 for the shared architecture and target boundaries, and [BENCHMARKS](BENCHMARKS.md)
 for the captured Quest workload profile.
-Developers can build the [Windows game and renderer diagnostic](overlay/windows/README.md).
+Developers can build the [shared desktop game and renderer diagnostic](overlay/desktop/README.md).
 The game uses separate local data/save directories; the diagnostic requires no game data.
-In the manager, select **Windows PCVR** under **Build and install**, then use
+In the manager, select **Windows PCVR** or **Linux PCVR** on the matching host under **Build and install**, then use
 **Launch PCVR** or **PCVR diagnostics**. See the [PCVR manager workflow](tools/manager/README.md#windows-pcvr).
 The game also opens a [desktop eye preview](overlay/windows/README.md#desktop-preview-and-input)
 with ImGui/F1–F12 display controls and keyboard/mouse/PC gamepad input.

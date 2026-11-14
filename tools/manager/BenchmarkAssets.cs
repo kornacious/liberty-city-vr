@@ -116,7 +116,7 @@ public static partial class BenchmarkAssets
     public static async Task<BenchmarkSetup> Prepare(ManagerSettings settings,string output,BenchmarkAsset[] inventory,
         Func<BenchmarkAsset,string,CancellationToken,Task> copyRemote,CancellationToken token)
     {
-        var original=PcvrPaths.From(settings);original.Validate(settings);PcvrWorkflow.ValidatePreparedData(original.Data);
+        var original=PcvrPaths.From(settings,PcvrWorkflow.HostTarget);original.Validate(settings);PcvrWorkflow.ValidatePreparedData(original.Data);
         output=Path.GetFullPath(output);Paths.NoLinks(output);
         var data=Paths.Child(output,"data");var user=Paths.Child(output,"user");
         (original with { Data=data,User=user }).Validate(settings);

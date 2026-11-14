@@ -4,18 +4,19 @@ using Microsoft.Win32;
 
 namespace LibertyManager;
 
-public sealed record PcvrPaths(string Install, string Data, string User)
+public sealed record PcvrPaths(string Install, string Data, string User, GameTarget Target = GameTarget.WindowsPcvr)
 {
-    public static PcvrPaths From(ManagerSettings settings)
+    public static PcvrPaths From(ManagerSettings settings, GameTarget target = GameTarget.WindowsPcvr)
     {
-        var root = Path.Combine(settings.Workplace, "windows-pcvr");
+        var linux = target == GameTarget.LinuxPcvr;
+        var root = Path.Combine(settings.Workplace, linux ? "linux-pcvr" : "windows-pcvr");
         string Resolve(string value, string name)
         {
             if (string.IsNullOrWhiteSpace(value)) return Path.GetFullPath(Path.Combine(root, name));
             if (!Path.IsPathFullyQualified(value)) throw new InvalidDataException("PCVR directories must be absolute paths.");
             return Path.GetFullPath(value);
         }
-        return new(Resolve(settings.PcvrInstallDirectory, "app"), Resolve(settings.PcvrDataDirectory, "data"), Resolve(settings.PcvrUserDirectory, "user"));
+        return new(Resolve(linux ? settings.LinuxPcvrInstallDirectory : settings.PcvrInstallDirectory, "app"), Resolve(linux ? settings.LinuxPcvrDataDirectory : settings.PcvrDataDirectory, "data"), Resolve(linux ? settings.LinuxPcvrUserDirectory : settings.PcvrUserDirectory, "user"), target);
     }
     public void Validate(ManagerSettings settings)
     {
@@ -24,30 +25,39 @@ public sealed record PcvrPaths(string Install, string Data, string User)
         {
             Paths.NoLinks(path);
             foreach (var source in new[] { settings.Repository, settings.GameDirectory,
-                         Path.Combine(settings.Workplace, "re3-public-b050e1c"), Path.Combine(settings.Workplace, "windows-pcvr-builds") }.Where(p => !string.IsNullOrWhiteSpace(p)))
+                         Path.Combine(settings.Workplace, "re3-public-b050e1c"), Path.Combine(settings.Workplace, "windows-pcvr-builds"), Path.Combine(settings.Workplace, "linux-pcvr-builds") }.Where(p => !string.IsNullOrWhiteSpace(p)))
                 if (Paths.Within(source, path) || Paths.Within(path, source))
                     throw new InvalidDataException("Keep PCVR install, data and user directories separate from retail data, source trees and build directories.");
         }
         for (var i=0; i<targets.Length; ++i) for (var j=i+1; j<targets.Length; ++j)
             if (Paths.Within(targets[i], targets[j]) || Paths.Within(targets[j], targets[i]))
                 throw new InvalidDataException("PCVR install, data and user directories must not overlap.");
+        var other=From(settings,Target==GameTarget.LinuxPcvr?GameTarget.WindowsPcvr:GameTarget.LinuxPcvr);
+        foreach(var path in targets)foreach(var alternate in new[]{other.Install,other.Data,other.User})
+            if(Paths.Within(path,alternate) || Paths.Within(alternate,path))
+                throw new InvalidDataException("Keep Windows and Linux PCVR install, data and save roots separate.");
     }
 }
 
-public sealed record PcvrInstallation(int Version, string Directory);
+public sealed record PcvrInstallation(int Version, string Directory, GameTarget Target = GameTarget.WindowsPcvr);
 
-public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner, PrivateLog log)
+public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner, PrivateLog log, GameTarget target = GameTarget.WindowsPcvr)
 {
+    public static GameTarget HostTarget => OperatingSystem.IsLinux() ? GameTarget.LinuxPcvr : GameTarget.WindowsPcvr;
+    private bool Linux => target == GameTarget.LinuxPcvr;
+    private string Name => Linux ? "Linux PCVR" : "Windows PCVR";
+    private string Executable(string name) => name + (Linux ? "" : ".exe");
+    private string Prefix => Path.GetFullPath(string.IsNullOrWhiteSpace(Linux ? settings.LinuxPcvrDependencyPrefix : settings.PcvrDependencyPrefix) ? Path.Combine(settings.Repository,".cache","desktop-deps",Linux ? "linux" : "windows") : (Linux ? settings.LinuxPcvrDependencyPrefix : settings.PcvrDependencyPrefix));
     private const string OpenXrArchive = "https://github.com/KhronosGroup/OpenXR-SDK/archive/refs/tags/release-1.1.58.zip";
     private const string OpenXrHash = "43d75ce00e31be8f662b58e8c74af8c04156bcaa7acbfc19112aa2880f3a3669";
-    private static void RequireWindows()
+    private void RequireHost()
     {
-        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            throw new PlatformNotSupportedException("Windows PCVR requires a Windows x64 host. Quest and other host tools remain available separately.");
+        if (target is not (GameTarget.WindowsPcvr or GameTarget.LinuxPcvr) || RuntimeInformation.ProcessArchitecture != Architecture.X64 || (Linux ? !OperatingSystem.IsLinux() : !OperatingSystem.IsWindows()))
+            throw new PlatformNotSupportedException("Build and run PCVR on its matching Windows/Linux x64 host.");
     }
     private PcvrPaths Layout()
     {
-        var paths=PcvrPaths.From(settings); paths.Validate(settings); return paths;
+        var paths=PcvrPaths.From(settings,target); paths.Validate(settings); return paths;
     }
     public static void ValidatePreparedData(string path)
     {
@@ -58,37 +68,65 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     // Versioned installs avoid replacing a running EXE. Publish the pointer only
     // after CMake installation and all required files have been verified.
-    public static string ResolveInstallation(string root)
+    public static string ResolveInstallation(string root, GameTarget target = GameTarget.WindowsPcvr)
     {
         Paths.NoLinks(root);
         var manifest=Paths.Child(root,"current.json");
         if (!File.Exists(manifest)) throw new IOException("No PCVR build installed. Select Windows PCVR under Build and install first.");
         var current=JsonSerializer.Deserialize<PcvrInstallation>(File.ReadAllText(manifest)) ?? throw new InvalidDataException("Invalid PCVR installation record.");
-        if (current.Version!=1 || !current.Directory.StartsWith("versions/",StringComparison.Ordinal)) throw new InvalidDataException("Unsupported PCVR installation record.");
+        if (current.Version is not (1 or 2) || (current.Version==1 && target!=GameTarget.WindowsPcvr) || (current.Version==2 && current.Target!=target) || !current.Directory.StartsWith("versions/",StringComparison.Ordinal)) throw new InvalidDataException("Unsupported PCVR installation record.");
         var directory=Paths.Child(root,current.Directory);
-        ValidateBinaries(directory);
+        ValidateBinaries(directory,target);
         return directory;
     }
-    private static void ValidateBinaries(string directory)
+    private static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr)
     {
-        foreach (var name in new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" })
-            if (!File.Exists(Paths.Child(directory,name))) throw new IOException("PCVR installation is incomplete: " + name);
+        foreach (var name in target==GameTarget.LinuxPcvr ? new[] { "libertyvr-game", "libertyvr-pcvr", "libopenxr_loader.so.1", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt", "desktop-backend.txt" } : new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" })
+            if(name=="libopenxr_loader.so.1") ValidateBundledLibrary(directory,Path.Combine(directory,name));
+            else if (!File.Exists(Paths.Child(directory,name))) throw new IOException("PCVR installation is incomplete: " + name);
+        if(File.Exists(Path.Combine(directory,"desktop-backend.txt"))) {
+            foreach(var (component,major) in new[]{("SDL3","0"),("avformat","63"),("avcodec","63"),("avutil","61"),("swresample","7")}) {
+                var required=target==GameTarget.LinuxPcvr?"lib"+component+".so."+major:component=="SDL3"?"SDL3.dll":component+"-"+major+".dll";
+                ValidateBundledLibrary(directory,Path.Combine(directory,required));
+                var pattern=target==GameTarget.LinuxPcvr?"lib"+component+".so*":component=="SDL3"?"SDL3.dll":component+"-*.dll";
+                var libraries=Directory.EnumerateFiles(directory,pattern).ToArray();
+                if(libraries.Length==0)throw new IOException("PCVR dependency missing: "+component);
+                foreach(var library in libraries)ValidateBundledLibrary(directory,library);
+            }
+            foreach(var name in new[]{"SDL_LICENSE.txt","FFMPEG_LICENSE.txt","config.mak"})
+                if(!File.Exists(Paths.Child(directory,"dependency-notices/"+name)))throw new IOException("PCVR dependency notice missing: "+name);
+        }
     }
-    public static void PublishInstallation(string root, string relative)
+    private static void ValidateBundledLibrary(string directory,string path)
+    {
+        Paths.NoLinks(directory);var file=new FileInfo(path);
+        if(!file.Exists)throw new IOException("PCVR bundled library is missing.");
+        var resolved=file.ResolveLinkTarget(true)?.FullName??file.FullName;
+        if(!Paths.Within(directory,resolved))throw new InvalidDataException("PCVR library link escapes its installation.");
+        Paths.NoLinks(resolved);
+    }
+    public static void PublishInstallation(string root, string relative, GameTarget target = GameTarget.WindowsPcvr)
     {
         if (!relative.StartsWith("versions/",StringComparison.Ordinal)) throw new InvalidDataException("Installations must use a versioned subdirectory.");
-        var directory=Paths.Child(root,relative); ValidateBinaries(directory);
+        var directory=Paths.Child(root,relative); ValidateBinaries(directory,target);
         var destination=Paths.Child(root,"current.json");
         var temporary=Paths.Child(root,".current-"+Guid.NewGuid().ToString("N"));
         try
         {
-            File.WriteAllText(temporary,JsonSerializer.Serialize(new PcvrInstallation(1,relative)));
+            File.WriteAllText(temporary,JsonSerializer.Serialize(new PcvrInstallation(File.Exists(Path.Combine(directory,"desktop-backend.txt")) ? 2 : 1,relative,target)));
             File.Move(temporary,destination,true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
     private async Task<(string Cmake,string Ninja,string Include,string Library,string Shader)> FindTools(CancellationToken token)
     {
+        if(Linux) {
+            var cm=Paths.FindExecutable(settings.CMake.Length>0?settings.CMake:"cmake") ?? throw new IOException("Install CMake.");
+            var nj=Paths.FindExecutable("ninja") ?? throw new IOException("Install Ninja.");
+            var linuxShader=Paths.FindExecutable("glslc") ?? throw new IOException("Install glslc/shaderc.");
+            if(Paths.FindExecutable("c++") is null)throw new IOException("Install GCC or Clang C++ tools.");
+            return (cm,nj,"","",linuxShader);
+        }
         await WindowsCompiler.Configure(runner,token);
         string? Find(string name)
         {
@@ -119,7 +157,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     private async Task<string> OpenXrSource(Toolchain tools,CancellationToken token)
     {
         string source;
-        if (!string.IsNullOrWhiteSpace(settings.PcvrOpenXrSource)) source=Path.GetFullPath(settings.PcvrOpenXrSource);
+        var configured=Linux?settings.LinuxPcvrOpenXrSource:settings.PcvrOpenXrSource;
+        if (!string.IsNullOrWhiteSpace(configured)) source=Path.GetFullPath(configured);
         else
         {
             source=Path.Combine(settings.Workplace,".tools/OpenXR-SDK-release-1.1.58");
@@ -139,31 +178,32 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     public async Task Build(ActionOptions options,CancellationToken token)
     {
-        RequireWindows(); var paths=Layout();
+        RequireHost(); var paths=Layout();
         if (!options.PcvrBuildOnly)
         {
             VariantInstaller.ValidateSource(settings,options);
             // An application-only installation is allowed before importing assets.
         }
+        if(!Directory.Exists(Path.Combine(Prefix,"include","SDL3")) || !Directory.Exists(Path.Combine(Prefix,"include","libavcodec")))throw new IOException("Build pinned desktop dependencies first with tools/desktop/build-deps.sh or build-deps.ps1, or configure the desktop dependency prefix.");
         var found=await FindTools(token);
         var tools=new Toolchain(settings,runner,log);
         var sdk=await OpenXrSource(tools,token);
         var source=await tools.Re3(token); var git=await tools.Git(token);
         var id=DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..6];
-        var work=Path.Combine(settings.Workplace,"windows-pcvr-builds",id);
+        var work=Path.Combine(settings.Workplace,Linux?"linux-pcvr-builds":"windows-pcvr-builds",id);
         var assembled=Path.Combine(work,"source"); var build=Path.Combine(work,"build");
         await Workflows.Assemble(settings.Repository,source,assembled,git,runner,log,token);
         var variants = !options.PcvrBuildOnly ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token) : new Dictionary<string,string>();
-        await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"windows"),"-B",build,"-G","Ninja",
+        await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"desktop"),"-B",build,"-G","Ninja",
             "-DCMAKE_BUILD_TYPE=Release","-DCMAKE_MAKE_PROGRAM="+found.Ninja,"-DLIBERTYVR_RE3_ROOT="+assembled,
-            "-DVulkan_INCLUDE_DIR="+found.Include,"-DVulkan_LIBRARY="+found.Library,"-DGLSLC="+found.Shader,
+            "-DLIBERTYVR_DESKTOP_PREFIX="+Prefix,"-DGLSLC="+found.Shader,
             "-DCMAKE_DISABLE_FIND_PACKAGE_OpenXR=TRUE","-DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK="+sdk,
             "-DFETCHCONTENT_FULLY_DISCONNECTED=ON","-DLIBERTYVR_GPU_TESTS="+(options.PcvrGpuTests ? "ON" : "OFF"),
-            "-DLIBERTYVR_AUDIO_TESTS="+(options.PcvrAudioTests ? "ON" : "OFF")],token:token);
+            "-DLIBERTYVR_AUDIO_TESTS="+(options.PcvrAudioTests ? "ON" : "OFF"),..(Linux?Array.Empty<string>():new[]{"-DVulkan_INCLUDE_DIR="+found.Include,"-DVulkan_LIBRARY="+found.Library})],token:token);
         await runner.Run(found.Cmake,["--build",build,"--parallel","8"],token:token);
-        var ctest=Path.Combine(Path.GetDirectoryName(found.Cmake)!,"ctest.exe");
+        var ctest=Path.Combine(Path.GetDirectoryName(found.Cmake)!,Executable("ctest"));
         await runner.Run(ctest,["--test-dir",build,"--output-on-failure"],token:token);
-        log.Write("Windows Release build and selected checks passed: "+build);
+        log.Write(Name+" Release build and selected checks passed: "+build);
         if (options.PcvrBuildOnly) { log.Write("Build only: installation and game-data preparation skipped."); return; }
         Directory.CreateDirectory(paths.Data);
         Directory.CreateDirectory(Path.Combine(paths.Data,"variants"));
@@ -175,8 +215,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
         foreach (var notice in new[] { "LICENSE", "NOTICE.md" })
             File.Copy(Path.Combine(settings.Repository,notice),Path.Combine(install,notice),true);
-        token.ThrowIfCancellationRequested(); PublishInstallation(paths.Install,relative);
-        log.Write("Windows PCVR installed: "+install+". Previous versions, game data and saves preserved.");
+        token.ThrowIfCancellationRequested(); PublishInstallation(paths.Install,relative,target);
+        log.Write(Name+" installed: "+install+". Previous versions, game data and saves preserved.");
         log.Write("Use Launch PCVR to play, or PCVR diagnostics to check the active runtime.");
     }
     public static string ValidateRuntimeManifest(string path)
@@ -196,9 +236,12 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     private void Runtime()
     {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("PCVR runtime checks require Windows.");
         var manifest=Environment.GetEnvironmentVariable("XR_RUNTIME_JSON");
-        if (string.IsNullOrWhiteSpace(manifest))
+        if (string.IsNullOrWhiteSpace(manifest) && Linux)
+        {
+            manifest=FindLinuxRuntimeManifest(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),Environment.GetEnvironmentVariable("XDG_CONFIG_DIRS"));
+        }
+        if (string.IsNullOrWhiteSpace(manifest) && OperatingSystem.IsWindows())
         {
             using var registry=RegistryKey.OpenBaseKey(RegistryHive.LocalMachine,RegistryView.Registry64);
             using var key=registry.OpenSubKey(@"SOFTWARE\Khronos\OpenXR\1");
@@ -207,6 +250,12 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         if (string.IsNullOrWhiteSpace(manifest)) throw new IOException("No active PC OpenXR runtime. Select one in Virtual Desktop, SteamVR or your headset software, then connect the headset.");
         ValidateRuntimeManifest(manifest);
         log.Write("Active x64 OpenXR runtime manifest and library found. Runtime selection was not changed.");
+    }
+    public static string? FindLinuxRuntimeManifest(string home,string? configHome,string? configDirs)
+    {
+        var user=string.IsNullOrWhiteSpace(configHome)||!Path.IsPathFullyQualified(configHome)?Path.Combine(home,".config"):configHome;
+        var system=(string.IsNullOrWhiteSpace(configDirs)?"/etc/xdg":configDirs).Split(Path.PathSeparator,StringSplitOptions.RemoveEmptyEntries).Where(Path.IsPathFullyQualified);
+        return new[]{user}.Concat(system).SelectMany(root=>new[]{Path.Combine(root,"openxr/1/active_runtime.x86_64.json"),Path.Combine(root,"openxr/1/active_runtime.json")}).FirstOrDefault(File.Exists);
     }
     public static async Task Probe(ICommandRunner commands,string executable,PrivateLog log,CancellationToken token)
     {
@@ -227,9 +276,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     public async Task Diagnose(CancellationToken token)
     {
-        RequireWindows(); var paths=Layout(); Runtime();
-        var install=ResolveInstallation(paths.Install);
-        await Probe(runner,Path.Combine(install,"libertyvr-pcvr.exe"),log,token);
+        RequireHost(); var paths=Layout();
+        var install=ResolveInstallation(paths.Install,target);
+        Runtime();
+        await Probe(runner,Path.Combine(install,Executable("libertyvr-pcvr")),log,token);
     }
     public static string[] LaunchArguments(PcvrPaths paths,int frames,string questProfile="")
     {
@@ -242,16 +292,16 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     public async Task Launch(ActionOptions options,CancellationToken token)
     {
-        RequireWindows(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
-        ValidatePreparedData(paths.Data); var install=ResolveInstallation(paths.Install); Runtime();
+        RequireHost(); var paths=Layout(); var arguments=LaunchArguments(paths,options.PcvrFrameLimit,options.PcvrQuestProfile);
+        ValidatePreparedData(paths.Data); var install=ResolveInstallation(paths.Install,target); Runtime();
         var engine=PcvrMods.SelectEngine(paths);
-        await Probe(runner,Path.Combine(install,"libertyvr-pcvr.exe"),log,token);
+        await Probe(runner,Path.Combine(install,Executable("libertyvr-pcvr")),log,token);
         Directory.CreateDirectory(paths.User);
-        log.Write("Starting Windows PCVR. Quit in-game to return to the manager. Cancel stops the game process.");
+        log.Write("Starting desktop PCVR. Quit in-game to return to the manager. Cancel stops the game process.");
         var previous=runner.CommandTimeout; runner.CommandTimeout=Timeout.InfiniteTimeSpan;
-        log.Write(engine==PcvrMods.Engine ? "Selected Upstate Liberty engine with separate Upstate saves." : "Selected Classic / Xbox engine.");
-        try { await runner.Run(Path.Combine(install,engine),arguments,paths.Data,token:token); }
+        log.Write(engine==PcvrMods.EngineFor(target) ? "Selected Upstate Liberty engine with separate Upstate saves." : "Selected Classic / Xbox engine.");
+        try { await runner.Run(Path.Combine(install,Linux ? Path.GetFileNameWithoutExtension(engine) : engine),arguments,paths.Data,token:token); }
         finally { runner.CommandTimeout=previous; }
-        log.Write("Windows PCVR exited successfully.");
+        log.Write(Name+" exited successfully.");
     }
 }

@@ -61,6 +61,30 @@ in the tree, selects that folder and scrolls it into view.
 
 ## Windows PCVR
 
+Windows PCVR now defaults to the shared SDL3/FFmpeg backend. Build the pinned
+[desktop dependencies](../../overlay/desktop/README.md#dependencies) first;
+the dependency prefix defaults to `repository/.cache/desktop-deps/windows` and
+can be changed in the desktop build form/settings. The old backend remains a
+direct-CMake migration fallback.
+
+### Linux PCVR
+
+Select **Linux PCVR (experimental)** on a Linux x64 host. It shares the desktop
+game, diagnostic, SDL3 window/input/audio implementation and FFmpeg decoding
+with Windows. Linux has separate dependency-prefix, OpenXR source, install,
+data and save settings; defaults use `workplace/linux-pcvr` and
+`repository/.cache/desktop-deps/linux`. Target numbers in JSON requests remain
+0 Quest, 1 Windows PCVR, with 2 added for Linux PCVR.
+
+Build and install assembles fresh sources, builds Release, runs native checks
+and publishes a versioned installation. Launch and diagnostics honor
+`XR_RUNTIME_JSON` or XDG OpenXR runtime configuration without changing runtime
+selection. Classic/Xbox and Upstate remain separate from Quest data/saves.
+No desktop workflow installs an APK or invokes ADB. WiVRn and native X11 and
+Wayland are acceptance targets; WSL compilation is not headset validation.
+
+### Windows workflow
+
 On a Windows x64 host, select **Windows PCVR (experimental)** on **Build and
 install**. Quest remains the default for existing settings. Changing targets
 preserves unsaved options; Cancel discards them. The other headset asset/music,
@@ -299,6 +323,7 @@ For example, build only with an already installed SDK:
 ```text
 dotnet build tools/manager -c Release
 dotnet run --project tools/manager/tests -c Release
+dotnet run --project tools/manager/tests -c Release -- --desktop
 dotnet publish tools/manager -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o out/manager-windows
 dotnet publish tools/manager -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o out/manager-linux
 ```

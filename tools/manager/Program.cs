@@ -31,13 +31,13 @@ internal static class Program
                 Actions: BuildAndInstall, BuildVehicleEditor, ManageMusic (ImportMusic alias),
                          InstallModernModels, RepairGameFiles, Update, TransferSave, ManageMods,
                          LaunchPcvr, DiagnosePcvr.
-                BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr.
+                BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr, 2 LinuxPcvr.
                 Variant options: InstallPcVariant, InstallXboxVariant, XboxIsoPath.
                 Both variants may be selected. PC uses Settings.GameDirectory.
                 Leave both unchecked for an application-only build/update.
                 PCVR options: PcvrBuildOnly, PcvrGpuTests, PcvrAudioTests.
                 ManageMods options: ModId "upstate-liberty", ModArchive (blank downloads v1.1.2),
-                                    Target 0 Quest (default), 1 WindowsPcvr,
+                                    Target 0 Quest (default), 1 WindowsPcvr, 2 LinuxPcvr,
                                     ModOperation 0 Status, 1 Install, 2 Enable, 3 Disable,
                                                  4 Delete, 5 Validate locally (no device access).
                 TransferSave options: SaveDirection 0 (Quest to PC) or 1 (PC to Quest),
@@ -66,7 +66,7 @@ internal static class Program
                 var assetAdb=new Toolchain(assetSettings,assetRunner,assetLog).FindAdb() ?? throw new IOException("Configure ADB for local benchmark preparation.");
                 var assetDevice=await QuestDevice.Connect(assetRunner,assetLog,assetAdb,null,cancellation.Token) ?? throw new IOException("Connect the personal Quest 3 device.");
                 var reference=await BenchmarkAssets.Inventory(assetDevice,cancellation.Token);
-                var assetPaths=PcvrPaths.From(assetSettings);assetPaths.Validate(assetSettings);
+                var assetPaths=PcvrPaths.From(assetSettings,PcvrWorkflow.HostTarget);assetPaths.Validate(assetSettings);
                 if(benchmarkMode=="--benchmark-inventory") {
                     var destination=Path.GetFullPath(benchmarkDestination);Paths.NoLinks(destination);
                     if(Directory.Exists(destination) || File.Exists(destination))throw new IOException("Choose a new inventory output directory.");

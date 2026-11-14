@@ -1,7 +1,7 @@
 #pragma once
 class CPlayerPed;
 namespace VrPlayerTraversal {
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 bool Flight();
 bool Noclip();
 bool TerrainQuery();

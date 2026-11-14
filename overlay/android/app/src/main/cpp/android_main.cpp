@@ -1,5 +1,5 @@
 #include "platform_android.h"
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 #include "DesktopMirror.h"
 #endif
 #include "xr_vulkan_session.h"
@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <thread>
+#include <exception>
 #include <unistd.h>
 
 #ifndef MIAMIVR_BRINGUP
@@ -350,7 +351,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		pad.gripPose[hand].valid = controllers.gripPose[hand].valid;
 		pad.aimPose[hand].valid = controllers.aimPose[hand].valid;
 	}
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     Desktop::MergeVrInput(&pad);
 #endif
 	androidgame::SetPadInput(pad);
@@ -364,7 +365,7 @@ renderGameFrame(VkImage image, VkImageView view, const float viewProj[2][16],
 		const unsigned char *pixels =
 			androidgame::VrDebugPixels(&width, &height);
 		xrvk::setDebugOverlay(pixels, width, height, recordingPixels);
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
         Desktop::SetGameOverlay(pixels,width,height,androidgame::VrMenuConsumesInput(),
                                 androidgame::QuestProfilerGetDisplayMode()==3);
 #endif
@@ -1049,8 +1050,13 @@ EndVrWristPanel(void)
 
 }  // namespace androidgame
 
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+#ifdef LIBERTYVR_DESKTOP
+#include "platform_desktop.h"
+#define RunWindowsGame RunDesktopGame
+#else
 #include "platform_windows.h"
+#endif
 #include "DesktopMirror.h"
 int RunWindowsGame(unsigned frameLimit)
 {
@@ -1059,9 +1065,19 @@ int RunWindowsGame(unsigned frameLimit)
     if(!xrvk::create(nullptr)) { xrvk::destroy(); return 1; }
     xrvk::GraphicsContext graphics{};
     if(!xrvk::getContext(&graphics)) { xrvk::destroy(); return 1; }
+#ifdef LIBERTYVR_DESKTOP
+    try {
+        if(!Desktop::InitializeGpu(graphics.instance,graphics.physicalDevice,graphics.device,graphics.queue,graphics.queueFamilyIndex))
+            Desktop::ShutdownGpu();
+    } catch(const std::exception &error) {
+        LOGW("Desktop preview unavailable: %s. Headset rendering continues.",error.what());
+        Desktop::ShutdownGpu();
+    }
+#else
     if(!Desktop::InitializeGpu(graphics.instance,graphics.physicalDevice,graphics.device,graphics.queue,graphics.queueFamilyIndex)) {
         Desktop::Close(); xrvk::destroy(); return 1;
     }
+#endif
     androidgame::VulkanContext context{};
     context.instance=graphics.instance; context.physicalDevice=graphics.physicalDevice;
     context.device=graphics.device; context.fragmentStoresAndAtomicsEnabled=graphics.fragmentStoresAndAtomicsEnabled;

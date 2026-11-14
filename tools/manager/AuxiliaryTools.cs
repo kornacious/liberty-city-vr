@@ -153,9 +153,10 @@ public sealed class AuxiliaryTools(ManagerSettings settings, ICommandRunner runn
             return indices.Length==0?null:arguments[indices[0]+1];
         }
         if(Option("--target")=="pcvr") {
-            var localSettings=settings with {PcvrDataDirectory=Option("--pcvr-data")??settings.PcvrDataDirectory,
-                PcvrUserDirectory=Option("--pcvr-user")??settings.PcvrUserDirectory};
-            var pcvr=PcvrPaths.From(localSettings);pcvr.Validate(localSettings);PcvrWorkflow.ValidatePreparedData(pcvr.Data);
+            var localSettings=OperatingSystem.IsLinux()
+                ? settings with {LinuxPcvrDataDirectory=Option("--pcvr-data")??settings.LinuxPcvrDataDirectory,LinuxPcvrUserDirectory=Option("--pcvr-user")??settings.LinuxPcvrUserDirectory}
+                : settings with {PcvrDataDirectory=Option("--pcvr-data")??settings.PcvrDataDirectory,PcvrUserDirectory=Option("--pcvr-user")??settings.PcvrUserDirectory};
+            var pcvr=PcvrPaths.From(localSettings,PcvrWorkflow.HostTarget);pcvr.Validate(localSettings);PcvrWorkflow.ValidatePreparedData(pcvr.Data);
             var workspace=Option("--workspace")??throw new InvalidDataException("Choose a workspace.");
             Paths.NoLinks(workspace);
             foreach(var target in new[]{pcvr.Data,pcvr.User,pcvr.Install})

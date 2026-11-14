@@ -278,7 +278,7 @@ StartFrameCapture(void)
 	clock_gettime(CLOCK_REALTIME, &realtime);
 	std::string details = "version," LIBERTYVR_VERSION_TEXT "\n";
 	details += std::string("execution_target,")+
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 		"windows_pcvr\n";
 #else
 		"quest_android\n";
@@ -598,7 +598,7 @@ SampleDiagnostics(void)
 	gSnapshot.trafficPoolReserveBlocks = CCarCtrl::NumVrPoolReserveBlocks;
 	gSnapshot.trafficDirectorMs = CCarCtrl::VrDirectorLastUpdateMs;
 	gSnapshot.trafficDirectorMaxMs = CCarCtrl::VrDirectorMaxUpdateMs;
-#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(GTA_VR_WEAPONS)
 	const int32 trafficJobHits = CCarCtrl::NumVrTrafficJobHits;
 	const int32 trafficJobMisses = CCarCtrl::NumVrTrafficJobMisses;
 	const int32 trafficJobDispatches = CCarCtrl::NumVrTrafficJobDispatches;
@@ -1210,7 +1210,7 @@ UpdateProfilerRecording(bool enabled)
 		sizeof(gPreviousSpawnTrace));
 	gPreviousSpawnAttempts = CCarCtrl::NumVrSpawnAttempts;
 	gPreviousSpawnSuccess = CCarCtrl::NumVrSpawnSuccess;
-#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(GTA_VR_WEAPONS)
 	gPreviousTrafficJobHits = CCarCtrl::NumVrTrafficJobHits;
 	gPreviousTrafficJobMisses = CCarCtrl::NumVrTrafficJobMisses;
 	gPreviousTrafficJobDispatches = CCarCtrl::NumVrTrafficJobDispatches;
@@ -1229,7 +1229,7 @@ UpdateProfilerRecording(bool enabled)
 		CPhysical::NumVrCollisionFlatSavedNodeVisits;
 #endif
 #endif
-#if (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)) && defined(GTA_VR_WEAPONS)
+#if (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))) && defined(GTA_VR_WEAPONS)
 	gPreviousPhysicsDirector = QuestPhysicsDirectorGetSnapshot();
 	gPreviousVehicleVisualBudget = QuestVehicleVisualBudgetGetSnapshot();
 #endif

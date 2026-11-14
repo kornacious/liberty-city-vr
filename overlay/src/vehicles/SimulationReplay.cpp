@@ -1,6 +1,6 @@
 #include "common.h"
 #include "SimulationReplay.h"
-#if defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS)
+#if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "SimulationReplayCore.h"
 #include "BenchmarkIdentity.h"
 #include "SourceIdentity.h"
@@ -40,7 +40,7 @@ namespace Core=SimulationReplayCore;
 #define LCVR_SIMULATION_REPLAY_ROOT "/sdcard/Android/data/com.libertyvr.quest/files/simulation-replays"
 #endif
 const char *Root(){
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     static std::string root=std::string(platform::storageRoot())+"/simulation-replays";
     return root.c_str();
 #else
@@ -87,7 +87,7 @@ uint64_t runWorstAtUs=0;
 #ifndef LCVR_RENDERDOC_CAPTURE_ROOT
 #define LCVR_RENDERDOC_CAPTURE_ROOT "/sdcard/Android/data/com.libertyvr.quest/files/renderdoc-captures"
 #endif
-#ifdef LIBERTYVR_WINDOWS
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 const char *WindowsRenderDocRoot() { static std::string root=std::string(platform::storageRoot())+"/renderdoc-captures"; return root.c_str(); }
 #undef LCVR_RENDERDOC_CAPTURE_ROOT
 #define LCVR_RENDERDOC_CAPTURE_ROOT WindowsRenderDocRoot()
