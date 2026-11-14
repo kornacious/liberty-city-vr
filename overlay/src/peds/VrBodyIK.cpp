@@ -34,11 +34,26 @@ extern void VrUpdateFirstPersonAnchor(bool postPhysics);
 namespace VrBodyIK
 {
 
+static bool gVehicleTransitionActive;
+
+bool
+VehicleTransitionActive(void)
+{
+	return gVehicleTransitionActive;
+}
+
 bool
 UsesOutfitHands(void)
 {
 	CPlayerPed *player = FindPlayerPed();
-	if(player == nil || !WeaponOwnershipActive())
+	if(player == nil)
+		return false;
+	// Skinned entry/exit poses retain their native animated skeleton in Apply.
+	// Render its hands too, instead of suppressing them for tracked VR meshes.
+	if(VehicleTransitionActive() && player->GetClump() != nil &&
+	   IsClumpSkinned(player->GetClump()))
+		return true;
+	if(!WeaponOwnershipActive())
 		return false;
 	// Special player models reuse the player slot. Inspect its live streamed
 	// name so changing out of the jumpsuit immediately restores the VR mesh,
@@ -90,8 +105,6 @@ bool GetCameraHeadPose(CPed *ped, CVector *position, CVector *right,
 	*up = pose.up; *forward = pose.forward;
 	return true;
 }
-
-static bool gVehicleTransitionActive;
 
 bool
 Enabled(void)

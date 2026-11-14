@@ -6,6 +6,10 @@ $source=Get-Content (Join-Path $KitRoot 'overlay/src/peds/VrBodyIK.cpp') -Raw
 $policy=[regex]::Match($source,'(?ms)^bool\r?\nUsesOutfitHands\(void\)\r?\n\{.*?^\}').Value
 if(-not $policy){throw 'Missing production outfit hand policy.'}
 [IO.File]::WriteAllText((Join-Path $fixture 'jumpsuit-hands-production.inc'),$policy)
+$weapons=Get-Content (Join-Path $KitRoot 'overlay/src/vr/QuestWeaponVR.cpp') -Raw
+$holsters=[regex]::Match($weapons,'(?ms)^bool\r?\nGetWeaponHolsterMatrix\(int slot, CMatrix \*matrix, int copy\)\r?\n\{.*?^\}').Value
+if(-not $holsters){throw 'Missing production holster rendering policy.'}
+[IO.File]::WriteAllText((Join-Path $fixture 'vehicle-holsters-production.inc'),$holsters)
 Copy-Item (Join-Path $PSScriptRoot 'test-jumpsuit-hands.cpp') $fixture
 [xml]$resources=Get-Content (Join-Path $KitRoot 'tools/manager/EmbeddedTools.resx') -Raw
 $runner=($resources.root.data | Where-Object name -eq 'tools/tests/test-ragdoll.ps1').value

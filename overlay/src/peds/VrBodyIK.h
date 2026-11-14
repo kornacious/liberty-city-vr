@@ -13,8 +13,9 @@ bool Enabled(void);
 bool VehicleEnabled(void);
 // True while the native enter/exit/carjack animation owns the player's upper body.
 void SetVehicleTransition(bool active);
+bool VehicleTransitionActive(void);
 bool WeaponOwnershipActive(void);
-// Preserve the prison outfit's own hands while IK drives its arms.
+// Preserve prison outfit hands and native skinned vehicle transition hands.
 bool UsesOutfitHands(void);
 void Apply(CPed *ped);
 void Reset(void);

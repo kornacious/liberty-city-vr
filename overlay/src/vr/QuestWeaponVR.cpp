@@ -3220,7 +3220,8 @@ GetWeaponHolsterMatrix(int slot, CMatrix *matrix, int copy)
 	// Rendering only: input and returns use BuildHolsterMatrix directly so
 	// hidden weapons remain grabbable at their assigned body points.
 	LoadSettings();
-	if(!gHolsteredWeaponsVisible || IsQuestTrainPassenger() || !AreTrackedHandsEnabled() ||
+	if(!gHolsteredWeaponsVisible || VrBodyIK::VehicleTransitionActive() ||
+	   IsQuestTrainPassenger() || !AreTrackedHandsEnabled() ||
 	   (FindPlayerVehicle() && !IsImmersiveDrivingActive()) ||
 	   (gWeaponHolsterMask & (1u << slot)) == 0)
 		return false;

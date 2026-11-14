@@ -6,6 +6,13 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-jumpsuit-hands.ps1` compiles the production outfit-hand and holster
+rendering policies. It covers live outfit changes, skinned and rigid models,
+entry/exit completion with IK enabled or disabled, missing players/clumps, and
+256 holster visibility combinations. Skinned vehicle transitions retain native
+animated hands, and holsters stay hidden during transitions for both asset sets.
+No game assets are used; hand animation and final appearance need in-game QA.
+
 The Windows `text-tokens` CTest uses the shared `QuestTextTokens.h` production
 helper. It covers Xbox/PC controller-action aliases, unknown and unfinished
 actions, formatting tokens, every buffer-edge truncation, Japanese delimiters
