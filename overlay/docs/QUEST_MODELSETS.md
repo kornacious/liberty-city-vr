@@ -46,6 +46,16 @@ textures become D3D8 TXDs. Dimensions, mip levels, skinning and supported materi
 are retained. Output models and dictionaries are reopened for structural checks.
 Claude's `playa5` texture is exported to `models/generic/player.bmp`.
 
+Conversion also corrects the vertically reversed gameplay-head UVs for Maria,
+Curly Bob and Catalina in the US 1.0 assets. Their texture pixels are preserved;
+the correction applies only to the detached gameplay heads, leaving bodies,
+hands and cutscene models unchanged. Existing Xbox installations need a fresh
+ISO import with **Install Original Xbox variant** enabled to receive this fix;
+an application-only update cannot change previously converted models. Local mesh
+inspection and converter checks cover the correction. On 2026-11-16, the user
+confirmed in-game VR rendering of Maria and Curly Bob after rebuilding and
+reimporting the Xbox ISO assets. Catalina's in-game confirmation remains pending.
+
 The complete Xbox variant includes the disc mission script, gameplay/path data,
 vehicle and world collision, standard animations and cutscene archives, text,
 converted models/textures, particles, Neo resources and converted audio. The

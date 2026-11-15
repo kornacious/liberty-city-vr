@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <cstring>
 #include <cmath>
+#include <unordered_set>
 #include "vendor/lzokay/lzokay.hpp"
 namespace fs = std::filesystem;
 using Bytes = std::vector<rw::uint8>;
@@ -67,6 +68,42 @@ static rw::Stream *nodeRead(rw::Stream *s,rw::int32 n,void *o,rw::int32 off,rw::
 }
 static rw::Stream *nodeWrite(rw::Stream *s,rw::int32 n,void *o,rw::int32 off,rw::int32) {s->write8((char*)o+off,n);return s;}
 static rw::int32 nodeSize(void *o,rw::int32 off,rw::int32) {return (rw::int32)std::strlen((char*)o+off);}
+static bool correctGameplayHeadUVs(const fs::path &input, rw::Geometry *geometry, const char *node) {
+    // These US 1.0 gameplay heads use the vertically reversed second V tile.
+    // The disc's WRAP sampler repeats it without reversing it. Keep this retail
+    // asset correction separate from Xbox vertex decoding: bodies, hands and
+    // cutscene heads (including mariah/curlyh) have different UV layouts.
+    const auto model=input.filename().string();
+    if((model!="maria.dff" && model!="curly.dff" && model!="cat.dff") ||
+       std::strcmp(node,"Shead01")!=0) return false;
+    for(int set=0;set<geometry->numTexCoordSets;set++)
+        for(int i=0;i<geometry->numVertices;i++)
+            geometry->texCoords[set][i].v=2.0f-geometry->texCoords[set][i].v;
+    return true;
+}
+static void init();
+static void headUVTest() {
+    init();
+    auto geometry=rw::Geometry::create(3,0,rw::Geometry::TEXTURED);
+    const rw::TexCoords authored[]={{0.25f,1.75f},{0.5f,1.25f},{0.75f,0.99f}};
+    for(const char *model:{"maria.dff","curly.dff","cat.dff"}) {
+        std::memcpy(geometry->texCoords[0],authored,sizeof(authored));
+        if(!correctGameplayHeadUVs(model,geometry,"Shead01")) throw std::runtime_error("Gameplay head correction missing");
+        const float expected[]={0.25f,0.75f,1.01f};
+        for(int i=0;i<3;i++)
+            if(geometry->texCoords[0][i].u!=authored[i].u || std::abs(geometry->texCoords[0][i].v-expected[i])>0.00001f)
+                throw std::runtime_error("Gameplay head UV orientation changed incorrectly");
+    }
+    for(const char *model:{"maria.dff","mariah.dff","curlyh.dff","asuka.dff","player.dff"})
+        for(const char *node:{"Swaist","SLhand01","SRhand01","Shead01"}) {
+            if(std::strcmp(model,"maria.dff")==0 && std::strcmp(node,"Shead01")==0) continue;
+            std::memcpy(geometry->texCoords[0],authored,sizeof(authored));
+            if(correctGameplayHeadUVs(model,geometry,node) || std::memcmp(geometry->texCoords[0],authored,sizeof(authored))!=0)
+                throw std::runtime_error("Unrelated geometry UVs changed");
+        }
+    geometry->destroy();
+    std::cout<<"PASS gameplay head orientation and body/hand/cutscene exclusions\n";
+}
 static void init() {
     if(!rw::Engine::init()) throw std::runtime_error("Cannot initialize librw");
     rw::registerMeshPlugin();rw::registerNativeDataPlugin();
@@ -148,10 +185,14 @@ static void convert(const fs::path &input,const fs::path &output) {
             rw::platform=rw::PLATFORM_XBOX;
             auto clump=rw::Clump::streamRead(&stream);
             if(!clump) throw std::runtime_error("Cannot read Xbox model");
+            std::unordered_set<rw::Geometry*> corrected;
             FORLIST(lnk,clump->atomics) {
                 auto atomic=rw::Atomic::fromClump(lnk);
                 if(atomic->geometry->flags&rw::Geometry::NATIVE) atomic->uninstance();
                 if(atomic->geometry->flags&rw::Geometry::NATIVE) throw std::runtime_error("Model remains Xbox-native");
+                if(!corrected.count(atomic->geometry) &&
+                   correctGameplayHeadUVs(input,atomic->geometry,(char*)atomic->getFrame()+nodeOffset))
+                    corrected.insert(atomic->geometry);
             }
             rw::platform=rw::PLATFORM_D3D8;
             if(!clump->streamWrite(&target)) throw std::runtime_error("Cannot write converted model");
@@ -165,6 +206,7 @@ static void convert(const fs::path &input,const fs::path &output) {
 int main(int argc,char **argv) {
     try {
         if(argc==2 && std::strcmp(argv[1],"--self-test")==0) {decoderTest();return 0;}
+        if(argc==2 && std::strcmp(argv[1],"--head-uv-test")==0) {headUVTest();return 0;}
         if(argc==3 && std::strcmp(argv[1],"--frontend")==0) {
             // Port-owned fallback artwork, independent of retail PC menu art.
             // Settings layout, fonts and backgrounds remain in the presenter.
