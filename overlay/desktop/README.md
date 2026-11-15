@@ -74,6 +74,14 @@ working directory; each explicit CLI path overrides its corresponding default.
 The base executable forwards to the sibling Upstate engine when enabled, retaining
 package validation and separate saves. `--help` works without configuration.
 
+Desktop saves use `<user-data>/userfiles/GTA3sf1.b` through `GTA3sf8.b`,
+plus `GTA3sfautosave.b`. Upstate uses the `upstate-liberty-1.1.2` subfolder.
+On first use, startup copies missing legacy slots from the selected content
+directory without overwriting saves or removing originals. Builds made before this correction
+wrote `1.b` through `8.b` and `autosave.b` into the content directory; after a
+variant reinstall, those originals may be in `variants/.backup-*`. Recover them
+into the matching base/Upstate save folder using the new names, retaining backups.
+
 Local installations include the SDL/FFmpeg shared libraries and notices,
 FFmpeg build configuration and matching source archives. Linux uses `$ORIGIN`
 library lookup; the host's Vulkan driver is never bundled. No public binary

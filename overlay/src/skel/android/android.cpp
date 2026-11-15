@@ -9,9 +9,13 @@
 #include "platform_android.h"
 #if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
 #include "DesktopMirror.h"
+#include "DesktopSaveDirectory.h"
 #endif
 
 #include "common.h"
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+#include "GenericGameStorage.h"
+#endif
 #include "crossplatform.h"
 #include "platform.h"
 #include "skeleton.h"
@@ -2629,6 +2633,17 @@ Initialise(const VulkanContext &context, bool *renderTargetStartupFailure)
 		ALOGE("PC/Xbox base not installed or incomplete. Install a variant using the manager.");
 		return false;
 	}
+
+#if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+	try {
+		const auto prefix = desktopsave::Prepare(platform::storageRoot(),
+		    ModelSets::ContentRoot(), QuestUpstate::Active());
+		strcpy(DefaultPCSaveFileName, prefix.c_str());
+	} catch(const std::exception &error) {
+		ALOGE("Cannot prepare persistent desktop saves: %s", error.what());
+		return false;
+	}
+#endif
 
 	if(RsEventHandler(rsINITIALIZE, nil) == rsEVENTERROR){
 		ALOGE("rsINITIALIZE failed");
