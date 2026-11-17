@@ -6,6 +6,15 @@
 > models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
 
+`test-vehicle-button-input` compiles the production vehicle button mapping.
+It checks B firing for Predator, Rhino and Firetruck across all pad modes,
+first/third person, default/physical driving, the forward Uzi setting and
+zero/one/two steering grips. Blocked input, tracked sidearm ownership and
+ordinary forward/side Uzi drive-bys are also covered. `test-vehicle-deformation-menu`
+checks that the grips+B cheat shortcut leaves vehicle input available while
+continuing to toggle once per press on foot. No game data is used by these host
+checks. The user confirmed the corrected behavior in-game on 2026-11-17.
+
 `test-jumpsuit-hands.ps1` compiles the production outfit-hand and holster
 rendering policies. It covers live outfit changes, skinned and rigid models,
 entry/exit completion with IK enabled or disabled, missing players/clumps, and

@@ -2343,6 +2343,18 @@ MapButtonDriveBy(CControllerState *state,
 	if(!input.b || (IsVrDrivingActive() &&
 	    (IsTrackedWeaponHeld(0) || IsTrackedWeaponHeld(1))))
 		return;
+	// Native vehicle weapons use the same pad fire button as drive-bys.
+	// Keep them independent of camera mode, steering grips and the optional
+	// forward Uzi setting. Do not select a sidearm shot or consume steering.
+	if(vehicle->GetModelIndex() == MI_PREDATOR ||
+	   vehicle->GetModelIndex() == MI_RHINO ||
+	   vehicle->GetModelIndex() == MI_FIRETRUCK){
+		if(CPad::GetPad(0)->GetMode() == 3)
+			state->RightShoulder1 = 255;
+		else
+			state->Circle = 255;
+		return;
+	}
 	// Both grips select the driver's window; one right grip selects the right.
 	const bool left = input.leftGrip >= 0.55f;
 	const bool right =

@@ -5318,7 +5318,8 @@ using uint32=uint32_t;using int16=int16_t;
 constexpr int VR_HAND_COUNT=2;
 template&lt;class T,class U,class V&gt;T clamp(T v,U a,V b){return std::max(T(a),std::min(v,T(b)));}
 struct CControllerState {int Square=0,Cross=0,Circle=0,LeftShoulder1=0,RightShoulder1=0,LeftShoulder2=0,RightShoulder2=0;void Clear(){*this={};}};
-struct CVehicle {void*pDriver=nullptr;bool IsRealHeli(){return false;}bool IsRealPlane(){return false;}bool IsCar(){return true;}bool IsBike(){return false;}} vehicle;
+enum {MI_PREDATOR,MI_RHINO,MI_FIRETRUCK,MI_NORMAL};
+struct CVehicle {void*pDriver=nullptr;int GetModelIndex(){return MI_NORMAL;}bool IsRealHeli(){return false;}bool IsRealPlane(){return false;}bool IsCar(){return true;}bool IsBike(){return false;}} vehicle;
 int player;CVehicle*FindPlayerVehicle(){return &amp;vehicle;}void*FindPlayerPed(){return &amp;player;}
 struct CPad {int GetMode(){return 0;}static CPad*GetPad(int){static CPad pad;return &amp;pad;}};
 namespace androidgame {struct PadInput{bool x=false,b=false,a=false;float leftTrigger=0,rightTrigger=0,leftGrip=0,rightGrip=0;}input;const PadInput&amp;GetPadInput(){return input;}}
@@ -6467,7 +6468,7 @@ foreach($mapping in @('case VR_MENU_PAGE_DEFORMATION: return &amp;gVrDeformation
  if(-not $source.Contains($mapping)){throw "Missing production routing: $mapping"}
 }
 if(-not [regex]::IsMatch($source,'case VR_MENU_PAGE_DEFORMATION:\s*DrawQuestDeformationPage\(\);\s*break;')){throw 'Missing deformation draw dispatch'}
-$shortcut=[regex]::Match($source,'(?s)\tconst bool cheatShortcut = modifier &amp;&amp; in\.b;.*?\tgVrCheatShortcutDown = cheatShortcut;')
+$shortcut=[regex]::Match($source,'(?s)\tconst bool cheatShortcut = modifier &amp;&amp; in\.b.*?\tgVrCheatShortcutDown = cheatShortcut;')
 if(-not $shortcut.Success){throw 'Missing actual cheat shortcut path'}
 $pieces.Add('static void DispatchShortcut(const PadInput &amp;in,bool modifier) {'+$shortcut.Value+'}')
 $shortcut=[regex]::Match($source,'(?s)\tconst bool replayShortcut = modifier &amp;&amp; in\.y.*?\tgVrReplayShortcutDown = replayShortcut;')
@@ -7661,5 +7662,21 @@ if($start -lt 0 -or $end -le $start) { throw 'Expected assembled Pad.cpp car inv
 if($LASTEXITCODE -ne 0) { throw 'Car invincibility fixture failed.' }
 Write-Host ('Pad.cpp SHA256: ' + (Get-FileHash -LiteralPath $padPath).Hash)
 </value>
+  </data>
+  <data name="tools/tests/test-vehicle-button-input.ps1" xml:space="preserve">
+    <value>param(
+ [string]$StageRoot=(Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+ [string]$OutDir=(Join-Path ([IO.Path]::GetTempPath()) ('vehicle-button-input-'+[Guid]::NewGuid().ToString('N')))
+)
+$ErrorActionPreference='Stop'
+$sourcePath=Join-Path $StageRoot 'overlay/src/vr/QuestDrivingVR.cpp'
+if(-not (Test-Path -LiteralPath $sourcePath)){$sourcePath=Join-Path $StageRoot 'src/vr/QuestDrivingVR.cpp'}
+$source=[IO.File]::ReadAllText($sourcePath)
+$method=[regex]::Match($source,'(?ms)^static void\s+MapButtonDriveBy\(.*?^\}')
+if(-not $method.Success){throw 'Missing production vehicle button mapping.'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vehicle-button-input-production.inc'),$method.Value)
+$fixture=Join-Path $StageRoot 'tools/tests/test-vehicle-button-input.cpp'
+if((Test-Path -LiteralPath $fixture) -and [IO.Path]::GetFullPath($fixture) -ne (Join-Path $PSScriptRoot 'test-vehicle-button-input.cpp')){Copy-Item -LiteralPath $fixture -Destination $PSScriptRoot}
+&amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-vehicle-button-input.cpp')</value>
   </data>
 </root>

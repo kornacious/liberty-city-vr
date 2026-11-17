@@ -13,7 +13,11 @@ closes; the gameplay shortcut closes back to play. Held opening/closing inputs
 are consumed so they cannot change a setting or immediately leave the parent.
 
 With both hands empty, hold both grips and press Y to open or close Simulation
-Replay, or B to open or close Cheats. Both shortcuts work on foot and in vehicles.
+Replay, or B to open or close Cheats while on foot. Replay also works in vehicles.
+In vehicles, B remains available for vehicle weapons even while both grips are
+held for steering; open Cheats through the VR menu instead. Built-in weapons
+(Predator guns, Rhino cannon and Firetruck water cannon) use B in first and third
+person without a side-look grip or the optional forward Uzi setting.
 Index triggers are optional; holding them while opening Simulation Replay does
 not activate a replay action.
 

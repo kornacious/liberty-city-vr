@@ -2889,8 +2889,9 @@ VrDebugUpdate(const PadInput &in)
 		FrontEndMenuManager.m_nCurrScreen = MENUPAGE_OPTIONS;
 	gVrMenuShortcutDown = menuShortcut;
 
-	// Empty-handed service shortcuts work both on foot and in vehicles.
-	const bool cheatShortcut = modifier && in.b;
+	// Vehicle grips belong to steering/drive-by controls; B must remain the
+	// vehicle action even when both grips and B are pressed together.
+	const bool cheatShortcut = modifier && in.b && !FindPlayerVehicle();
 	if(cheatShortcut && !gVrCheatShortcutDown){
 		const bool closingCheats =
 			gVrMenuVisible && (gVrMenuPage == VR_MENU_PAGE_CHEATS ||

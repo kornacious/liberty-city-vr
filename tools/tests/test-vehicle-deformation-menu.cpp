@@ -61,6 +61,7 @@ static void SimulationReplayMenuAction(int row,int direction){Check(row==-1&&dir
 enum {SOUND_FRONTEND_MENU_BACK,SOUND_FRONTEND_MENU_NEW_PAGE};
 static struct {void PlayFrontEndSound(int,int){}} DMAudio;
 static bool inVehicle;
+static void *FindPlayerVehicle(){return inVehicle ? &inVehicle : nullptr;}
 static int shortcutOpens;
 static void OpenCheatMenu(){++shortcutOpens;gVrMenuPage=VR_MENU_PAGE_CHEATS;}
 static bool gCutsceneAnchorConsumeUntilRelease=false;
@@ -253,15 +254,15 @@ static void VehicleCheatShortcut()
 {
  Reset();PadInput in;in.b=true;inVehicle=true;
  for(int i=0;i<50;i++)DispatchShortcut(in,true);
- Check(shortcutOpens==1&&gVrMenuVisible&&gVrCheatShortcutDown,"vehicle B chord opens cheats once");
- Check(VrMenuConsumesInput(),"vehicle shortcut consumes gameplay input");
- inVehicle=false;DispatchShortcut(in,true);
- Check(shortcutOpens==1,"leaving vehicle while holding B cannot toggle cheats again");
- in.b=false;DispatchShortcut(in,true);in.b=true;DispatchShortcut(in,true);
- Check(shortcutOpens==2&&!gVrMenuVisible,"a new on-foot chord closes cheats");
- Check(VrMenuConsumesInput(),"closing chord owns input through release");
+ Check(shortcutOpens==0&&!gVrMenuVisible&&!gVrCheatShortcutDown,"vehicle B chord stays available for vehicle actions");
+ Check(!VrMenuConsumesInput(),"vehicle B chord never consumes gameplay input");
+ in.b=false;DispatchShortcut(in,true);inVehicle=false;in.b=true;DispatchShortcut(in,true);
+ Check(shortcutOpens==1&&gVrMenuVisible,"on-foot chord still opens cheats");
  for(int i=0;i<50;i++)DispatchShortcut(in,true);
- Check(shortcutOpens==2,"held on-foot shortcut toggles only once");
+ Check(shortcutOpens==1,"held on-foot shortcut toggles only once");
+ in.b=false;DispatchShortcut(in,true);in.b=true;DispatchShortcut(in,true);
+ Check(shortcutOpens==2&&!gVrMenuVisible,"new on-foot chord closes cheats");
+ Check(VrMenuConsumesInput(),"closing chord owns input through release");
  in.b=false;DispatchShortcut(in,true);in.b=true;DispatchShortcut(in,false);
  Check(shortcutOpens==2&&!VrMenuConsumesInput(),"normal B without both-grip modifier never opens cheats or consumes gameplay");
 }
