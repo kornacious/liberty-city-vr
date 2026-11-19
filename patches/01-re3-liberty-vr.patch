@@ -8169,7 +8169,7 @@ index 3f7c4bca2ba8c333f7e974a5ea57a13b0397c54d..dc1fec10e831a0233abaae602a970af4
  
  void
 diff --git a/src/peds/PedFight.cpp b/src/peds/PedFight.cpp
-index 14adb16fc1a0d09e8df71eeb493875e51fc906af..72bb34f659cabad1d31e626dba680dd1fd19f25e 100644
+index 14adb16fc1a0d09e8df71eeb493875e51fc906af..6240c5aeda6eddbf8bdd622c3c33e1fc5a8fb849 100644
 --- a/src/peds/PedFight.cpp
 +++ b/src/peds/PedFight.cpp
 @@ -1,4 +1,5 @@
@@ -8245,7 +8245,43 @@ index 14adb16fc1a0d09e8df71eeb493875e51fc906af..72bb34f659cabad1d31e626dba680dd1
  	if (detectDieAnim) {
  		switch (method) {
  			case WEAPONTYPE_UNARMED:
-@@ -3022,9 +3045,36 @@ CPed::CollideWithPed(CPed *collideWith)
+@@ -2427,6 +2450,17 @@ CPed::InflictDamage(CEntity *damagedBy, eWeaponType method, float damage, ePedPi
+ 		return false;
+ 	}
+ 
++	eWeaponType killWeapon = method;
++#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
++	// Tracked in-car Uzi shots use regular bullet damage but qualify as drive-by kills.
++	if (method == WEAPONTYPE_UZI && damagedBy == player &&
++	    OculusVR::IsImmersiveDrivingActive()) {
++		CVector source, direction;
++		if (OculusVR::GetActiveTrackedWeaponAim(&source, &direction))
++			killWeapon = WEAPONTYPE_UZI_DRIVEBY;
++	}
++#endif
++
+ 	if (bInVehicle) {
+ 		if (method != WEAPONTYPE_DROWNING) {
+ #ifdef VC_PED_PORTS
+@@ -2467,7 +2501,7 @@ CPed::InflictDamage(CEntity *damagedBy, eWeaponType method, float damage, ePedPi
+ 					driverOfVeh->ReactToAttack(damagedBy);
+ 
+ 				if (damagedBy == FindPlayerPed() || damagedBy && damagedBy == FindPlayerVehicle()) {
+-					CDarkel::RegisterKillByPlayer(this, method, headShot);
++					CDarkel::RegisterKillByPlayer(this, killWeapon, headShot);
+ 					m_threatEntity = FindPlayerPed();
+ 				} else {
+ 					CDarkel::RegisterKillNotByPlayer(this, method);
+@@ -2490,7 +2524,7 @@ CPed::InflictDamage(CEntity *damagedBy, eWeaponType method, float damage, ePedPi
+ 		if (damagedBy == player || damagedBy && damagedBy == FindPlayerVehicle()) {
+ 
+ 			// There are PlayerInfo stuff here in VC
+-			CDarkel::RegisterKillByPlayer(this, method, headShot);
++			CDarkel::RegisterKillByPlayer(this, killWeapon, headShot);
+ 			m_threatEntity = player;
+ 		} else {
+ 			CDarkel::RegisterKillNotByPlayer(this, method);
+@@ -3022,9 +3056,36 @@ CPed::CollideWithPed(CPed *collideWith)
  	}
  }
  
@@ -8283,7 +8319,7 @@ index 14adb16fc1a0d09e8df71eeb493875e51fc906af..72bb34f659cabad1d31e626dba680dd1
  	CVehicleModelInfo *vehModel;
  	CColModel *vehColModel;
  	uint8 damageDir;
-@@ -3219,7 +3269,7 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
+@@ -3219,7 +3280,7 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
  		Say(SOUND_PED_DEFEND);
  
  	} else if (m_vecDamageNormal.z < -0.8f && impulse > 3.0f
@@ -8292,7 +8328,7 @@ index 14adb16fc1a0d09e8df71eeb493875e51fc906af..72bb34f659cabad1d31e626dba680dd1
  
  		bIsStanding = false;
  		uint8 fallDirection = GetLocalDirection(-car->m_vecMoveSpeed);
-@@ -3243,6 +3293,8 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
+@@ -3243,6 +3304,8 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
  			m_vecMoveSpeed = car->m_vecMoveSpeed * 0.75f;
  		}
  		m_vecMoveSpeed.z = 0.0f;
@@ -8301,7 +8337,7 @@ index 14adb16fc1a0d09e8df71eeb493875e51fc906af..72bb34f659cabad1d31e626dba680dd1
  		distVec.Normalise();
  #ifdef VC_PED_PORTS
  		distVec *= Min(car->m_fMass / 1400.0f, 1.0f);
-@@ -3251,6 +3303,17 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
+@@ -3251,6 +3314,17 @@ CPed::KillPedWithCar(CVehicle *car, float impulse)
  		Say(SOUND_PED_DEFEND);
  	}
  
