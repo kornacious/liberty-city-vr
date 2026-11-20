@@ -4438,7 +4438,12 @@ $pieces = foreach ($name in @('TrySwitchToMission', 'SwitchToMission')) {
     if (-not $match.Success) { throw "Cannot extract production function $name" }
     $match.Value
 }
-[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'mission-selector-production.inc'), ($pieces -join "`n"))
+$replaySource = Get-Content -Raw (Join-Path $StageRoot 'src/control/Script.cpp')
+$replay = [regex]::Match($replaySource, '(?ms)^bool CRunningScript::CanAllowMissionReplay\(\).*?^\}')
+$padSource = Get-Content -Raw (Join-Path $StageRoot 'src/core/Pad.cpp')
+$menu = [regex]::Match($padSource, '(?ms)^enum eVrMissionCategory\r?\n.*?^bool ActivateVrMission\(.*?^\}')
+if (-not $replay.Success -or -not $menu.Success) { throw 'Cannot extract production mission retry or menu logic.' }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'mission-selector-production.inc'), (($pieces + $replay.Value + $menu.Value) -join "`n"))
 &amp; (Join-Path $PSScriptRoot 'test-ragdoll.ps1') -KitRoot $StageRoot -OutDir $OutDir -Sources @('test-mission-selector.cpp')
 if ($LASTEXITCODE -ne 0) { throw 'Mission selector regression failed.' }
 </value>

@@ -839,6 +839,15 @@ index 11f3864aa4dd19b68d7a9add36b0143cbda5266a..0acb9c72e7dfd5d9e51f46f2f7e3a121
  #endif
  
  #ifdef USE_DEBUG_SCRIPT_LOADER
+@@ -628,7 +630,8 @@ enum {
+ 	MISSION_RETRY_STAGE_WAIT_FOR_USER,
+ 	MISSION_RETRY_STAGE_START_RESTARTING,
+ 	MISSION_RETRY_STAGE_WAIT_FOR_TIMER_AFTER_RESTART,
++	MISSION_RETRY_STAGE_SWITCHING_MISSION,
+ };
+ #endif
+ 
+ #endif // __GTA_SCRIPT_H__
 diff --git a/src/control/Script2.cpp b/src/control/Script2.cpp
 index d3ab2af723fb122a45037e56cc8ae0d65c527d8d..5ab469b0854ae0b9aa8563306e64c3d621375fa9 100644
 --- a/src/control/Script2.cpp
@@ -935,7 +944,7 @@ diff --git a/src/control/ScriptDebug.cpp b/src/control/ScriptDebug.cpp
 index 9eb3dffb9004fe488cc8f808e958334d20826e9d..adbadeb149f7c2c17c255a755fec6bae5e62a46b 100644
 --- a/src/control/ScriptDebug.cpp
 +++ b/src/control/ScriptDebug.cpp
-@@ -1396,11 +1396,53 @@ void FlushLog()
+@@ -1396,11 +1396,61 @@ void FlushLog()
  
  
  #ifdef MISSION_SWITCHER
@@ -978,7 +987,15 @@ index 9eb3dffb9004fe488cc8f808e958334d20826e9d..adbadeb149f7c2c17c255a755fec6bae
 +	if (!offsetReadable)
 +		return false;
 +
++#ifdef MISSION_REPLAY
++	// The outgoing mission can print M_FAIL as part of its cleanup.
++	AllowMissionReplay = MISSION_RETRY_STAGE_SWITCHING_MISSION;
++#endif
 +	SwitchToMission(mission);
++#ifdef MISSION_REPLAY
++	AllowMissionReplay = MISSION_RETRY_STAGE_NORMAL;
++	doingMissionRetry = false;
++#endif
 +	return bAlreadyRunningAMissionScript;
 +}
  void
@@ -2091,12 +2108,15 @@ diff --git a/src/core/Pad.cpp b/src/core/Pad.cpp
 index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f7e706dd8 100644
 --- a/src/core/Pad.cpp
 +++ b/src/core/Pad.cpp
-@@ -12,6 +12,18 @@
+@@ -12,6 +12,21 @@
  #endif
  
  #include "Pad.h"
 +#include "VrPlayerTraversal.h"
 +#include "Script.h"
++#include "QuestUpstate.h"
++#include "Collision.h"
++#include "Zones.h"
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
 +#include "OculusVR.h"
 +#endif
@@ -2110,7 +2130,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  #include "ControllerConfig.h"
  #include "Timer.h"
  #include "Frontend.h"
-@@ -21,19 +33,27 @@
+@@ -21,19 +36,27 @@
  #include "Font.h"
  #include "Hud.h"
  #include "Text.h"
@@ -2140,7 +2160,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  
  #ifdef GTA_PS2
  #include "eetypes.h"
-@@ -54,6 +74,7 @@ bool CPad::bDisplayNoControllerMessage;
+@@ -54,6 +77,7 @@ bool CPad::bDisplayNoControllerMessage;
  bool CPad::bObsoleteControllerMessage;
  bool CPad::bOldDisplayNoControllerMessage;
  bool CPad::m_bMapPadOneToPadTwo;
@@ -2148,7 +2168,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  #ifdef INVERT_LOOK_FOR_PAD
  bool CPad::bInvertLook4Pad;
  #endif
-@@ -95,6 +116,9 @@ void WeaponCheat()
+@@ -95,6 +119,9 @@ void WeaponCheat()
  	FindPlayerPed()->GiveWeapon(WEAPONTYPE_MOLOTOV, 5);
  	FindPlayerPed()->GiveWeapon(WEAPONTYPE_GRENADE, 5);
  	FindPlayerPed()->GiveWeapon(WEAPONTYPE_FLAMETHROWER, 200);
@@ -2158,7 +2178,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  }
  
  void HealthCheat()
-@@ -108,35 +132,38 @@ void HealthCheat()
+@@ -108,35 +135,38 @@ void HealthCheat()
  	}
  }
  
@@ -2210,7 +2230,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  void BlowUpCarsCheat()
  {
  	CHud::SetHelpMessage(TheText.Get("CHEAT1"), true);
-@@ -348,6 +375,782 @@ void AltDodoCheat(void)
+@@ -348,6 +378,859 @@ void AltDodoCheat(void)
  }
  #endif
  
@@ -2902,8 +2922,8 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +	67, 68, 69, 70, 71, 72, 73, 79
 +};
 +
-+static const uint8 gVrSideActivityMissions[] = {
-+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
++static const uint8 gVrPayphoneMissions[] = {
++	15, 16, 17, 18,
 +	40, 41, 42, 43, 63, 64, 65, 66, 74, 75, 76, 77, 78
 +};
 +
@@ -2912,8 +2932,8 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +static_assert(ARRAY_SIZE(gVrPortlandMissions) +
 +	ARRAY_SIZE(gVrStauntonMissions) +
 +	ARRAY_SIZE(gVrShoresideMissions) +
-+	ARRAY_SIZE(gVrSideActivityMissions) == ARRAY_SIZE(gVrMissionNames),
-+	"Every VR mission must appear exactly once");
++	ARRAY_SIZE(gVrPayphoneMissions) == 65,
++	"Only story and payphone missions belong in the VR selector");
 +
 +static const uint8 *
 +GetVrMissionCategoryEntries(int category, int *count)
@@ -2931,8 +2951,8 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +		*count = ARRAY_SIZE(gVrShoresideMissions);
 +		return gVrShoresideMissions;
 +	case VR_MISSION_CATEGORY_ACTIVITIES:
-+		*count = ARRAY_SIZE(gVrSideActivityMissions);
-+		return gVrSideActivityMissions;
++		*count = ARRAY_SIZE(gVrPayphoneMissions);
++		return gVrPayphoneMissions;
 +	default:
 +		*count = 0;
 +		return nil;
@@ -2950,7 +2970,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +	case VR_MISSION_CATEGORY_PORTLAND: return "PORTLAND STORY MISSIONS";
 +	case VR_MISSION_CATEGORY_STAUNTON: return "STAUNTON ISLAND MISSIONS";
 +	case VR_MISSION_CATEGORY_SHORESIDE: return "SHORESIDE VALE & FINALE";
-+	case VR_MISSION_CATEGORY_ACTIVITIES: return "PAYPHONES & ACTIVITIES";
++	case VR_MISSION_CATEGORY_ACTIVITIES: return "PAYPHONE MISSIONS";
 +	default: return "UNKNOWN";
 +	}
 +}
@@ -2962,6 +2982,16 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +	return count;
 +}
 +
++static int GetVrMissionScriptIndex(int mission)
++{
++	// Upstate Liberty 1.1.2 puts two initialization scripts before the original
++	// missions. The PC and Original Xbox tables use the same original indices.
++	const int offset = QuestUpstate::Active() ? 2 : 0;
++	if (CTheScripts::NumberOfMissionScripts != ARRAY_SIZE(gVrMissionNames) + offset)
++		return -1;
++	return mission + offset;
++}
++
 +const char *GetVrMissionName(int category, int item)
 +{
 +	static char label[112];
@@ -2970,9 +3000,74 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +	if (!entries || item < 0 || item >= count)
 +		return "UNKNOWN";
 +	const int mission = entries[item];
-+	sprintf(label, "%02d  %s", mission, gVrMissionNames[mission]);
++	const int scriptIndex = GetVrMissionScriptIndex(mission);
++	if (scriptIndex < 0)
++		return gVrMissionNames[mission];
++	sprintf(label, "%02d  %s", scriptIndex, gVrMissionNames[mission]);
 +	return label;
 +}
++
++#ifdef MISSION_SWITCHER
++static const CVector *GetVrMissionStart(int mission)
++{
++	// Original mission indices. PC, Original Xbox and Upstate share these
++	// story markers and payphone approaches. Mission 19 sets its own start.
++	static const struct {
++		uint8 first, last;
++		CVector marker;
++	} starts[] = {
++		{15, 18, {1224.5625f, -840.25f, 15.0f}},     // Marty
++		{20, 23, {892.75f, -425.75f, 13.875f}},      // Luigi
++		{24, 29, {1191.6875f, -870.0f, 15.0f}},     // Joey
++		{30, 34, {1219.75f, -319.6875f, 27.375f}},   // Toni
++		{35, 37, {1455.6875f, -187.25f, 55.5625f}}, // Salvatore
++		{38, 38, {1272.1875f, -92.875f, 13.75f}},   // 8-Ball
++		{39, 39, {1455.6875f, -187.25f, 55.5625f}}, // Salvatore
++		{40, 43, {938.375f, -230.5f, 3.875f}},      // El Burro
++		{44, 48, {523.6875f, -639.0f, 16.0625f}},   // Asuka's condo
++		{49, 53, {459.0625f, -1413.0f, 26.0625f}},  // Kenji
++		{54, 59, {38.75f, -725.375f, 22.75f}},      // Ray
++		{60, 62, {87.25f, -1548.5625f, 28.25f}},    // Donald Love
++		{63, 66, {120.6875f, -272.0625f, 16.0625f}}, // King Courtney
++		{67, 70, {87.25f, -1548.5625f, 28.25f}},    // Donald Love
++		{71, 73, {367.25f, -328.0625f, 19.5f}},     // Asuka's construction site
++		{74, 78, {-443.5f, -6.0625f, 3.75f}},       // D-Ice
++		{79, 79, {-362.75f, 246.5f, 60.0f}},        // Catalina
++	};
++	for (const auto &start : starts)
++		if (mission >= start.first && mission <= start.last)
++			return &start.marker;
++	return nil;
++}
++
++static void TeleportToVrMissionStart(int mission)
++{
++	const CVector *marker = GetVrMissionStart(mission);
++	CPlayerPed *player = FindPlayerPed();
++	// Start markers sit in doorways, alleys and beside phones.
++	if (!marker || !player || player->InVehicle() || !player->IsPedInControl())
++		return;
++
++	const eLevelName previousLevel = CGame::currLevel;
++	CTimer::Suspend();
++	CGame::currLevel = CTheZones::GetLevelFromPosition(marker);
++	CCollision::SortOutCollisionAfterLoad();
++	CStreaming::LoadScene(*marker);
++	bool foundGround;
++	const float ground = CWorld::FindGroundZFor3DCoord(
++		marker->x, marker->y, marker->z + 2.0f, &foundGround);
++	if (foundGround && ground >= marker->z - 3.0f) {
++		player->Teleport(CVector(marker->x, marker->y,
++			ground + player->GetDistanceFromCentreOfMassToBaseOfModel()));
++		player->SetMoveSpeed(0.0f, 0.0f, 0.0f);
++	} else {
++		CGame::currLevel = previousLevel;
++		CCollision::SortOutCollisionAfterLoad();
++		CStreaming::LoadScene(player->GetPosition());
++	}
++	CTimer::Resume();
++}
++#endif
 +
 +bool ActivateVrMission(int category, int item)
 +{
@@ -2981,9 +3076,11 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
 +	if (!FindPlayerPed() || !entries || item < 0 || item >= count)
 +		return false;
 +#ifdef MISSION_SWITCHER
-+	if (!CTheScripts::TrySwitchToMission(entries[item]))
++	const int mission = entries[item];
++	if (!CTheScripts::TrySwitchToMission(GetVrMissionScriptIndex(mission)))
 +		return false;
 +	CPad::bMissionCheatUsed = true;
++	TeleportToVrMissionStart(mission);
 +	return true;
 +#else
 +	return false;
@@ -2993,7 +3090,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  bool
  CControllerState::CheckForInput(void)
  {
-@@ -533,7 +1336,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -533,7 +1416,7 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  			state.WHEELUP = true;
  		}
  	}
@@ -3002,7 +3099,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  	// It seems there is no way to get number of buttons on mouse, so assign all buttons if we have mouse.
  	double xpos = 1.0f, ypos;
  	glfwGetCursorPos(PSGLOBAL(window), &xpos, &ypos);
-@@ -545,6 +1348,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
+@@ -545,6 +1428,8 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
  		state.WHEELDN = true;
  		state.WHEELUP = true;
  	}
@@ -3011,7 +3108,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  #endif
  
  	return state;
-@@ -592,7 +1397,7 @@ void CPad::UpdateMouse()
+@@ -592,7 +1477,7 @@ void CPad::UpdateMouse()
  			NewMouseControllerState = PCTempMouseControllerState;
  		}
  	}
@@ -3020,7 +3117,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  	if ( IsForegroundApp() && PSGLOBAL(cursorIsInWindow) )
  	{
  		double xpos = 1.0f, ypos;
-@@ -633,6 +1438,8 @@ void CPad::UpdateMouse()
+@@ -633,6 +1518,8 @@ void CPad::UpdateMouse()
  		OldMouseControllerState = NewMouseControllerState;
  		NewMouseControllerState = PCTempMouseControllerState;
  	}
@@ -3029,7 +3126,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  #endif
  }
  
-@@ -1125,6 +1932,9 @@ void CPad::UpdatePads(void)
+@@ -1125,6 +2012,9 @@ void CPad::UpdatePads(void)
  #else
  	CapturePad(0);
  #endif
@@ -3039,7 +3136,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  
  	// Improve keyboard input latency part 1
  #ifdef FIX_BUGS
-@@ -1166,6 +1976,9 @@ void CPad::UpdatePads(void)
+@@ -1166,6 +2056,9 @@ void CPad::UpdatePads(void)
  	NewKeyState = TempKeyState;
  #endif
  #endif
@@ -3049,7 +3146,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  }
  
  void CPad::ProcessPCSpecificStuff(void)
-@@ -1828,6 +2641,12 @@ bool CPad::GetLookBehindForPed(void)
+@@ -1828,6 +2721,12 @@ bool CPad::GetLookBehindForPed(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -3062,7 +3159,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  	return !!NewState.RightShock;
  }
  
-@@ -2127,6 +2946,11 @@ bool CPad::WeaponJustDown(void)
+@@ -2127,6 +3026,11 @@ bool CPad::WeaponJustDown(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -3074,7 +3171,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  	switch (CURMODE)
  	{
  		case 0:
-@@ -2359,6 +3183,21 @@ bool CPad::JumpJustDown(void)
+@@ -2359,6 +3263,21 @@ bool CPad::JumpJustDown(void)
  	return !!(NewState.Square && !OldState.Square);
  }
  
@@ -3096,7 +3193,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  bool CPad::GetSprint(void)
  {
  	if ( ArePlayerControlsDisabled() )
-@@ -2635,6 +3474,11 @@ bool CPad::ForceCameraBehindPlayer(void)
+@@ -2635,6 +3554,11 @@ bool CPad::ForceCameraBehindPlayer(void)
  	if ( ArePlayerControlsDisabled() )
  		return false;
  
@@ -3108,7 +3205,7 @@ index 2acb7991b0ecf1d40518b6ac0b59859889aa8502..a5373e0660c2cb6437390862dcc3722f
  	switch (CURMODE)
  	{
  		case 0:
-@@ -2863,6 +3707,8 @@ void LittleTest(void)
+@@ -2863,6 +3787,8 @@ void LittleTest(void)
  
  void CPad::ResetCheats(void)
  {

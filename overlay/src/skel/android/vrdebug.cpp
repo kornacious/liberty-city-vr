@@ -5548,9 +5548,9 @@ DrawQuestCheatPage(void)
 static void
 DrawQuestMissionPage(void)
 {
-	BeginFullVrMenuPage("CHEATS / MISSIONS",
-		"TEST TOOL - STARTS IN THE CURRENT SAVE STATE");
 	if(gVrMissionCategory < 0){
+		BeginFullVrMenuPage("CHEATS / MISSIONS",
+			"STARTS IN THE CURRENT SAVE STATE");
 		const int count = GetVrMissionCategoryCount();
 		for(int item = 0; item < count; item++){
 			char row[112];
@@ -5559,8 +5559,6 @@ DrawQuestMissionPage(void)
 			DrawFullVrMenuRow(row, 195+item*85, 3,
 				item == gVrMissionCategorySelection);
 		}
-		DrawVrMenuText("MISSION NUMBERS COME FROM THE ACTIVE MAIN.SCM TABLE",
-			VR_MENU_WIDTH/2, 610, 2, 255, 222, 145);
 		DrawVrMenuText(gVrCheatStatusFrames > 0 ? gVrCheatStatus :
 			"UP/DOWN SELECT   A OPEN   B BACK TO CHEATS",
 			VR_MENU_WIDTH/2, 718, 2,
@@ -5570,8 +5568,7 @@ DrawQuestMissionPage(void)
 		return;
 	}
 
-	DrawVrMenuText(GetVrMissionCategoryName(gVrMissionCategory),
-		VR_MENU_WIDTH/2, 132, 2, 255, 222, 145);
+	BeginFullVrMenuPage("CHEATS / MISSIONS", GetVrMissionCategoryName(gVrMissionCategory));
 	const int count = GetVrMissionCount(gVrMissionCategory);
 	const int first = (gVrMissionSelection/VR_CHEAT_ITEMS_PER_PAGE)*
 		VR_CHEAT_ITEMS_PER_PAGE;
@@ -5579,7 +5576,7 @@ DrawQuestMissionPage(void)
 	    row++){
 		const int item = first+row;
 		DrawFullVrMenuRow(GetVrMissionName(gVrMissionCategory, item),
-			154+row*34, 2, item == gVrMissionSelection);
+			180+row*34, 2, item == gVrMissionSelection);
 	}
 	char page[48];
 	const int pageCount = Max(1,
