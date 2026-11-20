@@ -1,10 +1,8 @@
-> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
-> manager modules. Open **Tools and tests**, or run `dotnet run --project
-> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
-> Legacy filenames below identify resource modules; old direct shell invocations
-> are historical. Use the manager pages for build/install, editor build, music,
-> models, repair and update. See [the manager guide](../../tools/manager/README.md) for runtime requirements.
-# Quest positional audio
+# Positional audio on Quest and PCVR
+
+Quest uses AAudio for effects output. Windows and Linux PCVR use SDL3 with
+the shared spatial mixer. Effects accumulate in a 32-bit buffer before the
+final stereo PCM output is clipped. The x64 filter uses SIMD for crowded scenes.
 
 World mono effects use a listener captured at the start of
 `cAudioManager::Service`, after game simulation and before audio source
@@ -65,7 +63,7 @@ data is involved in generation or distribution of this table.
 To reproduce the table (Python 3 and numpy):
 
 ```text
-python tools/generate-quest-hrtf.py PATH_TO_LOCAL_DIFFUSE_ZIP
+dotnet run --project tools/manager -c Release -- --tool tools/generate-quest-hrtf.py -- PATH_TO_LOCAL_DIFFUSE_ZIP
 ```
 
 The generator validates the archive checksum and never downloads inputs.

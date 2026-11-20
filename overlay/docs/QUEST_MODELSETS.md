@@ -3,7 +3,7 @@
 See the [implementation validation record](ASSET_VARIANTS_VALIDATION.md) for the
 automated checks, confirmed Quest menus/opening scene and remaining acceptance scope.
 
-The shared Quest and Windows PCVR engine selects one complete game variant before
+The shared Quest, Windows PCVR and Linux PCVR engine selects one complete game variant before
 loading assets. Installations live in `variants/pc` and `variants/xbox` below the
 game-data directory. An Xbox installation does not require a PC installation and
 never borrows missing files from it. `ModelSet=0` means PC; the persisted value
@@ -100,7 +100,7 @@ staged collection can replace an existing output. Generated audio is included in
 the checksummed installation manifest and atomic installation/rollback workflow.
 
 Xbox FLAC streams are used only when Xbox is active. PC uses its own complete installation,
-including any previously converted PC radio. FLAC streams play through Android's
+including any previously converted PC radio. Quest plays FLAC streams through Android's
 media framework; their exact durations are read from STREAMINFO at startup.
 
 To compare, select PC, fully restart, and listen to a repeatable scene or
@@ -115,7 +115,7 @@ separately from sample rate.
 ### Visual and animation scope
 
 The updated importer adds the Xbox particle settings and Neo resources to the
-Quest Vulkan renderer. Reimport with the current Manager to upgrade an existing
+shared Vulkan renderer. Reimport with the current Manager to upgrade an existing
 visual/audio collection; base PC files and saves are preserved.
 
 Particle rows are matched by name and emitted in stable engine-ID order. Xbox's
@@ -139,13 +139,13 @@ adaptation rather than a reproduction of every original camera-lens splash and
 droplet simulation rule.
 
 Vehicle highlights use authored material specularity. Reflective surroundings
-continue to come from the existing Quest **Lighting > Car Reflections** controls;
+continue to come from the existing **Lighting > Car Reflections** controls;
 this does not introduce the original console's separate environment-camera scene
 render. The Neo mask and Fresnel blend are applied to that existing reflection
 source. This avoids layering two competing reflection implementations. Precise
 console pixel parity and performance acceptance require headset comparison.
 
-Effects require both the updated APK and the newly prepared asset collection.
+Effects require both the updated game build and the newly prepared asset collection.
 Neo controls apply live; Asset Source changes still require a full restart.
 
 Xbox missions, gameplay data, collision and standard animations come from the ISO.
@@ -194,7 +194,7 @@ is unchanged.
 
 Head hiding, body IK, tracked weapons and holsters share the resulting view
 anchor. Vehicle-transition fallbacks never read skinned animation keys as rigid
-frames. These runtime fixes need only an APK update; an already prepared Original
+frames. These runtime fixes need only a game build update; an already prepared Original
 Xbox profile does not need rebuilding.
 
 With on-foot Body IK enabled, Original Xbox Claude also uses a tracked posture

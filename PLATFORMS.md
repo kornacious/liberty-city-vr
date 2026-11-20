@@ -16,7 +16,8 @@ The shared desktop build also includes a headset-independent
 [renderer debug viewer](overlay/desktop/RENDER_DEBUG.md), with flycam, ImGui
 controls and batch camera-path rendering. Its measurements describe the desktop
 device; native runtime validation must be reported separately for each host.
-Existing `QUEST_*.md` guides document the implemented headset target.
+The `QUEST_*.md` filenames predate PCVR. The gameplay and asset guides also cover
+the desktop games. Android storage, APK installation and ADB apply to Quest.
 
 The shared [desktop implementation](overlay/desktop/README.md) uses SDL3 for
 windows, input, Vulkan surfaces and audio output, plus FFmpeg audio decoding.
@@ -34,8 +35,8 @@ using CachyOS and WiVRn: the game builds and launches, PC and Original Xbox
 audio play correctly, and the first mission can be completed and saved.
 This validates the tested configuration; other distributions, display backends,
 runtimes, controllers, later missions and save loading need separate coverage.
-Linux includes the shared mission fixes. Their effect and any Linux-specific
-engine or runtime issues still need a native retest.
+A subsequent native Linux PCVR playtest confirmed clean audio in dense pedestrian
+and vehicle traffic after the mixer fix. The shared mission progression fixes still await a native Linux retest.
 
 The source kit includes a standalone
 [desktop diagnostic executable](overlay/desktop/README.md) for Windows and Linux. It compiles the same
@@ -82,7 +83,7 @@ see [benchmark workflow and limits](BENCHMARKS.md). Broader runtime/controller
 compatibility and any fallback for unavailable Vulkan features need validation;
 OpenXR alone does not establish support for every headset/runtime combination.
 
-Original Xbox collections can be installed into either target from the same
+Complete Original Xbox bases can be installed on all three targets from the same
 verified local conversion. The vehicle editor uses shared per-vehicle/modelset
 templates with separate Quest/PCVR personal overrides, conflict-aware transfer
 and live reload acknowledgements. See the [editor workflow](tools/vehicle-editor/README.md#quest-and-pcvr-targets).
@@ -106,4 +107,4 @@ Measure Quest improvements on Quest and PCVR improvements on the tested PC/runti
 Run target-appropriate compilation and automated checks when implementation
 changes. Continue Quest deployment rules in [AGENTS.md](AGENTS.md); each
 target's validation must be reported separately. All original game data stays
-local, and personal device identifiers remain private on both targets.
+local, and personal device identifiers remain private on all targets.

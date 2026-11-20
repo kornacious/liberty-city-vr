@@ -122,12 +122,13 @@ publish prebuilt DLLs, EXEs or game assets.
 Use .NET 10 and a clean local checkout of the pinned public re3 commit
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. Assemble into a new directory;
 the manager applies patches and overlays without modifying the checkout.
-Prepare a separate local data directory from your owned PC GTA III installation:
+The following CLI example prepares a legacy PC data root. For a complete PC
+or Original Xbox variant, use the manager’s **Build and install** page.
 
 ```text
 dotnet run --project tools/manager -c Release -- --assemble C:/LCVRBuild/re3-public C:/LCVRBuild/windows-src
 dotnet run --project tools/manager -c Release -- --prepare-windows-data C:/Games/GTAIII C:/LCVRBuild/windows-data
-cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIBERTYVR_RE3_ROOT=C:/LCVRBuild/windows-src -DLIBERTYVR_GPU_TESTS=ON -DLIBERTYVR_AUDIO_TESTS=ON
+cmake -S overlay/windows -B out/windows-pcvr -G Ninja -DCMAKE_BUILD_TYPE=Release -DLIBERTYVR_RE3_ROOT=C:/LCVRBuild/windows-src -DLIBERTYVR_DESKTOP_PREFIX=PATH_TO_DESKTOP_DEPENDENCIES -DLIBERTYVR_GPU_TESTS=ON -DLIBERTYVR_AUDIO_TESTS=ON
 cmake --build out/windows-pcvr --parallel
 ctest --test-dir out/windows-pcvr --output-on-failure
 out\windows-pcvr\libertyvr-game.exe --game-data C:/LCVRBuild/windows-data --user-data C:/LCVRBuild/windows-user
@@ -142,7 +143,8 @@ isolated data copy. Do not share live writable saves with another game instance.
 Reassemble sources after changing patches/overlays; rebuild after source changes.
 
 The shared game integration includes head/controller tracking, VR menus, gameplay
-and spatial/HRTF sound effects. Windows uses event-driven WASAPI for 48 kHz stereo
+and spatial/HRTF sound effects. The default Windows build uses SDL3 and FFmpeg.
+The optional legacy backend uses event-driven WASAPI for 48 kHz stereo
 effects and Media Foundation for music. Retail IMA/MS ADPCM WAVs are decoded locally
 through Windows ACM to `audio-cache` under the user directory; originals stay intact.
 Logs report output buffer exhaustion and longest mixer callback to help investigate

@@ -1,7 +1,7 @@
 # Curated mods in the VR Manager
 
 Open **Mods** in Liberty City / VR Manager. The initial catalog entry is
-**Upstate Liberty v1.1.2**. Select **Quest standalone** or **Windows PCVR**, choose
+**Upstate Liberty v1.1.2**. Select **Quest standalone**, **Windows PCVR** or **Linux PCVR (experimental)**, choose
 an operation, then **Perform**:
 
 - **Status** reads installed/enabled/runtime-support state from the selected target.
@@ -23,10 +23,10 @@ This digest matches the official release asset metadata and the supplied local
 archive. Other versions/repacked archives are rejected without changing the source.
 Install 7-Zip (`7zz` or `7z`) or select its executable in **Settings**.
 The archive and prepared payload remain under `<workplace>/mods`, outside Git.
-Windows ASI executables are excluded on both targets.
+Windows ASI executables are excluded on all targets.
 
-PCVR requires a prepared local PCVR data copy and a Windows build installed from
-the manager. Close PCVR before changes. Builds with `libertyvr-upstate.exe` and the
+PCVR requires a prepared local PCVR data copy and a matching desktop build installed from
+the manager. Close PCVR before changes. Builds with the Upstate executable (`libertyvr-upstate.exe` on Windows, `libertyvr-upstate` on Linux) and the
 versioned capability record support automatic enablement; older builds install
 the package disabled until rebuilt. **Launch PCVR** verifies the package and
 selects the separate expanded engine. The executable checks the pinned native

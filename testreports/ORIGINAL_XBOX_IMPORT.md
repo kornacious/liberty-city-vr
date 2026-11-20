@@ -1,5 +1,8 @@
 # Original Xbox local asset import
 
+This report records an earlier importer. For 0.9.5 installation and source
+selection, use the [complete PC and Original Xbox variant guide](../overlay/docs/QUEST_MODELSETS.md).
+
 Local Windows validation, 2026-11-06. Original disc data stayed local and is not
 part of this change. The source image was opened read-only; temporary extracted
 copies were cleaned by the importer. Only asset sizes/hashes identify the supported

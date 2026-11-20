@@ -17,8 +17,8 @@ Before a tag or GitHub release:
 
 1. Confirm `git diff --cached --name-only` contains no unexpected staged files.
 2. Confirm the repository contains no APK/AAB/SO/DLL, signing key,
-   `release-signing.properties`, game data, save, profiler CSV, log, Modern
-   model overlay, `.codex*`, `.claude`, `.agents`, `build`, `dist` or cache.
+   `release-signing.properties`, game data, save, profiler CSV, log, prepared
+   game variant, `.codex*`, `.claude`, `.agents`, `build`, `dist` or cache.
    No prebuilt executable belongs in the source kit; the retired texture
    compressor is no longer an exception.
    Exclude host-generated test `.inc` files and local iteration reports;
@@ -52,8 +52,12 @@ Before a tag or GitHub release:
    self-contained manager/editor distributions must retain the actual runtime,
    NuGet and native component license/notice files; CMake installs editor notices.
 8. Publish the commit/tag only after reviewing the complete GitHub file list.
-   If desired, use GitHub's automatic source archive; do not attach an APK,
-   assembled re3 tree, retail data or a generated Modern model set.
+   If desired, use GitHub's automatic source archive; do not attach an APK, desktop binary,
+   assembled re3 tree, retail data or a prepared asset variant.
+
+For the Windows PCVR RC, build the desktop game and run its CTest checks on
+Windows with the [desktop build workflow](overlay/desktop/README.md). Record the
+OpenXR runtime and gameplay coverage separately for each tested target.
 
 The manager assembles into a fresh output directory. Release signing fails unless
 the builder supplies their own private keystore configuration. Build and test the

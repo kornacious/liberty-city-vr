@@ -26,7 +26,10 @@ int main(int argc,char **argv) {
         pcvrstartup::Arguments utf8(argc,argv); argc=int(utf8.values.size()); argv=utf8.pointers.data();
         for(int i=1;i<argc;++i) {
             std::string argument=argv[i];
-            if(argument=="--help") { std::cout<<"Liberty City VR Windows game (experimental)\n--game-data DIRECTORY --user-data DIRECTORY [--frames N] [--quest-profile FILE]\nQuest profile matches captured rendering workload; PC timings are not Quest timings. Restart without the option for native PCVR.\nPaths default to pcvr-paths.ini beside the executable; CLI paths override it.\nUse an isolated locally prepared PCVR game directory; original game assets are not supplied.\n"; FinishStartup(0); }
+            if (argument == "--help") {
+                std::cout << pcvrstartup::GameHelp;
+                FinishStartup(0);
+            }
             if(argument=="--check-upstate-archive") { checkUpstateArchive=true; continue; }
             if(argument=="--check-assets") { checkAssets=true; continue; }
             if(i+1>=argc) throw std::runtime_error("Missing option value.");

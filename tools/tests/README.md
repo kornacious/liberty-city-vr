@@ -1,10 +1,9 @@
-> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
-> manager modules. Open **Tools and tests**, or run `dotnet run --project
-> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
-> Legacy filenames below identify resource modules; old direct shell invocations
-> are historical. Use the manager pages for build/install, editor build, music,
-> models, repair and update. See [the manager guide](../manager/README.md) for runtime requirements.
 # Host regression tests
+
+Run embedded adapters by their module IDs from **Tools and tests** or with
+`dotnet run --project tools/manager -c Release -- --tool MODULE -- ARGUMENTS`.
+Use `--list-tools` for the available module IDs. Some newer regression scripts
+are standalone files under `tools/tests`.
 
 `test-vehicle-button-input` compiles the production vehicle button mapping.
 It checks B firing for Predator, Rhino and Firetruck across all pad modes,
@@ -189,7 +188,7 @@ Device discovery, explicit target routing, log redaction and save/music provider
 boundaries are covered by the active C# manager checks using fake devices. The
 old script installer diagnostics tests were removed with those installers.
 
-`python3 tools/tests/test-patch-series.py <local-re3-clone>` checks that every
+`dotnet run --project tools/manager -c Release -- --tool tools/tests/test-patch-series.py -- <local-re3-clone>` checks that every
 patch uses LF and applies the complete series to the pinned upstream revision.
 It exports tracked source with `core.autocrlf=false` so Windows also exercises
 the clean Linux source bytes. It needs Python 3.12+ and Git, uses a temporary
@@ -221,7 +220,7 @@ configurations. It checks planes outside the mono view remain eligible during
 the shared VR scan, while unloaded/hidden planes and mono/theater clipping
 retain their previous behavior. Headset appearance requires an in-game check.
 
-`python3 tools/tests/test-loading-artwork.py <assembled-tree>` uses a C++17
+`dotnet run --project tools/manager -c Release -- --tool tools/tests/test-loading-artwork.py -- <assembled-tree>` uses a C++17
 compiler (`--cxx` selects it; `--cxx msvc` discovers the Windows toolchain) to
 exercise the production splash loader, artwork fit, `DoFade` and Vulkan
 fullscreen transform. It checks cyan texture selection/cache reuse, native
@@ -289,7 +288,7 @@ adapters; live mission playback still requires headset verification.
 Run the supported Liberty City suites together from a normal PowerShell session:
 
 ```powershell
-.\tools\tests\test-current-sources.ps1 -Re3Root C:\LCVRBuild\re3-public-b050e1c
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-current-sources.ps1 -- -Re3Root C:\LCVRBuild\re3-public-b050e1c
 ```
 
 Use the clean GTA III/re3 upstream described in BUILDING.md. The runner rejects
@@ -383,7 +382,7 @@ it does not mean handling is FPS-independent. Its regression checks also verify
 that skid history stays within each wheel call, that a recovered wheel regains
 normal grip, and that incoming non-normal wheels retain their traction loss at
 15–144 FPS. See
-[the detailed findings](../../WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
+[the detailed findings](../../testreports/WHEEL_SUSPENSION_FPS_REPORT.md) for rig assumptions,
 measured differences and limits. No original game data is used.
 
 `test-vehicle-coupled-fps.ps1 -StageRoot <assembled-tree>` characterizes a free
@@ -396,7 +395,7 @@ and native/experimental 30/60/120/240 Hz stepping, each over six game seconds.
 It checks geometry/response wiring, numerical bounds, native matrix repair,
 and render-pacing independence of fixed-step outcomes. It writes measurements
 and source hashes; fixed stepping is experimental and changes no runtime code.
-See [the coupled-vehicle report](../../VEHICLE_COUPLED_FPS_REPORT.md) for results,
+See [the coupled-vehicle report](../../testreports/VEHICLE_COUPLED_FPS_REPORT.md) for results,
 assumptions, exclusions and the required full-game validation follow-up.
 
 `test-vehicle-capture.ps1 -StageRoot <assembled-tree>` compiles the capture runtime
@@ -405,7 +404,7 @@ replay timing, pose restoration, command/session lifecycle, handle generations,
 model/handling mismatches, pause, duration bounds and duplicate control calls.
 A separate executable links disabled hooks without the runtime implementation.
 Native integration hooks are checked in the assembled world/car/collision code.
-See [capture/replay instructions](../../VEHICLE_CAPTURE_REPLAY.md).
+See [capture/replay instructions](../../testreports/VEHICLE_CAPTURE_REPLAY.md).
 
 `test-boat-input-timing.ps1 -StageRoot <assembled-tree>` extracts the production
 boat input function and gameplay clock helper. It checks the original 30 FPS
@@ -414,7 +413,7 @@ ticks, and smooth exponential steering at 15–144 FPS. Coverage includes pad
 and immersive helm input, uneven pacing, slow motion, pause, clipping/catch-up,
 steering reversals, output bounds and the signed squared steering lock. These
 are control-filter tests, not full hull dynamics or headset handling tests.
-See [repair notes and timing limits](../../BOAT_INPUT_TIMING_REPORT.md).
+See [repair notes and timing limits](../../testreports/BOAT_INPUT_TIMING_REPORT.md).
 
 `test-physics-sleep-timing.ps1 -StageRoot <assembled-tree>` compiles the production
 object sleep control, extracted vehicle sleep block and shared timing helper.
@@ -424,7 +423,7 @@ speed/angular thresholds and previous-frame displacement normalization across
 moving-map gates, counter saturation and the stationary-contact fast path are
 covered. Source checks verify every displacement producer/reset updates the
 sleep cache in existing storage. See
-[repair notes and limits](../../PHYSICS_SLEEP_TIMING_REPORT.md).
+[repair notes and limits](../../testreports/PHYSICS_SLEEP_TIMING_REPORT.md).
 
 `test-heli-control-timing.ps1 -StageRoot <assembled-tree>` extracts helicopter
 avoidance/recovery and Catalina landing blending. It checks 15–144 FPS,
@@ -432,7 +431,7 @@ uneven pacing, slow motion, pause, crossed 30 Hz decision windows, blocked-side
 responses, held lateral decisions and shot-down contact timers against an
 independent 30 FPS reference. Landing convergence is checked against an analytic
 elapsed-time response. Catch-up and separate helicopter state are included.
-See [repair notes and limits](../../HELI_CONTROL_TIMING_REPORT.md).
+See [repair notes and limits](../../testreports/HELI_CONTROL_TIMING_REPORT.md).
 
 `test-gameplay-timing.ps1 -StageRoot <assembled-tree>` compiles the production
 timer, gameplay schedule helper, swinging-door simulation and aircraft
@@ -446,7 +445,7 @@ still require headset testing.
 The header-only ragdoll suite works directly against the kit:
 
 ```powershell
-.\tools\tests\test-ragdoll.ps1 -KitRoot .
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-ragdoll.ps1 -- -KitRoot .
 ```
 
 `test-gta3-ragdoll-rig.ps1 -StageRoot <assembled-tree>` compiles the production
@@ -500,14 +499,13 @@ host suites and are never silently counted as passing.
 Actual-mesh diagnostics require the player's local, legally owned game data:
 
 ```powershell
-.\tools\tests\test-vehicle-deformation-body.ps1 `
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-vehicle-deformation-body.ps1 -- `
   -StageRoot C:\LCVRBuild\liberty-city-vr-build `
   -GameDataRoot 'C:\Games\Grand Theft Auto III'
 ```
 
 The vehicle readers access `models/gta3.img`, `models/gta3.dir` and
-`models/coll/vehicles.col`; optional Modern tests also need the locally generated
-overlay. No asset is embedded in these tests or exported for redistribution.
+`models/coll/vehicles.col`; the optional legacy Modern diagnostic reads the older overlay layout. No asset is embedded in these tests or exported for redistribution.
 `-UseBaseline`, where available, intentionally runs the old implementation and
 can fail the fixed-behavior assertion.
 
@@ -595,7 +593,7 @@ checks independently complete PC/Xbox sources and the retained Xbox calibration 
 `test-perf-capture.ps1` validates the production per-frame writer: raw timing
 precision, CSV schema, event transitions, queue overflow accounting, shutdown
 draining and exclusive session creation. It is included in the current-source
-gate. `python tools/tests/test-perf-analysis.py` separately tests the comparison
+gate. `dotnet run --project tools/manager -c Release -- --tool tools/tests/test-perf-analysis.py` separately tests the comparison
 tool's percentiles, validity masks, activity selection and incomplete sessions.
 Capture tests also cover mode switching policy, vehicle speed conversion and
 per-occupancy peak resets. Analysis tests cover schema 1 compatibility and schema

@@ -1,4 +1,4 @@
-# Shared Quest settings
+# VR settings on Quest and PCVR
 
 Main menu / Pause menu → Options and the VR settings shortcut open the same
 category catalog, page state and input handlers. Frontend Options renders those
@@ -47,7 +47,7 @@ The shared menu adds:
   gameplay overlay retains its normal radio behaviour. Defaults affect volumes only.
 - Language and Subtitles: installed game languages and subtitle visibility.
   The settings interface itself uses English labels.
-- Appearance: asset profile and player skin. Profile changes require restart;
+- Appearance: **Asset Source** selects the complete PC or Original Xbox base. A source change requires restart;
   skin changes apply immediately to a loaded player, or at the next game load.
 - Graphics: the inherited draw-distance preference, subject to the existing VR
   minimum-distance and world-LOD policies.
@@ -62,11 +62,9 @@ camera are absent from the Quest settings path. Legacy 2D brightness dimming is
 also omitted: it is not a stereo brightness adjustment. Temporal AA remains
 disabled internally and its non-actionable placeholder row is removed.
 
-The old PC settings pages and their reset actions remain available to desktop
-builds, but are unreachable through the Quest Options page. In particular, the
-PC graphics reset cannot disable the game's PS2 alpha capability or lower full
-island residency during a Quest session. The Vulkan toggle is the single
-user-facing alpha control.
+PCVR uses the shared Options pages. Desktop preview and window controls are
+available through the [PCVR preview](../windows/README.md#desktop-preview-and-input).
+The Vulkan toggle controls two-pass alpha.
 
 Shared Settings input emits the original navigation, setting-change, new-page
 and Back sounds once per input pulse or transition. The frontend Options hook

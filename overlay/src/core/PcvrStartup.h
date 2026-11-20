@@ -13,6 +13,17 @@
 #endif
 
 namespace pcvrstartup {
+inline constexpr char GameHelp[] =
+#ifdef _WIN32
+    "Liberty City VR Windows game\n"
+#else
+    "Liberty City VR Linux game (experimental)\n"
+#endif
+    "--game-data DIRECTORY --user-data DIRECTORY [--frames N] [--quest-profile FILE]\n"
+    "Quest profile matches captured rendering workload; PC timings are not Quest timings. Restart without the option for native PCVR.\n"
+    "Paths default to pcvr-paths.ini beside the executable; CLI paths override it.\n"
+    "Use an isolated locally prepared PCVR game directory; original game assets are not supplied.\n";
+
 struct Arguments {
     std::vector<std::string> values;
     std::vector<char*> pointers;

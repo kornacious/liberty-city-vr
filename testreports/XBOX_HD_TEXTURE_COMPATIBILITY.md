@@ -1,5 +1,8 @@
 # Xbox HD texture compatibility and two-profile selection
 
+This report records an earlier importer. For 0.9.5 installation and source
+selection, use the [complete PC and Original Xbox variant guide](../overlay/docs/QUEST_MODELSETS.md).
+
 Date: 2026-10-26. Local execution on `codex/xbox-hd-asset-preparation`.
 The working PC installation was inspected read-only. Original/mod assets remained
 local; no asset or executable is included in the source changes.

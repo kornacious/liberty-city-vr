@@ -1,6 +1,6 @@
 # Quest compatibility profile and matched replay benchmarks
 
-The Windows game can apply a rendering workload captured on an actual Quest 3.
+Both PCVR games can apply a rendering workload captured on an actual Quest 3.
 It uses the shared game/shaders, captured eye-buffer dimensions, MSAA, graphics
 and model-set selections, anisotropy and optional feature restrictions. Matched
 replay also uses the captured stereo FOV, separation and cant. This is a settings
@@ -21,7 +21,7 @@ current librw asset path uses BC uploads or its existing decoded fallback.
 
 ## Capture and use a profile
 
-1. Build/install both targets from the same source-kit contents. The manager embeds
+1. Build/install Quest and the PCVR target being measured from the same source-kit contents. The manager embeds
    a SHA256 identity of native/shader/build inputs, platform source and patches,
    including the pinned re3 base identity. Documentation edits do not change it;
    game-data contents are fingerprinted separately.

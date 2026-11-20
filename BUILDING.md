@@ -43,7 +43,7 @@ are never printed or saved in settings/logs.
 
 ## Build and install
 
-Choose **Build and install**, select Quest or Windows PCVR, and enable **Install
+Choose **Build and install**, select Quest standalone, Windows PCVR or experimental Linux PCVR, and enable **Install
 PC variant**, **Install Original Xbox variant**, or both. The PC checkbox enables
 its installation-folder field; Xbox enables the supported US 1.0 ISO field.
 Each is prepared as a complete independent installation under `variants/pc` or
@@ -59,27 +59,19 @@ including `sfx.RAW` and `sfx.SDT`. Xbox needs no PC installation. See the
 [asset guide](overlay/docs/QUEST_MODELSETS.md) for completeness, frontend resources
 and migration from legacy installations.
 
-**Convert and compress radio stations** is optional and off by default. It uses
+On Quest, **Convert and compress radio stations** is optional and off by default. It uses
 local FFmpeg/ffprobe (configure their executable paths in Settings) to encode the
 nine native music stations as AAC-LC, 128 kb/s stereo at 48 kHz in seekable `.m4a`
 containers. The game prefers these files directly, avoiding whole-station WAV
 decoding at tune time. AAC-LC/M4A is supported by Android's media framework
 ([supported formats](https://developer.android.com/media/platform/supported-formats)).
 
-- Copy game data only: copies the original WAVs and removes their old compressed
-  overrides so the game uses the WAVs again.
-- Convert only: pulls existing station WAVs from the selected headset into a
-  temporary local workplace folder, converts them and transfers the replacements.
-- Copy and convert: converts the PC station WAVs locally and sends only the
-  compressed stations. PC originals are preserved.
+With **Install PC variant** enabled, conversion runs before the manager seals
+the variant inventory. Reimport that variant without conversion to restore the
+original WAVs. Conversion from an installed headset applies only to legacy PC
+data directly under `gamedata`. Xbox radio comes from the ISO.
 
-All selected stations are converted and decoded for validation before any station
-is replaced. Each upload is hash verified and renamed into place before its
-headset WAV is removed. A failure preserves that station's WAV; previously
-completed replacements remain usable. Temporary PC files are cleaned up. Missing
-station WAVs are skipped, so conversion can be rerun after a completed or partial
-installation. Mission dialogue, sound effects, custom music and saves are outside
-the conversion. Build only skips conversion and all headset operations.
+### Quest build and deployment
 
 The x64 tool bootstrap retains the original verified versions:
 
@@ -98,7 +90,7 @@ fetched by the manager.
 The required public source is <https://github.com/mrxenginner/re3>, clean at
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. The manager obtains or verifies that
 checkout, copies it into a new private build directory, applies `patches/*.patch`
-in filename order, overlays the Quest files and installs the bundled librw fork.
+in filename order, adds the shared and platform-specific port files and installs the bundled librw fork.
 Previous builds and the clean upstream checkout are preserved.
 
 The APK is produced at:
@@ -153,12 +145,14 @@ audio, scripts, animation and gameplay data. CMake, Ninja, C++ and FFmpeg/ffprob
 are required. No game image or asset pack is downloaded. Reinstall a selected
 variant to repair its checksummed content; the other variant and saves survive.
 
-**Repair game files** replaces the port's allowlisted GXT and frontend/shared
+For legacy Quest data, **Repair game files** replaces the port's allowlisted GXT and frontend/shared
 TXD files when menu entries show missing labels. It requires existing game data
 and takes assets from the pinned re3 `gamefiles` folder or the folder you select.
-It does not replace retail IMG archives, optional model overlays or saves.
+For a managed base, use **Build and install** to reinstall the affected variant.
 
-**Update** requires clean main and a fast-forward from official main. It
+For PCVR updates, repeat **Build and install** for your desktop target.
+
+On Quest, **Update** requires clean main and a fast-forward from official main. It
 checks the version floor and asset-update marker, rebuilds the fetched manager,
 then builds and updates only the APK. Dry run performs local checks without
 network/build/device access. Build only produces the APK without installing.

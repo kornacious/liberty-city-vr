@@ -4,6 +4,8 @@ Date: 2026-11-13. Local Windows execution; original game assets and generated
 installations remained on the user's computer. This records the implementation
 following the [dependency audit](XBOX_STANDALONE_DEPENDENCY_AUDIT.md).
 
+For subsequent RC playthrough results and Linux coverage, see [platform status](../../PLATFORMS.md).
+
 ## Gameplay regression reported 2026-11-14
 
 The user confirmed successful installation on Quest 3 and Windows PCVR, but

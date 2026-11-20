@@ -1,5 +1,8 @@
 # Shared desktop validation — 2026-11-14
 
+For subsequent native Linux playtests and Windows RC progression results, see
+[platform status](../../PLATFORMS.md).
+
 ## Renderer debug viewer follow-up — local Windows
 
 The separate renderer viewer was built with MSVC alongside the normal Windows

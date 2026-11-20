@@ -1,5 +1,9 @@
 # Manager migration verification
 
+These dated checks describe the manager and asset layout at the time of each test.
+For 0.9.5 workflows, see the [manager guide](README.md) and the
+[complete asset variant guide](../../overlay/docs/QUEST_MODELSETS.md).
+
 ## Original Xbox PCVR and cross-target vehicle authoring — 2026-11-09
 
 - Local Windows execution. Original assets stayed on this computer/headset.

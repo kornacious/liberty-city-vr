@@ -11,9 +11,9 @@ Quest Vulkan and experimental Windows PCVR. Repository baseline:
 ## Finding
 
 The audited disc supplies the gameplay content needed for an Xbox-derived base
-installation. No indispensable PC-exclusive gameplay asset was found. The current
-installer and runtime nevertheless require a PC foundation; Xbox-only installation
-is **not implemented or validated as playable**.
+installation. No indispensable PC-exclusive gameplay asset was found. At the audited revision, the
+installer and runtime still required a PC foundation. The subsequent implementation
+and installation workflow are documented in the [asset guide](QUEST_MODELSETS.md).
 
 The remaining work is principally complete data preparation, frontend resources
 and text additions, and removing the runtime's unconditional Classic fallback.

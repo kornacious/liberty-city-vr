@@ -1,13 +1,14 @@
-# Quest gameplay
+# VR gameplay on Quest and PCVR
 
 ## 0.9.5 Release Candidate
 
-Ready for public testing and playing, with finishable main missions. Report
-mission progression, comfort and compatibility issues with the mission name,
-Classic/Modern model choice and steps to reproduce. Keep saves and game data
+Quest 3 and Windows PCVR are release candidates. Linux PCVR includes the shared
+gameplay changes and remains experimental. See [platform validation](../../PLATFORMS.md).
+Report mission progression, comfort and compatibility issues with the target, mission name,
+PC or Original Xbox asset source and steps to reproduce. Keep saves and game data
 local and omit personal device identifiers from reports.
 
-Quest garages retain the player camera and require both the player body and
+Garages retain the player camera and require both the player body and
 tracked eyes to clear the delivery doorway. Ammu-Nation shops preserve normal
 VR turning and seamless entry/exit while their purchase logic keeps running.
 Ambient bathroom and stair cameras no longer take over the player view. Train
@@ -22,7 +23,7 @@ placement. See the [weapon guide](QUEST_WEAPON_CALIBRATION.md) for calibration.
 
 Flight/Noclip, weather/time, mission countdown and paginated vehicle spawn
 controls are in the cheat menus. See the
-[changelog](../../CHANGELOG.md#085--release-candidate) for the release changes.
+[changelog](../../CHANGELOG.md#095--release-candidate) for the release changes.
 
 ## Controls and behavior
 

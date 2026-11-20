@@ -57,8 +57,12 @@ ADB or headset. Choose the corresponding prepared game-data folder for geometry.
 
 The editor labels the converted `modelsets/modern` collection **Original Xbox**.
 Existing Modern/Xbox selections and `xbox:` calibration IDs remain compatible.
-Use the manager's **Original Xbox assets** action to prepare the verified local ISO
-or reuse a verified prepared collection, and select Quest or Windows PCVR there.
+The game installs complete bases through **Build and install**. To preview a
+current installation, point **GTA III folder** directly at `variants/pc` or
+`variants/xbox` so the editor can read its `data` and `models` directories.
+The editor reads that folder through its Classic (root) lookup, which selects
+Classic placement records even when previewing Xbox geometry. Its Original
+Xbox preview option still looks for the older nested layout.
 
 Templates in `vehicle_placements.template.ini` are shared across targets. Quest
 personal overrides keep their existing workspace-root path; PCVR personal overrides
@@ -81,7 +85,7 @@ import baselines and backups stay local and outside version control.
 
 1. Open or create a workspace. Import placement packs or a legacy INI from the
    local-file section, or import the current headset settings from the device panel.
-2. Select Classic or Modern and search the catalogue. Missing modelsets and
+2. Select Classic or Original Xbox and search the catalogue. Missing modelsets and
    unsupported vehicle types remain visible. The source label identifies actual
    geometry/texture sources, including Classic fallback.
 3. Choose personal overrides or template/release defaults. Template fields show the authored layer. **Preview effective game values**
@@ -147,7 +151,7 @@ Reset removes only those personal speedometer fields and reveals inherited
 template/bundled values. Both styles render in immersive car driving; editor
 placement in a boat does not enable an in-game boat speedometer.
 
-Original Xbox reads the converted assets prepared under `modelsets/modern` in the selected
+The editor’s legacy Original Xbox preview reads assets under `modelsets/modern` in the selected
 game folder, with Classic fallback for missing files. Old Modern or Xbox editor
 selections reopen as Original Xbox. These placement records retain the `xbox:` section
 prefix for compatibility with the game's HD calibration identity; existing
@@ -243,9 +247,9 @@ including Classic entries. Do not replace the bundle with a partial template or
 concatenate the files (duplicate sections and fields are invalid). Keep personal
 overrides separate from release defaults.
 
-This tracked bundle supplies both targets: Android packages it as an APK asset,
+This tracked bundle supplies Quest and PCVR: Android packages it as an APK asset,
 and the manager copies it to the prepared PCVR data directory when refreshing
-Windows port files. The APK refreshes only its bundled baseline. Installed
+desktop port files. The APK refreshes only its bundled baseline. Installed
 templates, personal settings, game data and saves remain separate.
 The current release baseline includes manually calibrated Classic and Xbox
 wheel/radio entries. Xbox placements, including Speeder, are calibrated for
@@ -295,7 +299,7 @@ On WSLg systems with a failing GPU driver, `LIBGL_ALWAYS_SOFTWARE=1
 GALLIUM_DRIVER=llvmpipe` enables a software graphics smoke test.
 
 Desktop rendering does not reproduce the Quest's lighting or stereo optics.
-Modern geometry requires a locally installed compatible overlay to validate.
+Validating Xbox geometry requires locally prepared Xbox assets.
 No assets, headset images or settings are included in automated test fixtures.
 
 ### Live synchronization and template masking

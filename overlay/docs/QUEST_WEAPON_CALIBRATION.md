@@ -1,4 +1,4 @@
-# Quest weapon calibration
+# VR weapon calibration
 
 Open Settings > Weapons > Weapon Calibration while holding the weapon to edit.
 The heading identifies the weapon and the selected edit hand. Six submenus
@@ -28,7 +28,7 @@ and Back. Support grip style and the per-weapon laser switch stay on the root.
 Personal checkpoints live in `vr_settings.ini`, under
 `VRWeaponDefault_<id>_<name>` or `VRWeaponModernDefault_<id>_<name>`.
 Left-hand keys use the existing `Left` prefix. Classic and Xbox share the
-generic weapon profiles and checkpoint namespace. Modern is separate.
+generic weapon profiles and checkpoint namespace. The separate Modern namespace remains for legacy calibrations.
 The laser remains a per-weapon setting and is not included in a hand checkpoint.
 The Weapons page laser switch disables all weapon lasers, including saved ON
 overrides. Enable it to use the individual weapon choices again.
@@ -67,7 +67,7 @@ The factory profiles now include the headset-authored checkpoints captured on
 values, grip styles, and support-frame versions are recorded in
 `src/vr/QuestWeaponFactoryDefaults.h`. Classic/Xbox fresh defaults and Restore
 Factory Values apply these profiles after the older fallback calculations.
-Modern keeps its existing factory profiles. Grenade and detonator had only
+The legacy Modern profile keeps its existing factory profiles. Grenade and detonator had only
 left-hand checkpoints; their right-hand factory values remain unchanged at the
 user's request. Current working calibrations and personal checkpoints continue
 to take precedence and are not replaced during installation.

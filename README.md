@@ -1,6 +1,6 @@
 # Liberty City VR — source build kit
 
-> **NO APK IS PROVIDED. THIS IS A SOURCE-BUILD RELEASE.**
+> **0.9.5 Release Candidate is a source-only release for Quest 3 and Windows PCVR. Linux PCVR is experimental.**
 >
 > Open the cross-platform **Liberty City VR Manager** with `MANAGE.bat` on
 > Windows or `./MANAGE.sh` on Linux. Both also support
@@ -12,8 +12,8 @@
 >
 > Downloads of portable build tools retain pinned SHA256 checks. SDK package
 > installation requires explicit license consent. Game data comes only from
-> your legally owned local GTA III installation. Existing app data and saves
-> are preserved; an incompatible signing key stops installation.
+> your local GTA III PC installation or supported Original Xbox US 1.0 disc image. Existing app data and saves
+> are preserved; an incompatible Quest signing key stops APK installation.
 >
 > See [the manager guide](tools/manager/README.md) for configuration,
 > prerequisites, embedded auxiliary runtimes, logs and standalone publishing.
@@ -31,7 +31,7 @@ and **experimental Linux PCVR** in one source repository:
 | --- | --- |
 | Quest 3 / Android ARM64 | Release candidate with finishable main missions. |
 | Windows PCVR / x64 / OpenXR + Vulkan | Release candidate. The maintainer completed the main story, all payphone missions and the off-road missions with Original Xbox assets and Upstate Liberty enabled after the progression fixes. |
-| Linux PCVR / x64 / OpenXR + Vulkan | Experimental. Earlier native CachyOS/WiVRn testing covered build, launch, PC/Xbox audio, first mission and saving. The shared fixes are included and await a native retest. See [validation scope](PLATFORMS.md). |
+| Linux PCVR / x64 / OpenXR + Vulkan | Experimental. Earlier native CachyOS/WiVRn testing covered build, launch, PC/Xbox audio, first mission and saving. A later Linux playtest confirmed the crowded-scene audio fix. The mission fixes await a native retest. See [validation scope](PLATFORMS.md). |
 
 Manager/editor host support and PCVR game support are validated separately.
 See [platform scope and roadmap](PLATFORMS.md)
@@ -45,8 +45,9 @@ The game also opens a [desktop eye preview](overlay/windows/README.md#desktop-pr
 with ImGui/F1–F12 display controls and keyboard/mouse/PC gamepad input.
 Captured Quest workload profiles and local matched replay comparisons are available;
 see [benchmark setup and measurement limits](BENCHMARKS.md).
-Verified Original Xbox collections are supported on both targets, including matched
-Xbox replay comparisons. The [vehicle editor](tools/vehicle-editor/README.md#quest-and-pcvr-targets)
+All three targets can use a complete PC or Original Xbox base. Install either or both, then
+select **Appearance > Asset Source** and restart to switch. The Xbox base supplies its
+own scripts, collision, animations, models, textures and audio. The [vehicle editor](tools/vehicle-editor/README.md#quest-and-pcvr-targets)
 authors wheels, vehicle HUD/dashboard panels, radio/music and speedometer placement
 using shared templates and separate Quest/PCVR personal overrides, with transfer
 previews, backups and live reload acknowledgement.
@@ -56,13 +57,16 @@ for distance attenuation. Gain stays full inside the supplied minimum range,
 falls quadratically to silence at the maximum range, and updates as sources
 move. The existing effects/fade controls and 2D audio paths remain in effect.
 
-Quest swinging-door motion and aircraft destruction sequences follow elapsed
+Swinging-door motion and aircraft destruction sequences follow elapsed
 game time with their original 30 FPS reference behavior. Pickup partitions,
 population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version **v0.9.5 Release Candidate**.
+**New in 0.9.5 RC:** mission selection and progression fixes, an optional immersive
+fall view, and a desktop renderer debug viewer. PCVR now keeps saves in the
+persistent user directory. Reimport existing Xbox assets to get the corrected
+head texture coordinates for Maria, Curly Bob and Catalina.
 
 Please report mission progression issues, VR comfort problems and compatibility bugs
 in the Flat2VR community. See [the changelog](CHANGELOG.md#095--release-candidate) for changes
@@ -99,12 +103,15 @@ Existing graphics and calibration preferences are preserved. See
 [performance notes](PERFORMANCE.md) for the inherited rendering optimizations.
 
 It intentionally contains **no APK, complete re3 source tree, original game
-files, saves, logs or original Xbox assets**. Every user builds their
-own APK and supplies data from a legally owned PC copy of GTA III.
+files, saves, logs or original Xbox assets**. Build the application for your target and supply one complete local asset base.
 
 ## Updating an existing installation
 
-Choose **Update** in the manager. It fetches official main, requires a clean
+For Windows or Linux PCVR, run **Build and install** again for the same target. Leave
+both asset variants unchecked for an application-only update. To refresh converted
+Xbox models, select **Install Original Xbox variant** and reimport the ISO.
+
+For Quest, choose **Update** in the manager. It fetches official main, requires a clean
 fast-forward, checks the version floor, reuses cached tools, rebuilds the updated
 manager and replaces only the APK. Local changes, divergent history, asset-update
 requirements and incompatible signatures stop the update. Use **Dry run** for
@@ -112,8 +119,10 @@ local checks, **Build only** to skip deployment, and **Release** with your priva
 `LIBERTYVR_RELEASE_SIGNING_PROPERTIES` when updating a release-signed application.
 The workplace in **Settings** selects the tool/dependency cache.
 
-Mission autosaves retain their separate `autosave.b` and `autosave.b.bak` files;
-manual slots, calibration, retail data and optional model overlays stay in place.
+Quest mission autosaves use `autosave.b` with a separate backup. PCVR uses
+`GTA3sfautosave.b` in the persistent user directory, alongside the manual slots.
+Upstate Liberty keeps its own save folder.
+
 ## What is included
 
 | Path | Contents |
@@ -141,7 +150,7 @@ placement sharing, and the ADB/ffprobe prerequisites.
 Choose **Vehicle editor** in the manager to build, test and package the standalone non-VR editor.
 It reads your local GTA III models, edits virtual wheel and dashboard-panel
 placements per vehicle/modelset, and exports or transfers template and personal
-packs to a Quest 3. See the [editor guide](tools/vehicle-editor/README.md) for
+packs to Quest or a local PCVR installation. See the [editor guide](tools/vehicle-editor/README.md) for
 dependencies, import/deployment, and preview limitations.
 
 ## Required external source
@@ -163,19 +172,13 @@ Complete prerequisites and copy-paste commands are in
 
 Use the manager's **Build and install** page for the guided build workflow on Windows and Linux.
 
-If the OPTIONS menus show entries like `FET_GFX missing` or `FED_AAS missing`
-instead of labels, the installation predates the wizard copying the port's
-replacement text and frontend files.
-The manager's **Repair game files** page installs those onto an
-existing headset. It replaces selected GXT and frontend/shared TXD files,
-including files under `models/`; saves, settings, model archives and optional
-model overlays are left alone.
+If Options shows missing labels, reinstall the affected PC or Xbox variant through
+**Build and install**. For a legacy Quest installation with PC files directly under
+`gamedata`, **Repair game files** refreshes the replacement text and frontend assets.
 
 The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 
-## Current Quest build
-
-- Native arm64 Android application using OpenXR and Vulkan multiview.
+## VR gameplay and rendering on Quest and PCVR
 - Room-scale movement, physical weapons, two-hand support, holsters, scoped
   aiming and physical steering for cars and boats.
 - Remappable face buttons, grips and stick clicks; a swapped-hands layout;
@@ -185,15 +188,15 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
   enforcement officer attacking Claude within 15 metres and with clear sight
   triggers the normal Busted sequence. Lowering either hand, losing tracking,
   opening a menu or leaving combat resets the hold.
-- The Dodo uses powered fixed-wing flight on Quest. Hold the right trigger to
+- The Dodo uses powered fixed-wing flight. Hold the right trigger to
   build runway speed, then gently pull the left stick back to take off. Use
   left/right to bank, forward/back to pitch, and the left trigger to reduce
   power for landing. Car motion/physical-wheel modes do not affect aircraft.
 - In-headset controls, calibration, categorized cheats, traffic, ragdoll,
-  graphics and model-set menus.
+  graphics and asset source selection.
 - Native Main/Pause menu Options and the in-game VR overlay share categorized settings
   implementation, including audio volume, subtitles, language and player skins.
-  See [Quest settings](overlay/docs/QUEST_SETTINGS.md).
+  See [VR settings](overlay/docs/QUEST_SETTINGS.md).
 - Player cheats include Flight and Noclip. In Flight, move with the left stick,
   hold A to rise, B to descend, and the right index trigger (R2) for a speed boost.
   Noclip alone retains roads and terrain; combining it with Flight bypasses
@@ -214,16 +217,15 @@ The source-only maintainer checks are in [RELEASING.md](RELEASING.md).
 - Physics Director V2 with an ORIGINAL/OFF fallback; separate pedestrian and
   vehicle density controls from OFF to 300%. OFF prevents new spawns rather
   than deleting existing traffic.
-- Classic or Original Xbox asset profiles. Original Xbox loads its complete world,
-  vegetation, vehicle, pedestrian and weapon assets together. Changes require a
-  full app restart.
+- PC (Classic) or Original Xbox as the active asset source. A full restart applies
+  the selection to game data, visuals and audio together.
 
-Defaults retain 100% render scale and sustained CPU/GPU performance hints.
+Quest defaults to 100% render scale and requests sustained CPU/GPU performance hints.
 Ragdolls and vehicle deformation default to OFF; saved preferences take precedence.
 Normal frontend and save loading are used on startup. Experimental temporal AA,
 SGSR and runtime-only foveation remain disabled.
 
-Runtime/data layout is documented in
+The Quest runtime and storage layout are documented in
 [QUEST_PORT.md](overlay/docs/QUEST_PORT.md). See
 [QUEST_GAMEPLAY.md](overlay/docs/QUEST_GAMEPLAY.md) for gameplay changes,
 [QUEST_RAGDOLL.md](overlay/docs/QUEST_RAGDOLL.md) for ragdoll behavior and limits,
@@ -234,31 +236,14 @@ The [asset guide](overlay/docs/QUEST_MODELSETS.md) also describes the current
 local preparation from a user-provided original Xbox US 1.0 ISO,
 including conversion requirements and renderer/cutscene compatibility limits.
 
-## Troubleshooting and Game Data
+## Game data locations
 
-The final Quest path must be exactly
-`/sdcard/Android/data/com.libertyvr.quest/files/gamedata`.
-Fully restart the game after copying assets.
-
-For a fresh installation, install the APK first and bootstrap its app-owned
-storage through the save provider before copying data. Do not create the
-`files` root with ADB before this bootstrap. For example, in PowerShell:
-
-```powershell
-$adb = "C:\LCVRBuild\.android-sdk\platform-tools\adb.exe"
-
-& $adb devices
-& $adb shell am force-stop com.libertyvr.quest
-& $adb shell content query --uri content://com.libertyvr.quest.saves/slot/1 --projection _display_name:_size
-$gameData = "/sdcard/Android/data/com.libertyvr.quest/files/gamedata"
-foreach ($folder in @("Audio", "TEXT", "anim", "data", "models", "movies", "mp3", "skins", "txd")) {
-    & $adb push "C:\Games\GTA3\$folder" $gameData
-}
-```
-
-Then copy the assembled tree's replacement text/frontend files and VR hand
-assets as described in [BUILDING.md](BUILDING.md#6-supply-your-own-game-data).
-The guided installer performs these steps automatically.
+On Quest, the manager installs the selected base under
+`/sdcard/Android/data/com.libertyvr.quest/files/gamedata/variants/`. On PCVR,
+the configured data directory contains `variants/pc` or `variants/xbox`, and the
+user directory holds saves across application and asset updates. See the
+[build guide](BUILDING.md#build-and-install) for installation and the
+[asset guide](overlay/docs/QUEST_MODELSETS.md) for startup selection and repair.
 
 ## Tools and third-party dependencies
 
@@ -294,7 +279,7 @@ directed and reviewed by the project maintainer. Planned work includes:
 - Improving Quest rendering performance and stability, including Vulkan resource
   handling and visual correctness.
 - Expanding runtime/controller coverage and performance validation of the
-  Windows OpenXR/Vulkan game, manager integration and captured Quest
+  Windows and Linux OpenXR/Vulkan games, manager integration and captured Quest
   workload profile; see [platform scope](PLATFORMS.md).
 - Maintaining regression coverage, source assembly, build/update tooling and
   contributor documentation as features evolve.
@@ -305,8 +290,8 @@ sessions; headset behavior and performance still require local device testing.
 
 ## Distribution boundary
 
-Do not upload assembled source trees, APKs, original game files, saves, built
-model overlays or signing keys to this repository. Publish only this
+Do not upload assembled source trees, APKs, original game files, saves, prepared
+asset variants or signing keys to this repository. Publish only this
 build kit. Each player must obtain re3 and the original game separately and
 perform the documented build locally.
 

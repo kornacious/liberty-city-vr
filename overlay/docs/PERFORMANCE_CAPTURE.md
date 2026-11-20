@@ -1,9 +1,3 @@
-> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
-> manager modules. Open **Tools and tests**, or run `dotnet run --project
-> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
-> Legacy filenames below identify resource modules; old direct shell invocations
-> are historical. Use the manager pages for build/install, editor build, music,
-> models, repair and update. See [the manager guide](../../tools/manager/README.md) for runtime requirements.
 # Recording and comparing performance
 
 In **Graphics → Show FPS and Rendering Stats** select **MINIMAL** for FPS/frame
@@ -81,9 +75,9 @@ gameplay coordinates, but no device identifiers or original game assets.
   GPU observations are asynchronous, can repeat and are **not attributed to that
   row's CPU frame**. Their measurement scopes differ; do not add them together.
 - Actual render dimensions, effective scale and reported refresh rate.
-- Per-frame active world/vegetation/vehicle/pedestrian/weapon selections:
-  `0=Classic`, `1=Modern`, `2=legacy Xbox identity`. Requested selection is separate
-  because model changes require a restart.
+- The world, vegetation, vehicle, pedestrian and weapon columns all reflect the
+  same active base (`0=PC`, `1=Original Xbox`). Older captures can contain
+  legacy model-set values. A requested change takes effect after restart.
 - Player presence, ped/movement activity, health/armour, wanted level, weapon/ammo,
   vehicle model, position, engine speed, and pause/cutscene/on-mission flags.
   `speed_game_units` is the engine speed magnitude, not m/s. Activity reflects
@@ -647,7 +641,7 @@ controlled route without deaths for the main comparison; test combat and
 death/respawn separately for transition stalls.
 
 ```text
-python tools/analyze-perf-capture.py "before.frames.csv" "after.frames.csv"
+dotnet run --project tools/manager -c Release -- --tool tools/analyze-perf-capture.py -- "before.frames.csv" "after.frames.csv"
 ```
 
 The command prints one JSON summary per run: metadata, activity counts, events,

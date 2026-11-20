@@ -1,4 +1,4 @@
-# Quest ragdolls
+# VR ragdolls
 
 Open TRAFFIC > RAGDOLL to enable ragdolls and tune body weight, vehicle braking,
 car grip and bullet reaction. Changes apply immediately and retain their saved

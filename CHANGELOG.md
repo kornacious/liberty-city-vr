@@ -6,7 +6,7 @@ port from GTA Vice City to GTA III. Later entries describe Liberty City VR relea
 ## 0.9.5 — Release Candidate
 
 Source-build release covering changes after the 0.9.0 release commit `4fea4ff`,
-through `ff2ae9a` and the version update below. Quest 3 and Windows PCVR share
+including the RC version update and subsequent PCVR mixer fix. Quest 3 and Windows PCVR share
 release candidate status. The maintainer completed the main story, all payphone
 missions and the off-road missions on Windows PCVR with Original Xbox assets and
 Upstate Liberty enabled after the reported progression blockers were fixed. Linux PCVR
@@ -44,6 +44,9 @@ includes the shared fixes and remains experimental pending a native retest.
 
 ### Fixed
 
+- Fixed effects crackling in crowded PCVR scenes. The mixer sums voices before
+  clipping the stereo output. A native Linux PCVR playtest confirmed clean
+  playback in dense pedestrian and vehicle traffic.
 - Corrected VR mission selection and start locations, including off-road and
   remote-control missions. RC chase-camera effects now stay aligned with the
   remote vehicle.

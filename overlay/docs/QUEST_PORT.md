@@ -11,69 +11,19 @@ both eyes in one multiview pass to a two-layer OpenXR swapchain.
 - Saves/settings: `/sdcard/Android/data/com.libertyvr.quest/files/userfiles/`
 - VR settings: `gamedata/vr_settings.ini`
 
-The game directory must contain the data from the user's own PC copy. This
-project does not provide those files.
+## Install game data
 
-Expected top-level directories include:
+Select **Quest standalone** in the manager's **Build and install** page. Enable
+**Install PC variant** with a local PC installation, **Install Original Xbox
+variant** with a supported US 1.0 ISO, or both. The manager bootstraps app-owned
+storage, prepares the port resources (including the VR hands), verifies the
+transfers and activates each complete base under `gamedata/variants/pc` or
+`gamedata/variants/xbox`. Leave both unchecked for an application-only update.
 
-```text
-Audio/
-TEXT/
-anim/
-data/
-models/
-movies/
-mp3/
-skins/
-txd/
-```
-
-The Android filesystem is case-sensitive. The port resolves normal game-data
-requests case-insensitively, but preserving the original names remains the
-safest setup.
-
-## Copy data with adb
-
-For a completely fresh installation, install the APK and invoke its narrow save
-provider **before** using `adb push`:
-
-```sh
-adb shell content query --uri content://com.libertyvr.quest.saves/slot/1 --projection _display_name:_size
-```
-
-The expected result is a zero-byte `GTA3sf1.b` row. This creates
-`files/gamedata` and the standard retail-data children as the application UID.
-Never create `/sdcard/Android/data/com.libertyvr.quest/files` yourself before
-this bootstrap, because current Horizon OS can assign it to the shell UID and
-the game will be unable to enter its own data directory.
-
-Scoped storage can refuse to create deep children during `adb push`. If that
-happens, create the required tree with `adb shell mkdir -p` first. Push each
-source directory to the `gamedata` parent:
-
-```sh
-adb push "C:\path\to\GTA3\models" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
-adb push "C:\path\to\GTA3\data" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
-adb push "C:\path\to\GTA3\TEXT" /sdcard/Android/data/com.libertyvr.quest/files/gamedata
-```
-
-Do not push `models` to an already existing `.../gamedata/models` target;
-`adb` can create an incorrect `models/models` nesting.
-
-## Install the bundled VR hand assets
-
-The hand meshes are MIT-licensed assets from this port, not original GTA data.
-They remain outside the APK so the runtime loads them through the same game-data
-filesystem. From the assembled source tree run:
-
-```sh
-adb shell mkdir -p /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
-adb push gamefiles/models/vrhands /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models
-adb shell ls /sdcard/Android/data/com.libertyvr.quest/files/gamedata/models/vrhands
-```
-
-The final directory must directly contain `BigHandLeft.uxrh`,
-`BigHandRight.uxrh` and `BigHandsAlbedo.png`.
+With both bases installed, choose **Appearance > Asset Source** and fully
+restart the game. Existing PC data directly under `gamedata` can still serve as
+a legacy PC base. Reimport the ISO to migrate an old Xbox visual/audio overlay.
+See the [asset guide](QUEST_MODELSETS.md) for selection and integrity checks.
 
 ## Rendering and performance defaults
 
@@ -100,26 +50,11 @@ the fallback instead of continuing to claim the unavailable scale.
 Stereo MSAA is a player setting with OFF/2X/4X choices; restart after changing
 it. Temporal AA/SGSR and runtime-only foveation remain disabled research paths.
 
-## Model assets
-
-Without optional overlays, the runtime uses the base GTA III assets. Optional
-user-built overlays can be placed under:
-
-```text
-gamedata/modelsets/modern/
-gamedata/modelsets/xbox/
-```
-
-No third-party pack is distributed here. Category changes require a full process
-restart. The recommended Quest mix keeps vegetation, vehicles and pedestrians
-Classic while allowing Modern world textures and weapons. See
-[QUEST_MODELSETS.md](QUEST_MODELSETS.md).
-
 ## Logs and updates
 
-Both MINIMAL and ON profiling record raw per-frame timings, active model sets,
-player state/events and vehicle speeds in unique sessions. Only OFF stops the
-recording. See [performance capture and comparison](PERFORMANCE_CAPTURE.md).
+Enable **Graphics > Active Performance Profiling** to record frame timings,
+asset selections, player events and vehicle speeds. The FPS display setting
+controls the on-screen readout independently. See [performance capture and comparison](PERFORMANCE_CAPTURE.md).
 
 Useful runtime log:
 

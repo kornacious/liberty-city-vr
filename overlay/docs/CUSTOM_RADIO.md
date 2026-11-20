@@ -1,12 +1,6 @@
-> Tool migration: standalone `.ps1`, `.sh` and `.py` entrypoints are now embedded
-> manager modules. Open **Tools and tests**, or run `dotnet run --project
-> tools/manager -c Release -- --tool MODULE -- ARGUMENTS` from the repository root.
-> Legacy filenames below identify resource modules; old direct shell invocations
-> are historical. Use the manager pages for build/install, editor build, music,
-> models, repair and update. See [the manager guide](../../tools/manager/README.md) for runtime requirements.
 # Custom soundtracks and the adjustable radio board
 
-Custom soundtracks use Android MediaPlayer to read compressed local files
+On Quest, custom soundtracks use Android MediaPlayer to read compressed local files
 incrementally. Songs are not loaded or decoded wholesale into game memory.
 Music is independent of the APK and stays in app storage across APK updates.
 Uninstalling the app removes its music, settings and game data; keep originals.
@@ -68,46 +62,8 @@ Browse retains the previous selection; typing a path replaces it.
 **Validate only** checks local files without writing music
 or playlist order. ADB and ffprobe paths are configured in **Settings**.
 
-### Historical importer reference
-
-Install the updated APK first. Enable Quest USB debugging, accept the headset's
-ADB authorization prompt, and install Python 3, Android Platform Tools (`adb`)
-and FFmpeg (`ffprobe`). The importer finds ADB on PATH, in the SDK selected by
-`ANDROID_HOME`/`ANDROID_SDK_ROOT`, or (on Windows) in the standard Android SDK
-location and `C:\LCVRBuild\.android-sdk` used by the build script. FFprobe must
-be on PATH. You can override either tool with `--adb` and `--ffprobe`.
-
-Windows:
-
-```bat
-IMPORT_MUSIC.bat "C:\Music\Driving"
-```
-
-If ADB is installed elsewhere, supply its full path:
-
-```bat
-IMPORT_MUSIC.bat --adb "C:\My SDK\platform-tools\adb.exe" "C:\Music\Driving"
-```
-
-An error after all `VALID` lines saying `[WinError 2]` in older importers means
-ADB could not be launched. Update the importer or use `--adb` as above.
-
-Linux/macOS with Python and platform tools available:
-
-```sh
-./IMPORT_MUSIC.sh "/path/to/music"
-```
-
-Pass multiple files or directories; directory scanning is flat, not recursive.
-For multiple connected headsets, add `--serial YOUR_SERIAL`. The tool accepts
-Quest 3/3S devices in the authorized `device` state and never installs an APK,
-uninstalls the app, deletes songs, or transfers original game data.
-
-Validate without accessing any headset:
-
-```sh
-./IMPORT_MUSIC.sh --dry-run "/path/to/music"
-```
+Install the Quest APK and authorize the headset for USB debugging before
+transferring music. Use **Validate only** for an offline metadata check.
 
 The importer validates audio metadata with ffprobe, gives files safe ASCII names
 with a content-hash suffix, uploads to hidden staging files through a shell-only
@@ -211,11 +167,8 @@ Offsets use a fixed model seat origin and remain independent of seat/view tuning
 
 Save a vehicle placement, then select **EXPORT THIS VEHICLE PLACEMENT**. This
 exports the effective saved placement for the current vehicle, excluding drafts,
-visibility preferences and control bindings. Download it to a new local file:
-
-```sh
-./IMPORT_MUSIC.sh --export-board "/path/to/new-infernus-placement.ini"
-```
+visibility preferences and control bindings. In the manager's **Manage music** page, enter a new local filename in the
+radio-board export field and choose **Perform**.
 
 The export is a versioned INI with a `[Vehicle.<model id>]` section. Position is
 millimetres, rotation is canonical integer degrees `[-180,179]`, and scale is
@@ -235,10 +188,10 @@ Host checks use generated fixtures and fake media/pose backends; no original
 game files are needed:
 
 ```sh
-python3 tools/tests/test-custom-music.py
-python3 tools/tests/test-radio-input.py
-python3 tools/tests/test-radio-driving.py
-python3 tools/tests/test-import-music.py
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-custom-music.py
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-radio-input.py
+dotnet run --project tools/manager -c Release -- --tool tools/tests/test-radio-driving.py
+dotnet run --project tools/manager/tests -c Release
 c++ -std=c++17 -Ioverlay/src/audio -Ioverlay/src/vr \
   tools/tests/test-radio-music.cpp -o /tmp/test-radio-music
 /tmp/test-radio-music

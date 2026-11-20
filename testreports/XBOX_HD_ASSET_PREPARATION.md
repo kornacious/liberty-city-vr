@@ -1,5 +1,8 @@
 # Xbox Version HD preparation validation
 
+This report records an earlier importer. For 0.9.5 installation and source
+selection, use the [complete PC and Original Xbox variant guide](../overlay/docs/QUEST_MODELSETS.md).
+
 Date: 2026-10-26. Local Windows execution on branch
 `codex/xbox-hd-asset-preparation`. Game/mod assets remained local and were not
 staged or redistributed.

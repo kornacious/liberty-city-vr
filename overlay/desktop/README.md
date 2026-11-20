@@ -135,7 +135,8 @@ measurements of headset latency.
 Windows PCVR has release candidate status in 0.9.5. The maintainer completed the
 main story, all payphone missions and the off-road missions with Original Xbox
 assets and Upstate Liberty enabled. Linux PCVR remains experimental pending a
-native retest. Earlier CachyOS/WiVRn testing covered build and launch, PC and
+native mission-progression retest. A later Linux playtest confirmed the crowded-scene
+audio fix. Earlier CachyOS/WiVRn testing covered build and launch, PC and
 Original Xbox audio, first-mission completion and saving. See [platform status](../../PLATFORMS.md).
 
 Broader native acceptance must cover Windows/VirtualDesktopXR and Linux/WiVRn,

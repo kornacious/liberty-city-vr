@@ -4,7 +4,7 @@ Included with **Liberty City VR 0.9.5 Release Candidate**. Quest build/install a
 read the Android version code (**905**) from the source kit. See the
 [release changelog](../../CHANGELOG.md#095--release-candidate) for the latest changes.
 
-Build and install includes an optional **Convert and compress radio stations**
+Quest Build and install includes an optional **Convert and compress radio stations**
 checkbox. Configure FFmpeg and ffprobe in Settings. Selecting Install PC variant
 prepares AAC-LC/M4A radio in that variant before sealing and installation. Reimport
 the PC variant without conversion to restore WAVs. Original PC files are preserved.
@@ -12,7 +12,7 @@ Conversion-only from an installed headset remains a legacy-root workflow; comple
 variants must be reimported so their checksums and inventory stay coherent.
 See [the build guide](../../BUILDING.md#build-and-install).
 
-The interactive manager builds Quest, Windows PCVR and experimental Linux PCVR. Windows has
+The interactive manager builds Quest, Windows PCVR and experimental Linux PCVR. Both desktop targets have
 versioned local installation, isolated data preparation, launch and runtime diagnostics.
 Developer CLI commands `--assemble RE3 OUTPUT` and
 `--prepare-windows-data GTA OUTPUT` prepare sources and an isolated local asset
@@ -196,7 +196,7 @@ copy. Original data and saves are preserved; global launch paths remain unchange
 These operations require local headset access and must never run against cloud
 storage or publish original assets.
 
-CLI callers use `--run BuildAndInstall REQUEST.json` with `Options.Target: 1` and
+CLI callers use `--run BuildAndInstall REQUEST.json` with `Options.Target` set to 1 (Windows) or 2 (Linux) and
 PCVR-specific flags `PcvrBuildOnly`, `PcvrGpuTests` and
 `PcvrAudioTests`. `BuildOnly`, `Release`, `CopyGameData` and radio flags remain
 Quest options. Select either or both `InstallPcVariant` / `InstallXboxVariant` and
@@ -221,16 +221,17 @@ see the [target transfer workflow](../vehicle-editor/README.md#quest-and-pcvr-ta
 
 | Page | Configuration and behavior |
 | --- | --- |
-| Build and install | Select Quest or Windows PCVR. Quest retains debug/release APK builds, optional data/radio conversion and SDK consent. Windows builds Release with local MSVC/CMake/Ninja/Vulkan, runs checks, optionally prepares local data, and installs a versioned desktop build. |
+| Build and install | Select Quest standalone, Windows PCVR or experimental Linux PCVR. Quest retains debug/release APK builds, optional data/radio conversion and SDK consent. Windows builds Release with local MSVC/CMake/Ninja/Vulkan, runs checks, optionally prepares local data, and installs a versioned desktop build. Linux uses the native Linux toolchain and the same versioned layout. |
+| Renderer debug viewer | Runs the desktop renderer with flycam controls or a batch scenario on Windows or Linux. See the [viewer guide](../../overlay/desktop/RENDER_DEBUG.md). |
 | Launch PCVR | Validate installed files, prepared data and active runtime, probe Vulkan/OpenXR, then run the game with isolated saves. Quit in-game to return; Cancel stops the process. |
 | PCVR diagnostics | Check the active x64 runtime manifest/library and run Vulkan and OpenXR session probes. Does not change runtime selection or require game assets. Each probe has a 60-second timeout. |
-| Vehicle editor | Output folder and ZIP packaging. Configures CMake, builds the editor and three native test targets, runs CTest, installs and optionally packages. Includes the manager runtime for its device bridge. |
+| Vehicle editor | Output folder and ZIP packaging. Configures CMake, builds the editor and its native test targets, runs CTest, installs and optionally packages. Includes the manager runtime for its device bridge. |
 | Manage music | Browse headset music and file details. Ctrl-click selects an inclusive range; Range end then an ordinary click also selects a range. Shift-click is supported where the terminal forwards it; Windows Terminal consumes it for text selection. Plain click selects one. Drag or Up/Down moves the selected group; Delete queues selected files for removal. Perform applies order/deletion and Cancel discards them. The import browser supports multiple files/folders with Ctrl-click or Space (Alt-click for ranges), plus validation only and radio board export. Imports use ffprobe validation, duplicate hashes and verified atomic commits. |
-| Repair game files | Optional port `gamefiles` folder; otherwise obtains the pinned source. Requires an existing game installation and repairs the allowlisted replacement text/frontend files. |
+| Repair game files | Optional port `gamefiles` folder; otherwise obtains the pinned source. For legacy Quest data, repairs the allowlisted replacement text/frontend files. |
 | Update | Dry run, build only, debug/release and SDK license consent. Verifies clean main, fetches official main, enforces version floor and asset requirements, fast-forwards without reset/stash, rebuilds the updated manager and updates only the APK. |
 | Transfer save | Quest → PC or PC → Quest, checkbox multi-selection of slots 1–8 and Autosave, and PC save-folder browser. Validates every selected source and backs up destinations before writing, preserves save bytes and verifies Quest read-back. Native C# on Windows/Linux; requires ADB only. |
 | Settings | Repository, workplace, retail folder, Android SDK, JDK, ADB, ffprobe, CMake, Vulkan SDK, PCVR tools/directories and optional auxiliary runtimes; pinned tool download preference. |
-| Mods | Curated Upstate Liberty v1.1.2 for Quest or Windows PCVR: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete mod files on the selected target. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
+| Mods | Curated Upstate Liberty v1.1.2 for Quest, Windows PCVR or experimental Linux PCVR: validate a local `UL.7z` or download the pinned release, install, check status, enable, disable or delete mod files on the selected target. Requires installed 7-Zip (`7zz`/`7z`, or select its executable in Settings). |
 | Tools and tests | Source authoring, placement transfer, capture analysis, RenderDoc export, archive utilities, HRTF generation, artwork, regression adapters and optional librw packaging tools. Legacy save-transfer modules are hidden; use Transfer save. |
 
 The [curated mod guide](../../overlay/docs/QUEST_MODS.md) documents package handling
@@ -241,10 +242,10 @@ advertises support. Automatic enablement and re-enabling are gated by that
 capability; Windows ASI binaries are excluded from device packages.
 
 For PCVR, first build and install Windows PCVR and prepare its isolated data copy.
-On **Mods**, select **Windows PCVR**, confirm the PCVR directories, and choose
+On **Mods**, select the Windows or Linux PCVR target, confirm the PCVR directories, and choose
 **Install**. The package uses the same pinned archive and contains no Windows ASIs.
 Close PCVR before installing, enabling, disabling or deleting a mod. Install enables
-Upstate when the installed build includes `libertyvr-upstate.exe` and its capability
+Upstate when the installed build includes the Upstate executable and its capability
 record; older builds retain the package disabled until rebuilt. **Launch PCVR**
 verifies the enabled package and selects the separate Upstate executable. The
 native engine also verifies the pinned inventory before startup. Disable returns
@@ -318,8 +319,8 @@ PS2/Conan dependencies portable.
 The host copies only Git-tracked public source into a fresh local workplace
 snapshot and materializes the embedded modules there. It never copies untracked
 retail data, saves, private build trees, caches or Git metadata. This preserves
-relative imports, native test fixtures and authoring outputs while removing all
-standalone `.ps1`, `.sh` and `.py` source entrypoints from the checkout. Snapshots
+relative imports, native test fixtures and authoring outputs for embedded tools. The desktop dependency builders and some newer test
+scripts also ship as standalone files. Snapshots
 and outputs remain local for inspection. Scripts referenced by Android itself
 (the optional ASan wrapper) are generated only in the private assembled build.
 Superseded script installers, the Vice City save converter and downloaded
