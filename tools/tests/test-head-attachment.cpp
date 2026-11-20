@@ -57,9 +57,10 @@ static CVector submittedHead,submittedRight,submittedUp,submittedForward;
 static CVector gVrOnFootSkeletonHead;
 static float Atan2(float y,float x){return std::atan2(y,x);}
 enum {PED_IDLE,PED_DRIVING,PED_JUMP,PED_OPEN_DOOR,PED_CARJACK,PED_ENTER_CAR,PED_STEAL_CAR,PED_ENTER_TRAIN,PED_EXIT_TRAIN};
-static bool vehicleTransition,knockedDown,gVrInVehicle,trainPassenger,headModeOnFoot;
+static bool vehicleTransition,knockedDown,immersiveFall,gVrInVehicle,trainPassenger,headModeOnFoot;
 static int playerVehicleState=PED_IDLE;
-static bool PlayerKnockedDown(CPed*){return knockedDown;}
+static bool PlayerKnockedDown(CPed*){return knockedDown || immersiveFall;}
+static bool PlayerUsingFallView(CPed*){return immersiveFall;}
 namespace androidgame {
 static bool bobbing=true,boneView=false;
 static CVector eyeOffset;
@@ -217,7 +218,11 @@ int main(){
     Final(&player,false,p,f);
     Near(submittedUp,{0,1,0},"knockdown may follow native head orientation through get-up");
     Near(submittedHead,CVector(1,2,.3f)+CVector(.02f,.08f,-.06f),"eye fit follows the downed bone axes");
-    knockedDown=false;++CTimer::frame;Final(&player,false,p,f);
+    knockedDown=androidgame::boneView=false;immersiveFall=true;
+    ++CTimer::frame;Final(&player,false,p,f);
+    Near(submittedUp,{0,1,0},"immersive falls follow the head bone with level-horizon knockdowns selected");
+    Near(submittedHead,CVector(1,2,.3f)+CVector(.02f,.08f,-.06f),"immersive falls retain the calibrated eye position through collapse");
+    immersiveFall=false;++CTimer::frame;Final(&player,false,p,f);
     Near(submittedUp,{0,0,1},"standing recovers level horizon independent of bone view option");
     Require(resets==anchorWrites*2,"legacy smoothing cleared on every exact submission");
     QuestHeadAttachment::ComfortAnchor button;

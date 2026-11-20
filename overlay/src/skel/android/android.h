@@ -302,6 +302,8 @@ bool VrXboxKnockdownBoneViewEnabled();
 bool VrKnockdownPresentationActive(void);
 bool VrKnockdownTiltEnabled(void);
 void VrToggleKnockdownTilt(void);
+bool VrImmersiveFallViewEnabled(void);
+void VrToggleImmersiveFallView(void);
 
 // Latch the pose being held now as the neutral one. A player who started
 // seated and then stood up is riding an eye height taken while seated until

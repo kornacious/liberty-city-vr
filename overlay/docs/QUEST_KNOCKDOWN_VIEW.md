@@ -6,7 +6,12 @@
 > models, repair and update. See [the manager guide](../../tools/manager/README.md) for runtime requirements.
 # Knockdown view
 
-On foot, falling, staggering, diving away and getting up temporarily use the
+**Settings > Locomotion > Fall View** controls the camera for long drops and hard
+landings. **Standard** (default) keeps the existing locomotion view.
+**Immersive** follows the animated head through the fall, collapse and stand-up.
+It saves as `[VR] ImmersiveFallView=0` or `1` in `vr_settings.ini`.
+
+On foot, knockdowns, staggers, evasive dives and get-up animations temporarily use the
 animated player's head as the camera target. Tracked hands, held weapons,
 lasers, holster highlights and throwable previews hide through recovery.
 Held weapons return to their holsters without losing inventory or ammunition;
@@ -37,7 +42,8 @@ The option persists as `[VR] KnockdownCameraTilt=0` or `1` in
 ownership. Changing player, teleporting or leaving the gameplay context clears
 the knockdown offsets.
 
-Run `tools/tests/test-vr-knockdown.ps1` for production smoothing, state and
+Run `dotnet run --project tools/manager -c Release -- --tool tools/tests/test-vr-knockdown.ps1`
+for production smoothing, state and
 tracking-reference checks. In-headset checks should cover a car impact,
 sideways fall, face-up/down fall, get-up, repeated impacts, both view options,
 and transitions into death or a vehicle. Comfort and visual clipping require

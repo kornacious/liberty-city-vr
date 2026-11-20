@@ -22,12 +22,22 @@ struct {
 } gvk;
 static void resetAtomicMotionHistory() {}
 enum {PED_IDLE,PED_FALL,PED_GETUP,PED_STAGGER,PED_DIVE_AWAY,PED_DIE,PED_DEAD,PED_DRIVING,PED_HANDS_UP,PED_ARRESTED,PED_DRAG_FROM_CAR};
+enum {ANIM_STD_FALL, ANIM_STD_FALL_COLLAPSE};
+struct CAnimBlendAssociation { float blendDelta = 0.0f; };
 struct CPlayerPed {
 	int state=PED_IDLE, m_nPedState=PED_IDLE; bool vehicle=false, dead=false;
+	bool bIsInTheAir=false, bIsLanding=false, falling=false, collapsing=false;
+	CAnimBlendAssociation fallAnimation, collapseAnimation;
 	float m_fHealth=100;
 	bool InVehicle() {return vehicle;} bool DyingOrDead() {return dead;}
 	int GetPedState() {return state;}
+	CPlayerPed *GetClump() {return this;}
 };
+static bool RpAnimBlendClumpIsInitialized(CPlayerPed *) {return true;}
+static CAnimBlendAssociation *RpAnimBlendClumpGetAssociation(CPlayerPed *clump, int id) {
+	if(id==ANIM_STD_FALL) return clump->falling ? &clump->fallAnimation : nullptr;
+	return clump->collapsing ? &clump->collapseAnimation : nullptr;
+}
 using CPed=CPlayerPed;
 static CPlayerPed gatePlayer;
 static CPed *FindPlayerPed() {return &gatePlayer;}
@@ -37,10 +47,13 @@ struct {bool m_bMenuActive=false;} FrontEndMenuManager;
 struct {bool m_WideScreenOn=false;} TheCamera;
 struct CCutsceneMgr {static bool IsRunning(){return false;} static bool IsCutsceneProcessing(){return false;}};
 namespace androidgame {
+	static bool immersiveFallView;
+	bool VrImmersiveFallViewEnabled() {return immersiveFallView;}
 	bool VrKnockdownPresentationActive();
 	static void *VrCutsceneCameraActor(){return nullptr;}
 }
-enum {WBSTATE_PLAYING};
+enum {WBSTATE_PLAYING, WBSTATE_BUSTED};
+namespace ModelSets {static bool IsModernActive(){return false;}}
 struct CWorld {
 	struct Player {int m_WBState=WBSTATE_PLAYING;};
 	static Player Players[1]; static int PlayerInFocus;
@@ -143,6 +156,20 @@ int main() {
 	Check(androidgame::VrKnockdownPresentationActive() && !BodyIKGameplayContext(),"head-height recovery must keep hand visibility and IK ownership synchronized");
 	gKnockdownView=yawOnly;
 	Check(!androidgame::VrKnockdownPresentationActive() && BodyIKGameplayContext(),"yaw-only recovery must restore hands and body IK together");
+	gatePlayer.bIsInTheAir=true;
+	gatePlayer.falling=true;
+	Check(!androidgame::VrKnockdownPresentationActive(),"standard fall view must preserve locomotion presentation");
+	androidgame::immersiveFallView=true;
+	Check(androidgame::VrKnockdownPresentationActive() && !BodyIKGameplayContext(),"a long drop must let the fall animation own the body");
+	gatePlayer.fallAnimation.blendDelta=-1.0f;
+	Check(!PlayerUsingFallView(&gatePlayer),"a fading fall association must not capture an ordinary jump");
+	gatePlayer.bIsInTheAir=false;
+	gatePlayer.bIsLanding=true;
+	Check(!PlayerUsingFallView(&gatePlayer),"a routine landing must preserve locomotion presentation");
+	gatePlayer.collapsing=true;
+	Check(androidgame::VrKnockdownPresentationActive() && !BodyIKGameplayContext(),"collapse and stand-up must own presentation even in PED_IDLE");
+	gatePlayer.bIsLanding=false;
+	Check(!PlayerUsingFallView(&gatePlayer),"the landing callback must relinquish the camera even if the animation is still fading");
 	for(int hand=0;hand<2;hand++) {
 		gHeldSlot[hand]=hand+2;gHolsterSelection[hand]=hand+2;
 		gDropped[hand].slot=hand+2;gSupportHand[hand]=1-hand;

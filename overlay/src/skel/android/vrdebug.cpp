@@ -818,6 +818,7 @@ enum eVrLocomotionMenuItem {
 	VR_LOCOMOTION_SNAP_ANGLE,
 	VR_LOCOMOTION_HEAD_BOBBING,
 	VR_LOCOMOTION_KNOCKDOWN_TILT,
+	VR_LOCOMOTION_FALL_VIEW,
 	VR_LOCOMOTION_CUTSCENES,
 	VR_LOCOMOTION_BODY_IK,
 	VR_LOCOMOTION_HEAD_CALIBRATION,
@@ -4000,6 +4001,9 @@ VrDebugUpdate(const PadInput &in)
 					SaveXboxHeadFit();
 				}else androidgame::VrToggleKnockdownTilt();
 				break;
+			case VR_LOCOMOTION_FALL_VIEW:
+				androidgame::VrToggleImmersiveFallView();
+				break;
 			case VR_LOCOMOTION_BODY_IK:
 				LoadPersistentBodyIKSettings();
 				gBodyIKEnabled = !gBodyIKEnabled;
@@ -5273,6 +5277,9 @@ DrawQuestLocomotionPage(void)
 		ModelSets::IsModernActive() ?
 			(gXboxHeadFit.value[QuestHeadCalibration::BONE_VIEW] ? "HEAD BONE" : "LEVEL HORIZON") :
 			(androidgame::VrKnockdownTiltEnabled() ? "IMMERSIVE TILT" : "LEVEL HORIZON"));
+	snprintf(rows[VR_LOCOMOTION_FALL_VIEW], sizeof(rows[0]),
+		"FALL VIEW  < %s >",
+		androidgame::VrImmersiveFallViewEnabled() ? "IMMERSIVE" : "STANDARD");
 	snprintf(rows[VR_LOCOMOTION_CUTSCENES], sizeof(rows[0]),
 		"CUTSCENES  < %s >",
 		gCutsceneMode ? "STEREO  R3 CAMERA  L3 KEEP" : "CINEMA SCREEN");

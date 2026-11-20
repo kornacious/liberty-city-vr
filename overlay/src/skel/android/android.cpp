@@ -104,6 +104,7 @@ static bool gForegroundApp = true;
 static VrKnockdownView gKnockdownView;
 static VrCrouchView gCrouchView;
 static int gKnockdownTilt = -1;
+static int gImmersiveFallView = -1;
 extern bool gVrFirstPersonActive;
 
 bool
@@ -123,6 +124,42 @@ androidgame::VrToggleKnockdownTilt(void)
 		gKnockdownTilt ? "1" : "0", ".\\vr_settings.ini");
 }
 
+bool
+androidgame::VrImmersiveFallViewEnabled(void)
+{
+	if(gImmersiveFallView < 0)
+		gImmersiveFallView = GetPrivateProfileIntA("VR", "ImmersiveFallView", 0,
+			".\\vr_settings.ini") != 0;
+	return gImmersiveFallView != 0;
+}
+
+void
+androidgame::VrToggleImmersiveFallView(void)
+{
+	gImmersiveFallView = !VrImmersiveFallViewEnabled();
+	WritePrivateProfileStringA("VR", "ImmersiveFallView",
+		gImmersiveFallView ? "1" : "0", ".\\vr_settings.ini");
+}
+
+static bool
+PlayerUsingFallView(CPlayerPed *player)
+{
+	if(!androidgame::VrImmersiveFallViewEnabled() || !player ||
+	   player->InVehicle() || player->DyingOrDead() || !player->GetClump() ||
+	   !RpAnimBlendClumpIsInitialized(player->GetClump()))
+		return false;
+
+	// A hard drop uses the native fall and collapse animations without
+	// entering PED_FALL or PED_GETUP. Collapse includes standing back up.
+	if(player->bIsLanding)
+		return RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_STD_FALL_COLLAPSE) != nil;
+	if(!player->bIsInTheAir)
+		return false;
+	const CAnimBlendAssociation *fall =
+		RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_STD_FALL);
+	return fall && fall->blendDelta >= 0.0f;
+}
+
 static bool
 PlayerKnockedDown(CPlayerPed *player)
 {
@@ -133,7 +170,7 @@ PlayerKnockedDown(CPlayerPed *player)
 	switch(player->GetPedState()){
 	case PED_FALL: case PED_GETUP: case PED_STAGGER: case PED_DIVE_AWAY:
 		return true;
-	default: return false;
+	default: return PlayerUsingFallView(player);
 	}
 }
 
@@ -1885,7 +1922,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 					posed = true;
 				}
 			}
-			const bool tilt = androidgame::VrKnockdownTiltEnabled();
+			const bool tilt = androidgame::VrKnockdownTiltEnabled() || PlayerUsingFallView(player);
 			const float normalYaw = Atan2(forward.y, forward.x);
 			if(!knockdownHeadingValid){
 				lastOnFootYaw = normalYaw;
@@ -2026,7 +2063,8 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 				 playerVehicleState==PED_ENTER_CAR || playerVehicleState==PED_STEAL_CAR);
 			// Entry follows the authored head until driving owns the camera.
 			// Routine gait still cannot steer the HMD.
-			if(!animatedCarEntry && (!PlayerKnockedDown(player) || !androidgame::VrXboxKnockdownBoneViewEnabled()))
+			if(!animatedCarEntry && (!PlayerKnockedDown(player) ||
+			   (!androidgame::VrXboxKnockdownBoneViewEnabled() && !PlayerUsingFallView(player))))
 				QuestHeadAttachment::ViewBasis(heading, vertical,
 					boneRight, boneUp, boneForward);
 			float eyeForward, eyeHeight, eyeSide;
