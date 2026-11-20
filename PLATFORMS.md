@@ -1,14 +1,14 @@
 # Liberty City VR platform scope
 
-Liberty City VR 0.9.0 is a source-only GTA III VR project built on re3,
+Liberty City VR 0.9.5 Release Candidate is a source-only GTA III VR project built on re3,
 OpenXR and the bundled librw Vulkan renderer. Its official repository is
 [kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
 | Game target | Status | Current workflow |
 | --- | --- | --- |
-| Standalone Quest 3, Android ARM64 | Implemented; release candidate | Manager source assembly, APK build and local headset installation. |
-| Windows PCVR, x64, OpenXR + Vulkan | Experimental game integration implemented | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
-| Linux PCVR, x64, OpenXR + Vulkan | Validated on native CachyOS with WiVRn | Manager build/install/launch, PC and Original Xbox audio, first-mission completion and saving confirmed locally. Separate target data/save settings and XDG runtime discovery. |
+| Standalone Quest 3, Android ARM64 | Release candidate | Manager source assembly, APK build and local headset installation. |
+| Windows PCVR, x64, OpenXR + Vulkan | Release candidate | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
+| Linux PCVR, x64, OpenXR + Vulkan | Experimental, pending native retest | Manager build/install/launch, separate target data/save settings and XDG runtime discovery. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.
@@ -25,17 +25,23 @@ mixer. The previous Windows backend remains available as a migration fallback
 while broader desktop/runtime coverage is assessed. Linux builds
 under WSL do not establish native Linux VR support.
 
-Native Linux PCVR validation was confirmed by the maintainer on 2026-11-14
+The maintainer completed the main story, all payphone missions and the off-road
+missions on Windows PCVR with Original Xbox assets and Upstate Liberty enabled.
+The reported mission blockers were fixed and the affected missions were completed.
+
+Earlier native Linux PCVR validation was confirmed by the maintainer on 2026-11-14
 using CachyOS and WiVRn: the game builds and launches, PC and Original Xbox
 audio play correctly, and the first mission can be completed and saved.
 This validates the tested configuration; other distributions, display backends,
 runtimes, controllers, later missions and save loading need separate coverage.
+Linux includes the shared mission fixes. Their effect and any Linux-specific
+engine or runtime issues still need a native retest.
 
-Version 0.9.0 includes a standalone
+The source kit includes a standalone
 [desktop diagnostic executable](overlay/desktop/README.md) for Windows and Linux. It compiles the same
 librw Vulkan sources and shaders as Quest, uses shared stereo transforms, and
 implements runtime/device negotiation, stereo diagnostic rendering and basic
-controller grip/select actions. A separate experimental game target reuses the re3
+controller grip/select actions. The separate game target reuses the re3
 game loop, tracked VR interactions, menus and spatial audio mixer. Neither bundles game assets.
 
 ## Shared architecture and implementation

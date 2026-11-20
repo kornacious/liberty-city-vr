@@ -1,11 +1,8 @@
 # Liberty City VR Manager
 
-Included with **Liberty City VR 0.9.0 — release candidate**, ready for public
-testing and playing with finishable main missions. Quest build/install and update
-read the Android version code (**900**) from the source kit. See the
-[release changelog](../../CHANGELOG.md#090--release-candidate) for Windows/Linux
-PCVR builds, the shared SDL3/FFmpeg backend, asset variants, portable installations
-and all changes since 0.8.5; earlier changes have their own entries.
+Included with **Liberty City VR 0.9.5 Release Candidate**. Quest build/install and update
+read the Android version code (**905**) from the source kit. See the
+[release changelog](../../CHANGELOG.md#095--release-candidate) for the latest changes.
 
 Build and install includes an optional **Convert and compress radio stations**
 checkbox. Configure FFmpeg and ffprobe in Settings. Selecting Install PC variant
@@ -15,11 +12,11 @@ Conversion-only from an installed headset remains a legacy-root workflow; comple
 variants must be reimported so their checksums and inventory stay coherent.
 See [the build guide](../../BUILDING.md#build-and-install).
 
-The interactive manager builds Quest or experimental Windows/Linux PCVR. Windows has
+The interactive manager builds Quest, Windows PCVR and experimental Linux PCVR. Windows has
 versioned local installation, isolated data preparation, launch and runtime diagnostics.
 Developer CLI commands `--assemble RE3 OUTPUT` and
 `--prepare-windows-data GTA OUTPUT` prepare sources and an isolated local asset
-copy for the experimental [Windows CMake build](../../overlay/windows/README.md).
+copy for the [Windows CMake build](../../overlay/windows/README.md).
 Assembly requires the clean pinned public re3 commit; data preparation refuses
 existing or overlapping destinations and never accesses a headset. Updates use
 [the renamed official repository](https://github.com/kornacious/liberty-city-vr).
@@ -92,7 +89,7 @@ Wayland are acceptance targets; WSL compilation is not headset validation.
 
 ### Windows workflow
 
-On a Windows x64 host, select **Windows PCVR (experimental)** on **Build and
+On a Windows x64 host, select **Windows PCVR** on **Build and
 install**. Quest remains the default for existing settings. Changing targets
 preserves unsaved options; Cancel discards them. The other headset asset/music,
 repair and update actions remain Quest workflows. Update PCVR by building and
@@ -253,8 +250,10 @@ verifies the enabled package and selects the separate Upstate executable. The
 native engine also verifies the pinned inventory before startup. Disable returns
 launches to Classic/Xbox; delete removes only the managed mod payload. Base data,
 archive cache and saves remain intact. Upstate saves use
-`<PCVR user>/userfiles/upstate-liberty-1.1.2`, separate from Classic saves. PCVR
-gameplay and performance acceptance for the expansion remains experimental.
+`<PCVR user>/userfiles/upstate-liberty-1.1.2`, separate from Classic saves.
+The 0.9.5 Release Candidate Windows playthrough covered the main story, all payphone missions
+and the off-road missions with Upstate Liberty and Original Xbox assets enabled.
+Linux PCVR awaits a native retest.
 
 Headless example: `--run ManageMods REQUEST.json` with
 `"Options":{"Target":1,"ModOperation":1,"ModId":"upstate-liberty","ModArchive":"C:\\Mods\\UL.7z"}`.

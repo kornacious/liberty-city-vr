@@ -3,7 +3,7 @@
 Use `MANAGE.bat` or `./MANAGE.sh` from the source-kit root. The manager builds
 Liberty City VR against the pinned GTA III **re3** source, not reVC. Original
 Vice City VR/reVC credits describe the port's ancestry; they are not build inputs.
-The interactive build/install page selects Quest or experimental Windows PCVR.
+The interactive build/install page offers Quest, Windows PCVR and experimental Linux PCVR.
 Windows uses MSVC, Ninja, CMake and Vulkan tools, with versioned local installation,
 isolated game data/saves, launch and OpenXR diagnostics. Direct [Windows CMake
 builds](../overlay/windows/README.md) and CLI source/data preparation remain available.

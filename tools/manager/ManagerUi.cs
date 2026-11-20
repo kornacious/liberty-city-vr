@@ -135,7 +135,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         switch (page)
         {
             case 0:
-                var target = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)", "Linux PCVR (experimental)"],
+                var target = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR", "Linux PCVR (experimental)"],
                     Value = (int)options.Target, Width = Dim.Fill(2), Height = 3 };
                 target.SetScheme(Theme()); form.Add(target); row += 4;
                 readFields.Add(() => options.Target = (GameTarget)(target.Value ?? 0));
@@ -202,7 +202,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Note("Compatible GTA III/re3 saves only. Backups: " + Path.Combine(draft.Workplace, "save-transfer", "backups"));
                 break;
             case (int)ManagerAction.ManageMods:
-                var modTarget = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR (experimental)", "Linux PCVR (experimental)"],
+                var modTarget = new OptionSelector { X = 1, Y = row, Labels = ["Quest standalone", "Windows PCVR", "Linux PCVR (experimental)"],
                     Value = (int)options.Target, Width = Dim.Fill(2), Height = 3 };
                 modTarget.SetScheme(Theme()); form.Add(modTarget); row += 4;
                 readFields.Add(() => options.Target = (GameTarget)(modTarget.Value ?? 0));
@@ -219,7 +219,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 readFields.Add(() => options.ModOperation = (ModOperation)(modOperation.Value ?? 0));
                 Field("UL.7z package (blank: download v1.1.2)", options.ModArchive, v => options.ModArchive = v, OpenMode.File);
                 Note("Install: choose UL.7z or leave blank to download v1.1.2. SHA256 verified.");
-                Note("Upstate uses a separate native engine and save folder. Headset acceptance is experimental.");
+                Note("Upstate uses a separate native engine and save folder.");
                 Note("Install auto-enables when the selected target has Upstate runtime support. Rebuild PCVR to add it.");
                 Note("Status reads the selected target. Validate locally never accesses a device.");
                 Note("Disable keeps files. Enable verifies files. Delete keeps saves and the PC archive.");

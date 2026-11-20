@@ -1,15 +1,13 @@
 # Source-only release checklist
 
-Current release: **0.9.0 — release candidate**, a source-build release for Quest
-and experimental Windows/Linux PCVR. The 0.9.0 notes cover changes after
-`6fbb67dd29`, from Windows game integration `136ca86ef0` through `6f13a4b`;
-see [CHANGELOG.md](CHANGELOG.md#090--release-candidate). Windows and Linux
-builds use shared SDL3/FFmpeg services; native Linux gameplay coverage is
-currently CachyOS/WiVRn, first-mission completion and saving.
-See [PLATFORMS.md](PLATFORMS.md) for target status and validation boundaries.
-Keep Android `versionName` at `0.9.0`, `versionCode` at `900`, and the shared native
-version string in `overlay/src/vr/OculusVR.h` at `0.9.0`. The release candidate
-status is documented separately from the numeric version used by build tools.
+The **0.9.5 Release Candidate** covers Quest 3 and Windows PCVR. Linux PCVR
+remains experimental pending a native retest. See
+[the changelog](CHANGELOG.md#095--release-candidate) for changes since 0.9.0 and
+[platform scope](PLATFORMS.md) for gameplay validation.
+
+Keep Android `versionName` and the CMake project versions at `0.9.5`. Android
+`versionCode` and OpenXR application versions use `905`. The shared native version
+and `RELEASE CANDIDATE` menu label are in `overlay/src/vr/OculusVR.h`.
 
 The local `liberty-city-vr-build` directory is a private development/build tree containing a
 complete re3 checkout. **Never publish or archive that directory.** The public

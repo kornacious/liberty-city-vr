@@ -1,9 +1,8 @@
 # Build and manage Liberty City VR
 
-This guide builds **0.9.0**, the release candidate ready for public testing and
-playing with finishable main missions. Android uses version code **900**; the
-APK and native About/menu version strings are **0.9.0**. See the
-[changelog](CHANGELOG.md#090--release-candidate) for the release changes.
+This guide builds **0.9.5 Release Candidate**. Android uses version code **905**.
+The in-game main menu and VR About page display the full release label. See the
+[changelog](CHANGELOG.md#095--release-candidate) for the release changes.
 
 The manager builds the **Quest Android application**, **Windows PCVR** and
 **Linux PCVR**. Select the desktop target matching your native host to build,

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(LibertyVRWindows VERSION 0.9.0 LANGUAGES C CXX)
+project(LibertyVRWindows VERSION 0.9.5 LANGUAGES C CXX)
 include(CTest)
 option(LIBERTYVR_LEGACY_WINDOWS_BACKEND "Use the pre-SDL Windows backend during migration" OFF)
 if(LIBERTYVR_LEGACY_WINDOWS_BACKEND)

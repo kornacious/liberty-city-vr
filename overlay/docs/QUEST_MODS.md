@@ -33,7 +33,9 @@ selects the separate expanded engine. The executable checks the pinned native
 inventory before opening game state. Corrupt enabled packages stop launch; disable
 or reinstall to recover. Base files are retained under the isolated data directory;
 Upstate saves use `<PCVR user>/userfiles/upstate-liberty-1.1.2`. No ADB is used for
-PCVR mod operations. Gameplay and performance acceptance remains experimental.
+PCVR mod operations. The 0.9.5 Release Candidate playthrough on Windows PCVR
+used Upstate Liberty with Original Xbox assets and covered the main story, all
+payphone missions and the off-road missions. Linux PCVR still awaits a native retest.
 
 ## Native engine adapter
 

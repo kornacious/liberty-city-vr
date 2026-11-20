@@ -103,7 +103,7 @@ struct Application {
         XrInstanceCreateInfo info{XR_TYPE_INSTANCE_CREATE_INFO};
         std::strcpy(info.applicationInfo.applicationName, "Liberty City VR Windows bring-up");
         std::strcpy(info.applicationInfo.engineName, "librw Vulkan");
-        info.applicationInfo.applicationVersion = 900;
+        info.applicationInfo.applicationVersion = 905;
         // Vulkan enable2 works with OpenXR 1.0; do not require a 1.1 runtime.
         info.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
         info.enabledExtensionCount = 1; info.enabledExtensionNames = &extension;
@@ -124,7 +124,7 @@ struct Application {
                 requirements.maxApiVersionSupported, VK_API_VERSION_1_1))
             throw std::runtime_error("This renderer requires Vulkan 1.1 within the runtime's supported range.");
         VkApplicationInfo app{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-        app.pApplicationName = "Liberty City VR"; app.applicationVersion = VK_MAKE_VERSION(0,9,0);
+        app.pApplicationName = "Liberty City VR"; app.applicationVersion = VK_MAKE_VERSION(0,9,5);
         app.apiVersion = VK_API_VERSION_1_1;
         VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO}; info.pApplicationInfo = &app;
         XrVulkanInstanceCreateInfoKHR xrInfo{XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR};
@@ -666,7 +666,7 @@ int main(int argc, char **argv) {
         for(int i = 1; i < argc; ++i) {
             const std::string argument = argv[i];
             if(argument == "--help") {
-                std::cout << "Liberty City VR 0.9.0 Windows OpenXR/Vulkan bring-up (not the game)\n"
+                std::cout << "Liberty City VR 0.9.5 Windows OpenXR/Vulkan bring-up (not the game)\n"
                     "--probe          Negotiate OpenXR GPU/device/session, then exit\n"
                     "--vulkan-probe   Check desktop Vulkan without a headset/runtime\n"
                     "--renderer-probe Render five offscreen stereo frames without OpenXR\n"

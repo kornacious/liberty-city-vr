@@ -3,6 +3,63 @@
 The port started from Vice City VR 0.5.6. Liberty City VR 0.6.0 marks the
 port from GTA Vice City to GTA III. Later entries describe Liberty City VR releases.
 
+## 0.9.5 — Release Candidate
+
+Source-build release covering changes after the 0.9.0 release commit `4fea4ff`,
+through `ff2ae9a` and the version update below. Quest 3 and Windows PCVR share
+release candidate status. The maintainer completed the main story, all payphone
+missions and the off-road missions on Windows PCVR with Original Xbox assets and
+Upstate Liberty enabled after the reported progression blockers were fixed. Linux PCVR
+includes the shared fixes and remains experimental pending a native retest.
+
+### Added
+
+- Added a headset-independent desktop renderer debug viewer and manager workflow.
+  It supports Classic/Original Xbox and Upstate worlds, ImGui flycam controls,
+  synthetic stereo, rendering visualizations and statistics, and camera-path
+  recording, playback and batch reports. It uses the game's production LOD
+  distance policy. See [renderer debug viewer](overlay/desktop/RENDER_DEBUG.md).
+- Added **Settings > Locomotion > Fall View**. The optional Immersive view follows
+  the animated head through long falls, hard landings and recovery. Standard is
+  the default.
+- Added a VR cheat that blocks NPC entry and carjacking while the player drives,
+  while preserving normal exit and mission lock behavior.
+
+### Changed
+
+- Updated package, CMake, diagnostic and in-game version strings to **0.9.5**,
+  with Android and OpenXR application version codes set to **905**. The main
+  menu and VR About page now show **Release Candidate**.
+- Reworked the VR mission selector layout to show the selected category above
+  its mission list and give the rows more room.
+- The Audio and Radio settings keep PC station logos. Original Xbox stations
+  use text labels while retaining station previews and selection highlighting.
+
+### Removed
+
+- Removed the experimental label from Windows PCVR in the manager and current
+  platform documentation.
+- Removed mismatched PC station artwork from the Original Xbox radio strip and
+  redundant test-tool and script-table copy from the VR mission selector.
+
+### Fixed
+
+- Corrected VR mission selection and start locations, including off-road and
+  remote-control missions. RC chase-camera effects now stay aligned with the
+  remote vehicle.
+- Credited kills made with the tracked Uzi during **Uzi Money**.
+- Restored Predator, Rhino and Firetruck weapon input in both vehicle views and
+  prevented the in-vehicle shortcut from opening the cheat menu.
+- Restored fire truck water cannon range at VR refresh rates and made scrolling
+  billboards advance at their intended speed at high frame rates.
+- Corrected the flipped gameplay head UVs for Maria, Curly Bob and Catalina in
+  the Original Xbox model conversion. Existing Xbox variants need a fresh ISO
+  import to pick up the corrected models.
+- Moved PCVR saves to the persistent user directory. Missing manual slots and
+  autosaves migrate from legacy content directories without overwriting existing
+  saves, with separate folders for the base game and Upstate Liberty.
+- Stopped NPC taunts when the speaker dies.
+
 ## 0.9.0 — Release candidate
 
 Source-build release covering all 31 commits after the 0.8.5 baseline

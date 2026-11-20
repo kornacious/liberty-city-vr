@@ -11,7 +11,8 @@ class CVehicle;
 
 // Shared native version for the flat main menu, VR About page and profiler.
 // Keep the Android APK version in build.gradle.kts in sync.
-#define LIBERTYVR_VERSION_TEXT "0.9.0"
+#define LIBERTYVR_VERSION_TEXT "0.9.5"
+#define LIBERTYVR_RELEASE_STAGE "RELEASE CANDIDATE"
 
 namespace OculusVR
 {

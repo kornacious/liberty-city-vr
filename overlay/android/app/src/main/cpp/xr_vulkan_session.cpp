@@ -488,7 +488,7 @@ createInstance(android_app *app)
 	info.enabledExtensionCount = (uint32_t)enabled.size();
 	info.enabledExtensionNames = enabled.data();
 	strcpy(info.applicationInfo.applicationName, "Liberty City VR");
-	info.applicationInfo.applicationVersion = 900;
+	info.applicationInfo.applicationVersion = 905;
 	strcpy(info.applicationInfo.engineName, "re3");
 	info.applicationInfo.engineVersion = 1;
 #if defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
@@ -640,7 +640,7 @@ createVulkan(void)
 	// extensions it needs for swapchain sharing.
 	VkApplicationInfo appInfo = { VK_STRUCTURE_TYPE_APPLICATION_INFO };
 	appInfo.pApplicationName = "Liberty City VR";
-	appInfo.applicationVersion = VK_MAKE_VERSION(0, 9, 0);
+	appInfo.applicationVersion = VK_MAKE_VERSION(0, 9, 5);
 	appInfo.pEngineName = "re3";
 	appInfo.engineVersion = 1;
 	appInfo.apiVersion = VK_API_VERSION_1_1;

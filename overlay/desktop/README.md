@@ -132,9 +132,11 @@ they contain no game data. Tests exercise seek, pause, loop, output replacement,
 stream replacement and shutdown. Audio callback counters are diagnostics, not
 measurements of headset latency.
 
-Native Linux gameplay validation was confirmed on CachyOS/WiVRn on 2026-11-14:
-build and launch, PC and Original Xbox audio, first-mission completion and saving.
-See [platform status](../../PLATFORMS.md) for the tested scope.
+Windows PCVR has release candidate status in 0.9.5. The maintainer completed the
+main story, all payphone missions and the off-road missions with Original Xbox
+assets and Upstate Liberty enabled. Linux PCVR remains experimental pending a
+native retest. Earlier CachyOS/WiVRn testing covered build and launch, PC and
+Original Xbox audio, first-mission completion and saving. See [platform status](../../PLATFORMS.md).
 
 Broader native acceptance must cover Windows/VirtualDesktopXR and Linux/WiVRn,
 both X11 and native Wayland, controller bindings, audio routing, session/focus

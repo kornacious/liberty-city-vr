@@ -2059,7 +2059,7 @@ index 666774feb20680ca974e129af6c28eeebd62d37b..3cbe00a2a5ad9b13c23f96d347f02fc4
 +#if defined(GTA_VR_OCULUS) || defined(GTA_VR_WEAPONS)
 +	if (m_bGameNotLoaded && m_nCurrScreen == MENUPAGE_START_MENU) {
 +		wchar releaseName[96];
-+		AsciiToUnicode("LIBERTY CITY VR V" LIBERTYVR_VERSION_TEXT " ALPHA - NOT FOR RESALE", releaseName);
++		AsciiToUnicode("LIBERTY CITY VR V" LIBERTYVR_VERSION_TEXT " " LIBERTYVR_RELEASE_STAGE " - NOT FOR RESALE", releaseName);
 +
 +		CFont::SetBackgroundOff();
 +		CFont::SetBackGroundOnlyTextOff();

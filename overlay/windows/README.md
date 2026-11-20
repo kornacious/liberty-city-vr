@@ -13,14 +13,16 @@ variant selection/inventory without creating an OpenXR session.
 
 The developer executables use the same librw Vulkan backend and shaders as Quest:
 `libertyvr-pcvr` renders a diagnostic scene without game data; `libertyvr-game`
-is an experimental playable GTA III port using the shared re3/VR integration.
+is the Windows PCVR game and uses the shared re3/VR integration.
 `libertyvr-upstate` builds that integration with the isolated expanded Upstate
 engine tables and save layout. In the manager, select **Windows PCVR** on **Mods**
 to install/enable Upstate Liberty v1.1.2; **Launch PCVR** verifies the package and
 selects its executable. Quit PCVR before changing mods. Disabling returns to the
 Classic/Xbox executable. Upstate saves remain in
-`<PCVR user>/userfiles/upstate-liberty-1.1.2`; Windows ASIs are excluded. Expansion
-gameplay/performance acceptance remains experimental.
+`<PCVR user>/userfiles/upstate-liberty-1.1.2`; Windows ASIs are excluded.
+The 0.9.5 Release Candidate playthrough on Windows PCVR covered the main story,
+all payphone missions and the off-road missions with Original Xbox assets and
+Upstate Liberty enabled.
 
 To check an installed Upstate archive without a headset, run
 `libertyvr-upstate --game-data DATA --user-data USER --check-upstate-archive`
@@ -115,7 +117,7 @@ publish prebuilt DLLs, EXEs or game assets.
 
 ## Run and interpret results
 
-### Experimental game
+### PCVR game
 
 Use .NET 10 and a clean local checkout of the pinned public re3 commit
 `b050e1cc63b1869e6b514ab2f1a00ef4969e0c84`. Assemble into a new directory;
@@ -151,8 +153,8 @@ RenderDoc integration uses an already injected DLL and never loads one automatic
 Use the in-game Quit option for a clean shutdown. Audio tests need an active Windows
 audio endpoint, and the GPU test needs a working Vulkan device. Synthetic playback
 tests verify the platform path; listen to engines, sirens, music and spatial effects
-in the headset before claiming playback quality. Other runtimes/controllers, complete
-mission progression and focus recovery still need Windows-specific validation.
+in the headset before claiming playback quality. Broader runtime and controller
+compatibility and focus recovery still need Windows-specific validation.
 
 ### Renderer diagnostic
 

@@ -23,15 +23,15 @@
 > and discussion of the mod take place in the Flat2VR community.
 
 Liberty City VR brings GTA III to VR using re3, OpenXR and the bundled librw
-Vulkan renderer. The project covers **standalone Meta Quest 3** and experimental
-**Windows/Linux PCVR targets** in one source repository:
+Vulkan renderer. The project covers **standalone Meta Quest 3**, **Windows PCVR**
+and **experimental Linux PCVR** in one source repository:
 [github.com/kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
-| Target | Status in 0.9.0 |
+| Target | Status in 0.9.5 Release Candidate |
 | --- | --- |
-| Quest 3 / Android ARM64 | Implemented; source-build release candidate. |
-| Windows PCVR / x64 / OpenXR + Vulkan | Experimental playable build; manager builds, installs locally, launches and diagnoses the PC runtime. |
-| Linux PCVR / x64 / OpenXR + Vulkan | Validated on native CachyOS/WiVRn: build, launch, PC/Xbox audio, first mission and saving. See [validation scope](PLATFORMS.md). |
+| Quest 3 / Android ARM64 | Release candidate with finishable main missions. |
+| Windows PCVR / x64 / OpenXR + Vulkan | Release candidate. The maintainer completed the main story, all payphone missions and the off-road missions with Original Xbox assets and Upstate Liberty enabled after the progression fixes. |
+| Linux PCVR / x64 / OpenXR + Vulkan | Experimental. Earlier native CachyOS/WiVRn testing covered build, launch, PC/Xbox audio, first mission and saving. The shared fixes are included and await a native retest. See [validation scope](PLATFORMS.md). |
 
 Manager/editor host support and PCVR game support are validated separately.
 See [platform scope and roadmap](PLATFORMS.md)
@@ -62,12 +62,11 @@ population/world cleanup, garage checks, siren yielding and distant train/plane
 updates use a separate 30 Hz gameplay clock that respects pause and slow motion.
 Crossed schedule phases are processed when a frame spans multiple ticks.
 
-Current source-kit version: **v0.9.0 — release candidate**.
+Current source-kit version **v0.9.5 Release Candidate**.
 
-**The Quest build is ready for public testing and playing, with finishable main missions.** Please
-report mission progression issues, VR comfort problems and compatibility bugs
-in the Flat2VR community. See [the changelog](CHANGELOG.md#090--release-candidate)
-for changes since 0.8.5 (`6fbb67dd29`); earlier release changes remain documented below it.
+Please report mission progression issues, VR comfort problems and compatibility bugs
+in the Flat2VR community. See [the changelog](CHANGELOG.md#095--release-candidate) for changes
+since 0.9.0.
 
 The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
 foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
@@ -295,7 +294,7 @@ directed and reviewed by the project maintainer. Planned work includes:
 - Improving Quest rendering performance and stability, including Vulkan resource
   handling and visual correctness.
 - Expanding runtime/controller coverage and performance validation of the
-  experimental Windows OpenXR/Vulkan game, manager integration and captured Quest
+  Windows OpenXR/Vulkan game, manager integration and captured Quest
   workload profile; see [platform scope](PLATFORMS.md).
 - Maintaining regression coverage, source assembly, build/update tooling and
   contributor documentation as features evolve.

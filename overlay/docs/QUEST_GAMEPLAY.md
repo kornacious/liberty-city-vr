@@ -1,6 +1,6 @@
 # Quest gameplay
 
-## 0.9.0 release candidate
+## 0.9.5 Release Candidate
 
 Ready for public testing and playing, with finishable main missions. Report
 mission progression, comfort and compatibility issues with the mission name,
