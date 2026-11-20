@@ -64,11 +64,12 @@ See the [dependency audit](XBOX_STANDALONE_DEPENDENCY_AUDIT.md) for the evidence
 scope of compatibility.
 
 Our custom settings layout remains in use. Missing legacy frontend icons have
-port-owned generated replacements; Xbox radio choices use numbered badges with
-station labels rather than the original PC station-logo textures. The port's
-settings backgrounds and controller resources accompany each variant. Required
-port menu keys are merged into each supported Xbox GXT without replacing existing
-Xbox strings. Unsupported extra locales are not imported as playable translations.
+port-owned generated replacements. The Xbox radio strip uses short station
+labels and highlights the selected station. The PC radio strip uses station
+logos. The port's settings backgrounds and controller resources accompany each
+variant. Required port menu keys are merged into each supported Xbox GXT without
+replacing existing Xbox strings. Unsupported extra locales are not imported as
+playable translations.
 This does not reproduce the original Xbox animated frontend.
 
 Preparation uses unique local directories under `<workplace>/prepared-variants`.

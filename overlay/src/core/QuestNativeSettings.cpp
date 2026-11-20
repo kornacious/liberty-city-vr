@@ -59,10 +59,13 @@ void VrDrawNativeSettings()
     NativeText(page.subtitle, 110, 32, SMALLESTTEXT_X_SCALE, SMALLESTTEXT_Y_SCALE, CRGBA(210,190,145,255));
     CFont::SetFontStyle(FONT_LOCALE(FONT_HEADING));
     const int first = page.First();
+    const bool showRadioStrip = page.radioStation >= 0 && first == 0;
+    const bool textOnlyRadioStrip = showRadioStrip && ModelSets::IsModernActive();
+    const float radioStripHeight = textOnlyRadioStrip ? 28.0f : 65.0f;
     for(int i=first;i<(int)page.rows.size() && i<first+QuestNativeSettings::Page::RowsPerPage;++i) {
         const auto &row = page.rows[i];
         const float y = 64.0f+(i-first)*(page.categories ? 26.0f : 20.0f)+
-            (page.radioStation >= 0 && first == 0 && i >= 3 ? 65.0f : 0.0f);
+            (showRadioStrip && i >= 3 ? radioStripHeight : 0.0f);
         if(row.selected) CSprite2d::DrawRect(CRect(X(10),Y(y-(page.categories ? 4 : 2)),X(630),Y(y+(page.categories ? 23 : 18))),CRGBA(100,200,50,50));
         const CRGBA colour = !row.available ? CRGBA(160,146,114,255) :
             row.selected ? CRGBA(255,217,106,255) : CRGBA(235,170,50,255);
@@ -78,7 +81,7 @@ void VrDrawNativeSettings()
             }
         }
     }
-    if(page.radioStation >= 0 && first == 0) {
+    if(showRadioStrip) {
         // Preserve the original station-to-sprite mapping: texture order does
         // not match radio tuning order. Untuned stations use the original red.
         static const int sprites[] = { FE_RADIO1, FE_RADIO2, FE_RADIO5, FE_RADIO7,
@@ -88,14 +91,18 @@ void VrDrawNativeSettings()
         const float start = (640.0f-(count*size+(count-1)*5.0f))*0.5f;
         for(int station=0;station<count;++station) {
             const float x = start+station*(size+5.0f);
-            const CRGBA tint = station == page.radioStation ? CRGBA(255,255,255,255) : CRGBA(225,0,0,170);
+            const bool selected = station == page.radioStation;
+            if(textOnlyRadioStrip) {
+                static const char *const stations[] = { "HEAD", "DOUBLE", "K-JAH", "RISE",
+                    "LIPS", "GAME", "MSX", "FLASH", "CHAT", "USER" };
+                const CRGBA colour = selected ? CRGBA(255,217,106,255) : CRGBA(195,160,105,255);
+                NativeText(stations[station], x+size*0.5f, 130, 0.35f, 0.65f, colour, false, true);
+                continue;
+            }
+            const CRGBA tint = selected ? CRGBA(255,255,255,255) : CRGBA(225,0,0,170);
             auto &sprite = station == 9 ? FrontEndMenuManager.m_aMenuSprites[MENUSPRITE_MP3LOGO] :
                 FrontEndMenuManager.m_aFrontEndSprites[sprites[station]];
             sprite.Draw(CRect(X(x),Y(130),X(x+size),Y(130+size)),tint);
-            if(ModelSets::IsModernActive()) {
-                static const char *stations[]={"HEAD","DOUBLE","K-JAH","RISE","LIPS","GAME","MSX","FLASH","CHAT","USER"};
-                NativeText(stations[station],x+size*0.5f,174,0.22f,0.45f,CRGBA(235,170,50,255),false,true);
-            }
         }
     }
     CFont::SetFontStyle(FONT_BANK);

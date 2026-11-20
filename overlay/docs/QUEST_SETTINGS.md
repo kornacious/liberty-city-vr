@@ -41,8 +41,8 @@ settings, including traffic density and Vulkan PS2 alpha rendering.
 The shared menu adds:
 
 - Audio and Radio: native segmented music/SFX volume sliders, station playback
-  previews with the original radio logo strip and selected-station highlight,
-  board/custom-music setup and audio-volume defaults. Previews follow
+  previews, a station strip with PC logos or Xbox text labels, a selected-station
+  highlight, board/custom-music setup and audio-volume defaults. Previews follow
   station changes and stop when leaving Audio or selecting Radio Off. The
   gameplay overlay retains its normal radio behaviour. Defaults affect volumes only.
 - Language and Subtitles: installed game languages and subtitle visibility.
