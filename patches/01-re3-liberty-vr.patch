@@ -10021,7 +10021,7 @@ index 957844a5dc438bde3d69f584cc20119bcfb6d5c3..0f3e0334a0536ed9880917aa778387da
 +#if defined(RW_VULKAN) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)))
 +#include "GameRenderCommand.h"
 +
-+extern bool gVrFirstPersonActive;
++namespace androidgame { bool VrHasTrackedSceneCamera(void); }
 +namespace androidgame { bool VrShouldUseTheaterMode(void); }
 +
 +namespace
@@ -10207,7 +10207,7 @@ index 957844a5dc438bde3d69f584cc20119bcfb6d5c3..0f3e0334a0536ed9880917aa778387da
 +	// inherit the removed chase-camera gait/bob while their projection used
 +	// the VR view matrix. Use the actual rendered camera origin for the same
 +	// camera-relative construction as desktop.
-+	if(gVrFirstPersonActive && Scene.camera != nil){
++	if(androidgame::VrHasTrackedSceneCamera() && Scene.camera != nil){
 +		RwFrame *frame = RwCameraGetFrame(Scene.camera);
 +		if(frame != nil){
 +			RwMatrix *camera = RwFrameGetLTM(frame);
@@ -10234,7 +10234,7 @@ index 957844a5dc438bde3d69f584cc20119bcfb6d5c3..0f3e0334a0536ed9880917aa778387da
  	int g = CTimeCycle::GetLowCloudsGreen() * lowcloudintensity;
  	int b = CTimeCycle::GetLowCloudsBlue() * lowcloudintensity;
 +#if defined(RW_VULKAN) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)))
-+	const bool renderWorldClouds = gVrFirstPersonActive;
++	const bool renderWorldClouds = androidgame::VrHasTrackedSceneCamera();
 +	WorldCloudBatch worldCloudBatch;
 +#endif
  	for(int cloudtype = 0; cloudtype < 3; cloudtype++){

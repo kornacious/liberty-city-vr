@@ -279,6 +279,7 @@ float VrScopeZoomFactor(void);
 // once and submitted to both eyes on a world-locked cinema quad instead of
 // being interpreted as an immersive stereo world.
 bool VrShouldUseTheaterMode(void);
+bool VrHasTrackedSceneCamera(void);
 
 // The basis the frame is actually rendered with, in game space. Effects that
 // ask what is in front of the viewer have to read this rather than TheCamera:

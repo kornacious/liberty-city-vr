@@ -610,15 +610,29 @@ VrCaptureViewWindow(void)
 }
 static float gVrSavedFov = -1.0f;
 
+static bool
+VrRemoteChaseActive(bool remoteMode)
+{
+	return remoteMode && !androidgame::VrShouldUseTheaterMode() &&
+		!CCutsceneMgr::IsCutsceneProcessing() && !CCutsceneMgr::IsRunning() &&
+		!TheCamera.m_WideScreenOn;
+}
+
+bool
+androidgame::VrHasTrackedSceneCamera(void)
+{
+	return gVrFirstPersonActive || VrRemoteChaseActive(
+		CWorld::Players[CWorld::PlayerInFocus].IsPlayerInRemoteMode());
+}
+
 // Called at the top of DoRWStuffStartOfFrame_Horizon, before CameraSize
-// derives the view window: during first person rendering the game runs on
+// derives the view window: with a tracked scene camera the game runs on
 // the eye's real field of view, exactly as the desktop BeginEye does, which
 // is what sizes coronas and other screen-space sprites correctly.
 void
 VrApplyEyeFov(void)
 {
-	extern bool gVrFirstPersonActive;
-	if(gVrFirstPersonActive && gVrEyeFovDeg > 1.0f){
+	if(androidgame::VrHasTrackedSceneCamera() && gVrEyeFovDeg > 1.0f){
 		if(gVrSavedFov < 0.0f)
 			gVrSavedFov = CDraw::GetFOV();
 		CDraw::SetFOV(gVrEyeFovDeg);
@@ -1390,6 +1404,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 	CPlayerPed *player = FindPlayerPed();
 	const bool remoteMode =
 		CWorld::Players[CWorld::PlayerInFocus].IsPlayerInRemoteMode();
+	const bool remoteChase = VrRemoteChaseActive(remoteMode);
 	// Entry and exit animations keep the reference frame on the ped, as the
 	// desktop build does, so the view turns with Tommy. Third person is off
 	// for the same window: riding the chase camera while the game slides it
@@ -1475,10 +1490,10 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		rw::vulkan::setFirstPersonAnchor(nil,0.0f,0,0);
 	}
 	entryCameraPlayer=player;entryCameraActive=xboxCarEntry;
-	rw::vulkan::setFirstPersonPositionLocked(wantFirstPerson &&
+	rw::vulkan::setFirstPersonPositionLocked(remoteChase || (wantFirstPerson &&
 		((trainPassenger && (player->InVehicle() ||
 		  (ModelSets::IsModernActive() && playerVehicleState==PED_EXIT_TRAIN))) ||
-		 xboxCarEntry || (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled())));
+		 xboxCarEntry || (xboxKnockdown && androidgame::VrXboxKnockdownLockEnabled()))));
 	rw::vulkan::setFirstPersonHeightLocked(wantFirstPerson && !thirdPersonVehicle &&
 		ModelSets::IsModernActive() && !player->InVehicle() && player->bIsDucking && !xboxKnockdown);
 
@@ -2116,6 +2131,18 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		if(postPhysics){
 			SyncRenderWareCameraToVrView();
 		}
+	}else if(remoteChase){
+		// Keep the stock chase camera's pitch and position. The tracked
+		// view must also reach the CPU projection used by world effects.
+		const CVector &position = TheCamera.GetPosition();
+		const CVector &forward = TheCamera.GetForward();
+		const CVector &up = TheCamera.GetUp();
+		const CVector right = CrossProduct(forward, up);
+		rw::vulkan::setFirstPersonAnchorBasis(&position.x, &right.x,
+			&up.x, &forward.x, Atan2(forward.y, forward.x), 1);
+		gVrOnFootBodyAnchorValid = false;
+		if(postPhysics)
+			SyncRenderWareCameraToVrView();
 	}else if(cinematicCutscene){
 		CVector forward = TheCamera.Cams[TheCamera.ActiveCam].Front;
 		forward.z = 0.0f;
