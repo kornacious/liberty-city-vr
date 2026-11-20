@@ -3267,7 +3267,7 @@ $legacyMatch = [regex]::Match($pad, '(?s)static const char \*gVrCheatNames\[\]\s
 $legacy = @([regex]::Matches($legacyMatch.Groups[1].Value, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
 $mappingMatch = [regex]::Match($header, '(?s)kSourceCategories\[\]\s*=\s*\{(.*?)\};')
 $labels = @([regex]::Matches($mappingMatch.Groups[1].Value, '// ([^\r\n]+)') | ForEach-Object { $_.Groups[1].Value.Trim() })
-if ($special.Count -ne 6 -or $legacy.Count -ne 32 -or $labels.Count -ne $special.Count + $legacy.Count) {
+if ($special.Count -ne 6 -or $legacy.Count -ne 33 -or $labels.Count -ne $special.Count + $legacy.Count) {
     throw 'The native cheat catalog changed; review the category mapping and its coverage.'
 }
 if ($pad -match 'VR_SPECIAL_PASS_CURRENT_MISSION|PassCurrentVrMission|VrMissionPassEntry|gVrMissionPassEntries|PASS CURRENT MISSION' -or
@@ -3340,6 +3340,16 @@ $pieces.Add($timeAction.Value)
 $toggle = [regex]::Match($pad, '(?ms)^bool GetVrCheatToggleState\(.*?^\}')
 if (-not $toggle.Success) { throw 'Cannot extract backend toggle state.' }
 $pieces.Add($toggle.Value)
+$vehicle = [IO.File]::ReadAllText((Join-Path $sourceRoot 'vehicles/Vehicle.cpp'))
+foreach ($pattern in @(
+    '(?m)^bool CVehicle::bVrDoorLockEnabled = false;',
+    '(?ms)^bool\r?\nCVehicle::IsEntryLockedByVrCheat\(void\).*?^\}',
+    '(?ms)^bool\r?\nCVehicle::CanPedOpenLocks\(CPed \*ped\).*?^\}'
+)) {
+    $match = [regex]::Match($vehicle, $pattern)
+    if (-not $match.Success) { throw "Cannot extract vehicle door lock code: $pattern" }
+    $pieces.Add($match.Value)
+}
 $timer = [IO.File]::ReadAllText((Join-Path $sourceRoot 'control/OnscreenTimer.cpp'))
 foreach ($name in @('Init', 'Process')) {
     $match = [regex]::Match($timer, '(?ms)^void\r?\nCOnscreenTimer::' + $name + '\(\).*?^\}')

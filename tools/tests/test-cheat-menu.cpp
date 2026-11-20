@@ -32,7 +32,7 @@ static bool IsQuestDualWieldEnabled(int){return false;}
 static int GetQuestCalibrationValue(int,int,int){return 360;}
 static int GetQuestWeaponLaserOverride(int){return -1;}
 }
-static int nativeCount = 38;
+static const int nativeCount = 39;
 static int activatedSource = -1, activationCount, cycledSource = -1, cycleDirection;
 static bool godMode, unlimitedRun, neverWanted, carInvincibility;
 namespace VrPlayerTraversal {
@@ -43,6 +43,7 @@ static bool ToggleFlight(){flight=!flight; return true;}
 static bool ToggleNoclip(){noclip=!noclip; return true;}
 }
 namespace TimeCheatFixture { static bool ActivateVrTimeCheat(int); void ToggleFastWeather(); bool GetVrCheatToggleState(int, bool*); }
+namespace TimeCheatFixture { static bool ToggleCarDoors(); }
 static int GetVrCheatCount() { return nativeCount; }
 static int GetVrMissionCategoryCount() { return 0; }
 static int GetVrMissionCount(int) { return 0; }
@@ -66,6 +67,7 @@ static bool ActivateVrCheat(int source)
 	if(source == 5) carInvincibility = !carInvincibility;
 	if(source == 36) return VrPlayerTraversal::ToggleFlight();
 	if(source == 37) return VrPlayerTraversal::ToggleNoclip();
+	if(source == 38) return TimeCheatFixture::ToggleCarDoors();
 	if(source >= 29) return TimeCheatFixture::ActivateVrTimeCheat(source-6);
 	return source != 0 && source != 1; // Vehicle spawning can be unavailable without a player.
 }
@@ -144,6 +146,28 @@ static bool gVrGodModeEnabled, gVrCarInvincibilityEnabled;
 static bool IsVrRunWithoutLimitsEnabled() { return false; }
 struct CWanted { static bool bNoWantedCheat; };
 bool CWanted::bNoWantedCheat;
+enum { CARLOCK_UNLOCKED, CARLOCK_LOCKED, CARLOCK_LOCKED_INITIALLY,
+       CARLOCK_LOCKED_PLAYER_INSIDE, CARLOCK_LOCKOUT_PLAYER_ONLY };
+struct CVehicle;
+struct CPed {
+	bool player = false, bInVehicle = false;
+	CVehicle *m_pMyVehicle = nullptr;
+	bool IsPlayer() { return player; }
+};
+struct CVehicle {
+	static bool bVrDoorLockEnabled;
+	CPed *pDriver = nullptr;
+	bool car = true;
+	int m_nDoorLock = CARLOCK_UNLOCKED;
+	bool IsCar() { return car; }
+	bool IsEntryLockedByVrCheat();
+	bool CanPedOpenLocks(CPed *ped);
+};
+static bool ToggleCarDoors()
+{
+	CVehicle::bVrDoorLockEnabled = !CVehicle::bVrDoorLockEnabled;
+	return true;
+}
 }
 struct WeaponPlayer {
  unsigned int ammo[14] = {};
@@ -183,6 +207,36 @@ static void CheckDrawSelection(int selected)
 int main()
 {
 	using namespace VrCheatMenu;
+	{
+		using namespace TimeCheatFixture;
+		CVehicle car, otherCar;
+		CPed driver, npc;
+		driver.player = driver.bInVehicle = true;
+		driver.m_pMyVehicle = &car;
+		car.pDriver = &driver;
+		Check(car.CanPedOpenLocks(&npc), "the cheat defaults to off");
+		ToggleCarDoors();
+		Check(!car.CanPedOpenLocks(&npc), "the driven car blocks outside entry");
+		Check(car.CanPedOpenLocks(&driver), "the cheat preserves the driver's native door access");
+		Check(otherCar.CanPedOpenLocks(&npc), "other cars retain native access");
+		car.car = false;
+		Check(car.CanPedOpenLocks(&npc), "non-car vehicles retain native access");
+		car.car = true;
+		driver.bInVehicle = false;
+		Check(car.CanPedOpenLocks(&npc), "exiting ends the lock immediately");
+		driver.bInVehicle = true;
+		car.pDriver = &npc;
+		Check(car.CanPedOpenLocks(&driver), "riding as a passenger does not lock the car");
+		car.pDriver = &driver;
+		car.m_nDoorLock = CARLOCK_LOCKED_INITIALLY;
+		Check(car.IsEntryLockedByVrCheat() && car.m_nDoorLock == CARLOCK_LOCKED_INITIALLY,
+			"the cheat preserves the original lock flag");
+		ToggleCarDoors();
+		Check(!car.IsEntryLockedByVrCheat() && !car.CanPedOpenLocks(&npc),
+			"disabling the cheat restores native lock behavior");
+		car.m_nDoorLock = CARLOCK_UNLOCKED;
+		Check(car.CanPedOpenLocks(&npc), "disabling the cheat allows entry to an unlocked car");
+	}
  {
   using namespace TimeCheatFixture;
   const int presets[] = {6, 12, 18, 0};
@@ -228,9 +282,9 @@ int main()
   Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(i) == sortedModels[i], "production catalog sorts case-insensitively and breaks ties by model ID");
  Check(VehicleCatalogFixture::GetVrSpawnVehicleModel(-1) == -1 && VehicleCatalogFixture::GetVrSpawnVehicleModel(4) == -1, "invalid catalog rows have no model");
 
-	const int expectedCounts[] = {8, 3, 1, 14, 3, 5, 3};
-	int seen[38] = {};
-	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes exactly the 38 retained cheats");
+	const int expectedCounts[] = {8, 3, 1, 14, 3, 6, 3};
+	int seen[nativeCount] = {};
+	Check(ActualBackendCheatCount() == nativeCount, "actual backend count includes all 39 cheats");
 	Check(VR_SPECIAL_SPAWN_NEXT_CAR == 0 && VR_SPECIAL_SPAWN_NEXT_BOAT == 1 &&
 		VR_SPECIAL_GOD_MODE == 2 && VR_SPECIAL_RUN_WITHOUT_LIMITS == 3 &&
 		VR_SPECIAL_NEVER_WANTED == 4 && VR_SPECIAL_CAR_INVINCIBILITY == 5 &&

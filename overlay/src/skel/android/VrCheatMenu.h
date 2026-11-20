@@ -47,7 +47,8 @@ static const unsigned char kSourceCategories[] = {
 	WEATHER,          // REWIND ONE HOUR
 	WEATHER,          // STOP MISSION TIMER
 	GENERAL,          // FLIGHT
-	GENERAL           // NOCLIP
+	GENERAL,          // NOCLIP
+	VEHICLE_EFFECTS   // LOCK CAR DOORS
 };
 
 inline const char *CategoryName(int category)
