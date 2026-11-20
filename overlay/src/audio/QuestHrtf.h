@@ -6,6 +6,8 @@
 #include <cstring>
 #if defined(__aarch64__)
 #include <arm_neon.h>
+#elif defined(__SSE2__) || defined(_M_X64)
+#include <emmintrin.h>
 #endif
 
 // Measured, diffuse-field equalized MIT KEMAR HRIRs. Positive azimuth is
@@ -95,6 +97,18 @@ struct History {
                 sum = vmlaq_f32(sum, coeff, vld1q_f32(input + tap));
             }
             output[ear] = vaddvq_f32(sum);
+#elif defined(__SSE2__) || defined(_M_X64)
+            __m128 sum = _mm_setzero_ps();
+            const __m128 smoothing = _mm_set1_ps(1.0f / 240.0f);
+            for(int tap = 0; tap < Taps; tap += 4){
+                __m128 coeff = _mm_loadu_ps(current.ear[ear] + tap);
+                const __m128 goal = _mm_loadu_ps(target.ear[ear] + tap);
+                coeff = _mm_add_ps(coeff, _mm_mul_ps(_mm_sub_ps(goal, coeff), smoothing));
+                _mm_storeu_ps(current.ear[ear] + tap, coeff);
+                sum = _mm_add_ps(sum, _mm_mul_ps(coeff, _mm_loadu_ps(input + tap)));
+            }
+            const __m128 pairs = _mm_add_ps(sum, _mm_movehl_ps(sum, sum));
+            output[ear] = _mm_cvtss_f32(_mm_add_ss(pairs, _mm_shuffle_ps(pairs, pairs, 0x55)));
 #else
             for(int tap = 0; tap < Taps; ++tap){
                 float &coeff = current.ear[ear][tap];

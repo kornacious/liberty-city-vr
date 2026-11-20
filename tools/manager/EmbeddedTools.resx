@@ -3027,8 +3027,8 @@ function Extract([string]$Pattern) {
 }
 $types = Extract '(?ms)^struct AndroidChannel \{.*?^};'
 $code = ''
-foreach ($name in @('clampSample', 'updateSpatialization', 'audioCallback')) {
-    $code += (Extract ('(?ms)^static (?:int|void|aaudio_data_callback_result_t)\s+' + $name + '\(.*?^}')) + "`n"
+foreach ($name in @('clampSample', 'updateSpatialization', 'mixBlock', 'audioCallback')) {
+    $code += (Extract ('(?ms)^static (?:int|void|int32_t)\s+' + $name + '\(.*?^}')) + "`n"
 }
 $code += (Extract '(?ms)^void\s+QuestAudio::SetChannel2D\(.*?^}') + "`n"
 foreach ($name in @('InitialiseChannel', 'SetChannelEmittingVolume', 'SetChannel3DPosition', 'SetChannel3DDistances', 'SetChannelVolume', 'SetChannelPan', 'SetChannelFrequency', 'SetChannelLoopPoints', 'SetChannelLoopCount', 'StartChannel')) {

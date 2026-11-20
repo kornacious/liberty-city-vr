@@ -120,12 +120,9 @@ updateSpatialization(AndroidChannel &channel)
 	QuestHrtf::Build(channel.filter, channel.x, channel.y, channel.z, channel.spatial);
 }
 
-static int32_t
-audioCallback(void *, void *audioData, int32_t numFrames)
+static void
+mixBlock(int32_t *mix, int32_t numFrames)
 {
-	int16_t *output = static_cast<int16_t *>(audioData);
-	memset(output, 0, size_t(numFrames) * 2 * sizeof(int16_t));
-
 	// Never hold the control mutex while mixing a complete AAudio burst.  The
 	// game thread updates several channel properties every frame; keeping this
 	// mutex across all channels and samples could stall DMAudio.Service for a
@@ -201,9 +198,8 @@ audioCallback(void *, void *audioData, int32_t numFrames)
 				history.Process(sample, channel.filter, leftSample, rightSample);
 			const int left = int(leftSample * volume);
 			const int right = int(rightSample * volume);
-			output[frame * 2] = int16_t(clampSample(output[frame * 2] + left));
-			output[frame * 2 + 1] =
-				int16_t(clampSample(output[frame * 2 + 1] + right));
+			mix[frame * 2] += left;
+			mix[frame * 2 + 1] += right;
 			if(!channel.sourceEnded)
 				channel.cursor += step;
 			else if(--channel.tailFrames == 0){
@@ -229,6 +225,23 @@ audioCallback(void *, void *audioData, int32_t numFrames)
 			live.sourceEnded = mixed.sourceEnded;
 			live.tailFrames = mixed.tailFrames;
 		}
+	}
+}
+
+static int32_t
+audioCallback(void *, void *audioData, int32_t numFrames)
+{
+	int16_t *output = static_cast<int16_t *>(audioData);
+	constexpr int32_t BlockFrames = 1024;
+	int32_t mix[BlockFrames * 2];
+	while(numFrames > 0){
+		const int32_t frames = std::min(numFrames, BlockFrames);
+		std::fill_n(mix, frames * 2, 0);
+		mixBlock(mix, frames);
+		// Opposite-polarity voices can cancel even after a partial sum overloads.
+		for(int32_t i = 0; i < frames * 2; ++i)
+			*output++ = int16_t(clampSample(mix[i]));
+		numFrames -= frames;
 	}
 	return 0;
 }
@@ -539,6 +552,8 @@ void cSampleManager::SetChannel3DDistances(uint32 channel, float maxDist, float 
 	if(channel >= MAXCHANNELS) return;
 	std::lock_guard<std::mutex> lock(gMixerMutex);
 	AndroidChannel &out = gChannels[channel];
+	// The game resubmits the same ranges alongside moving-source positions.
+	if(out.maxDistance == maxDist && out.minDistance == minDist) return;
 	out.maxDistance = maxDist;
 	out.minDistance = minDist;
 	updateSpatialization(out);

@@ -19,9 +19,7 @@ using int32 = int32_t;
 using bool8 = bool;
 constexpr int MAXCHANNELS = 2, MAX2DCHANNELS = 1, CHANNEL2D = 2;
 constexpr uint32 MAX_VOLUME = 127, DIGITALRATE = 48000, TOTAL_AUDIO_SAMPLES = 2;
-constexpr int MUSICMODE_CUTSCENE = 1, AAUDIO_CALLBACK_RESULT_CONTINUE = 0;
-using aaudio_data_callback_result_t = int;
-struct AAudioStream {};
+constexpr int MUSICMODE_CUTSCENE = 1;
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #include "android-audio-types.inc"
 AndroidChannel gChannels[MAXCHANNELS + MAX2DCHANNELS];
@@ -63,7 +61,7 @@ bool InitialiseLegacyChannel(uint32 channel, uint32 sample, uint8 bank) {
 int Mix(int channel = 0) {
     manager.StartChannel(uint32(channel));
     int16_t output[2] = {};
-    Require(audioCallback(nullptr, nullptr, output, 1) == AAUDIO_CALLBACK_RESULT_CONTINUE);
+    Require(audioCallback(nullptr, output, 1) == 0);
     gChannels[channel].playing = false;
     return output[0];
 }
@@ -91,10 +89,10 @@ Stereo RenderPosition(float left, float forward, float up, bool split = false) {
     if(split) {
         int offset = 0;
         for(int frames : {1, 7, 31, 64, 153}) {
-            audioCallback(nullptr, nullptr, output.data() + offset * 2, frames);
+            audioCallback(nullptr, output.data() + offset * 2, frames);
             offset += frames;
         }
-    } else audioCallback(nullptr, nullptr, output.data(), 256);
+    } else audioCallback(nullptr, output.data(), 256);
     Require(!gChannels[0].playing); // Includes the complete HRIR tail.
     return output;
 }
@@ -150,12 +148,12 @@ void SpatialRegressions() {
     manager.SetChannel3DPosition(0, 16, 0, 0);
     manager.StartChannel(0);
     int16_t partial[16];
-    audioCallback(nullptr, nullptr, partial, 8); // Interrupt a live HRIR tail.
+    audioCallback(nullptr, partial, 8); // Interrupt a live HRIR tail.
     Require(right == RenderPosition(-16, 0, 0));
     raw[0] = 0;
     manager.StartChannel(0);
     Stereo restarted{};
-    audioCallback(nullptr, nullptr, restarted.data(), 256);
+    audioCallback(nullptr, restarted.data(), 256);
     for(int16_t value : restarted) Require(value == 0);
     raw[0] = 12000;
     Require(manager.InitialiseChannel(0, 0, 0));
@@ -165,7 +163,7 @@ void SpatialRegressions() {
     Require(!gChannels[0].filter.active);
     manager.StartChannel(0);
     Stereo dry{};
-    audioCallback(nullptr, nullptr, dry.data(), 256);
+    audioCallback(nullptr, dry.data(), 256);
     Require(dry[0] == 0 && dry[1] > 11000);
     for(size_t i = 2; i < dry.size(); ++i) Require(dry[i] == 0);
     // All directions and elevation-ring seams must remain finite, including
@@ -294,13 +292,13 @@ int main(int argc, char **) {
     manager.StartChannel(0);
     int16_t silent[128];
     std::fill(std::begin(silent), std::end(silent), int16_t(123));
-    audioCallback(nullptr, nullptr, silent, 8);
+    audioCallback(nullptr, silent, 8);
     Require(gChannels[0].cursor == 8 && gChannels[0].playing);
     for(int i = 0; i < 16; ++i) Require(silent[i] == 0);
     manager.SetChannel3DPosition(0, 0, 0, 0);
     Require(gChannels[0].cursor == 8);
     manager.SetChannel3DPosition(0, 0, 120, 0);
-    audioCallback(nullptr, nullptr, silent, 64);
+    audioCallback(nullptr, silent, 64);
     Require(!gChannels[0].playing && gChannels[0].cursor == 64);
     // Effects/fade scaling and cutscene ducking still apply exactly once.
     manager.SetChannel3DPosition(0, 0, 0, 0);
@@ -363,7 +361,7 @@ int main(int argc, char **) {
                 int frames = 0;
                 while(gChannels[CHANNEL2D].playing && frames < 600) {
                     int16_t output[2];
-                    audioCallback(nullptr, nullptr, output, 1);
+                    audioCallback(nullptr, output, 1);
                     const double position = double(frames) * playbackRate / outputRate;
                     if(position < 64.0 - 1e-8) {
                         const double value = std::min(position, 63.0) * 400;
@@ -389,13 +387,13 @@ int main(int argc, char **) {
     manager.StartChannel(CHANNEL2D);
     gChannels[CHANNEL2D].cursor = 3.5;
     int16_t seam[2];
-    audioCallback(nullptr, nullptr, seam, 1);
+    audioCallback(nullptr, seam, 1);
     Require(std::abs(int(seam[0]) - 1000) <= 1); // halfway from 1200 to 800
     Require(gChannels[CHANNEL2D].cursor == 3.625);
     // A one-shot holds its final value instead of reading past the buffer.
     manager.SetChannelLoopCount(CHANNEL2D, 1);
     gChannels[CHANNEL2D].cursor = 3.5;
-    audioCallback(nullptr, nullptr, seam, 1);
+    audioCallback(nullptr, seam, 1);
     Require(std::abs(int(seam[0]) - 1200) <= 1);
     // Frontend stereo pairs go through the spatial channels with an enormous
     // attenuation radius. Opposite-polarity halves must remain separate rather
@@ -413,7 +411,7 @@ int main(int argc, char **) {
         manager.StartChannel(uint32(i));
     }
     int16_t stereo[2];
-    audioCallback(nullptr, nullptr, stereo, 1);
+    audioCallback(nullptr, stereo, 1);
     Require(stereo[0] > 9800 && stereo[1] == -10000);
     // Changing audible range cannot change the bearing or stereo separation.
     const uint32 rightPan = gChannels[1].pan;
@@ -423,8 +421,25 @@ int main(int argc, char **) {
     Require(gChannels[1].pan == 63);
     manager.SetChannel3DPosition(1, 0, 0, 1000);
     Require(gChannels[1].pan == 63);
+    // Two loud voices overload the partial sum. The third cancels one exactly.
+    std::fill_n(raw, 32, int16_t(28000));
+    std::fill_n(raw + 32, 32, int16_t(-28000));
+    for(int channel = 0; channel <= CHANNEL2D; ++channel) {
+        Require(InitialiseLegacyChannel(channel, channel == CHANNEL2D ? 1 : 0, 0));
+        manager.SetChannelLoopCount(channel, 0);
+        manager.StartChannel(channel);
+    }
+    std::array<int16_t, 2050> crowded;
+    audioCallback(nullptr, crowded.data(), 1025);
+    for(int16_t sample : crowded) Require(sample == 28000);
+    for(int16_t peak : {28000, -28000}) {
+        std::fill(std::begin(raw), std::end(raw), peak);
+        audioCallback(nullptr, stereo, 1);
+        Require(stereo[0] == (peak > 0 ? 32767 : -32768));
+        Require(stereo[1] == stereo[0]);
+    }
     SpatialRegressions();
-    std::printf("Android audio: %d assertions passed against production headset frame, listener, HRTF, setters and AAudio callback.\n", checks);
+    std::printf("Android audio: %d assertions passed against production headset frame, listener, HRTF, setters and effects mixer.\n", checks);
     if(argc > 1) BenchmarkSpatialAudio();
     return 0;
 }
