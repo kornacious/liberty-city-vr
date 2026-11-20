@@ -10623,18 +10623,34 @@ index 846b3fd0f1ad470b8a03685930e61db18dff74cb..3b6396f906747080b7dedc3c46634843
  	if(FrontEndMenuManager.m_PrefsUseWideScreen)	
  		return 16.0f/9.0f;
 diff --git a/src/renderer/Fluff.cpp b/src/renderer/Fluff.cpp
-index c4cfe7f7a11d87e7a7837d22cec14d0e4bf1856f..ce4bd96a515b8f6ad04e2a89f0eb40f26adb8c06 100644
+index c4cfe7f7a11d87e7a7837d22cec14d0e4bf1856f..df3299c1c2356fd0a6a449e24c4d89ea745eb57a 100644
 --- a/src/renderer/Fluff.cpp
 +++ b/src/renderer/Fluff.cpp
-@@ -13,6 +13,7 @@
+@@ -13,6 +13,8 @@
  #include "Stats.h"
  #include "maths.h"
  #include "Frontend.h"
 +#include "GameRenderCommand.h"
++#include "QuestGameTime.h"
  
  uint8 ScrollCharSet[59][5] = {
  	{ 0x00, 0x00, 0x00, 0x00, 0x00 }, // ' '
-@@ -772,11 +773,11 @@ void CTowerClock::Render()
+@@ -352,6 +354,14 @@ void CScrollBar::Update()
+ 	else
+ 		m_fIntensity = 1.0f - 4.0f * (distanceFromCamera - 75.0f) / 100.0f;
+ 
++	// Each legacy game tick shifts one dot column, independently of rendering.
++	const uint32 ticks = QuestGameTime::Count();
++	for (uint32 tick = 0; tick < ticks; ++tick)
++		AdvanceScroll();
++}
++
++void CScrollBar::AdvanceScroll()
++{
+ 	m_Counter = (m_Counter + 1) % 8;
+ 		
+ 	// if message is fully printed, load up the next one
+@@ -772,11 +782,11 @@ void CTowerClock::Render()
  		LittleTest();
  
  		// Draw lines
@@ -10650,6 +10666,19 @@ index c4cfe7f7a11d87e7a7837d22cec14d0e4bf1856f..ce4bd96a515b8f6ad04e2a89f0eb40f2
  		}
  	}
  }
+diff --git a/src/renderer/Fluff.h b/src/renderer/Fluff.h
+index 8d80f426156fa2f0e7087d26a6bf35d057aa9983..5f7563b11b0f8f7bf140e2bd520ed658cb4bd028 100644
+--- a/src/renderer/Fluff.h
++++ b/src/renderer/Fluff.h
+@@ -53,6 +53,8 @@ private:
+ 	uint8       m_uBlue;
+ 	float       m_fScale;
+ 
++	void AdvanceScroll();
++
+ public:
+ 	void SetVisibility(bool visible) { m_bVisible = visible; }
+ 	bool IsVisible() { return m_bVisible; }
 diff --git a/src/renderer/Font.cpp b/src/renderer/Font.cpp
 index 9ebc16ecc6a5168190a22d1be6628f18e3f2a1ec..2414b977235f6bccb825ecb6d72fbd1931f9f906 100644
 --- a/src/renderer/Font.cpp
