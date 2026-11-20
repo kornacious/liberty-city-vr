@@ -41,7 +41,7 @@ index 80bd2ce539a65ca37eb70eeb77a14be18fc56ee2..b52fa440d262cb7a0f1b06d5e14fe977
  	static char *GetCutsceneName(void) { return ms_cutsceneName; }
  	static void SetCutsceneOffset(const CVector& vec) { ms_cutsceneOffset = vec; }
 diff --git a/src/audio/AudioLogic.cpp b/src/audio/AudioLogic.cpp
-index e2288292ae60474ada402deafdf183c145689319..1eab9c7037b061ec3fbac46defccd018d95eccf2 100644
+index e2288292ae60474ada402deafdf183c145689319..cf3da1aba428d6b7b5ad3d7357aa563b8647fcc3 100644
 --- a/src/audio/AudioLogic.cpp
 +++ b/src/audio/AudioLogic.cpp
 @@ -1,7 +1,15 @@
@@ -84,7 +84,17 @@ index e2288292ae60474ada402deafdf183c145689319..1eab9c7037b061ec3fbac46defccd018
  				m_sQueueSample.m_nLoopCount = 0;
  				SET_EMITTING_VOLUME(VEHICLE_HORN_VOLUME);
  				SET_LOOP_OFFSETS(m_sQueueSample.m_nSampleIndex)
-@@ -3860,7 +3876,7 @@ cAudioManager::SetupPedComments(cPedParams &params, uint16 sound)
+@@ -3797,6 +3813,9 @@ cAudioManager::SetupPedComments(cPedParams &params, uint16 sound)
+ 	uint8 Vol;
+ 	float maxDist;
+ 	tPedComment pedComment;
++	pedComment.m_bRequiresLivingPed = ped != nil && !ped->IsPlayer() && sound != SOUND_PED_DEATH;
++	if (pedComment.m_bRequiresLivingPed && ped->DyingOrDead())
++		return;
+ 
+ 	if (ped != nil) {
+ 		switch (sound) {
+@@ -3860,7 +3879,7 @@ cAudioManager::SetupPedComments(cPedParams &params, uint16 sound)
  				Vol = PED_COMMENT_VOLUME;
  				break;
  			default:
@@ -93,8 +103,97 @@ index e2288292ae60474ada402deafdf183c145689319..1eab9c7037b061ec3fbac46defccd018
  					Vol = PED_COMMENT_VOLUME;
  				else
  					Vol = PED_COMMENT_VOLUME_BEHIND_WALL;
+@@ -6282,6 +6301,18 @@ cPedComments::Add(tPedComment *com)
+ 	m_aPedCommentOrderList[m_nActiveQueue][i] = index;
+ }
+ 
++void
++cPedComments::Remove(int32 entityIndex)
++{
++	for (uint8 queue = 0; queue < NUM_SOUND_QUEUES; queue++) {
++		for (uint8 i = 0; i < m_nPedCommentCount[queue]; i++) {
++			tPedComment &comment = m_aPedCommentQueue[queue][m_aPedCommentOrderList[queue][i]];
++			if (comment.m_bRequiresLivingPed && comment.m_nEntityIndex == entityIndex)
++				comment.m_nLoadingTimeout = -1;
++		}
++	}
++}
++
+ void
+ cPedComments::Process()
+ {
+@@ -6290,8 +6321,16 @@ cPedComments::Process()
+ 
+ 	if (AudioManager.m_bIsPaused) return;
+ 
+-	if (m_nPedCommentCount[m_nActiveQueue]) {
+-		sampleIndex = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_nSampleIndex;
++	for (uint8 i = 0; i < m_nPedCommentCount[m_nActiveQueue]; i++) {
++		tPedComment &comment = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][i]];
++		if (comment.m_nLoadingTimeout < 0)
++			continue;
++		if (comment.m_bRequiresLivingPed && !AudioManager.IsLivingPed(comment.m_nEntityIndex)) {
++			comment.m_nLoadingTimeout = -1;
++			continue;
++		}
++
++		sampleIndex = comment.m_nSampleIndex;
+ 		switch (SampleManager.IsPedCommentLoaded(sampleIndex))
+ 		{
+ 		case LOADING_STATUS_NOT_LOADED:
+@@ -6300,13 +6339,13 @@ cPedComments::Process()
+ 			break;
+ #endif
+ 		case LOADING_STATUS_LOADED:
+-			AudioManager.m_sQueueSample.m_nEntityIndex = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_nEntityIndex;
++			AudioManager.m_sQueueSample.m_nEntityIndex = comment.m_nEntityIndex;
+ 			AudioManager.m_sQueueSample.m_nCounter = 0;
+ 			AudioManager.m_sQueueSample.m_nSampleIndex = sampleIndex;
+ 			AudioManager.m_sQueueSample.m_nBankIndex = SFX_BANK_PED_COMMENTS;
+ 			AudioManager.m_sQueueSample.m_nPriority = 3;
+-			AudioManager.m_sQueueSample.m_nVolume = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_nVolume;
+-			AudioManager.m_sQueueSample.m_fDistance = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_fDistance;
++			AudioManager.m_sQueueSample.m_nVolume = comment.m_nVolume;
++			AudioManager.m_sQueueSample.m_fDistance = comment.m_fDistance;
+ 			AudioManager.m_sQueueSample.m_nLoopCount = 1;
+ #ifndef GTA_PS2
+ 			AudioManager.m_sQueueSample.m_nLoopStart = 0;
+@@ -6314,7 +6353,7 @@ cPedComments::Process()
+ #endif // !GTA_PS2
+ #ifdef EXTERNAL_3D_SOUND
+ 	#ifdef FIX_BUGS
+-			AudioManager.m_sQueueSample.m_nEmittingVolume = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_nEmittingVolume;
++			AudioManager.m_sQueueSample.m_nEmittingVolume = comment.m_nEmittingVolume;
+ 	#else
+ 			AudioManager.m_sQueueSample.m_nEmittingVolume = MAX_VOLUME;
+ 	#endif // FIX_BUGS
+@@ -6365,7 +6404,7 @@ cPedComments::Process()
+ 				break;
+ 			}
+ 			AudioManager.m_sQueueSample.m_bStatic = TRUE;
+-			AudioManager.m_sQueueSample.m_vecPos = m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_vecPos;
++			AudioManager.m_sQueueSample.m_vecPos = comment.m_vecPos;
+ 
+ 			if (sampleIndex >= SFX_AMMU_D && sampleIndex <= SFX_AMMU_F) {
+ 				AudioManager.m_sQueueSample.m_bReverb = FALSE;
+@@ -6395,12 +6434,13 @@ cPedComments::Process()
+ 			if (CTimer::GetIsSlowMotionActive())
+ 				AudioManager.m_sQueueSample.m_nFrequency >>= 1;
+ #endif
+-			m_aPedCommentQueue[m_nActiveQueue][m_aPedCommentOrderList[m_nActiveQueue][0]].m_nLoadingTimeout = -1;
+-			AudioManager.AddSampleToRequestedQueue();
++			comment.m_nLoadingTimeout = -1;
++			AudioManager.AddSampleToRequestedQueue(comment.m_bRequiresLivingPed);
+ 			break;
+ 		case LOADING_STATUS_LOADING: break;
+ 		default: break;
+ 		}
++		break;
+ 	}
+ 
+ 	// Switch queue
 diff --git a/src/audio/AudioManager.cpp b/src/audio/AudioManager.cpp
-index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc23e4a364 100644
+index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..6e789fd8e7b688bb92e067ca53abee6e81d66626 100644
 --- a/src/audio/AudioManager.cpp
 +++ b/src/audio/AudioManager.cpp
 @@ -1,7 +1,15 @@
@@ -113,7 +212,15 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  
  #include "AudioScriptObject.h"
  #include "MusicManager.h"
-@@ -119,6 +127,9 @@ cAudioManager::Service()
+@@ -11,6 +19,7 @@
+ #include "Camera.h"
+ #include "World.h"
+ #include "Entity.h"
++#include "Ped.h"
+ 
+ cAudioManager AudioManager;
+ 
+@@ -119,6 +128,9 @@ cAudioManager::Service()
  		m_bTimerJustReset = FALSE;
  	}
  	if (m_bIsInitialised) {
@@ -123,7 +230,50 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_bWasPaused = m_bIsPaused;
  		m_bIsPaused = CTimer::GetIsUserPaused();
  #ifdef AUDIO_REFLECTIONS
-@@ -338,7 +349,7 @@ cAudioManager::ResetTimers(uint32 time)
+@@ -199,6 +211,25 @@ void
+ cAudioManager::DestroyEntity(int32 id)
+ {
+ 	if (m_bIsInitialised && id >= 0 && id < NUM_AUDIOENTITIES && m_asAudioEntities[id].m_bIsUsed) {
++		if (m_asAudioEntities[id].m_nType == AUDIOTYPE_PHYSICAL && static_cast<CEntity *>(m_asAudioEntities[id].m_pEntity)->IsPed()) {
++			// Audio entity IDs can be reused before the next audio update.
++			m_sPedComments.Remove(id);
++			for (uint8 queue = 0; queue < NUM_SOUND_QUEUES; queue++) {
++				for (uint8 i = 0; i < m_nRequestedCount[queue]; i++) {
++					tSound &sample = m_aRequestedQueue[queue][m_aRequestedOrderList[queue][i]];
++					if (sample.m_bRequiresLivingPed && sample.m_nEntityIndex == id)
++						sample.m_bIsPlayingFinished = TRUE;
++				}
++			}
++			for (uint8 i = 0; i < m_nActiveSamples; i++) {
++				tSound &sample = m_asActiveSamples[i];
++				if (sample.m_nEntityIndex == id && sample.m_bRequiresLivingPed) {
++					SampleManager.StopChannel(i);
++					sample.m_nSampleIndex = NO_SAMPLE;
++					sample.m_nEntityIndex = AEHANDLE_NONE;
++				}
++			}
++		}
+ 		m_asAudioEntities[id].m_bIsUsed = FALSE;
+ 		for (uint32 i = 0; i < m_nAudioEntitiesCount; i++) {
+ 			if (id == m_aAudioEntityOrderList[i]) {
+@@ -234,6 +265,16 @@ cAudioManager::GetEntityPointer(int32 id)
+ 	return NULL;
+ }
+ 
++bool
++cAudioManager::IsLivingPed(int32 id)
++{
++	void *entity = GetEntityPointer(id);
++	if (entity == nil || m_asAudioEntities[id].m_nType != AUDIOTYPE_PHYSICAL)
++		return false;
++	CEntity *physical = static_cast<CEntity *>(entity);
++	return physical->IsPed() && !static_cast<CPed *>(physical)->DyingOrDead();
++}
++
+ static Const uint8 OneShotPriority[] = {
+ 										3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5, 3, 5, 2, 2, 1, 1, 3, 1, 3, 3, 1, 1, 1, 4, 4, 3, 1, 1,
+ 										1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 6, 1, 1, 3, 2, 2, 2, 2, 0, 0, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+@@ -338,7 +379,7 @@ cAudioManager::ResetTimers(uint32 time)
  		SampleManager.SetEffectsFadeVolume(0);
  		SampleManager.SetMusicFadeVolume(0);
  		MusicManager.ResetMusicAfterReload();
@@ -132,7 +282,7 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		SampleManager.Service();
  #endif
  	}
-@@ -586,7 +597,11 @@ cAudioManager::ComputeVolume(uint8 emittingVolume, float maxDistance, float dist
+@@ -586,7 +627,11 @@ cAudioManager::ComputeVolume(uint8 emittingVolume, float maxDistance, float dist
  void
  cAudioManager::TranslateEntity(Const CVector *in, CVector *out)
  {
@@ -144,7 +294,51 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  }
  
  int32
-@@ -765,7 +780,7 @@ cAudioManager::UpdateReflections()
+@@ -652,7 +697,7 @@ cAudioManager::InterrogateAudioEntities()
+ }
+ 
+ void
+-cAudioManager::AddSampleToRequestedQueue()
++cAudioManager::AddSampleToRequestedQueue(bool8 requiresLivingPed)
+ {
+ 	uint32 finalPriority;
+ 	uint8 sampleIndex;
+@@ -679,6 +724,7 @@ cAudioManager::AddSampleToRequestedQueue()
+ #endif
+ 		m_sQueueSample.m_nFinalPriority = finalPriority;
+ 		m_sQueueSample.m_bIsPlayingFinished = FALSE;
++		m_sQueueSample.m_bRequiresLivingPed = requiresLivingPed;
+ #ifdef AUDIO_REFLECTIONS
+ 		if (m_sQueueSample.m_bIs2D) {
+ 			m_sQueueSample.m_bReflections = FALSE;
+@@ -701,7 +747,7 @@ cAudioManager::AddSampleToRequestedQueue()
+ 		AddDetailsToRequestedOrderList(sampleIndex);
+ #ifdef AUDIO_REFLECTIONS
+ 		if (bReflections)
+-			AddReflectionsToRequestedQueue();
++			AddReflectionsToRequestedQueue(requiresLivingPed);
+ #endif
+ 	}
+ }
+@@ -724,7 +770,7 @@ cAudioManager::AddDetailsToRequestedOrderList(uint8 sample)
+ 
+ #ifdef AUDIO_REFLECTIONS
+ void
+-cAudioManager::AddReflectionsToRequestedQueue()
++cAudioManager::AddReflectionsToRequestedQueue(bool8 requiresLivingPed)
+ {
+ 	float reflectionDistance;
+ 	int32 noise;
+@@ -750,7 +796,7 @@ cAudioManager::AddReflectionsToRequestedQueue()
+ 					}
+ 					m_sQueueSample.m_nPriority += 20;
+ 					m_sQueueSample.m_vecPos = m_avecReflectionsPos[i];
+-					AddSampleToRequestedQueue();
++					AddSampleToRequestedQueue(requiresLivingPed);
+ 				}
+ 			}
+ 		}
+@@ -765,7 +811,7 @@ cAudioManager::UpdateReflections()
  	CEntity *ent;
  
  	if (m_FrameCounter % 8 == 0) {
@@ -153,7 +347,7 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_avecReflectionsPos[0] = camPos;
  		m_avecReflectionsPos[0].y += 50.0f;
  		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[0], colpoint, ent, true, false, false, true, false, true, true))
-@@ -773,7 +788,7 @@ cAudioManager::UpdateReflections()
+@@ -773,7 +819,7 @@ cAudioManager::UpdateReflections()
  		else
  			m_afReflectionsDistances[0] = 50.0f;
  	} else if ((m_FrameCounter + 1) % 8 == 0) {
@@ -162,7 +356,7 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_avecReflectionsPos[1] = camPos;
  		m_avecReflectionsPos[1].y -= 50.0f;
  		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[1], colpoint, ent, true, false, false, true, false, true, true))
-@@ -781,7 +796,7 @@ cAudioManager::UpdateReflections()
+@@ -781,7 +827,7 @@ cAudioManager::UpdateReflections()
  		else
  			m_afReflectionsDistances[1] = 50.0f;
  	} else if ((m_FrameCounter + 2) % 8 == 0) {
@@ -171,7 +365,7 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_avecReflectionsPos[2] = camPos;
  		m_avecReflectionsPos[2].x -= 50.0f;
  		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[2], colpoint, ent, true, false, false, true, false, true, true))
-@@ -789,7 +804,7 @@ cAudioManager::UpdateReflections()
+@@ -789,7 +835,7 @@ cAudioManager::UpdateReflections()
  		else
  			m_afReflectionsDistances[2] = 50.0f;
  	} else if ((m_FrameCounter + 3) % 8 == 0) {
@@ -180,7 +374,7 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_avecReflectionsPos[3] = camPos;
  		m_avecReflectionsPos[3].x += 50.0f;
  		if (CWorld::ProcessLineOfSight(camPos, m_avecReflectionsPos[3], colpoint, ent, true, false, false, true, false, true, true))
-@@ -797,7 +812,7 @@ cAudioManager::UpdateReflections()
+@@ -797,7 +843,7 @@ cAudioManager::UpdateReflections()
  		else
  			m_afReflectionsDistances[3] = 50.0f;
  	} else if ((m_FrameCounter + 4) % 8 == 0) {
@@ -189,7 +383,16 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  		m_avecReflectionsPos[4] = camPos;
  		m_avecReflectionsPos[4].z += 50.0f;
  		if (CWorld::ProcessVerticalLine(camPos, m_avecReflectionsPos[4].z, colpoint, ent, true, false, false, false, true, false, nil))
-@@ -847,7 +862,7 @@ cAudioManager::AddReleasingSounds()
+@@ -822,7 +868,7 @@ cAudioManager::AddReleasingSounds()
+ 
+ 	for (uint8 i = 0; i < m_nRequestedCount[queue]; i++) {
+ 		tSound &sample = m_aRequestedQueue[queue][m_aRequestedOrderList[queue][i]];
+-		if (sample.m_bIsPlayingFinished)
++		if (sample.m_bIsPlayingFinished || (sample.m_bRequiresLivingPed && !IsLivingPed(sample.m_nEntityIndex)))
+ 			continue;
+ 
+ 		toProcess[i] = FALSE;
+@@ -847,7 +893,7 @@ cAudioManager::AddReleasingSounds()
  						sample.m_fDistance = Sqrt(GetDistanceSquared(sample.m_vecPos));
  						if (sample.m_nSampleIndex >= SAMPLEBANK_PED_START && sample.m_nSampleIndex <= SAMPLEBANK_PED_END) { // check if it's ped comment
  							uint8 vol;
@@ -198,7 +401,16 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  								vol = PED_COMMENT_VOLUME;
  							else
  								vol = PED_COMMENT_VOLUME_BEHIND_WALL;
-@@ -1100,6 +1115,9 @@ cAudioManager::ProcessActiveQueues()
+@@ -929,7 +975,7 @@ cAudioManager::AddReleasingSounds()
+ 				sample.m_bStatic = FALSE;
+ 			}
+ 			memcpy(&m_sQueueSample, &sample, sizeof(tSound));
+-			AddSampleToRequestedQueue();
++			AddSampleToRequestedQueue(sample.m_bRequiresLivingPed);
+ 		}
+ 	}
+ }
+@@ -1100,6 +1146,9 @@ cAudioManager::ProcessActiveQueues()
  #else
  						if (SampleManager.InitialiseChannel(j, m_asActiveSamples[j].m_nSampleIndex, m_asActiveSamples[j].m_nBankIndex)) {
  #endif
@@ -208,6 +420,55 @@ index fa17b9740520040dd55ccfafb938a2a2f8d12cb6..bc708c5b70640b7913e306ddef9f1ffc
  #ifdef USE_TIME_SCALE_FOR_AUDIO
  							SampleManager.SetChannelFrequency(j, m_asActiveSamples[j].m_nFrequency * timeScale);
  #else
+diff --git a/src/audio/AudioManager.h b/src/audio/AudioManager.h
+index 1752c4cdcdeb4f11e513ee31b667a355c55ce984..92dea4bc677603cd261e5944d6e6e2f6a6b9076d 100644
+--- a/src/audio/AudioManager.h
++++ b/src/audio/AudioManager.h
+@@ -18,6 +18,7 @@ public:
+ 	uint32 m_nSampleIndex;		// An index of sample from AudioSamples.h
+ 	uint8 m_nBankIndex;			// A sound bank index. IDK what's the point of it here since samples are hardcoded anyway
+ 	bool8 m_bIs2D;				// If TRUE then sound is played in 2D space (such as frontend or police radio)
++	bool8 m_bRequiresLivingPed;
+ 	uint32 m_nPriority;			// The multiplier for the sound priority (see m_nFinalPriority below). Lesser value means higher priority
+ 	uint32 m_nFrequency;		// Sound frequency, plain and simple
+ 	uint8 m_nVolume;			// Sound volume (0..127), only used as an actual volume without EXTERNAL_3D_SOUND (see m_nEmittingVolume)
+@@ -98,6 +99,7 @@ public:
+ 	float m_fDistance;
+ 	uint8 m_nVolume;
+ 	int8 m_nLoadingTimeout; // how many iterations we gonna wait until dropping the sample if it's still not loaded (only useful on PS2)
++	bool8 m_bRequiresLivingPed;
+ #if defined(EXTERNAL_3D_SOUND) && defined(FIX_BUGS)
+ 	uint8 m_nEmittingVolume;
+ #endif
+@@ -126,6 +128,7 @@ public:
+ 		m_nActiveQueue = 0;
+ 	}
+ 	void Add(tPedComment *com);
++	void Remove(int32 entityIndex);
+ 	void Process();
+ };
+ 
+@@ -274,6 +277,7 @@ public:
+ 	bool8 GetEntityStatus(int32 id);
+ 	void SetEntityStatus(int32 id, bool8 status);
+ 	void *GetEntityPointer(int32 id);
++	bool IsLivingPed(int32 id);
+ 	void PlayOneShot(int32 index, uint16 sound, float vol);
+ 	void SetEffectsMasterVolume(uint8 volume);
+ 	void SetMusicMasterVolume(uint8 volume);
+@@ -308,10 +312,10 @@ public:
+ 	uint32 ComputeDopplerEffectedFrequency(uint32 oldFreq, float position1, float position2, float speedMultiplier); // inlined on PS2
+ 	int32 RandomDisplacement(uint32 seed);
+ 	void InterrogateAudioEntities(); // inlined on PS2
+-	void AddSampleToRequestedQueue();
++	void AddSampleToRequestedQueue(bool8 requiresLivingPed = FALSE);
+ 	void AddDetailsToRequestedOrderList(uint8 sample); // inlined on PS2
+ #ifdef AUDIO_REFLECTIONS
+-	void AddReflectionsToRequestedQueue();
++	void AddReflectionsToRequestedQueue(bool8 requiresLivingPed);
+ 	void UpdateReflections();
+ #endif
+ 	void AddReleasingSounds();
 diff --git a/src/audio/sampman_null.cpp b/src/audio/sampman_null.cpp
 index 6fda39b60c7ad384309619276fbf74ef927d88c1..ddcb256506a9d012ca15f7f47a0f14eb2d489312 100644
 --- a/src/audio/sampman_null.cpp
@@ -8317,6 +8578,24 @@ index 3f7c4bca2ba8c333f7e974a5ea57a13b0397c54d..e76f42709e24ae5fea48df8e1a5df4ea
  }
  
  void
+diff --git a/src/peds/PedChat.cpp b/src/peds/PedChat.cpp
+index a89ab6a8faeb08e72136bd073b76a3e8bea045b6..459fe7e3f841ae9a13b87db2d018f4770cc07b29 100644
+--- a/src/peds/PedChat.cpp
++++ b/src/peds/PedChat.cpp
+@@ -59,7 +59,12 @@ CPed::ServiceTalking(void)
+ 	if (bBodyPartJustCameOff && m_bodyPartBleeding == PED_HEAD)
+ 		return;
+ 
+-	if (!CGeneral::faststricmp(CModelInfo::GetModelInfo(GetModelIndex())->GetModelName(), "bomber"))
++	if (!IsPlayer() && DyingOrDead()) {
++		if (m_queuedSound != SOUND_PED_DEATH) {
++			m_queuedSound = SOUND_NO_SOUND;
++			return;
++		}
++	} else if (!CGeneral::faststricmp(CModelInfo::GetModelInfo(GetModelIndex())->GetModelName(), "bomber"))
+ 		m_queuedSound = SOUND_PED_BOMBER;
+ 	else if (m_nPedState == PED_ON_FIRE)
+ 		m_queuedSound = SOUND_PED_BURNING;
 diff --git a/src/peds/PedFight.cpp b/src/peds/PedFight.cpp
 index 14adb16fc1a0d09e8df71eeb493875e51fc906af..6240c5aeda6eddbf8bdd622c3c33e1fc5a8fb849 100644
 --- a/src/peds/PedFight.cpp
