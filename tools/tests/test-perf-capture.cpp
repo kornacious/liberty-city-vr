@@ -15,6 +15,7 @@ static std::vector<std::string> Cells(const std::string &line)
     std::istringstream input(line);
     std::string cell;
     while(std::getline(input, cell, ',')) result.push_back(cell);
+    if(!line.empty() && line.back()==',') result.emplace_back();
     return result;
 }
 int main()
@@ -166,6 +167,44 @@ int main()
         frame.staticReuse.topModel=1416;frame.staticReuse.cpuMs=.012345;
         frame.opaqueMeshBatchEnabled=i%2;
         frame.opaqueMeshBatch={100,99,64,62,7,8,9};
+        frame.staticArrayBatchEnabled=1;
+        frame.staticArrayBatch={};
+        frame.staticArrayBatch.shortenedBatches=2;
+        frame.staticArrayBatch.crossBatches=3;
+        frame.staticArrayBatch.crossSavedDraws=8;
+        frame.staticArrayBatch.crossUploadBytes=2048;
+        frame.staticArrayBatch.crossFallbacks=1;
+        frame.staticArrayBatch.crossFlushMs=.125;
+        frame.staticArrayBatch.crossCacheHits=9;
+        frame.staticArrayBatch.crossCacheMisses=3;
+        frame.staticArrayBatch.crossCacheBuilds=2;
+        frame.staticArrayBatch.crossCacheBytes=65536;
+        frame.staticArrayBatch.crossCacheUploadBytes=8192;
+        frame.staticArrayBatch.crossPipelineBinds=4;
+        frame.staticArrayBatch.crossDescriptorBinds=5;
+        frame.staticArrayBatch.crossTransformBinds=3;
+        frame.staticArrayBatch.demandProbes=5;
+        frame.staticArrayBatch.demandReplacements=2;
+        frame.staticArrayBatch.demandUploadBytes=32768;
+        frame.staticArrayOccupancy={};
+        frame.staticArrayResidency={};
+        if(i%2){
+            frame.staticArrayOccupancy.sampled=true;
+            frame.staticArrayOccupancy.count=2;
+            frame.staticArrayOccupancy.pages[0]={64,64,16,8,5,1,131072,2};
+            frame.staticArrayOccupancy.pages[1]={64,64,16,2,0,0,32768};
+            frame.staticArrayResidency.sampled=true;
+            frame.staticArrayResidency.Observe(64,64,true,unsigned(StaticArrayBatch::Result::Ready));
+            frame.staticArrayResidency.Observe(64,64,true,unsigned(StaticArrayBatch::Result::Ready));
+            frame.staticArrayResidency.Observe(128,128,false,StaticArrayBatch::ResidentOnlyMiss);
+            frame.staticArrayBatch.duplicateMergedLayers=3;
+        }
+        frame.staticArrayBatch.pageSizeRetries=1;
+        frame.staticArrayBatch.pageMemoryCacheHits=4;
+        frame.staticArrayBatch.Fallback(StaticArrayBatch::Result::PreferredPageFull);
+        frame.staticArrayBatch.Fallback(StaticArrayBatch::Result::PageMemoryLimit);
+        frame.staticArrayBatch.Fallback(StaticArrayBatch::Result::SmallTextureReserve);
+        frame.staticArrayBatch.Fallback(StaticArrayBatch::Result::PreferredPageFull);
         for(unsigned reason=0;reason<OpaqueOrder::RejectionCount;++reason)
             frame.opaqueOrder.rejected[reason]=(i+reason)%11;
         if(writer.Submit(frame)) ++accepted;
@@ -280,6 +319,46 @@ int main()
           assert(std::stoi(row[column("world_occlusion_clip_boundary")])==5);
           assert(std::stoi(row[column("world_occlusion_clip_invalid")])==1);
           assert(std::stoi(row[column("world_occlusion_clip_plane_visits")])==170);
+          assert(std::stoi(row[column("static_array_batch_enabled")])==1);
+          assert(std::stoi(row[column("static_array_shortened_batches")])==2);
+          assert(std::stoi(row[column("cross_array_batches")])==3);
+          assert(std::stoi(row[column("cross_array_saved_draws")])==8);
+          assert(std::stoi(row[column("cross_array_upload_bytes")])==2048);
+          assert(std::stoi(row[column("cross_array_fallbacks")])==1);
+          assert(std::stod(row[column("cross_array_flush_ms")])==.125);
+          assert(row[column("cross_array_cache_hits")]=="9");
+          assert(row[column("cross_array_cache_misses")]=="3");
+          assert(row[column("cross_array_cache_builds")]=="2");
+          assert(row[column("cross_array_cache_bytes")]=="65536");
+          assert(row[column("cross_array_cache_upload_bytes")]=="8192");
+          assert(row[column("cross_array_pipeline_binds")]=="4");
+          assert(row[column("cross_array_descriptor_binds")]=="5");
+          assert(row[column("cross_array_transform_binds")]=="3");
+          assert(std::stoi(row[column("static_array_page_size_retries")])==1);
+          assert(std::stoi(row[column("static_array_page_memory_cache_hits")])==4);
+          assert(std::stoi(row[column("static_array_occupancy_sampled")])==int(id%2));
+          assert(row[column("static_array_page_occupancy")]==
+                 (id%2?"64:64:16:8:5:1:131072|64:64:16:2:0:0:32768":""));
+          assert(row[column("static_array_residency_sampled")]==(id%2?"1":"0"));
+          assert(row[column("static_array_residency_overflow")]=="0");
+          assert(row[column("static_array_duplicate_merged_layers")]==(id%2?"3":"0"));
+          assert(row[column("static_array_residency_misses")]==
+                 (id%2?"64:64:other_page:uploaded:2|128:128:absent:resident_only:1":""));
+          assert(row[column("static_array_page_copies")]==(id%2?"3:2|0:0":""));
+          assert(row[column("static_array_demand_probes")]=="5");
+          assert(row[column("static_array_demand_replacements")]=="2");
+          assert(row[column("static_array_demand_upload_bytes")]=="32768");
+          unsigned totalFallbacks=0;
+          for(unsigned i=0;i<StaticArrayBatch::FallbackCount;++i){
+              const std::string key="static_array_fallback_"+std::string(StaticArrayBatch::FallbackName(i));
+              const unsigned count=std::stoul(row[column(key.c_str())]);
+              const auto reason=StaticArrayBatch::Result(i);
+              assert(count==(reason==StaticArrayBatch::Result::PreferredPageFull?2u:
+                             (reason==StaticArrayBatch::Result::PageMemoryLimit ||
+                              reason==StaticArrayBatch::Result::SmallTextureReserve)?1u:0u));
+              totalFallbacks+=count;
+          }
+          assert(totalFallbacks==4 && std::stoul(row[column("static_array_fallbacks")])==totalFallbacks);
           assert(std::stoi(row[column("world_occlusion_source_geometry_rejected")])==2);
           assert(std::stoi(row[column("world_occlusion_source_no_opaque")])==3);
           assert(std::stoi(row[column("world_occlusion_mesh_opaque")])==11);

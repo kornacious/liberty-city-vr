@@ -362,18 +362,21 @@ beginOneShot(void)
 	VkCommandBufferBeginInfo beginInfo = {};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS){
+		vkFreeCommandBuffers(gvk.device, gvk.commandPool, 1, &commandBuffer);
+		return VK_NULL_HANDLE;
+	}
 	return commandBuffer;
 }
 
-void
+bool32
 endOneShot(VkCommandBuffer commandBuffer)
 {
 	if(commandBuffer == VK_NULL_HANDLE)
-		return;
+		return 0;
 	if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS){
 		vkFreeCommandBuffers(gvk.device, gvk.commandPool, 1, &commandBuffer);
-		return;
+		return 0;
 	}
 
 	if(gvk.inFrame){
@@ -381,7 +384,7 @@ endOneShot(VkCommandBuffer commandBuffer)
 		// prepends all of these command buffers to the main frame in one batch;
 		// its fence then provides an exact lifetime boundary for staging data.
 		frameUploadCommands[gvk.activeFrame].push_back(commandBuffer);
-		return;
+		return 1;
 	}
 
 	// Startup uploads have no later frame fence to inherit. Keep the
@@ -395,10 +398,11 @@ endOneShot(VkCommandBuffer commandBuffer)
 	if(submitted != VK_SUCCESS){
 		VKERR("one-shot submit failed: %d", (int)submitted);
 		vkFreeCommandBuffers(gvk.device, gvk.commandPool, 1, &commandBuffer);
-		return;
+		return 0;
 	}
-	vkQueueWaitIdle(gvk.queue);
+	const VkResult waited=vkQueueWaitIdle(gvk.queue);
 	vkFreeCommandBuffers(gvk.device, gvk.commandPool, 1, &commandBuffer);
+	return waited==VK_SUCCESS;
 }
 
 void
@@ -3006,6 +3010,8 @@ endFrame(void)
 			flushRetired(i);
 		}
 		gvk.hasSubmittedFrame = 0;
+		clearStaticArrayGeometry();
+		clearStaticArrayPages();
 	}
 	gvk.inFrame = 0;
 	gGpuRecordingActive=0;

@@ -215,6 +215,10 @@ static int gOpaqueWorldAlphaFastPath = 1;
 static int gOpaqueOrderExperiment = 0;
 static int gOpaqueMeshBatch = 0;
 static int gStaticInstances = 0;
+static int gStaticSubmissionCache = 0;
+static int gStaticMeshCull = 0;
+static int gStaticArrayBatch = 0;
+static int gCrossArrayBatch = 0;
 static int gWorldBackface = 0;
 static int gWorldOcclusion = 0;
 static int gMaskedAlphaPassSkip = 0;
@@ -705,6 +709,10 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_MASKED_ALPHA_SKIP,
 	VR_OPT_OPAQUE_MESH_BATCH,
 	VR_OPT_STATIC_INSTANCES,
+	VR_OPT_STATIC_SUBMISSION_CACHE,
+	VR_OPT_STATIC_MESH_CULL,
+	VR_OPT_STATIC_ARRAY_BATCH,
+	VR_OPT_CROSS_ARRAY_BATCH,
 	VR_OPT_WORLD_BACKFACE,
 	VR_OPT_WORLD_OCCLUSION,
 	VR_OPT_OPAQUE_ORDER,
@@ -1330,6 +1338,10 @@ LoadVrSettings(void)
 	gWorldOcclusion = GetPrivateProfileIntA("VR", "WorldOcclusion", 0, ".\\vr_settings.ini") != 0;
 	gWorldBackface = GetPrivateProfileIntA("VR", "WorldBackface", 0, ".\\vr_settings.ini") != 0;
 	gStaticInstances = GetPrivateProfileIntA("VR", "StaticInstances", 0, ".\\vr_settings.ini") != 0;
+	gStaticSubmissionCache = GetPrivateProfileIntA("VR", "StaticSubmissionCache", 0, ".\\vr_settings.ini") != 0;
+	gStaticMeshCull = GetPrivateProfileIntA("VR", "StaticMeshCull", 0, ".\\vr_settings.ini") != 0;
+	gStaticArrayBatch = GetPrivateProfileIntA("VR", "StaticArrayBatch", 0, ".\\vr_settings.ini") != 0;
+	gCrossArrayBatch = GetPrivateProfileIntA("VR", "CrossArrayBatch", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
 	gMaskedAlphaPassSkip = GetPrivateProfileIntA("VR", "MaskedAlphaPassSkip", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueWorldAlphaFastPath = GetPrivateProfileIntA("VR",
@@ -3191,6 +3203,22 @@ VrDebugUpdate(const PadInput &in)
                 }
                 SaveVrInteger("WorldBackface",gWorldBackface);
                 rw::vulkan::setWorldBackfaceEnabled(gWorldBackface);
+			}else if(gVrOptimizationSelection == VR_OPT_CROSS_ARRAY_BATCH){
+				gCrossArrayBatch = !gCrossArrayBatch;
+				SaveVrInteger("CrossArrayBatch", gCrossArrayBatch);
+				rw::vulkan::setCrossArrayBatchEnabled(gCrossArrayBatch);
+			}else if(gVrOptimizationSelection == VR_OPT_STATIC_ARRAY_BATCH){
+				gStaticArrayBatch = !gStaticArrayBatch;
+				SaveVrInteger("StaticArrayBatch", gStaticArrayBatch);
+				rw::vulkan::setStaticArrayBatchEnabled(gStaticArrayBatch);
+			}else if(gVrOptimizationSelection == VR_OPT_STATIC_MESH_CULL){
+				gStaticMeshCull = !gStaticMeshCull;
+				SaveVrInteger("StaticMeshCull", gStaticMeshCull);
+				rw::vulkan::setStaticMeshCullEnabled(gStaticMeshCull);
+			}else if(gVrOptimizationSelection == VR_OPT_STATIC_SUBMISSION_CACHE){
+				gStaticSubmissionCache = !gStaticSubmissionCache;
+				SaveVrInteger("StaticSubmissionCache", gStaticSubmissionCache);
+				rw::vulkan::setStaticSubmissionCacheEnabled(gStaticSubmissionCache);
 			}else if(gVrOptimizationSelection == VR_OPT_STATIC_INSTANCES){
 				gStaticInstances = !gStaticInstances;
 				SaveVrInteger("StaticInstances", gStaticInstances);
@@ -4340,6 +4368,10 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_MASKED_ALPHA_SKIP],sizeof(rows[0]),"MASKED ALPHA PASS SKIP  < %s >",gMaskedAlphaPassSkip?"ON":"OFF");
 	snprintf(rows[VR_OPT_OPAQUE_MESH_BATCH],sizeof(rows[0]),"OPAQUE MESH BATCH  < %s >",gOpaqueMeshBatch?"ON":"OFF");
 	snprintf(rows[VR_OPT_STATIC_INSTANCES],sizeof(rows[0]),"STATIC INSTANCING  < %s >",gStaticInstances?"ON":"OFF");
+	snprintf(rows[VR_OPT_STATIC_SUBMISSION_CACHE],sizeof(rows[0]),"STATIC SUBMISSION CACHE  < %s >",gStaticSubmissionCache?"ON":"OFF");
+	snprintf(rows[VR_OPT_STATIC_MESH_CULL],sizeof(rows[0]),"STATIC MESH FRUSTUM CULL  < %s >",gStaticMeshCull?"ON":"OFF");
+	snprintf(rows[VR_OPT_STATIC_ARRAY_BATCH],sizeof(rows[0]),"STATIC TEXTURE ARRAY BATCHING  < %s >",gStaticArrayBatch?"ON":"OFF");
+	snprintf(rows[VR_OPT_CROSS_ARRAY_BATCH],sizeof(rows[0]),"CROSS-OBJECT ARRAY BATCHING  < %s >",gCrossArrayBatch?"ON":"OFF");
 	snprintf(rows[VR_OPT_OPAQUE_ORDER],sizeof(rows[0]),"OPAQUE ORDER EXPERIMENT  < %s >",gOpaqueOrderExperiment?"ON":"OFF");
 	snprintf(rows[VR_OPT_WORLD_BACKFACE],sizeof(rows[0]),"WORLD BACKFACE CULL  < %s >",gWorldBackface?"ON":"OFF");
 	snprintf(rows[VR_OPT_WORLD_OCCLUSION],sizeof(rows[0]),"WORLD OCCLUSION  < %s >",gWorldOcclusion?"ON":"OFF");
@@ -4350,13 +4382,17 @@ DrawQuestOptimizationsPage(void)
 	int visibleRow = 0;
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item){
 		if(item == VR_OPT_SIMULATION && !IsSimulationReplayAvailable()) continue;
-		DrawFullVrMenuRow(rows[item],160+visibleRow++*36,2,item==gVrOptimizationSelection,true,false,
+		DrawFullVrMenuRow(rows[item],160+visibleRow++*26,2,item==gVrOptimizationSelection,true,false,
 			item!=VR_OPT_BACK && item!=VR_OPT_SIMULATION, item==VR_OPT_SIMULATION);
 	}
 	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_FXAA_INTEGER?"NATIVE 1:1 ONLY; OFF FILTERED / ON INTEGER STENCIL":
         gVrOptimizationSelection==VR_OPT_LOD_FADE?"LOD DISTANCE FADES; ASSET-LOADING FADES ARE SEPARATE":
         gVrOptimizationSelection==VR_OPT_WORLD_OCCLUSION?"BOTH EYES MUST BE HIDDEN; SWITCHES BACKFACE CULL OFF":
         gVrOptimizationSelection==VR_OPT_WORLD_BACKFACE?"CLOSED OPAQUE MESHES; SWITCHES WORLD OCCLUSION OFF":
+        gVrOptimizationSelection==VR_OPT_STATIC_SUBMISSION_CACHE?"REQUIRES STATIC INSTANCING":
+        gVrOptimizationSelection==VR_OPT_STATIC_MESH_CULL?"KEEP MESHES VISIBLE IN EITHER EYE":
+        gVrOptimizationSelection==VR_OPT_STATIC_ARRAY_BATCH?"MERGE ADJACENT OPAQUE WORLD MATERIALS":
+        gVrOptimizationSelection==VR_OPT_CROSS_ARRAY_BATCH?"REQUIRES STATIC INSTANCING AND TEXTURE ARRAY BATCHING":
         gWorldLodMode==WorldLodPolicy::Off?"OFF HIDES SCENERY THAT HAS NO HIGH-DETAIL MODEL":
 		gWorldLodMode==WorldLodPolicy::Aggressive?"EARLIER SWITCHING; UNPAIRED DETAIL HIDDEN":
 		gWorldLodMode==WorldLodPolicy::Performance?"EARLIER WORLD LOD SWITCHING; DISTANT COVERAGE KEPT":
@@ -6748,6 +6784,10 @@ static const Control controls[]={
 {"WorldOcclusion",0,1,false,[](){LoadVrSettings();return int(gWorldOcclusion);},[](int value){gWorldOcclusion=static_cast<decltype(gWorldOcclusion)>(value);}},
 {"WorldBackface",0,1,false,[](){LoadVrSettings();return int(gWorldBackface);},[](int value){gWorldBackface=static_cast<decltype(gWorldBackface)>(value);}},
 {"StaticInstances",0,1,false,[](){LoadVrSettings();return int(gStaticInstances);},[](int value){gStaticInstances=static_cast<decltype(gStaticInstances)>(value);}},
+{"StaticSubmissionCache",0,1,false,[](){LoadVrSettings();return gStaticSubmissionCache;},[](int value){gStaticSubmissionCache=value;}},
+{"StaticMeshCull",0,1,false,[](){LoadVrSettings();return gStaticMeshCull;},[](int value){gStaticMeshCull=value;}},
+{"StaticArrayBatch",0,1,false,[](){LoadVrSettings();return gStaticArrayBatch;},[](int value){gStaticArrayBatch=value;}},
+{"CrossArrayBatch",0,1,false,[](){LoadVrSettings();return gCrossArrayBatch;},[](int value){gCrossArrayBatch=value;}},
 {"OpaqueMeshBatch",0,1,false,[](){LoadVrSettings();return int(gOpaqueMeshBatch);},[](int value){gOpaqueMeshBatch=static_cast<decltype(gOpaqueMeshBatch)>(value);}},
 {"MaskedAlphaPassSkip",0,1,false,[](){LoadVrSettings();return int(gMaskedAlphaPassSkip);},[](int value){gMaskedAlphaPassSkip=static_cast<decltype(gMaskedAlphaPassSkip)>(value);}},
 {"OpaqueWorldAlphaFastPath",0,1,false,[](){LoadVrSettings();return int(gOpaqueWorldAlphaFastPath);},[](int value){gOpaqueWorldAlphaFastPath=static_cast<decltype(gOpaqueWorldAlphaFastPath)>(value);}},
@@ -6824,6 +6864,10 @@ Frame ApplyFrame(bool theaterFrame){
 	rw::vulkan::setFxaaIntegerStencilEnabled(androidgame::VrFxaaIntegerStencil());
 	rw::vulkan::setWorldBackfaceEnabled(androidgame::VrWorldBackface());
 	rw::vulkan::setStaticInstancesEnabled(androidgame::VrStaticInstances());
+	rw::vulkan::setStaticSubmissionCacheEnabled(gStaticSubmissionCache);
+	rw::vulkan::setStaticMeshCullEnabled(gStaticMeshCull);
+	rw::vulkan::setStaticArrayBatchEnabled(gStaticArrayBatch);
+	rw::vulkan::setCrossArrayBatchEnabled(gCrossArrayBatch);
 	rw::vulkan::setOpaqueMeshBatchEnabled(androidgame::VrOpaqueMeshBatch());
 	rw::vulkan::setMaskedAlphaPassSkipEnabled(androidgame::VrMaskedAlphaPassSkip());
 	rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(androidgame::VrOpaqueWorldAlphaFastPath());

@@ -102,6 +102,7 @@ vec3 RwNeoRimLight(vec3 normal)
 		RwNeoRimChannel(scene.neoRimEnd.b,scene.neoRimStart.b,scene.neoParams.y,scene.neoParams.z,scene.neoParams.w,facing));
 }
 
+#ifndef RW_STATIC_ARRAY_CROSS
 layout(push_constant) uniform PushConstants {
 	mat4 model;
 	// Material colour modulated with the vertex colour.
@@ -138,3 +139,4 @@ vec4 RwRootScreenMotion()
 	return vec4(push.model[0].w, push.model[1].w,
 	            push.model[2].w, push.model[3].w);
 }
+#endif

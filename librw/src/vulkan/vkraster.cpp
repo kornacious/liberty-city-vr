@@ -503,8 +503,23 @@ rasterCreate(Raster *raster)
 	if((raster->type & 0xF) == Raster::CAMERATEXTURE ||
 	   (raster->type & 0xF) == Raster::CAMERA)
 		imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	if((raster->type & 0xF)==Raster::TEXTURE &&
+	   native->format==VK_FORMAT_R8G8B8A8_UNORM && native->numLevels==1){
+		VkFormatProperties properties={};
+		vkGetPhysicalDeviceFormatProperties(gvk.physicalDevice,native->format,&properties);
+		if(properties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT){
+			imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+			native->staticArrayCopySource=1;
+		}
+	}
 
-	if(vkCreateImage(gvk.device, &imageInfo, nil, &native->image) != VK_SUCCESS){
+	VkResult created=vkCreateImage(gvk.device,&imageInfo,nil,&native->image);
+	if(created!=VK_SUCCESS && native->staticArrayCopySource){
+		imageInfo.usage &= ~VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		native->staticArrayCopySource=0;
+		created=vkCreateImage(gvk.device,&imageInfo,nil,&native->image);
+	}
+	if(created!=VK_SUCCESS){
 		VKERR("vkCreateImage failed for %dx%d", raster->width, raster->height);
 		raster->flags |= Raster::DONTALLOCATE;
 		return raster;
@@ -1750,6 +1765,8 @@ rasterUnlock(Raster *raster, int32 level)
 		region.imageExtent.depth = 1;
 		vkCmdCopyBufferToImage(commandBuffer, native->stagingBuffer, native->image,
 		                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		if(native->staticArrayCopySource)
+			syncStaticArrayRasterUpload(native,commandBuffer);
 
 		if(gvk.generateMipmaps && native->generateMips &&
 		   level == 0 && native->numLevels > 1)
@@ -1762,8 +1779,8 @@ rasterUnlock(Raster *raster, int32 level)
 		                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		if(native->stagingCpu)
 			memcpy(native->stagingMapped, native->stagingCpu, (size_t)native->stagingBytes);
-		endOneShot(commandBuffer);
-		native->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		if(endOneShot(commandBuffer))
+			native->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	}
 
 	vkUnmapMemory(gvk.device, native->stagingMemory);

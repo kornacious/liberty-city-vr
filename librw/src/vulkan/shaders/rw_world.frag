@@ -15,7 +15,12 @@ layout(location=6) in vec2 fragTexCoord1;
 // opaque world pass must compile to a variant that contains no discard at all.
 layout(constant_id = 0) const int RW_ALPHA_TEST = 0;
 
+#ifdef RW_STATIC_ARRAY
+layout(set = 1, binding = 0) uniform sampler2DArray diffuseTexture;
+layout(location = 7) flat in uint fragTextureLayer;
+#else
 layout(set = 1, binding = 0) uniform sampler2D diffuseTexture;
+#endif
 #ifndef RW_WORLD_EFFECTS_RESOURCES
 #define RW_WORLD_EFFECTS_RESOURCES 1
 #endif
@@ -75,7 +80,11 @@ void main()
 {
 	// Untextured materials bind a 1x1 white texture, so there is no separate
 	// untextured variant to compile or select.
+#ifdef RW_STATIC_ARRAY
+	vec4 texColour = texture(diffuseTexture, vec3(fragTexCoord, float(fragTextureLayer)));
+#else
 	vec4 texColour = texture(diffuseTexture, fragTexCoord);
+#endif
 	vec4 colour = fragColour * texColour;
 #if RW_NEO_RESOURCES
 	const int neoFlags=int(push.ambientLight.w);
@@ -85,6 +94,7 @@ void main()
 	}
 #endif
 
+#ifndef RW_STATIC_ARRAY_CROSS
 	if(RW_ALPHA_TEST == 1){
 		// The PS2 rule splits a blended mesh in two: the solid half is
 		// drawn with depth writes, the faint half without. A negative
@@ -124,6 +134,7 @@ void main()
         outColour=vec4(rgb,colour.a);
         outDynamicMotion=vec2(0.0); return;
     }
+#endif
 
 	// The game's dynamic lights, per pixel. The original fixed function turned
 	// these into extra directionals and only for peds and vehicles; evaluating
@@ -467,7 +478,7 @@ void main()
 
 	}
 #endif
-#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS && !defined(RW_STATIC_ARRAY_CROSS)
 	// Culling visualizer: paint the draw its debug colour. The index is the
 	// whole of surfaceProps.z here (the pack was suppressed on the CPU), so
 	// the texture still reads through underneath at 40 percent.

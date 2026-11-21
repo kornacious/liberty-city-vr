@@ -43,6 +43,19 @@ static std::vector<float> Raster(const Item *a,const std::vector<unsigned> &orde
     return image;
 }
 int main(){
+    float model[16]={};
+    model[0]=model[5]=model[10]=model[15]=1;
+    float planes[2][5][4]={};
+    planes[0][0][0]=planes[1][0][0]=1;
+    planes[1][0][3]=2;
+    const StaticMeshVisibility::Bounds leftOnly={{-1,0,0},{-.5f,1,1},true};
+    const StaticMeshVisibility::Bounds outside={{-4,0,0},{-3,1,1},true};
+    assert(StaticMeshVisibility::Frusta(planes,model).Visible(leftOnly));
+    assert(!StaticMeshVisibility::Frusta(planes,model).Visible(outside));
+    model[12]=3;
+    assert(StaticMeshVisibility::Frusta(planes,model).Visible(outside));
+    model[12]=std::numeric_limits<float>::infinity();
+    assert(StaticMeshVisibility::Frusta(planes,model).Visible(outside));
     Item a[StaticInstances::Window];bool used[StaticInstances::Window]={};unsigned selected[StaticInstances::MaxInstances];StaticInstances::Stats s;
     a[0]=Make(0,1,-.8f,.8f,.4f);a[1]=Make(1,2,-.8f,.8f,.5f);a[2]=Make(2,1,-.8f,.8f,.6f);
     assert(Plan(a,3,0,used,selected,s)==2); // separated opaque depth

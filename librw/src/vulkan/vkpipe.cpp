@@ -8,6 +8,9 @@
 #include <assert.h>
 #include <math.h>
 #include <chrono>
+#include <algorithm>
+#include <functional>
+#include <optional>
 #include <unordered_map>
 
 #include "../rwbase.h"
@@ -71,7 +74,8 @@ bool32 getOpaqueOrderEnabled(void){return gOpaqueOrderEnabled;}
 OpaqueOrder::Stats getOpaqueOrderStats(void){return gOpaqueOrderStats;}
 void recordOpaqueOrderSwaps(uint32 swaps){gOpaqueOrderStats.swaps+=swaps;}
 static void resetStaticInstanceStats(void);
-void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};gWorldBackfaceStats={};resetWorldOcclusion();resetStaticReuseSample(0,0);}
+static StaticArrayBatch::Stats gStaticArrayStats;
+void resetAtomicSubmissionStats(void){resetStaticInstanceStats();gStaticArrayStats={};gAtomicSubmissionStats={};gOpaqueOrderStats={};gAlphaBoundStats={};gOpaqueMeshBatchStats={};gWorldBackfaceStats={};resetWorldOcclusion();resetStaticReuseSample(0,0);}
 AtomicSubmissionStats getAtomicSubmissionStats(void){return gAtomicSubmissionStats;}
 UniformAlphaPolicy::BoundStats getAlphaBoundStats(void){return gAlphaBoundStats;}
 
@@ -83,6 +87,11 @@ void setWorldBackfaceEnabled(bool32 enabled){
 bool32 getWorldBackfaceEnabled(void){return gWorldBackfaceEnabled;}
 WorldBackface::Stats getWorldBackfaceStats(void){return gWorldBackfaceStats;}
 static bool32 gStaticInstancesEnabled;
+static bool32 gStaticSubmissionCacheEnabled;
+static bool32 gStaticMeshCullEnabled;
+static bool32 gStaticArrayBatchEnabled;
+static bool32 gCrossArrayBatchEnabled;
+static void flushPendingCrossArray();
 static StaticInstances::Stats gStaticInstanceStats;
 static DrawProfile::Context gInstanceOwner,gInstanceParents[DrawProfile::ContextDepth];
 static unsigned gInstanceDepth;
@@ -103,12 +112,29 @@ static unsigned gInstanceCount;
 static void resetStaticInstanceStats(void){assert(gInstanceCount==0);gStaticInstanceStats={};}
 
 bool32 getStaticInstancesEnabled(void){return gStaticInstancesEnabled;}
+bool32 getStaticSubmissionCacheEnabled(void){return gStaticSubmissionCacheEnabled;}
+bool32 getStaticMeshCullEnabled(void){return gStaticMeshCullEnabled;}
+bool32 getStaticArrayBatchEnabled(void){return gStaticArrayBatchEnabled;}
+bool32 getCrossArrayBatchEnabled(void){return gCrossArrayBatchEnabled;}
+void setCrossArrayBatchEnabled(bool32 enabled){
+	if(gCrossArrayBatchEnabled==(enabled!=0)) return;
+	flushStaticInstances();
+	gCrossArrayBatchEnabled=enabled!=0;
+}
+void setStaticArrayBatchEnabled(bool32 enabled){gStaticArrayBatchEnabled=enabled!=0;}
+void setStaticMeshCullEnabled(bool32 enabled){gStaticMeshCullEnabled=enabled!=0;}
+void setStaticSubmissionCacheEnabled(bool32 enabled){
+	if(gStaticSubmissionCacheEnabled==(enabled!=0))return;
+	flushStaticInstances();
+	gStaticSubmissionCacheEnabled=enabled!=0;
+}
 void setStaticInstancesEnabled(bool32 enabled){
 	if(gStaticInstancesEnabled!=(enabled!=0)){flushStaticInstances();gStaticInstancesEnabled=enabled!=0;}
 }
 StaticInstances::Stats getStaticInstancesStats(void){return gStaticInstanceStats;}
 bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags){
-	if(!gStaticInstancesEnabled&&!gWorldBackfaceEnabled&&!getWorldOcclusionEnabled())return 0;
+	if(!gStaticInstancesEnabled&&!gStaticMeshCullEnabled&&!gStaticArrayBatchEnabled&&
+	   !gWorldBackfaceEnabled&&!getWorldOcclusionEnabled())return 0;
 	if(gInstanceDepth<DrawProfile::ContextDepth)gInstanceParents[gInstanceDepth]=gInstanceOwner;
 	gInstanceOwner=gInstanceDepth<DrawProfile::ContextDepth?DrawProfile::Entity(model,entityClass,name,flags):DrawProfile::Context{};
 	++gInstanceDepth;return 1;
@@ -116,15 +142,41 @@ bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,
 void endStaticInstanceEntity(void){
 	if(gInstanceDepth && --gInstanceDepth<DrawProfile::ContextDepth)gInstanceOwner=gInstanceParents[gInstanceDepth];
 }
+// A flush records a continuous run of commands without calling another renderer.
+// Reestablish all bindings on the first draw, including after collector fallback.
+struct StaticDrawBindings {
+	AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,VkPipelineLayout> state;
+	VkBuffer vertices=VK_NULL_HANDLE,indices=VK_NULL_HANDLE;
+	VkBuffer transforms=VK_NULL_HANDLE;
+	VkDeviceSize transformOffset=0;
+	bool enabled;
+
+	StaticDrawBindings(bool cache,bool profile):state(cache,profile),enabled(cache){}
+};
+
 static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeline,
-                                   VkBuffer transforms,VkDeviceSize transformOffset,unsigned instances){
+                                   VkBuffer transforms,VkDeviceSize transformOffset,unsigned instances,
+                                   StaticDrawBindings &bindings){
 	const VkCommandBuffer cb=gvk.frameCommands;
 	const VkDeviceSize zero=0;
-	vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
-	vkCmdBindVertexBuffers(cb,0,1,&d.vertices,&zero);
-	if(instances>1)vkCmdBindVertexBuffers(cb,1,1,&transforms,&transformOffset);
-	vkCmdBindIndexBuffer(cb,d.indices,0,VK_INDEX_TYPE_UINT16);
-	vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,getPipelineLayout(),1,1,&d.texture,0,nil);
+	const VkPipelineLayout layout=getPipelineLayout();
+	if(bindings.state.PipelineBind(pipeline))
+		vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+	if(!bindings.enabled||bindings.vertices!=d.vertices){
+		vkCmdBindVertexBuffers(cb,0,1,&d.vertices,&zero);
+		bindings.vertices=d.vertices;
+	}
+	if(instances>1&&(!bindings.enabled||bindings.transforms!=transforms||bindings.transformOffset!=transformOffset)){
+		vkCmdBindVertexBuffers(cb,1,1,&transforms,&transformOffset);
+		bindings.transforms=transforms;
+		bindings.transformOffset=transformOffset;
+	}
+	if(!bindings.enabled||bindings.indices!=d.indices){
+		vkCmdBindIndexBuffer(cb,d.indices,0,VK_INDEX_TYPE_UINT16);
+		bindings.indices=d.indices;
+	}
+	if(bindings.state.TextureBind(layout,d.texture))
+		vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,1,1,&d.texture,0,nil);
 	vkCmdPushConstants(cb,getPipelineLayout(),VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(d.push),&d.push);
 	const bool sampled=gpuProfileSampling();
 	DrawProfile::Context previousOwner;
@@ -136,9 +188,29 @@ static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeli
 	gStaticInstanceStats.emittedIndices+=uint64(d.count)*instances;
 }
 void flushStaticInstances(void){
+	flushPendingCrossArray();
 	if(!gInstanceCount)return;
 	assert(gvk.inFrame);
 	const auto start=std::chrono::steady_clock::now();
+	StaticDrawBindings bindings(gStaticSubmissionCacheEnabled,
+		gStaticSubmissionCacheEnabled&&gvk.frameTimestampEnabled);
+	unsigned nextCandidate[StaticInstances::Window];
+	if(gStaticSubmissionCacheEnabled){
+		// Group potential matches by geometry and texture in submission order.
+		// Hash collisions still go through the full state and stereo proofs.
+		constexpr unsigned BucketCount=StaticInstances::Window*2;
+		unsigned head[BucketCount];
+		for(auto &entry:head)entry=gInstanceCount;
+		for(unsigned i=gInstanceCount;i>0;){
+			--i;
+			const auto &draw=gInstanceDraws[i];
+			const size_t key=(std::hash<VkBuffer>{}(draw.indices)>>4) ^
+				(std::hash<VkDescriptorSet>{}(draw.texture)>>3) ^ (size_t(draw.first)*31);
+			const unsigned bucket=unsigned(key%BucketCount);
+			nextCandidate[i]=head[bucket];
+			head[bucket]=i;
+		}
+	}
 	bool used[StaticInstances::Window]={};
 	for(unsigned i=0;i<gInstanceCount;++i){
 		if(used[i])continue;
@@ -150,7 +222,8 @@ void flushStaticInstances(void){
 				a.owner.flags==b.owner.flags &&
 				memcmp(a.push.materialColour,b.push.materialColour,64)==0;
 		};
-		unsigned n=StaticInstances::Plan(gInstanceDraws,gInstanceCount,i,used,selected,match,gStaticInstanceStats);
+		unsigned n=StaticInstances::Plan(gInstanceDraws,gInstanceCount,i,used,selected,match,
+			gStaticInstanceStats,gStaticSubmissionCacheEnabled?nextCandidate:nullptr);
 		VkBuffer buffer=VK_NULL_HANDLE;VkDeviceSize offset=0;void *mapped=nil;
 		if(n>1 && (gInstanceDraws[i].count>~0u/n || !allocateStaticInstanceTransforms(n,&buffer,&offset,&mapped))){
 			++gStaticInstanceStats.allocationFailure;n=1;
@@ -165,10 +238,12 @@ void flushStaticInstances(void){
 			++gStaticInstanceStats.groups;gStaticInstanceStats.instances+=n;
 			gStaticInstanceStats.savedDraws+=n-1;
 		}
-		emitStaticInstanceDraw(gInstanceDraws[i],n>1?gInstanceDraws[i].instanced:gInstanceDraws[i].pipeline,buffer,offset,n);
+		emitStaticInstanceDraw(gInstanceDraws[i],n>1?gInstanceDraws[i].instanced:gInstanceDraws[i].pipeline,buffer,offset,n,bindings);
 		for(unsigned j=0;j<n;++j)used[selected[j]]=true;
 	}
 	gInstanceCount=0;
+	if(gStaticSubmissionCacheEnabled&&gvk.frameTimestampEnabled)
+		gAtomicSubmissionStats.Add(bindings.state.stats);
 	gStaticInstanceStats.flushMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
 }
 
@@ -295,11 +370,16 @@ uploadStaticBuffer(const void *data, VkDeviceSize size, VkBufferUsageFlags usage
 	}
 
 	void *mapped = nil;
-	vkMapMemory(gvk.device, stagingMemory, 0, size, 0, &mapped);
+	if(vkMapMemory(gvk.device, stagingMemory, 0, size, 0, &mapped)!=VK_SUCCESS){
+		retireBuffer(staging,stagingMemory);
+		destroyStaticBuffer(*bufferOut,*memoryOut);
+		return 0;
+	}
 	memcpy(mapped, data, (size_t)size);
 	vkUnmapMemory(gvk.device, stagingMemory);
 
 	VkCommandBuffer commandBuffer = beginOneShot();
+	bool32 uploaded=0;
 	if(commandBuffer != VK_NULL_HANDLE){
 		VkBufferCopy copy = {};
 		copy.size = size;
@@ -320,14 +400,524 @@ uploadStaticBuffer(const void *data, VkDeviceSize size, VkBufferUsageFlags usage
 		                     VK_PIPELINE_STAGE_TRANSFER_BIT,
 		                     VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
 		                     0, 0, nil, 1, &ready, 0, nil);
-		endOneShot(commandBuffer);
+		uploaded=endOneShot(commandBuffer);
 	}
 
 	// A streamed model may be drawn later in this same frame. Submission order
 	// makes the copy visible first; defer the upload source until the frame
 	// fence proves that both operations have completed.
 	retireBuffer(staging, stagingMemory);
-	return 1;
+	if(!uploaded) destroyStaticBuffer(*bufferOut,*memoryOut);
+	return uploaded;
+}
+
+namespace {
+
+constexpr unsigned MaxArrayMeshes=32;
+constexpr uint32 MaxArrayIndices=12288;
+constexpr size_t ArrayGeometryLimit=16*1024*1024;
+constexpr size_t ArrayGeometryUploadLimit=512*1024;
+constexpr size_t CrossGeometryLimit=16*1024*1024;
+constexpr size_t CrossGeometryUploadLimit=512*1024;
+constexpr size_t CrossGeometryEntryLimit=512;
+constexpr unsigned CrossGeometryBuildLimit=4;
+
+struct ArrayMaterial {
+	float colour[4];
+	float surface[2];
+	uint32 layer;
+};
+
+struct ArrayGeometry {
+	VkBuffer buffer=VK_NULL_HANDLE;
+	VkDeviceMemory memory=VK_NULL_HANDLE;
+	VkDeviceSize indexOffset=0;
+	size_t bytes=0;
+	uint64 generation=0;
+	uint32 first=0;
+	std::vector<ArrayMaterial> materials;
+	std::vector<uint8> payload;
+};
+
+static std::unordered_map<InstanceDataHeader*,std::vector<ArrayGeometry>> arrayGeometry;
+static size_t arrayGeometryBytes=0,arrayGeometryUploadBytes=0;
+static unsigned arrayGeometryBuildAttempts=0;
+static uint64 nextArrayGeometryGeneration=0;
+
+struct CrossGeometry {
+	VkBuffer buffer=VK_NULL_HANDLE;
+	VkDeviceMemory memory=VK_NULL_HANDLE;
+	VkDeviceSize indexOffset=0;
+	size_t bytes=0;
+	uint64 lastUsedFrame=0;
+};
+
+struct CrossGeometryHash {
+	size_t operator()(const StaticArrayBatch::CrossGeometryKey &key) const noexcept
+	{
+		size_t hash=0;
+		for(auto generation:key)
+			hash^=std::hash<uint64>{}(generation)+0x9e3779b9u+(hash<<6)+(hash>>2);
+		return hash;
+	}
+};
+
+static std::unordered_map<StaticArrayBatch::CrossGeometryKey,CrossGeometry,CrossGeometryHash> crossGeometry;
+static size_t crossGeometryBytes=0,crossGeometryAttemptedBytes=0;
+static unsigned crossGeometryBuildAttempts=0;
+static uint64 crossGeometryFrame=0;
+
+static void retireCrossGeometry(CrossGeometry &batch)
+{
+	destroyStaticBuffer(batch.buffer,batch.memory);
+	crossGeometryBytes-=batch.bytes;
+}
+
+static void retireArrayGeometry(ArrayGeometry &batch)
+{
+	if(!batch.generation) return;
+	// Retiring the source drains draws that may still reference its CPU payload.
+	destroyStaticBuffer(batch.buffer,batch.memory);
+	for(auto entry=crossGeometry.begin();entry!=crossGeometry.end();){
+		if(!StaticArrayBatch::UsesCrossGeometry(entry->first,batch.generation)){
+			++entry;
+			continue;
+		}
+		retireCrossGeometry(entry->second);
+		entry=crossGeometry.erase(entry);
+	}
+}
+
+static void forgetStaticArrayGeometry(InstanceDataHeader *header)
+{
+	auto found=arrayGeometry.find(header);
+	if(found==arrayGeometry.end()) return;
+	for(auto &batch:found->second){
+		retireArrayGeometry(batch);
+		arrayGeometryBytes-=batch.bytes;
+	}
+	arrayGeometry.erase(found);
+}
+
+static void fillArrayMaterial(const Geometry *geometry,const Material &material,ArrayMaterial &out)
+{
+	const bool modulate=(geometry->flags & Geometry::MODULATE)!=0;
+	out.colour[0]=modulate?material.color.red/255.0f:1.0f;
+	out.colour[1]=modulate?material.color.green/255.0f:1.0f;
+	out.colour[2]=modulate?material.color.blue/255.0f:1.0f;
+	out.colour[3]=1.0f;
+	out.surface[0]=material.surfaceProps.ambient;
+	out.surface[1]=material.surfaceProps.diffuse;
+}
+
+static bool arrayMeshTexture(const InstanceData &mesh,StaticArrayTexture &out)
+{
+	const Material *material=mesh.material;
+	if(!mesh.numIndex || mesh.numIndex%3 || mesh.vertexAlpha ||
+	   !material || material->color.alpha!=255 || !material->texture ||
+	   MatFX::get(material) || !isfinite(material->surfaceProps.ambient) ||
+	   !isfinite(material->surfaceProps.diffuse)) return false;
+	auto *texture=material->texture;
+	return getStaticArrayTexture(texture->raster,texture->getFilter(),
+	                             texture->getAddressU(),texture->getAddressV(),out);
+}
+
+static bool equalArrayMaterial(const ArrayMaterial &a,const ArrayMaterial &b)
+{
+	return a.layer==b.layer && memcmp(a.colour,b.colour,sizeof(a.colour))==0 &&
+	       memcmp(a.surface,b.surface,sizeof(a.surface))==0;
+}
+
+static StaticArrayBatch::Result buildStaticArrayGeometry(InstanceDataHeader *header,uint32 first,
+                                     const ArrayMaterial *materials,unsigned count,
+                                     uint32 elements,ArrayGeometry &batch,bool keepPayload)
+{
+	using Result=StaticArrayBatch::Result;
+	const size_t maxBytes=size_t(elements)*(sizeof(WorldArrayVertex)+sizeof(uint32));
+	if(maxBytes>ArrayGeometryUploadLimit-arrayGeometryUploadBytes || arrayGeometryBuildAttempts>=8)
+		return Result::GeometryBuildBudget;
+	if(header->totalNumVertex>65536) return Result::GeometryInput;
+	if(maxBytes>ArrayGeometryLimit-arrayGeometryBytes+batch.bytes) return Result::GeometryMemoryLimit;
+	++arrayGeometryBuildAttempts;
+
+	const auto *src=reinterpret_cast<const WorldVertex *>(header->vertexBuffer);
+	std::vector<WorldArrayVertex> vertices;
+	std::vector<uint32> indices(elements);
+	std::vector<uint32> remap(header->totalNumVertex,UINT32_MAX);
+	vertices.reserve(elements);
+	uint32 indexOffset=0;
+	for(unsigned i=0;i<count;++i){
+		const auto &mesh=header->inst[first+i];
+		const auto append=[&](uint16 original){
+			const uint32 vertexIndex=(uint32)vertices.size();
+			WorldArrayVertex vertex={};
+			vertex.vertex=src[original];
+			memcpy(vertex.materialColour,materials[i].colour,sizeof(vertex.materialColour));
+			memcpy(vertex.surface,materials[i].surface,sizeof(vertex.surface));
+			vertex.layer=materials[i].layer;
+			vertices.push_back(vertex);
+			return vertexIndex;
+		};
+		if(!StaticArrayBatch::RemapRange(header->indexBuffer+mesh.offset/2,mesh.numIndex,
+		                               remap.data(),header->totalNumVertex,(uint32)vertices.size(),
+		                               indices.data()+indexOffset,append)) return Result::GeometryInput;
+		indexOffset+=mesh.numIndex;
+	}
+	ArrayGeometry replacement;
+	replacement.first=first;
+	replacement.indexOffset=vertices.size()*sizeof(WorldArrayVertex);
+	replacement.bytes=size_t(replacement.indexOffset)+indices.size()*sizeof(uint32);
+	replacement.materials.assign(materials,materials+count);
+	std::vector<uint8> upload(replacement.bytes);
+	memcpy(upload.data(),vertices.data(),size_t(replacement.indexOffset));
+	memcpy(upload.data()+replacement.indexOffset,indices.data(),indices.size()*sizeof(uint32));
+	if(!uploadStaticBuffer(upload.data(),upload.size(),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+	                       &replacement.buffer,&replacement.memory)) return Result::GeometryUpload;
+	if(keepPayload) replacement.payload=std::move(upload);
+	replacement.generation=++nextArrayGeometryGeneration;
+	retireArrayGeometry(batch);
+	arrayGeometryBytes+=replacement.bytes;
+	arrayGeometryBytes-=batch.bytes;
+	arrayGeometryUploadBytes+=replacement.bytes;
+	++gStaticArrayStats.cacheBuilds;
+	batch=std::move(replacement);
+	return Result::Ready;
+}
+
+struct CrossArrayDraw {
+	VkPipeline pipeline,crossPipeline;
+	VkDescriptorSet texture;
+	VkBuffer buffer;
+	VkDeviceSize indexOffset;
+	const uint8 *payload;
+	uint64 generation;
+	uint32 elements;
+	PushConstants push;
+	DrawProfile::Context owner;
+	const Atomic *atomic;
+	bool duplicateSingleton;
+};
+
+static CrossArrayDraw crossArrayDraws[CrossArrayMaxObjects];
+static unsigned crossArrayDrawCount=0;
+static uint32 crossArrayElements=0;
+static bool crossArrayDraining=false;
+static constexpr uint32 CrossArrayMaxElements=4096;
+using CrossBindings=StaticArrayBatch::CrossArrayBindings<VkPipeline,VkDescriptorSet>;
+static CrossBindings crossBindings;
+
+static void profileArrayDraw(uint32 elements,const DrawProfile::Context &owner)
+{
+	if(!gpuProfileSampling()) return;
+	auto &context=gvk.frames[gvk.activeFrame].gpuProfile.geometry.entity;
+	const auto previous=context;
+	context=owner;
+	countGpuProfileDraw(elements,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,DrawProfile::Mesh|DrawProfile::WritesDepth);
+	context=previous;
+}
+
+static void emitArrayDraw(const CrossArrayDraw &draw)
+{
+	crossBindings.Invalidate();
+	const auto command=gvk.frameCommands;
+	const auto layout=getPipelineLayout();
+	const VkDeviceSize zero=0;
+	vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,draw.pipeline);
+	vkCmdBindVertexBuffers(command,0,1,&draw.buffer,&zero);
+	vkCmdBindIndexBuffer(command,draw.buffer,draw.indexOffset,VK_INDEX_TYPE_UINT32);
+	vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,1,1,&draw.texture,0,nil);
+	vkCmdPushConstants(command,layout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(draw.push),&draw.push);
+	profileArrayDraw(draw.elements,draw.owner);
+	vkCmdDrawIndexed(command,draw.elements,1,0,0,0);
+}
+
+static bool makeCrossGeometryRoom(size_t bytes)
+{
+	while(crossGeometry.size()>=CrossGeometryEntryLimit || bytes>CrossGeometryLimit-crossGeometryBytes){
+		auto oldest=crossGeometry.end();
+		for(auto entry=crossGeometry.begin();entry!=crossGeometry.end();++entry){
+			if(crossGeometryFrame-entry->second.lastUsedFrame<=1) continue;
+			if(oldest==crossGeometry.end() || entry->second.lastUsedFrame<oldest->second.lastUsedFrame)
+				oldest=entry;
+		}
+		if(oldest==crossGeometry.end()) return false;
+		retireCrossGeometry(oldest->second);
+		crossGeometry.erase(oldest);
+	}
+	return true;
+}
+
+static CrossGeometry *getCrossGeometry(const StaticArrayBatch::CrossGeometryKey &key)
+{
+	auto entry=crossGeometry.find(key);
+	if(entry!=crossGeometry.end()){
+		++gStaticArrayStats.crossCacheHits;
+		entry->second.lastUsedFrame=crossGeometryFrame;
+		return &entry->second;
+	}
+	++gStaticArrayStats.crossCacheMisses;
+	size_t vertexBytes=0;
+	for(unsigned i=0;i<crossArrayDrawCount;++i) vertexBytes+=crossArrayDraws[i].indexOffset;
+	const size_t indexBytes=size_t(crossArrayElements)*sizeof(uint32);
+	const size_t bytes=vertexBytes+indexBytes;
+	if(crossGeometryBuildAttempts>=CrossGeometryBuildLimit ||
+	   bytes>CrossGeometryUploadLimit-crossGeometryAttemptedBytes) return nil;
+	++crossGeometryBuildAttempts;
+	crossGeometryAttemptedBytes+=bytes;
+
+	std::vector<uint8> upload;
+	try {
+		upload.resize(bytes);
+		std::vector<uint32> indexData(crossArrayElements);
+		uint32 vertexBase=0,indexBase=0;
+		for(unsigned i=0;i<crossArrayDrawCount;++i){
+			const auto &draw=crossArrayDraws[i];
+			const uint32 vertexCount=(uint32)(draw.indexOffset/sizeof(WorldArrayVertex));
+			for(uint32 vertex=0;vertex<vertexCount;++vertex){
+				WorldArrayVertex data;
+				memcpy(&data,draw.payload+vertex*sizeof(data),sizeof(data));
+				data.layer=StaticArrayBatch::EncodeCrossLayer(data.layer,i);
+				memcpy(upload.data()+(vertexBase+vertex)*sizeof(data),&data,sizeof(data));
+			}
+			memcpy(indexData.data()+indexBase,draw.payload+draw.indexOffset,draw.elements*sizeof(uint32));
+			StaticArrayBatch::OffsetCrossIndices(indexData.data()+indexBase,draw.elements,vertexBase);
+			vertexBase+=vertexCount;
+			indexBase+=draw.elements;
+		}
+		memcpy(upload.data()+vertexBytes,indexData.data(),indexBytes);
+		if(!makeCrossGeometryRoom(bytes)) return nil;
+		entry=crossGeometry.try_emplace(key).first;
+	} catch(const std::bad_alloc &) {
+		return nil;
+	}
+	auto &cached=entry->second;
+	if(!uploadStaticBuffer(upload.data(),bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+	                       &cached.buffer,&cached.memory)){
+		crossGeometry.erase(entry);
+		return nil;
+	}
+	cached.indexOffset=vertexBytes;
+	cached.bytes=bytes;
+	cached.lastUsedFrame=crossGeometryFrame;
+	crossGeometryBytes+=bytes;
+	gStaticArrayStats.crossCacheUploadBytes+=(uint32)bytes;
+	++gStaticArrayStats.crossCacheBuilds;
+	return &cached;
+}
+
+static bool emitCrossArrayBatch()
+{
+	if(crossArrayDrawCount<2) return false;
+	bool crossesObjects=false;
+	StaticArrayBatch::CrossGeometryKey key={};
+	const auto &first=crossArrayDraws[0];
+	for(unsigned i=0;i<crossArrayDrawCount;++i){
+		const auto &draw=crossArrayDraws[i];
+		key[i]=draw.generation;
+		crossesObjects|=draw.atomic!=first.atomic;
+	}
+	if(!crossesObjects) return false;
+	const auto *cached=getCrossGeometry(key);
+	CrossArrayStream stream{};
+	if(!cached || !allocateCrossArrayStream(crossArrayDrawCount,stream)){
+		++gStaticArrayStats.crossFallbacks;
+		return false;
+	}
+	for(unsigned i=0;i<crossArrayDrawCount;++i){
+		const auto &draw=crossArrayDraws[i];
+		auto *object=stream.mapped+i*sizeof(CrossArrayObject);
+		memcpy(object+offsetof(CrossArrayObject,model),draw.push.model,sizeof(draw.push.model));
+		memcpy(object+offsetof(CrossArrayObject,ambient),draw.push.ambientLight,sizeof(draw.push.ambientLight));
+		memcpy(object+offsetof(CrossArrayObject,directional),draw.push.lightDirColour,sizeof(draw.push.lightDirColour));
+		gStaticArrayStats.duplicateMergedLayers+=draw.duplicateSingleton;
+	}
+	const auto command=gvk.frameCommands;
+	const auto layout=getPipelineLayout();
+	const VkDeviceSize zero=0;
+	const unsigned changes=crossBindings.Update(first.crossPipeline,first.texture,stream.descriptor,stream.pageOffset);
+	if(changes&CrossBindings::BindPipeline){
+		vkCmdBindPipeline(command,VK_PIPELINE_BIND_POINT_GRAPHICS,first.crossPipeline);
+		++gStaticArrayStats.crossPipelineBinds;
+	}
+	vkCmdBindVertexBuffers(command,0,1,&cached->buffer,&zero);
+	vkCmdBindIndexBuffer(command,cached->buffer,cached->indexOffset,VK_INDEX_TYPE_UINT32);
+	const bool bindTexture=changes&CrossBindings::BindTexture;
+	const bool bindTransforms=changes&CrossBindings::BindTransforms;
+	if(bindTexture || bindTransforms){
+		const VkDescriptorSet sets[]={first.texture,stream.descriptor};
+		vkCmdBindDescriptorSets(command,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,
+		                       bindTexture?1:2,unsigned(bindTexture)+unsigned(bindTransforms),
+		                       sets+(bindTexture?0:1),bindTransforms?1:0,bindTransforms?&stream.pageOffset:nil);
+		++gStaticArrayStats.crossDescriptorBinds;
+		if(bindTransforms) ++gStaticArrayStats.crossTransformBinds;
+	}
+	profileArrayDraw(crossArrayElements,DrawProfile::Context{});
+	vkCmdDrawIndexed(command,crossArrayElements,1,0,0,stream.firstObject);
+	++gStaticArrayStats.crossBatches;
+	gStaticArrayStats.crossSavedDraws+=crossArrayDrawCount-1;
+	gStaticArrayStats.crossUploadBytes+=crossArrayDrawCount*sizeof(CrossArrayObject);
+	return true;
+}
+
+static void flushCrossArrayDraws()
+{
+	if(!crossArrayDrawCount || crossArrayDraining) return;
+	// Upload staging buffers and evicted cache entries use fence-based retirement,
+	// which flushes queued draws before retiring a buffer.
+	crossArrayDraining=true;
+	const bool profile=gvk.frameTimestampEnabled!=0;
+	const auto start=profile?std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
+	if(!emitCrossArrayBatch())
+		for(unsigned i=0;i<crossArrayDrawCount;++i) emitArrayDraw(crossArrayDraws[i]);
+	crossArrayDrawCount=0;
+	crossArrayElements=0;
+	crossArrayDraining=false;
+	if(profile)
+		gStaticArrayStats.crossFlushMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+}
+
+static void submitArrayDraw(const CrossArrayDraw &draw)
+{
+	if(!draw.crossPipeline || draw.elements>CrossArrayMaxElements){
+		flushStaticInstances();
+		emitArrayDraw(draw);
+		return;
+	}
+	if(gInstanceCount) flushStaticInstances();
+	if(crossArrayDrawCount){
+		const auto &first=crossArrayDraws[0];
+		if(first.crossPipeline!=draw.crossPipeline || first.texture!=draw.texture ||
+		   crossArrayDrawCount==CrossArrayMaxObjects || crossArrayElements+draw.elements>CrossArrayMaxElements)
+			flushCrossArrayDraws();
+	}
+	crossArrayDraws[crossArrayDrawCount++]=draw;
+	crossArrayElements+=draw.elements;
+}
+
+static unsigned drawStaticArrayBatch(const Atomic *atomic,const Geometry *geometry,InstanceDataHeader *header,
+                                     uint32 first,const PushConstants &push,
+                                     const StaticMeshVisibility::Frusta *frusta,bool allowCross)
+{
+	using Result=StaticArrayBatch::Result;
+	if((!allowCross && first+1>=header->numMeshes) || !header->vertexBuffer || !header->indexBuffer) return 0;
+	StaticArrayTexture textures[MaxArrayMeshes];
+	unsigned count=0;
+	uint32 elements=0;
+	for(;count<MaxArrayMeshes && first+count<header->numMeshes;++count){
+		const auto &range=header->inst[first+count];
+		if(range.numIndex>MaxArrayIndices-elements || range.offset%2 ||
+		   range.offset/2>header->totalNumIndex ||
+		   range.numIndex>header->totalNumIndex-range.offset/2 ||
+		   (frusta && !frusta->Visible(range.visibilityBounds)) ||
+		   !arrayMeshTexture(range,textures[count])) break;
+		if(count && (textures[count].width!=textures[0].width ||
+		             textures[count].height!=textures[0].height ||
+		             textures[count].samplerKey!=textures[0].samplerKey)) break;
+		elements+=range.numIndex;
+	}
+	if(!count || (count<2&&!allowCross)) return 0;
+	const auto alphaFunction=gstate.alphaTestFunction;
+	gstate.alphaTestFunction=ALPHAALWAYS;
+	const VkPipeline pipeline=getPipeline(SHADER_WORLD_ARRAY,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	const VkPipeline crossPipeline=allowCross?getPipeline(SHADER_WORLD_ARRAY_CROSS,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST):VK_NULL_HANDLE;
+	gstate.alphaTestFunction=alphaFunction;
+	if(!pipeline) return gStaticArrayStats.Fallback(Result::PipelineUnavailable);
+	if(count==1 && !crossPipeline) return 0;
+
+	const auto baseLayer=getStaticArrayLayer(textures[0],StaticArrayBatch::MaxPages,count==1,
+	                                        count>1?&textures[1]:nil);
+	if(count==1 && !baseLayer.page) return 0;
+	if(!baseLayer.page) return gStaticArrayStats.Fallback(baseLayer.result);
+	ArrayMaterial materials[MaxArrayMeshes];
+	elements=0;
+	unsigned available=0;
+	unsigned duplicates=0;
+	auto layerResult=Result::Ready;
+	for(;available<count;++available){
+		const auto layer=available==0?baseLayer:getStaticArrayLayer(textures[available],baseLayer.pageIndex);
+		if(!layer.page){layerResult=layer.result;break;}
+		auto &range=header->inst[first+available];
+		fillArrayMaterial(geometry,*range.material,materials[available]);
+		materials[available].layer=layer.layer;
+		duplicates+=layer.duplicate;
+		elements+=range.numIndex;
+	}
+	if(available<2 && count>1) return gStaticArrayStats.Fallback(layerResult);
+
+	auto &batches=arrayGeometry[header];
+	const auto found=std::find_if(batches.begin(),batches.end(),[first](const ArrayGeometry &item){return item.first==first;});
+	ArrayGeometry created;
+	ArrayGeometry *batch=found==batches.end()?&created:&*found;
+	if(batch==&created) batches.reserve(batches.size()+1);
+	const bool cached=batch->buffer && batch->materials.size()==available && (!crossPipeline || !batch->payload.empty()) &&
+	                  std::equal(batch->materials.begin(),batch->materials.end(),materials,equalArrayMaterial);
+	const auto geometryResult=cached?Result::Ready:
+		buildStaticArrayGeometry(header,first,materials,available,elements,*batch,crossPipeline!=VK_NULL_HANDLE);
+	if(geometryResult!=Result::Ready){
+		if(batches.empty()) arrayGeometry.erase(header);
+		return gStaticArrayStats.Fallback(geometryResult);
+	}
+	if(batch==&created){
+		batches.push_back(std::move(created));
+		batch=&batches.back();
+	}
+	submitArrayDraw({pipeline,crossPipeline,baseLayer.page,batch->buffer,batch->indexOffset,
+	                 batch->payload.data(),batch->generation,elements,push,gInstanceOwner,atomic,
+	                 available==1 && duplicates!=0});
+	if(available>1) gStaticArrayStats.duplicateMergedLayers+=duplicates;
+	++gStaticArrayStats.batches;
+	if(available<count) ++gStaticArrayStats.shortenedBatches;
+	gStaticArrayStats.savedDraws+=available-1;
+	gStaticArrayStats.indices+=elements;
+	return available;
+}
+
+}
+
+static void flushPendingCrossArray()
+{
+	flushCrossArrayDraws();
+	// Other renderers can change graphics bindings after a public drain.
+	crossBindings.Invalidate();
+}
+
+void clearStaticArrayGeometry(void)
+{
+	// Called after the queue has drained on shutdown or failed submission.
+	for(auto &entry:arrayGeometry)
+		for(auto &batch:entry.second){
+			if(batch.buffer) vkDestroyBuffer(gvk.device,batch.buffer,nil);
+			if(batch.memory) vkFreeMemory(gvk.device,batch.memory,nil);
+		}
+	arrayGeometry.clear();
+	arrayGeometryBytes=0;
+	for(auto &entry:crossGeometry){
+		const auto &batch=entry.second;
+		if(batch.buffer) vkDestroyBuffer(gvk.device,batch.buffer,nil);
+		if(batch.memory) vkFreeMemory(gvk.device,batch.memory,nil);
+	}
+	crossGeometry.clear();
+	crossGeometryBytes=0;
+}
+
+void resetStaticArrayGeometryFrame(void)
+{
+	crossBindings.Invalidate();
+	arrayGeometryUploadBytes=0;
+	arrayGeometryBuildAttempts=0;
+	crossGeometryAttemptedBytes=0;
+	crossGeometryBuildAttempts=0;
+	++crossGeometryFrame;
+}
+
+StaticArrayBatch::Stats getStaticArrayBatchStats(void)
+{
+	auto stats=gStaticArrayStats;
+	stats.geometryBytes=(uint32)arrayGeometryBytes;
+	stats.geometryUploadBytes=(uint32)arrayGeometryUploadBytes;
+	stats.crossCacheBytes=(uint32)crossGeometryBytes;
+	getStaticArrayPageStats(stats);
+	return stats;
 }
 
 namespace {
@@ -365,6 +955,7 @@ instanceMesh(rw::ObjPipeline *, Geometry *geo)
 		inst->numIndex = mesh->numIndices;
 		inst->material = mesh->material;
 		inst->vertexAlpha = 0;
+		inst->visibilityBounds.valid=false;
 		inst->offset = offset;
 		memcpy((uint8*)header->indexBuffer + inst->offset,
 		       mesh->indices, inst->numIndex*2);
@@ -440,6 +1031,7 @@ freeInstanceData(Geometry *geometry)
 		return;
 	InstanceDataHeader *header = (InstanceDataHeader*)geometry->instData;
 	geometry->instData = nil;
+	forgetStaticArrayGeometry(header);
 
 	if(gvk.device != VK_NULL_HANDLE){
 		destroyStaticBuffer(header->vbo, header->vboMemory);
@@ -462,6 +1054,7 @@ destroyNativeGeometryData(void *object, int32, int32)
 void
 defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 {
+	if(reinstance) forgetStaticArrayGeometry(header);
     header->backfaceCertificate=-1;
     header->occlusionSource.Reset();
 	const bool isPrelit = !!(geo->flags & Geometry::PRELIT);
@@ -557,6 +1150,26 @@ defaultInstanceCB(Geometry *geo, InstanceDataHeader *header, bool32 reinstance)
 					inst->vertexAlpha = 1;
 					break;
 				}
+		}
+	}
+
+	if(header->numMeshes>1){
+		for(uint32 mesh=0;mesh<header->numMeshes;++mesh){
+			InstanceData &range=header->inst[mesh];
+			auto &bounds=range.visibilityBounds;
+			bounds.valid=header->orderBoundsValid && range.numIndex>0;
+			const uint16 *indices=header->indexBuffer+range.offset/2;
+			for(uint32 i=0;bounds.valid && i<range.numIndex;++i){
+				if(indices[i]>=header->totalNumVertex){
+					bounds.valid=false;
+					break;
+				}
+				for(unsigned axis=0;axis<3;++axis){
+					const float value=vertices[indices[i]].position[axis];
+					bounds.minimum[axis]=i?fminf(bounds.minimum[axis],value):value;
+					bounds.maximum[axis]=i?fmaxf(bounds.maximum[axis],value):value;
+				}
+			}
 		}
 	}
 
@@ -1030,7 +1643,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	if(!instanceSubmission)flushStaticInstances();
 	const bool measureBindings = cacheBindings && gvk.frameTimestampEnabled && !instanceSubmission;
 	const bool auditSampling = gStaticReuse.stats.sampled!=0;
-	const bool staticAtomic = (gOpaqueMeshBatchEnabled || auditSampling || instanceSubmission) && cacheBindings &&
+	const bool staticAtomic = (gOpaqueMeshBatchEnabled || auditSampling || instanceSubmission ||
+	                           gStaticMeshCullEnabled || gStaticArrayBatchEnabled) && cacheBindings &&
 		OpaqueOrder::IsDefaultCallback(atomic->renderCB,Atomic::defaultRenderCB,gOpaqueOrderDefaultWrapper) &&
 		geometry->numMorphTargets==1 && !geometry->lockedSinceInst &&
 		atomic->getPipeline() && atomic->getPipeline()->platform==PLATFORM_VULKAN &&
@@ -1039,6 +1653,31 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		!(geometry->flags & Geometry::NATIVE) &&
 		header->primType==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 	const bool batchAtomic = !DebugVisualization::MeshDebug() && gOpaqueMeshBatchEnabled && staticAtomic;
+	const bool arrayAtomic=gStaticArrayBatchEnabled && staticAtomic &&
+		gInstanceOwner.entityClass==0 && gInstanceOwner.model>=0 && gInstanceOwner.flags==0 &&
+		gvk.firstPersonActive && gvk.viewCount==2 && !gvk.wristPanelOffscreen &&
+		!physicalScopeCaptureActive() && !gvk.im3dWaterDraw && !gWorldBackfaceEnabled &&
+		!DebugVisualization::MeshDebug() && !worldEffectsActive() && !gvk.neoEnabled &&
+		gvk.sgsrMode==SGSR_OFF
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
+		&& !gvk.debugVizActive
+#endif
+		;
+	// Drain before any unsupported writer can bind its own per-draw state
+	// (especially the bone descriptor, which the merged pipeline also uses).
+	if(!arrayAtomic) flushPendingCrossArray();
+	std::optional<StaticMeshVisibility::Frusta> meshFrusta;
+	if(gStaticMeshCullEnabled && staticAtomic && header->numMeshes>1 &&
+	   gInstanceOwner.entityClass==0 && gInstanceOwner.model>=0 &&
+	   gvk.firstPersonActive && gvk.stereoCullPlanesValid && gvk.viewCount==2 &&
+	   !gvk.wristPanelOffscreen && !physicalScopeCaptureActive() && !DebugVisualization::MeshDebug() &&
+	   gvk.sgsrMode==SGSR_OFF && !gvk.neoEnabled && !worldEffectsActive()
+#if defined(LIBERTYVR_DEV_TOOLS) && LIBERTYVR_DEV_TOOLS
+	   && !gvk.debugVizActive
+#endif
+	){
+		meshFrusta.emplace(gvk.stereoCullPlanes,push.model);
+	}
 	const bool measureBatch = gOpaqueMeshBatchEnabled && gvk.frameTimestampEnabled;
 	bool bufferStatic=instanceSubmission && staticAtomic && gInstanceOwner.entityClass==0 && gInstanceOwner.model>=0;
 	StaticInstances::Bounds instanceBounds;
@@ -1051,8 +1690,13 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 	const VkPipelineLayout layout = getPipelineLayout();
 	VkDescriptorSet boundNeo[2]={};
 	const VkDeviceSize vertexOffset = 0;
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &header->vbo, &vertexOffset);
-	vkCmdBindIndexBuffer(commandBuffer, header->ibo, 0, VK_INDEX_TYPE_UINT16);
+	bool legacyGeometryBound=false;
+	// The collector or its immediate fallback binds these before the first draw.
+	if(!instanceSubmission||!gStaticSubmissionCacheEnabled){
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &header->vbo, &vertexOffset);
+		vkCmdBindIndexBuffer(commandBuffer, header->ibo, 0, VK_INDEX_TYPE_UINT16);
+		legacyGeometryBound=true;
+	}
 
 	if(boneOffset != nil){
 		VkDescriptorSet boneSet = getBoneDescriptor();
@@ -1146,6 +1790,11 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		const bool blendedMask = wantsBlend && !vehicleAlphaPass &&
 			gstate.alphaTestFunction != ALPHAALWAYS;
 		gstate.mipLodBias = blendedMask ? getMaskedMipBias() : 0;
+		// Later meshes can inherit sampler state. Update it even when this
+		// range can be rejected before pipeline and descriptor resolution.
+		if(meshFrusta && (!material || !MatFX::get(material)) &&
+		   !meshFrusta->Visible(inst->visibilityBounds))
+			continue;
 		const uint32 alphaPasses=selectAtomicAlphaPasses(inst,material,raster,geometry,
 			shader,boneOffset,gsSplit,vehicleSplit,textureAlpha,splitReference);
 		const int firstGsPass=(alphaPasses&UniformAlphaPolicy::Solid)?0:1;
@@ -1178,6 +1827,32 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
             if(backfaceMesh)gstate.cullMode=CULLBACK;
             else ++gWorldBackfaceStats.rejectState;
         }
+		if(arrayAtomic && !wantsBlend && !gsSplit && profileDepthWrite &&
+		   gstate.zTestEnabled && !profileAlphaTest){
+			PushConstants arrayPush={};
+			memcpy(arrayPush.model,push.model,sizeof(push.model));
+			memcpy(arrayPush.ambientLight,push.ambientLight,sizeof(push.ambientLight));
+			memcpy(arrayPush.lightDirColour,push.lightDirColour,sizeof(push.lightDirColour));
+			unsigned merged=0;
+			try {
+				merged=drawStaticArrayBatch(atomic,geometry,header,i,arrayPush,meshFrusta?&*meshFrusta:nullptr,
+				                           gCrossArrayBatchEnabled&&instanceSubmission);
+			} catch(const std::bad_alloc &) {
+				gStaticArrayStats.Fallback(StaticArrayBatch::Result::HostAllocation);
+			}
+			if(merged){
+				gstate.cullMode=savedCull;
+				gstate.zWriteEnabled=savedZWrite;
+				gstate.alphaTestFunction=savedAlphaFunction;
+				// The next ordinary draw must see its own geometry and texture.
+				bindings.Invalidate();
+				legacyGeometryBound=false;
+				i+=merged-1;
+				inst+=merged-1;
+				continue;
+			}
+		}
+		flushPendingCrossArray();
 		VkPipeline pipeline = getPipeline(shader,
 		                                  (VkPrimitiveTopology)header->primType);
 		VkPipeline instancePipeline=VK_NULL_HANDLE;
@@ -1190,6 +1865,11 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		gstate.alphaTestFunction = savedAlphaFunction;
 		if(pipeline == VK_NULL_HANDLE)
 			continue;
+		if(!instanceSubmission && !legacyGeometryBound){
+			vkCmdBindVertexBuffers(commandBuffer,0,1,&header->vbo,&vertexOffset);
+			vkCmdBindIndexBuffer(commandBuffer,header->ibo,0,VK_INDEX_TYPE_UINT16);
+			legacyGeometryBound=true;
+		}
 		if(!instanceSubmission && bindings.PipelineBind(pipeline))
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		if(!cacheBindings || !textureResolved){
@@ -1297,6 +1977,7 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 			(gsPass == 0 ? splitReference : -splitReference) :
 			gstate.alphaTestRef/255.0f;
 
+
 		// Never defer commands across objects or reorder geometry. Compatible
 		// adjacent index ranges share every per-atomic value and the exact
 		// texture/sampler and material state used to build this push block.
@@ -1312,6 +1993,8 @@ drawAtomicMeshes(Atomic *atomic, InstanceDataHeader *header, uint32 shader,
 		if(batchState){
 			while(i+batchMeshes<header->numMeshes && batchMeshes<OpaqueMeshBatch::MaxMeshes){
 				const InstanceData &next=inst[batchMeshes];
+				if(meshFrusta && !meshFrusta->Visible(next.visibilityBounds))
+					break;
 				if(measureBatch) ++gOpaqueMeshBatchStats.checks;
 				if(next.vertexAlpha || !sameOpaqueBatchMaterial(material,next.material)){
 					if(measureBatch) ++gOpaqueMeshBatchStats.rejectedMaterial;

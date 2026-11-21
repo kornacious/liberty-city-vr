@@ -310,6 +310,16 @@ StartFrameCapture(void)
 	details += "world_backface_at_start," + std::to_string(rw::vulkan::getWorldBackfaceEnabled()?1:0) + "\n";
 	details += "static_instances_policy,bounded64_instances16_radius32_stereo_separation_v1\n";
 	details += "static_instances_at_start," + std::to_string(rw::vulkan::getStaticInstancesEnabled()?1:0) + "\n";
+	details += "static_submission_cache_at_start," + std::to_string(rw::vulkan::getStaticSubmissionCacheEnabled()?1:0) + "\n";
+	details += "static_mesh_cull_at_start," + std::to_string(rw::vulkan::getStaticMeshCullEnabled()?1:0) + "\n";
+	details += "static_array_batch_at_start," + std::to_string(rw::vulkan::getStaticArrayBatchEnabled()?1:0) + "\n";
+	details += "cross_array_batch_at_start," + std::to_string(rw::vulkan::getCrossArrayBatchEnabled()?1:0) + "\n";
+	details += "cross_array_geometry_policy,device_local_cache_v1\n";
+	details += "cross_array_submission_policy,packed_uniform_pages_v1\n";
+	details += "static_array_page_policy,small_texture_reserve_shared_samplers_v1\n";
+	details += "static_array_residency,source_frame_sampled_every_8_v1\n";
+	details += "static_array_demand_admission,repeated_compatible_misses_v1\n";
+	details += "static_submission_cache_counter_scope,one_vk_static_atomic_calls_entry_per_measured_collector_flush\n";
 	details += "static_reuse_policy,disabled_for_static_instance_benchmark\n";
 	details += "opaque_mesh_batch_at_start," + std::to_string(rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0) + "\n";
 	details += "masked_alpha_pass_skip_at_start," + std::to_string(rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0) + "\n";
@@ -983,7 +993,10 @@ UpdateProfilerRecording(bool enabled)
 	gRecordingEnabled = enabled;
 	gProfilerEnabled = gProfilingState.Collecting() || gDesktopObserver;
 	if(enabled) StartFrameCapture();
-	else gCaptureWriter.Stop();
+	else {
+		rw::vulkan::setStaticArrayResidencySampling(false);
+		gCaptureWriter.Stop();
+	}
 	if(gLogFile != nil){
 		fclose(gLogFile);
 		gLogFile = nil;
@@ -1341,6 +1354,8 @@ QuestProfilerBeginAppFrame(void)
 	gCaptureFrame.id = ++gCaptureId;
 	gCaptureFrame.startNs = NowNanoseconds();
 	rw::vulkan::setGpuProfileFrame(gCaptureFrame.id,gCaptureFrame.startNs);
+	rw::vulkan::setStaticArrayResidencySampling(gRecordingEnabled &&
+		gCaptureFrame.id%StaticArrayBatch::OccupancySampleInterval==0);
 	gCaptureFrame.intervalMs = gPreviousCaptureStartNs ?
 		(double)(gCaptureFrame.startNs-gPreviousCaptureStartNs)/1000000.0 : -1.0;
 	gAppFrameOpen = true;
@@ -1371,6 +1386,7 @@ void
 QuestProfilerCancelAppFrame(void)
 {
 	rw::vulkan::setGpuProfileFrame(0,0);
+	rw::vulkan::setStaticArrayResidencySampling(false);
 	gAppFrameOpen = false;
 	gVkBeginOpen = false;
 	gStepOpen = false;
@@ -1626,6 +1642,12 @@ QuestProfilerEndAppFrame(void)
 		gCaptureFrame.worldBackface=rw::vulkan::getWorldBackfaceStats();
 		gCaptureFrame.staticInstancesEnabled = rw::vulkan::getStaticInstancesEnabled()?1:0;
 		gCaptureFrame.staticInstances = rw::vulkan::getStaticInstancesStats();
+		gCaptureFrame.staticArrayBatchEnabled = rw::vulkan::getStaticArrayBatchEnabled()?1:0;
+		gCaptureFrame.staticArrayBatch = rw::vulkan::getStaticArrayBatchStats();
+		if(gCaptureFrame.id%StaticArrayBatch::OccupancySampleInterval==0)
+			rw::vulkan::getStaticArrayOccupancy(gCaptureFrame.staticArrayOccupancy);
+		if(gCaptureFrame.staticArrayOccupancy.sampled)
+			rw::vulkan::getStaticArrayResidencyStats(gCaptureFrame.staticArrayResidency);
 		gCaptureFrame.staticReuse = rw::vulkan::getStaticReuseStats();
 		gCaptureFrame.opaqueMeshBatchEnabled = rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0;
 		gCaptureFrame.opaqueMeshBatch = rw::vulkan::getOpaqueMeshBatchStats();

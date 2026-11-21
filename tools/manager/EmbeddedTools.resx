@@ -945,6 +945,81 @@ def summarize_static_instances(rows):
             "note":"Actual instanced submissions; indices include all instances. Flush timer excludes collection/bounds setup."}
 
 
+def summarize_static_array(rows):
+    prefix = "static_array_fallback_"
+    reasons = [key for key in rows[0] if key.startswith(prefix)] if rows else []
+    if not reasons:
+        return None
+    valid, invalid = [], 0
+    for row in rows:
+        try:
+            enabled = int(row["static_array_batch_enabled"])
+            if enabled == 0:
+                continue
+            counts = {key[len(prefix):]: int(row[key]) for key in reasons}
+            fallback = int(row["static_array_fallbacks"])
+            shortened = int(row["static_array_shortened_batches"])
+            batches = int(row["static_array_batches"])
+            if (enabled != 1 or min(counts.values()) &lt; 0 or sum(counts.values()) != fallback
+                    or not 0 &lt;= shortened &lt;= batches):
+                raise ValueError("Inconsistent batching fallback sample")
+            valid.append((counts, fallback, shortened))
+        except (ValueError, TypeError, KeyError):
+            invalid += 1
+    totals = Counter()
+    for counts, _, _ in valid:
+        totals.update(counts)
+    return {"valid_enabled_frames": len(valid), "invalid_frames": invalid,
+            "fallback_reasons": dict(totals.most_common()),
+            "fallbacks_per_frame": distribution([fallback for _, fallback, _ in valid]),
+            "shortened_batches_per_frame": distribution([shortened for _, _, shortened in valid])}
+
+
+def summarize_static_array_occupancy(rows):
+    if not rows or "static_array_occupancy_sampled" not in rows[0]:
+        return None
+    samples, invalid = [], 0
+    by_group = {}
+    for row in rows:
+        try:
+            flag = int(row["static_array_occupancy_sampled"])
+            if flag == 0:
+                continue
+            entries = row["static_array_page_occupancy"]
+            pages = entries.split("|") if entries else []
+            if flag != 1 or len(pages) &gt; 32:
+                raise ValueError("Invalid page occupancy sample")
+            groups = {}
+            snapshot = Counter()
+            for page in pages:
+                width, height, sampler, layers, live, held, allocated = map(int, page.split(":"))
+                if (not 1 &lt;= width &lt;= 256 or not 1 &lt;= height &lt;= 256 or not 0 &lt;= sampler &lt;= 512
+                        or not 2 &lt;= layers &lt;= 64 or min(live, held) &lt; 0 or live+held &gt; layers
+                        or allocated &lt;= 0):
+                    raise ValueError("Invalid page occupancy entry")
+                group = groups.setdefault((width, height, sampler), Counter())
+                counts = dict(pages=1, bytes=allocated, layers=layers, live=live, held=held,
+                              reusable=layers-live-held, empty_page_bytes=allocated if live+held == 0 else 0)
+                group.update(counts)
+                snapshot.update(counts)
+            if snapshot["bytes"] != int(row["static_array_page_bytes"]):
+                raise ValueError("Page occupancy does not match allocated bytes")
+        except (ValueError, TypeError, KeyError):
+            invalid += 1
+            continue
+        samples.append(snapshot)
+        for key, group in groups.items():
+            by_group.setdefault(key, []).append(group)
+
+    keys = ("pages", "bytes", "layers", "live", "held", "reusable", "empty_page_bytes")
+    return {"samples": len(samples), "invalid_samples": invalid,
+            "pool": {key: distribution([s[key] for s in samples]) for key in keys},
+            "groups": [{"width": w, "height": h, "sampler_key": None if sampler == 512 else sampler,
+                        "samples_present": len(group),
+                        "per_sample": {key: distribution([s[key] for s in group]) for key in keys}}
+                       for (w, h, sampler), group in sorted(by_group.items())]}
+
+
 def summarize_static_reuse(rows):
     if not rows or "static_reuse_sampled" not in rows[0]:
         return None
@@ -1460,6 +1535,8 @@ def summarize(path, include_nongameplay=False, allow_incomplete=False):
         "atomic_submission": summarize_atomic_submission(selected),
         "static_reuse": summarize_static_reuse(selected),
         "static_instances": summarize_static_instances(selected),
+        "static_array": summarize_static_array(selected),
+        "static_array_page_occupancy": summarize_static_array_occupancy(selected),
         "world_occlusion_build_phases": summarize_occlusion_phases(selected),
         "world_occlusion_zero_depth_sources": summarize_occlusion_sources(selected),
         "world_occlusion_source_model_frames": dict(Counter(row["world_occlusion_source_top_model"]
@@ -4634,6 +4711,34 @@ spec.loader.exec_module(analysis)
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_static_array_occupancy_groups_pages_and_validates_pool(self):
+        row = dict(static_array_occupancy_sampled="1", static_array_page_bytes="196608",
+                   static_array_page_occupancy="64:64:16:8:5:1:131072|64:64:16:2:0:0:32768|64:64:17:2:2:0:32768")
+        result = analysis.summarize_static_array_occupancy([
+            row, dict(row, static_array_occupancy_sampled="0", static_array_page_occupancy=""),
+            dict(row, static_array_page_bytes="1")])
+        self.assertEqual((result["samples"], result["invalid_samples"]), (1, 1))
+        self.assertEqual(result["pool"]["reusable"], analysis.distribution([4]))
+        self.assertEqual(result["pool"]["empty_page_bytes"], analysis.distribution([32768]))
+        self.assertEqual([group["sampler_key"] for group in result["groups"]], [16, 17])
+        self.assertEqual(result["groups"][0]["per_sample"]["live"], analysis.distribution([5]))
+        self.assertEqual(result["groups"][0]["per_sample"]["held"], analysis.distribution([1]))
+        self.assertIsNone(analysis.summarize_static_array_occupancy([{}]))
+        shared = dict(row, static_array_page_bytes="131072",
+                      static_array_page_occupancy="64:64:512:8:5:1:131072")
+        self.assertIsNone(analysis.summarize_static_array_occupancy([shared])["groups"][0]["sampler_key"])
+
+    def test_static_array_fallback_reasons_reconcile(self):
+        row = dict(static_array_batch_enabled="1", static_array_fallbacks="5",
+                   static_array_fallback_preferred_page_full="3", static_array_fallback_page_memory_limit="2",
+                   static_array_batches="7", static_array_shortened_batches="1")
+        result = analysis.summarize_static_array([row, dict(row, static_array_batch_enabled="0"),
+                                                 dict(row, static_array_fallbacks="6")])
+        self.assertEqual(result["fallback_reasons"], {"preferred_page_full": 3, "page_memory_limit": 2})
+        self.assertEqual(result["valid_enabled_frames"], 1)
+        self.assertEqual(result["invalid_frames"], 1)
+        self.assertIsNone(analysis.summarize_static_array([{"static_array_fallbacks": "5"}]))
+
     def test_static_instances_actual_savings_and_conservation(self):
         keys=["queued_draws", "groups", "instances", "saved_draws", "reject_state", "reject_bounds",
               "reject_order", "reject_spatial", "pipeline_misses", "allocation_failures", "source_indices", "emitted_indices"]
@@ -6904,6 +7009,9 @@ $code += "`n" + (Extract $state '(?ms)^void\r?\nfreeTextureDescriptorSets\(.*?^\
 $code += "`n" + (Extract $device '(?ms)^struct RetiredBuffer\r?\n.*?(?=^// -+\r?\n// Shared helpers)')
 $code += "`n" + (Extract $state '(?ms)^void\r?\nretireRasterTextureDescriptors\(.*?^\}')
 $code += "`n" + (Extract $state '(?ms)^VkDescriptorSet\r?\ngetTextureDescriptor\(.*?^\}')
+$code += "`n" + (Extract $state '(?ms)^static bool matchesTextureShape\(.*?^\}')
+$code += "`n" + (Extract $state '(?ms)^static VkDescriptorSet getStaticArrayPageDescriptor\(.*?^\}')
+$code += "`n" + (Extract $state '(?ms)^StaticArrayLayer getStaticArrayLayer\(.*?^\}')
 $code += "`n" + (Extract $raster '(?ms)^static void\*\r?\ndestroyNativeRaster\(.*?^\}')
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vulkan-descriptors-types.inc'), $types)
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'vulkan-descriptors-production.inc'), $code)

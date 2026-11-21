@@ -164,6 +164,10 @@ struct Frame {
     WorldBackface::Stats worldBackface{};
     int staticInstancesEnabled=0;
     StaticInstances::Stats staticInstances{};
+    int staticArrayBatchEnabled=0;
+    StaticArrayBatch::Stats staticArrayBatch{};
+    StaticArrayBatch::Occupancy staticArrayOccupancy{};
+    StaticArrayBatch::ResidencyStats staticArrayResidency{};
     int maskedAlphaPassSkipEnabled=0;
     int activeModels[5]{}, requestedModel = 0;
     float renderScale = -1;
@@ -285,8 +289,46 @@ class Writer {
             std::fprintf(frames,",%d,%d,%u,%u,%u,%u,%u,%u,%u",slot,source.model,source.selected,source.attempted,
                 source.noDepth,source.improved,source.budget,source.redundant,source.updates);
         }
-        std::fprintf(frames,",%u,%u,%u,%u,%u,%u\n",oc.clipProfile.inside,oc.clipProfile.outside,oc.clipProfile.crossing,
+        std::fprintf(frames,",%u,%u,%u,%u,%u,%u",oc.clipProfile.inside,oc.clipProfile.outside,oc.clipProfile.crossing,
             oc.clipProfile.boundary,oc.clipProfile.invalid,oc.clipProfile.planeVisits);
+        const auto &array=f.staticArrayBatch;
+        std::fprintf(frames,",%d,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u",f.staticArrayBatchEnabled,
+            array.batches,array.savedDraws,array.indices,array.cacheBuilds,array.fallbacks,
+            array.pageBytes,array.pageUploadBytes,array.geometryBytes,array.geometryUploadBytes,array.shortenedBatches);
+        for(auto count:array.fallbackReasons) std::fprintf(frames,",%u",count);
+        const auto &occupancy=f.staticArrayOccupancy;
+        std::fprintf(frames,",%u,%u,%u,%u,%.6f,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%d,",
+            array.crossBatches,array.crossSavedDraws,array.crossUploadBytes,array.crossFallbacks,array.crossFlushMs,
+            array.crossCacheHits,array.crossCacheMisses,array.crossCacheBuilds,array.crossCacheBytes,array.crossCacheUploadBytes,
+            array.crossPipelineBinds,array.crossDescriptorBinds,array.crossTransformBinds,
+            array.pageSizeRetries,array.pageMemoryCacheHits,occupancy.sampled?1:0);
+        if(occupancy.sampled)
+            for(unsigned i=0;i<occupancy.count;++i){
+                const auto &page=occupancy.pages[i];
+                if(i) std::fputc('|',frames);
+                std::fprintf(frames,"%u:%u:%u:%u:%u:%u:%u",page.width,page.height,page.samplerKey,
+                             page.layers,page.live,page.held,page.bytes);
+            }
+        const auto &residency=f.staticArrayResidency;
+        std::fprintf(frames,",%d,%u,%u,",residency.sampled?1:0,
+            residency.overflow,residency.sampled?array.duplicateMergedLayers:0);
+        if(residency.sampled)
+            for(unsigned i=0;i<residency.count;++i){
+                const auto &event=residency.events[i];
+                if(i) std::fputc('|',frames);
+                std::fprintf(frames,"%u:%u:%s:%s:%u",unsigned(event.width),unsigned(event.height),
+                             event.elsewhere?"other_page":"absent",
+                             StaticArrayBatch::ResidencyOutcomeName(event.outcome),event.requests);
+            }
+        std::fputc(',',frames);
+        if(occupancy.sampled)
+            for(unsigned i=0;i<occupancy.count;++i){
+                const auto &page=occupancy.pages[i];
+                if(i) std::fputc('|',frames);
+                std::fprintf(frames,"%u:%u",page.live-page.duplicateLayers,page.duplicateLayers);
+            }
+        std::fprintf(frames,",%u,%u,%u",array.demandProbes,array.demandReplacements,array.demandUploadBytes);
+        std::fputc('\n',frames);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
             if(g.status==1){
@@ -383,7 +425,17 @@ public:
         for(unsigned rank=1;rank<=WorldOcclusion::TopSourceCount;++rank)
             for(const char *field:{"slot","model","selected","attempted","no_depth","improved","budget","redundant","updates"})
                 std::fprintf(frames,",world_occlusion_zero_source_%u_%s",rank,field);
-        std::fputs(",world_occlusion_clip_inside,world_occlusion_clip_outside,world_occlusion_clip_crossing,world_occlusion_clip_boundary,world_occlusion_clip_invalid,world_occlusion_clip_plane_visits\n",frames);
+        std::fputs(",world_occlusion_clip_inside,world_occlusion_clip_outside,world_occlusion_clip_crossing,world_occlusion_clip_boundary,world_occlusion_clip_invalid,world_occlusion_clip_plane_visits",frames);
+        std::fputs(",static_array_batch_enabled,static_array_batches,static_array_saved_draws,static_array_indices,static_array_cache_builds,static_array_fallbacks,static_array_page_bytes,static_array_page_upload_bytes,static_array_geometry_bytes,static_array_geometry_upload_bytes,static_array_shortened_batches",frames);
+        for(unsigned i=0;i<StaticArrayBatch::FallbackCount;++i)
+            std::fprintf(frames,",static_array_fallback_%s",StaticArrayBatch::FallbackName(i));
+        std::fputs(",cross_array_batches,cross_array_saved_draws,cross_array_upload_bytes,cross_array_fallbacks,cross_array_flush_ms"
+            ",cross_array_cache_hits,cross_array_cache_misses,cross_array_cache_builds,cross_array_cache_bytes,cross_array_cache_upload_bytes"
+            ",cross_array_pipeline_binds,cross_array_descriptor_binds,cross_array_transform_binds"
+            ",static_array_page_size_retries,static_array_page_memory_cache_hits,static_array_occupancy_sampled,static_array_page_occupancy"
+            ",static_array_residency_sampled,static_array_residency_overflow,static_array_duplicate_merged_layers"
+            ",static_array_residency_misses,static_array_page_copies"
+            ",static_array_demand_probes,static_array_demand_replacements,static_array_demand_upload_bytes\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

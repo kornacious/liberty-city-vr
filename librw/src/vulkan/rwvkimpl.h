@@ -4,6 +4,7 @@
 
 #include <vulkan/vulkan.h>
 #include "GpuPassProfile.h"
+#include "OpaqueMeshBatch.h"
 
 namespace rw {
 namespace vulkan {
@@ -47,6 +48,8 @@ struct VulkanRaster
 	// Set when the source was a DXT/BC texture that this device cannot sample
 	// natively and had to be decompressed on upload.
 	bool32 wasTranscoded;
+	bool32 staticArrayCopySource;
+	StaticArrayBatch::DemandHistory staticArrayDemand;
 
 	// Immutable texture descriptors are owned by vkstate's raster/view/sampler
 	// cache. Keep them outside this memset-initialised plugin record.
@@ -420,6 +423,14 @@ struct WorldVertex
 	float32 texCoord1[2];
 };
 
+struct WorldArrayVertex
+{
+	WorldVertex vertex;
+	float32 materialColour[4];
+	float32 surface[2];
+	uint32 layer;
+};
+
 // Skinned geometry: the world vertex plus the four bone weights and indices
 // RenderWare stores per vertex. Peds and anything else driven by an HAnim
 // hierarchy comes through here.
@@ -443,6 +454,8 @@ enum ShaderVariant
 	SHADER_IM3D,
 	SHADER_SKIN,
 	SHADER_WORLD_INSTANCED,
+	SHADER_WORLD_ARRAY,
+	SHADER_WORLD_ARRAY_CROSS,
 	SHADER_COUNT
 };
 
@@ -582,6 +595,40 @@ VkPipelineLayout getPipelineLayout(void);
 
 // Descriptor set 1 for a raster, or the 1x1 white fallback when raster is nil.
 VkDescriptorSet getTextureDescriptor(Raster *raster);
+struct StaticArrayTexture {
+	VulkanRaster *native;
+	uint32 width,height,samplerKey;
+	VkSampler sampler;
+};
+struct StaticArrayLayer {
+	VkDescriptorSet page=VK_NULL_HANDLE;
+	uint32 layer=0;
+	StaticArrayBatch::Result result=StaticArrayBatch::Result::Ready;
+	uint32 pageIndex=StaticArrayBatch::MaxPages;
+	bool duplicate=false;
+};
+bool getStaticArrayTexture(Raster *raster, uint32 filter, uint32 u, uint32 v, StaticArrayTexture &out);
+StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,
+                                     uint32 preferredPage=StaticArrayBatch::MaxPages,
+                                     bool residentOnly=false,
+                                     const StaticArrayTexture *companion=nullptr);
+struct CrossArrayObject {
+	float32 model[16],ambient[4],directional[4];
+};
+constexpr unsigned CrossArrayMaxObjects=StaticArrayBatch::CrossObjectLimit;
+struct CrossArrayStream {
+	VkDescriptorSet descriptor;
+	uint32 pageOffset,firstObject;
+	uint8 *mapped;
+};
+bool allocateCrossArrayStream(unsigned count,CrossArrayStream &out);
+void invalidateStaticArrayRaster(VulkanRaster *native);
+void syncStaticArrayRasterUpload(VulkanRaster *native,VkCommandBuffer command);
+void clearStaticArrayPages(void);
+void getStaticArrayPageStats(StaticArrayBatch::Stats &stats);
+void resetStaticArrayFrame(void);
+void resetStaticArrayGeometryFrame(void);
+void clearStaticArrayGeometry(void);
 VkImageView getFallbackTextureView(void);
 VkDescriptorSet getSceneDescriptor(void);
 
@@ -644,7 +691,7 @@ bool32 createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
 // Records and submits a one-shot command buffer. Live-frame uploads inherit
 // the active frame fence; startup uploads retain a synchronous fallback.
 VkCommandBuffer beginOneShot(void);
-void endOneShot(VkCommandBuffer commandBuffer);
+bool32 endOneShot(VkCommandBuffer commandBuffer);
 void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                            VkImageAspectFlags aspect, uint32 levelCount,
                            VkImageLayout from, VkImageLayout to);

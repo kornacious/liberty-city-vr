@@ -511,6 +511,22 @@ mode changes; set the mode before starting playback and keep it fixed per run.
 
 ### Static instancing experiment
 
+Two default-OFF controls benchmark the existing static-world renderer independently.
+**Static Submission Cache** requires Static Instancing. It indexes candidate
+instance matches by geometry and texture and skips repeated Vulkan bindings
+within each collector flush. When enabled, the `vk_static_atomic_*` counter
+totals also include the collector, where one call denotes one measured flush.
+Compare pipeline and texture requests against actual binds and compare CPU
+flush time with the control enabled and disabled.
+
+**Static Mesh Frustum Cull** uses bounds built from each indexed mesh of a static
+building. It tests those bounds against both current eye frusta before
+pipeline and descriptor resolution and keeps any mesh visible in either eye. The replay records
+the starting settings as `static_submission_cache_at_start` and
+`static_mesh_cull_at_start`. Measure culled work with actual road, world and
+fading draw/triangle counts. Check fast head turns and geometry close to the
+edge of either eye before enabling it for normal play.
+
 Graphics → Optimizations → **Static Instancing** is a persisted, default-OFF benchmark switch
 (`VR/StaticInstances`); changes apply immediately. Compare four normal demo
 playbacks in **OFF → ON → OFF → ON** order. Keep Opaque Mesh Batch, Opaque Order
@@ -604,6 +620,143 @@ any grouping is used to change rendering.
 Geometry, object and Vulkan handles remain in process-local tables; only numeric
 counts and model IDs enter the CSV. The analysis tool verifies source-frame
 identity and summarizes valid sampled rows separately from unsampled rows.
+
+### Static texture array batching
+
+**Graphics → Optimizations → Static Texture Array Batching** is a default-off
+control for the main stereo world view. It uses the no-discard opaque world
+path and works with or without Static Instancing. Keep **Opaque World Fast Path**
+on for the Classic comparison. The batcher joins consecutive compatible
+opaque triangle ranges within a static road or building atomic. Each triangle
+uses the original vertex values and its own material colour, lighting
+coefficients, and texture layer. Array layers keep the original texels and
+sampler and use a full layer for each texture, so UVs continue to wrap normally.
+
+The path handles single-mip opaque RGBA8 textures up to 256 by 256.
+Physical pages group textures by dimensions. Each sampler gets an immutable
+descriptor to the shared array view, and each batch still requires one
+effective sampler. A raster on the page reuses its layer across sampler variants. Other textures and
+order-sensitive surfaces use ordinary draws. Texture pages and the geometry
+cache are bounded, and uploads are amortized across frames. The original
+draw path also handles cold shaders, exhausted budgets, and failed allocations.
+
+For a comparison, warm the same Classic route in each configuration, then run
+three alternating off/on pairs with matching graphics settings, 120 Hz, and
+RenderDoc detached. Record both the full route and seconds 20–22. The session
+records `static_array_batch_at_start`. Frame columns report emitted batches,
+saved draws, submitted indices, cache builds, fallbacks, image allocation bytes,
+geometry payload bytes, and uploads. Check the companion draw counts and
+frame-time tails on device, and compare both eyes at road seams and coplanar
+markings.
+
+For fallback diagnosis, one completed Classic replay with batching on after a
+warm-up is sufficient. The `static_array_fallback_*` columns add up to
+`static_array_fallbacks` on each frame. They distinguish a full preferred page,
+page-count and memory limits, upload and build budgets, and resource failures.
+`static_array_shortened_batches` counts runs that emitted a batch for a prefix
+after a later texture could not join its page. Those batches still saved draws.
+Initial checks that found fewer than two compatible ranges do not count as
+fallbacks. The capture analyzer totals the reasons for enabled frames and
+leaves the breakdown unavailable for older recordings.
+
+New texture sizes start with up to eight layers. When a size fills its
+existing pages, its next page targets twice the largest allocated page for
+that group, subject to the existing page, device, and pool limits. Compare
+the live and reusable layers with the prior build's occupancy to measure the
+change in reserved memory. Page creation retries with fewer layers when the driver's allocation exceeds
+the remaining memory budget. A shape whose two-layer page cannot fit is cached
+until capacity is available. Compare `static_array_page_size_retries` and
+`static_array_page_memory_cache_hits` with actual saved draws and CPU frame
+times. To compare against an earlier build's page packing, start both runs in
+a fresh game process and warm up on the same route before measuring.
+
+The recorder samples page occupancy every eighth captured frame.
+`static_array_occupancy_sampled` distinguishes an unsampled row from a sampled
+empty pool. `static_array_page_occupancy` contains one pipe-separated record
+per page, with colon-separated width, height, sampler key, total layers,
+live layers, layers held for the current recording, and allocated bytes.
+Reusable layers are total minus live and held. The capture analyzer aggregates
+by dimensions and sampler key. A sampler key of 512 marks a physical page
+shared across samplers. The analyzer checks the pool byte total and reports bytes in
+completely empty pages separately from reusable layers in occupied pages.
+
+The 24 MiB, 32-page pool protects capacity for textures up to 64×64. Pages
+with either dimension over 64 may occupy up to 10 MiB and 15 page slots.
+Small textures can use the remaining pool, including capacity the larger
+textures leave unused. Limits use the Vulkan allocation size, including
+padding, and apply only to new pages. Existing eligible layers can still be
+used or filled. The `static_array_fallback_small_texture_reserve` column
+counts page admissions blocked by the reservation, while
+`static_array_fallback_page_memory_limit` tracks the full-pool limit.
+Compare 64×64 resident layers and actual draw counts after warming the same
+route from a fresh game process.
+
+Residency diagnostics share the one-in-eight occupancy sampling interval.
+`static_array_residency_sampled` marks the source frame.
+`static_array_residency_misses` contains pipe-separated records with
+colon-separated width, height, initial residency, outcome, and request count.
+`absent` means no compatible resident layer. `other_page` means the raster was
+resident on another physical page when a specific page was requested.
+`uploaded` reports a successful upload after a miss, `resident_only` reports a
+lookup that could not allocate, and other outcomes use the existing fallback
+reason names. These are lookup counts, so repeated requests for one raster
+count separately. The bounded histogram reports uncounted requests in
+`static_array_residency_overflow`.
+
+`static_array_page_copies` follows the page order in
+`static_array_page_occupancy`. Each entry contains the number of live primary
+copies and additional copies. The sum of primary copies across pages counts
+unique resident rasters. Each sampler descriptor shares its page's texels.
+`static_array_duplicate_merged_layers` counts uses of additional copies in
+emitted draws that merged multiple ranges or objects, once per source range.
+These fields contain dimensions and counts only.
+
+When an eligible 64×64 or 128×128 texture misses an allocating lookup on
+three distinct frames with at most 24 frames between consecutive misses, the batcher
+can reuse a cold layer of the same size. The replacement must be on the
+page already chosen for the run or on a page containing the next compatible
+texture. A slot must have gone at least 240 frames without a reference.
+Resident-only probes and textures that already have a copy do not trigger
+replacement. The renderer allows up to eight victim searches and two
+successful replacements per frame, within the existing upload limit.
+`static_array_demand_probes`, `static_array_demand_replacements`, and
+`static_array_demand_upload_bytes` report this activity on every frame.
+Demand upload bytes are included in the normal page upload total.
+
+### Cross-object array batching
+
+**Cross-Object Array Batching** is a default-off control in the same menu.
+Enable **Static Instancing**, **Opaque World Fast Path**, and **Static Texture
+Array Batching** for the comparison. This path combines consecutive compatible
+submissions from static road and building objects with the same array descriptor
+and Vulkan pipeline. It retains primitive order and each object's transform,
+lighting, and fog state. Other draws and render-pass boundaries drain pending
+work. Each draw groups at most eight source submissions and 4,096 indices.
+Merged vertices and indices are cached in device-local buffers keyed by the
+ordered source geometry. Reinstancing or retiring a source invalidates its
+merged buffers. The cache holds up to 512 entries and 16 MiB of geometry payload.
+It attempts at most four builds and 512 KiB of geometry per frame. Each in-flight
+frame slot has a 144 KiB uniform stream for current transforms and lighting,
+with 128 object records per page. Each merged draw uses its first instance
+index to select its records inside the page. Consecutive merged draws reuse
+unchanged pipeline, texture and uniform-page bindings. Runs that exceed a
+budget or fail allocation use the original draws in submission order.
+
+Keep the previous Classic route settings, warm up for each configuration, then
+run three alternating pairs with only Cross-Object Array Batching toggled.
+Compare `cross_array_saved_draws`, `cross_array_fallbacks`, and
+`cross_array_flush_ms` alongside the normal route and busy-window frame times.
+`cross_array_upload_bytes` counts transforms and lighting in this version.
+Add `cross_array_cache_upload_bytes` to compare with the combined upload total
+reported by the previous stream. The cache also reports hits, misses, successful
+builds, and resident geometry bytes.
+Compare `cross_array_pipeline_binds`, `cross_array_descriptor_binds`, and
+`cross_array_transform_binds` with `cross_array_batches` to measure binding
+reuse. Transform page binds are included in the descriptor bind count.
+Merged draws contribute their complete index count to the render phase. The
+combined model attribution is unknown because a draw can contain multiple
+owners. The per-frame timings still include eligibility and collection costs
+outside the flush timer.
 
 ### Opaque mesh batching experiment
 

@@ -75,6 +75,21 @@ compile_shader("${LIBRW_SHADER_DIR}/rw_world.vert" vertex
                "${LIBRW_SHADER_DIR}" -DRW_STATIC_INSTANCING=1)
 list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
 
+set(SHADER_OUTPUTS "")
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.vert" vertex
+               "rw_world_array_vert" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_STATIC_ARRAY=1)
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.vert" vertex
+               "rw_world_array_cross_vert" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_STATIC_ARRAY=1 -DRW_STATIC_ARRAY_CROSS=1)
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment
+               "rw_world_array_frag" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_STATIC_ARRAY=1 -DRW_WORLD_EFFECTS_RESOURCES=0)
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment
+               "rw_world_array_cross_frag" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_STATIC_ARRAY=1 -DRW_STATIC_ARRAY_CROSS=1 -DRW_WORLD_EFFECTS_RESOURCES=0)
+list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
+
 # Build the baseline world fragment interface without effects resources. A
 # specialization-only variant still advertises set 3 to capture reflection.
 set(SHADER_OUTPUTS "")

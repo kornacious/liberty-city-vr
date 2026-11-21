@@ -121,6 +121,7 @@ struct InstanceData
 	bool32 vertexAlpha;
 	uint32 offset;		// byte offset into the index buffer
 	uint32 wireOffset, wireCount;
+	StaticMeshVisibility::Bounds visibilityBounds;
 };
 
 struct InstanceDataHeader : rw::InstanceDataHeader
@@ -305,6 +306,18 @@ bool32 getWorldBackfaceEnabled(void);
 WorldBackface::Stats getWorldBackfaceStats(void);
 void setStaticInstancesEnabled(bool32 enabled);
 bool32 getStaticInstancesEnabled(void);
+void setStaticSubmissionCacheEnabled(bool32 enabled);
+bool32 getStaticSubmissionCacheEnabled(void);
+void setStaticMeshCullEnabled(bool32 enabled);
+bool32 getStaticMeshCullEnabled(void);
+void setStaticArrayBatchEnabled(bool32 enabled);
+bool32 getStaticArrayBatchEnabled(void);
+void setCrossArrayBatchEnabled(bool32 enabled);
+bool32 getCrossArrayBatchEnabled(void);
+StaticArrayBatch::Stats getStaticArrayBatchStats(void);
+void getStaticArrayOccupancy(StaticArrayBatch::Occupancy &out);
+void setStaticArrayResidencySampling(bool enabled);
+void getStaticArrayResidencyStats(StaticArrayBatch::ResidencyStats &out);
 StaticInstances::Stats getStaticInstancesStats(void);
 void flushStaticInstances(void);
 // Hidden-line geometry fills depth first; edges replay after world/effects.

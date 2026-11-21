@@ -22,6 +22,7 @@ template<class Pipeline,class Descriptor,class Layout> class Cache {
 public:
     Stats stats;
     Cache(bool enable,bool profile):enabled(enable),measure(profile){if(measure)stats.atomics=1;}
+    void Invalidate(){pipelineKnown=false;textureKnown=false;}
     bool PipelineBind(Pipeline next){
         const bool emit=!enabled||!pipelineKnown||pipeline!=next;
         if(measure){++stats.pipelineRequests;if(emit)++stats.pipelineBinds;}

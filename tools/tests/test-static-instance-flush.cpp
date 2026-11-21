@@ -1,8 +1,10 @@
 #include "../../librw/src/vulkan/StaticInstances.h"
+#include "../../librw/src/vulkan/AtomicSubmission.h"
 #include <cassert>
 #include <chrono>
 #include <cstring>
 #include <vector>
+#include <functional>
 using uint32=uint32_t;using uint64=uint64_t;
 using VkPipeline=uint64_t;using VkDescriptorSet=uint64_t;using VkBuffer=uint64_t;using VkDeviceSize=uint64_t;
 constexpr uint64_t VK_NULL_HANDLE=0;
@@ -13,7 +15,13 @@ struct PushConstants {float model[16]{},materialColour[4]{},surfaceProps[4]{},am
 static StaticInstanceDraw gInstanceDraws[StaticInstances::Window];
 static unsigned gInstanceCount;
 static StaticInstances::Stats gStaticInstanceStats;
-static struct {bool inFrame=true;uint32 sceneWidth=64,sceneHeight=64;} gvk;
+static AtomicSubmission::Stats gAtomicSubmissionStats;
+static bool gStaticSubmissionCacheEnabled=false;
+static struct {bool inFrame=true,frameTimestampEnabled=false;uint32 sceneWidth=64,sceneHeight=64;} gvk;
+struct StaticDrawBindings {
+    AtomicSubmission::Cache<VkPipeline,VkDescriptorSet,uint64_t> state;
+    StaticDrawBindings(bool cache,bool profile):state(cache,profile){}
+};
 struct InstanceDataHeader {bool orderBoundsValid=true;float orderMin[3]={-.2f,-.2f,.2f},orderMax[3]={.2f,.2f,.4f};};
 static struct Scene {float viewProj[2][16]{};} scene;
 static Scene *getSceneData(){return &scene;}
@@ -30,7 +38,9 @@ static bool allocateStaticInstanceTransforms(unsigned,VkBuffer *buffer,VkDeviceS
     if(allocationFails)return false;
     *buffer=1;*offset=0;*mapped=matrices;return true;
 }
-static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeline,VkBuffer buffer,VkDeviceSize,unsigned instances){
+static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeline,VkBuffer buffer,VkDeviceSize,unsigned instances,StaticDrawBindings &bindings){
+    bindings.state.PipelineBind(pipeline);
+    bindings.state.TextureBind(1,d.texture);
     if(instances>1){
         assert(buffer==1 && pipeline==d.instanced);
         for(unsigned i=0;i<instances;++i){
@@ -40,6 +50,7 @@ static void emitStaticInstanceDraw(const StaticInstanceDraw &d,VkPipeline pipeli
     }else{assert(pipeline==d.pipeline);emitted.push_back(unsigned(d.push.model[12]));}
     gStaticInstanceStats.emittedIndices+=uint64(d.count)*instances;
 }
+static void flushPendingCrossArray() {}
 #include "static-instance-flush-production.inc"
 static void Fill(unsigned count){
     emitted.clear();gInstanceCount=count;gStaticInstanceStats={};
@@ -87,4 +98,20 @@ int main(){
     Fill(3);for(auto &d:gInstanceDraws)d.instanced=0;
     flushStaticInstances();assert((emitted==std::vector<unsigned>{0,1,2}));
     assert(gStaticInstanceStats.savedDraws==0);
+    gStaticSubmissionCacheEnabled=true;
+    gvk.frameTimestampEnabled=true;
+    Fill(3);gInstanceDraws[1].texture=99;
+    for(unsigned e=0;e<2;++e)
+        gInstanceDraws[1].bounds.depth.nearDepth[e]=gInstanceDraws[1].bounds.depth.farDepth[e]=.8f;
+    flushStaticInstances();
+    assert((emitted==std::vector<unsigned>{0,2,1}));
+    assert(gStaticInstanceStats.savedDraws==1);
+    assert(gStaticInstanceStats.sourceIndices==gStaticInstanceStats.emittedIndices);
+    Fill(3);
+    for(auto &d:gInstanceDraws)d.instanced=0;
+    gAtomicSubmissionStats={};
+    flushStaticInstances();
+    assert((emitted==std::vector<unsigned>{0,1,2}));
+    assert(gAtomicSubmissionStats.pipelineRequests==3 && gAtomicSubmissionStats.pipelineBinds==1);
+    assert(gAtomicSubmissionStats.textureRequests==3 && gAtomicSubmissionStats.textureBinds==1);
 }

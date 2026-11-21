@@ -15,7 +15,8 @@ using VkPipeline = uint64;
 using VkPrimitiveTopology = uint32;
 #define nil nullptr
 enum { VK_NULL_HANDLE = 0, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 3, VK_PRIMITIVE_TOPOLOGY_LINE_LIST = 1,
-    SHADER_WORLD = 0, SHADER_IM2D, SHADER_IM3D, SHADER_SKIN, SHADER_WORLD_INSTANCED, SHADER_COUNT,
+    SHADER_WORLD = 0, SHADER_IM2D, SHADER_IM3D, SHADER_SKIN, SHADER_WORLD_INSTANCED, SHADER_WORLD_ARRAY,
+    SHADER_WORLD_ARRAY_CROSS, SHADER_COUNT,
     BLENDZERO = 1, BLENDONE = 2, BLENDSRCALPHA = 5, BLENDINVSRCALPHA = 6,
     CULLNONE = 1, CULLBACK = 2, ALPHAALWAYS = 1, ALPHAGREATEREQUAL = 2 };
 struct RenderState {
@@ -89,10 +90,19 @@ int main()
     assert(std::memcmp(&saved, &gstate, sizeof(gstate)) == 0);
     // Fading meshes must be ready before the first gameplay frame.
     for(uint32 shader = SHADER_WORLD; shader < SHADER_COUNT; ++shader) {
-        if(shader==SHADER_WORLD_INSTANCED) continue; // opaque depth-writing draws only
+        if(shader==SHADER_WORLD_INSTANCED || shader==SHADER_WORLD_ARRAY || shader==SHADER_WORLD_ARRAY_CROSS) continue;
         gstate.zTestEnabled = 1; gstate.zWriteEnabled = 0;
         assert(warmed.count(makePipelineKey(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)) == 1);
     }
+    const auto beforeArray=gstate;
+    gstate.zTestEnabled=1; gstate.zWriteEnabled=1; gstate.vertexAlphaEnabled=0;
+    gstate.alphaTestFunction=ALPHAALWAYS;
+    assert(warmed.count(makePipelineKey(SHADER_WORLD_ARRAY,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST))==1);
+    assert(warmed.count(makePipelineKey(SHADER_WORLD_ARRAY_CROSS,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST))==1);
+    gstate.zWriteEnabled=0;
+    assert(warmed.count(makePipelineKey(SHADER_WORLD_ARRAY,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST))==0);
+    assert(warmed.count(makePipelineKey(SHADER_WORLD_ARRAY_CROSS,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST))==0);
+    gstate=beforeArray;
     const auto noWrite = makePipelineKey(SHADER_IM2D, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     strict = true;
     assert(makePipelineKey(SHADER_IM2D, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST) != noWrite);

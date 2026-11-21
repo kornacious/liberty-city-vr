@@ -58,11 +58,12 @@ inline bool Nearby(const float a[3],const float b[3]){
 // their original instance order. A failed proof never changes the source list.
 template<class Item,class Match>
 unsigned Plan(const Item *items,unsigned count,unsigned first,const bool *used,
-              unsigned *selected,Match match,Stats &stats){
+              unsigned *selected,Match match,Stats &stats,const unsigned *nextCandidate=nullptr){
     unsigned n=1;selected[0]=first;
     if(!items[first].opaque)return n;
     bool member[Window]={};member[first]=true;
-    for(unsigned j=first+1;j<count && n<MaxInstances;++j){
+    for(unsigned j=nextCandidate?nextCandidate[first]:first+1;
+        j<count && n<MaxInstances;j=nextCandidate?nextCandidate[j]:j+1){
         if(used[j]||!items[j].opaque||!match(items[first],items[j]))continue;
         if(!Nearby(items[first].position,items[j].position)){++stats.rejectSpatial;continue;}
         bool safe=true;
@@ -75,4 +76,55 @@ unsigned Plan(const Item *items,unsigned count,unsigned first,const bool *used,
     }
     return n;
 }
+}
+
+namespace StaticMeshVisibility {
+
+struct Bounds {
+    float minimum[3], maximum[3];
+    bool valid;
+};
+
+// Pull the play-space frusta back into model space once per atomic.
+struct Frusta {
+    double planes[2][5][4];
+    bool valid=true;
+
+    Frusta(const float source[2][5][4],const float model[16]) {
+        for(unsigned eye=0;eye<2;++eye)
+            for(unsigned plane=0;plane<5;++plane)
+                for(unsigned column=0;column<4;++column){
+                    double value=column==3?source[eye][plane][3]:0.0;
+                    for(unsigned axis=0;axis<3;++axis)
+                        value+=double(source[eye][plane][axis])*model[column*4+axis];
+                    planes[eye][plane][column]=value;
+                    valid=valid&&std::isfinite(value);
+                }
+    }
+
+    bool Visible(const Bounds &bounds) const {
+        if(!valid||!bounds.valid) return true;
+        for(const auto &eye:planes){
+            bool rejected=false;
+            for(const auto &plane:eye){
+                double farthest=plane[3];
+                double magnitude=std::abs(plane[3]);
+                for(unsigned axis=0;axis<3;++axis){
+                    const double term=plane[axis]*(plane[axis]<0?bounds.minimum[axis]:bounds.maximum[axis]);
+                    farthest+=term;
+                    magnitude+=std::abs(term);
+                }
+                // The side planes are normalized in play space. Allow
+                // subpixel/rasterization error and cancellation at large coordinates.
+                if(farthest < -0.25-0.00001*magnitude){
+                    rejected=true;
+                    break;
+                }
+            }
+            if(!rejected) return true;
+        }
+        return false;
+    }
+};
+
 }

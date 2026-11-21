@@ -20,10 +20,23 @@
 #include "VulkanPlatform.h"
 
 #include <vector>
+#include <algorithm>
 #include <unordered_map>
 
 static const uint32_t kWorldInstancedVertSpv[] =
 #include "rw_world_instanced_vert.h"
+;
+static const uint32_t kWorldArrayVertSpv[] =
+#include "rw_world_array_vert.h"
+;
+static const uint32_t kWorldArrayCrossVertSpv[] =
+#include "rw_world_array_cross_vert.h"
+;
+static const uint32_t kWorldArrayCrossFragSpv[] =
+#include "rw_world_array_cross_frag.h"
+;
+static const uint32_t kWorldArrayFragSpv[] =
+#include "rw_world_array_frag.h"
 ;
 static const uint32_t kWorldVertSpv[] =
 #include "rw_world_vert.h"
@@ -127,7 +140,15 @@ struct StateFrame
 	VkDeviceMemory instanceMemory;
 	uint8 *instanceMapped;
 	VkDeviceSize instanceOffset;
+	VkBuffer crossArrayBuffer;
+	VkDeviceMemory crossArrayMemory;
+	uint8 *crossArrayMapped;
+	VkDescriptorSet crossArrayDescriptor;
+	StaticArrayBatch::CrossObjectCursor crossArrayCursor;
 };
+constexpr uint32 CrossArrayCapacity=144*1024;
+constexpr uint32 CrossArrayUniformBytes=StaticArrayBatch::CrossObjectPageSize*sizeof(CrossArrayObject);
+static_assert(CrossArrayUniformBytes<=16384 && sizeof(CrossArrayObject)==96,"Cross-array std140 layout");
 
 struct State
 {
@@ -691,7 +712,8 @@ warmStandardPipelines(void)
 		gstate.cullMode = cull ? CULLBACK : CULLNONE;
 		gstate.alphaTestFunction = alphaTest ? ALPHAGREATEREQUAL : ALPHAALWAYS;
 		for(uint32 shader = 0; shader < SHADER_COUNT; shader++){
-			if(shader==SHADER_WORLD_INSTANCED && (blend||!depthTest||!depthWrite||alphaTest))continue;
+			if((shader==SHADER_WORLD_INSTANCED || shader==SHADER_WORLD_ARRAY || shader==SHADER_WORLD_ARRAY_CROSS) &&
+			   (blend||!depthTest||!depthWrite||alphaTest)) continue;
 			getPipeline(shader, VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 		}
 	}
@@ -808,7 +830,7 @@ stateInit(void)
 		MAX_TEXTURE_DESCRIPTORS*NUM_FRAME_CONTEXTS + 1 +
 		3*NUM_FRAME_CONTEXTS;
 	poolSizes[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	poolSizes[2].descriptorCount = NUM_FRAME_CONTEXTS;
+	poolSizes[2].descriptorCount = 2*NUM_FRAME_CONTEXTS;
 
 	VkDescriptorPoolCreateInfo poolInfo = {};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -816,7 +838,7 @@ stateInit(void)
 	// requires this flag on the pool.
 	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 	poolInfo.maxSets =
-		MAX_TEXTURE_DESCRIPTORS*NUM_FRAME_CONTEXTS + 16;
+		MAX_TEXTURE_DESCRIPTORS*NUM_FRAME_CONTEXTS + 16 + NUM_FRAME_CONTEXTS;
 	poolInfo.poolSizeCount = 4;
 	poolInfo.pPoolSizes = poolSizes;
 	if(vkCreateDescriptorPool(gvk.device, &poolInfo, nil, &gs.descriptorPool) != VK_SUCCESS)
@@ -897,6 +919,10 @@ stateInit(void)
 	gs.modules[SHADER_WORLD][1] = createModule(kWorldFragSpv, sizeof(kWorldFragSpv));
 	gs.modules[SHADER_WORLD_INSTANCED][0] = createModule(kWorldInstancedVertSpv,sizeof(kWorldInstancedVertSpv));
 	gs.modules[SHADER_WORLD_INSTANCED][1] = gs.modules[SHADER_WORLD][1];
+	gs.modules[SHADER_WORLD_ARRAY][0] = createModule(kWorldArrayVertSpv, sizeof(kWorldArrayVertSpv));
+	gs.modules[SHADER_WORLD_ARRAY][1] = createModule(kWorldArrayFragSpv, sizeof(kWorldArrayFragSpv));
+	gs.modules[SHADER_WORLD_ARRAY_CROSS][0] = createModule(kWorldArrayCrossVertSpv, sizeof(kWorldArrayCrossVertSpv));
+	gs.modules[SHADER_WORLD_ARRAY_CROSS][1] = createModule(kWorldArrayCrossFragSpv, sizeof(kWorldArrayCrossFragSpv));
 	gs.worldNoEffectsModule = createModule(kWorldNoEffectsFragSpv,
 		sizeof(kWorldNoEffectsFragSpv));
 	if(gs.worldNoEffectsModule == VK_NULL_HANDLE)
@@ -968,6 +994,17 @@ stateInit(void)
 			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 		boneWrite.pBufferInfo = &boneBufferInfo;
 		vkUpdateDescriptorSets(gvk.device, 1, &boneWrite, 0, nil);
+		if(createBuffer(CrossArrayCapacity,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		               &sf.crossArrayBuffer,&sf.crossArrayMemory) &&
+		   vkMapMemory(gvk.device,sf.crossArrayMemory,0,CrossArrayCapacity,0,
+		               (void**)&sf.crossArrayMapped)==VK_SUCCESS &&
+		   vkAllocateDescriptorSets(gvk.device,&boneSetInfo,&sf.crossArrayDescriptor)==VK_SUCCESS){
+			VkDescriptorBufferInfo crossInfo={sf.crossArrayBuffer,0,CrossArrayUniformBytes};
+			boneWrite.dstSet=sf.crossArrayDescriptor;
+			boneWrite.pBufferInfo=&crossInfo;
+			vkUpdateDescriptorSets(gvk.device,1,&boneWrite,0,nil);
+		}
 	}
 
 	gs.boneAlignment = gvk.deviceProperties.limits.minUniformBufferOffsetAlignment;
@@ -1056,6 +1093,8 @@ stateShutdown(void)
 	if(!gs.initialised)
 		return;
 	vkDeviceWaitIdle(gvk.device);
+	clearStaticArrayGeometry();
+	clearStaticArrayPages();
 
 	for(size_t i = 0; i < gs.pipelines.size(); i++)
 		vkDestroyPipeline(gvk.device, gs.pipelines[i].pipeline, nil);
@@ -1108,6 +1147,9 @@ stateShutdown(void)
 
 	for(uint32 frame = 0; frame < NUM_FRAME_CONTEXTS; frame++){
 		StateFrame &sf = gs.frames[frame];
+		if(sf.crossArrayMapped) vkUnmapMemory(gvk.device,sf.crossArrayMemory);
+		if(sf.crossArrayBuffer) vkDestroyBuffer(gvk.device,sf.crossArrayBuffer,nil);
+		if(sf.crossArrayMemory) vkFreeMemory(gvk.device,sf.crossArrayMemory,nil);
 		if(sf.instanceMapped)vkUnmapMemory(gvk.device,sf.instanceMemory);
 		if(sf.instanceBuffer)vkDestroyBuffer(gvk.device,sf.instanceBuffer,nil);
 		if(sf.instanceMemory)vkFreeMemory(gvk.device,sf.instanceMemory,nil);
@@ -1234,7 +1276,8 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 {
 	if(!gs.initialised || shader >= SHADER_COUNT)
 		return VK_NULL_HANDLE;
-	if(shader==SHADER_WORLD_INSTANCED && !gs.modules[shader][0])return VK_NULL_HANDLE;
+	if((shader==SHADER_WORLD_INSTANCED || shader==SHADER_WORLD_ARRAY || shader==SHADER_WORLD_ARRAY_CROSS) &&
+	   (!gs.modules[shader][0] || !gs.modules[shader][1]))return VK_NULL_HANDLE;
 
 	if(gs.lastPipelineValid && gs.lastPipelineKey == key)
 		return gs.lastPipeline;
@@ -1303,7 +1346,8 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	// Use the captured pipeline key, including cold-effects fallback keys,
 	// rather than the current frame's settings. World, skin and Im3D share
 	// this fragment interface; Im2D keeps its own coverage variants.
-	if(shader != SHADER_IM2D && (key & (uint64(1) << 22)) == 0)
+	if(shader != SHADER_IM2D && shader != SHADER_WORLD_ARRAY && shader != SHADER_WORLD_ARRAY_CROSS &&
+	   (key & (uint64(1) << 22)) == 0)
 		stages[1].module = gs.worldNoEffectsModule;
 	if((key & (uint64(1) << 23)) != 0)
 		stages[1].module = gs.im2dCoverageModule;
@@ -1319,7 +1363,8 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	VkVertexInputAttributeDescription attributes[9] = {};
 	uint32 attributeCount = 0;
 
-	if(shader == SHADER_WORLD || shader == SHADER_WORLD_INSTANCED){
+	if(shader == SHADER_WORLD || shader == SHADER_WORLD_INSTANCED ||
+	   shader == SHADER_WORLD_ARRAY || shader == SHADER_WORLD_ARRAY_CROSS){
 		binding.stride = sizeof(WorldVertex);
 		attributes[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,
 		                  (uint32)offsetof(WorldVertex, position) };
@@ -1335,6 +1380,13 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 			for(uint32 column=0;column<4;++column)
 				attributes[5+column]={4+column,1,VK_FORMAT_R32G32B32A32_SFLOAT,column*16};
 			attributeCount=9;
+		}else if(shader==SHADER_WORLD_ARRAY || shader==SHADER_WORLD_ARRAY_CROSS){
+			static_assert(offsetof(WorldArrayVertex,vertex)==0, "world attributes must share the prefix");
+			binding.stride=sizeof(WorldArrayVertex);
+			attributes[5]={4,0,VK_FORMAT_R32G32B32A32_SFLOAT,(uint32)offsetof(WorldArrayVertex,materialColour)};
+			attributes[6]={5,0,VK_FORMAT_R32G32_SFLOAT,(uint32)offsetof(WorldArrayVertex,surface)};
+			attributes[7]={6,0,VK_FORMAT_R32_UINT,(uint32)offsetof(WorldArrayVertex,layer)};
+			attributeCount=8;
 		}
 	}else if(shader == SHADER_SKIN){
 		binding.stride = sizeof(SkinVertex);
@@ -1581,6 +1633,7 @@ freeTextureDescriptorSets(VkDescriptorSet *sets, uint32 count)
 void
 retireRasterTextureDescriptors(VulkanRaster *native)
 {
+	invalidateStaticArrayRaster(native);
 	auto found = textureDescriptors.find(native);
 	if(found == textureDescriptors.end())
 		return;
@@ -1590,6 +1643,462 @@ retireRasterTextureDescriptors(VulkanRaster *native)
 	for(TextureDescriptorEntry &entry : found->second)
 		retireTextureDescriptorSets(&entry.set, 1);
 	textureDescriptors.erase(found);
+}
+
+namespace {
+
+constexpr uint32 StaticArrayLayerLimit=64;
+constexpr size_t StaticArrayUploadLimit=512*1024;
+constexpr size_t StaticArrayPageLimit=StaticArrayBatch::MaxPages;
+
+struct StaticTexturePage {
+	VkImage image=VK_NULL_HANDLE;
+	VkImageView view=VK_NULL_HANDLE;
+	VkDeviceMemory memory=VK_NULL_HANDLE;
+	uint32 width=0,height=0,layers=0,bytes=0;
+	struct SamplerDescriptor {
+		uint32 key;
+		VkDescriptorSet set;
+	};
+	std::vector<SamplerDescriptor> descriptors;
+	bool initialized=false;
+	struct Slot {
+		VulkanRaster *owner=nullptr;
+		uint64 releasedFrame=0;
+		uint64 lastReference=0;
+	} slots[StaticArrayLayerLimit];
+};
+
+static bool matchesTextureShape(const StaticTexturePage &page,const StaticArrayTexture &texture)
+{
+	// Array admission supports one format and mip level. Sampling state
+	// lives in the descriptor, independently of the image's layers.
+	return page.width==texture.width && page.height==texture.height;
+}
+
+static std::vector<StaticTexturePage> staticArrayPages;
+static StaticArrayBatch::TexturePageBudget staticArrayBudget;
+static size_t staticArrayUploadBytes=0;
+static uint32 staticArrayPageAttempts=0,staticArrayUploads=0;
+static uint32 staticArrayPageSizeRetries=0,staticArrayPageMemoryCacheHits=0;
+static uint32 staticArrayDemandProbes=0,staticArrayDemandReplacements=0,staticArrayDemandUploadBytes=0;
+static uint64 staticArrayFrame=1;
+// A two-layer image's minimum allocation depends on its shape, not its sampler.
+// Keep this device-local and bounded. The cache is cleared with the page pool.
+static std::unordered_map<uint32,VkDeviceSize> staticArrayMinimumPageBytes;
+struct LayerLocation { uint32 page,layer; };
+static std::unordered_map<VulkanRaster*, std::vector<LayerLocation>> staticArrayLocations;
+static StaticArrayBatch::ResidencyStats staticArrayResidency;
+
+static void destroyStaticArrayPage(StaticTexturePage &page)
+{
+	for(auto &descriptor:page.descriptors) freeTextureDescriptorSets(&descriptor.set,1);
+	if(page.view) vkDestroyImageView(gvk.device,page.view,nil);
+	if(page.image) vkDestroyImage(gvk.device,page.image,nil);
+	if(page.memory) vkFreeMemory(gvk.device,page.memory,nil);
+}
+
+static StaticArrayBatch::Result createStaticArrayPage(const StaticArrayTexture &texture)
+{
+	using Result=StaticArrayBatch::Result;
+	const bool small=StaticArrayBatch::TexturePageBudget::IsSmall(texture.width,texture.height);
+	const auto countStatus=staticArrayBudget.CheckPageCount(small,(unsigned)staticArrayPages.size());
+	if(countStatus!=Result::Ready) return countStatus;
+	StaticTexturePage page;
+	page.width=texture.width;
+	page.height=texture.height;
+	page.layers=gvk.deviceProperties.limits.maxImageArrayLayers;
+	if(page.layers>StaticArrayLayerLimit) page.layers=StaticArrayLayerLimit;
+	if(page.layers<2) return Result::LayerDeviceLimit;
+	const auto remaining=staticArrayBudget.Remaining(small);
+	const uint32 layerBytes=page.width*page.height*4;
+	const uint32 memoryLayers=(uint32)(remaining/layerBytes);
+	const uint32 pageMemoryLayers=(4*1024*1024)/layerBytes;
+	if(page.layers>memoryLayers) page.layers=memoryLayers;
+	if(page.layers>pageMemoryLayers) page.layers=pageMemoryLayers;
+	if(page.layers<2) return staticArrayBudget.MemoryFailure(2*layerBytes);
+	const uint32 shape=(page.width<<16)|page.height;
+	const auto minimum=staticArrayMinimumPageBytes.find(shape);
+	if(minimum!=staticArrayMinimumPageBytes.end() && minimum->second>remaining){
+		++staticArrayPageMemoryCacheHits;
+		return staticArrayBudget.MemoryFailure(minimum->second);
+	}
+	if(staticArrayPageAttempts>=4) return Result::PageCreationBudget;
+	++staticArrayPageAttempts;
+	uint32 largestPage=0;
+	for(const auto &existing:staticArrayPages)
+		if(matchesTextureShape(existing,texture) && largestPage<existing.layers)
+			largestPage=existing.layers;
+	page.layers=StaticArrayBatch::PageLayerTarget(largestPage,page.layers);
+	staticArrayPages.reserve(StaticArrayPageLimit);
+
+	VkImageCreateInfo image={VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+	image.imageType=VK_IMAGE_TYPE_2D;
+	image.format=VK_FORMAT_R8G8B8A8_UNORM;
+	image.extent={page.width,page.height,1};
+	image.mipLevels=1;
+	image.samples=VK_SAMPLE_COUNT_1_BIT;
+	image.tiling=VK_IMAGE_TILING_OPTIMAL;
+	image.usage=VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	VkMemoryRequirements requirements={};
+	const auto fit=StaticArrayBatch::FitPageLayers(page.layers,[&](uint32 layers){
+		image.arrayLayers=layers;
+		if(vkCreateImage(gvk.device,&image,nil,&page.image)!=VK_SUCCESS) return Result::PageAllocation;
+		vkGetImageMemoryRequirements(gvk.device,page.image,&requirements);
+		if(requirements.size<=remaining) return Result::Ready;
+		vkDestroyImage(gvk.device,page.image,nil);
+		page.image=VK_NULL_HANDLE;
+		if(layers>2) ++staticArrayPageSizeRetries;
+		return Result::PageMemoryLimit;
+	});
+	if(fit!=Result::Ready){
+		if(fit==Result::PageMemoryLimit){
+			if(staticArrayMinimumPageBytes.size()<256)
+				staticArrayMinimumPageBytes.emplace(shape,requirements.size);
+			return staticArrayBudget.MemoryFailure(requirements.size);
+		}
+		return fit;
+	}
+	VkMemoryAllocateInfo allocation={VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+	allocation.allocationSize=requirements.size;
+	if(!findMemoryType(requirements.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,&allocation.memoryTypeIndex) ||
+	   vkAllocateMemory(gvk.device,&allocation,nil,&page.memory)!=VK_SUCCESS ||
+	   vkBindImageMemory(gvk.device,page.image,page.memory,0)!=VK_SUCCESS){
+		destroyStaticArrayPage(page);
+		return Result::PageAllocation;
+	}
+	VkImageViewCreateInfo view={VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+	view.image=page.image;
+	view.viewType=VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+	view.format=image.format;
+	view.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,page.layers};
+	if(vkCreateImageView(gvk.device,&view,nil,&page.view)!=VK_SUCCESS){
+		destroyStaticArrayPage(page);
+		return Result::PageAllocation;
+	}
+	page.bytes=(uint32)requirements.size;
+	staticArrayPages.push_back(std::move(page));
+	staticArrayBudget.Add(small,(uint32)requirements.size);
+	return Result::Ready;
+}
+
+static VkDescriptorSet getStaticArrayPageDescriptor(StaticTexturePage &page,const StaticArrayTexture &texture)
+{
+	for(const auto &descriptor:page.descriptors)
+		if(descriptor.key==texture.samplerKey) return descriptor.set;
+
+	// Reserve before allocating the Vulkan set. Published sets are immutable
+	// and survive as long as the page, including across in-flight frame slots.
+	page.descriptors.reserve(page.descriptors.size()+1);
+	VkDescriptorSet set=VK_NULL_HANDLE;
+	VkDescriptorSetAllocateInfo descriptors={VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+	descriptors.descriptorPool=gs.descriptorPool;
+	descriptors.descriptorSetCount=1;
+	descriptors.pSetLayouts=&gs.textureLayout;
+	if(vkAllocateDescriptorSets(gvk.device,&descriptors,&set)!=VK_SUCCESS) return VK_NULL_HANDLE;
+	VkDescriptorImageInfo descriptor={texture.sampler,page.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+	VkWriteDescriptorSet write={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+	write.dstSet=set;
+	write.descriptorCount=1;
+	write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	write.pImageInfo=&descriptor;
+	vkUpdateDescriptorSets(gvk.device,1,&write,0,nil);
+	page.descriptors.push_back({texture.samplerKey,set});
+	return set;
+}
+
+static VkImageMemoryBarrier arrayBarrier(VkImage image, uint32 layer, uint32 layers,
+                                         VkImageLayout from, VkImageLayout to,
+                                         VkAccessFlags source, VkAccessFlags destination)
+{
+	VkImageMemoryBarrier barrier={VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+	barrier.srcAccessMask=source;
+	barrier.dstAccessMask=destination;
+	barrier.oldLayout=from;
+	barrier.newLayout=to;
+	barrier.srcQueueFamilyIndex=barrier.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;
+	barrier.image=image;
+	barrier.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,layer,layers};
+	return barrier;
+}
+
+static bool uploadStaticArrayLayer(const StaticArrayTexture &texture, StaticTexturePage &page, uint32 layer)
+{
+	const VkCommandBuffer command=beginOneShot();
+	if(!command) return false;
+	constexpr auto sampled=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	constexpr auto transferSource=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	constexpr auto transferDestination=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	if(!page.initialized){
+		const auto initialize=arrayBarrier(page.image,0,page.layers,VK_IMAGE_LAYOUT_UNDEFINED,sampled,0,0);
+		vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+		                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nil,0,nil,1,&initialize);
+	}
+	const VkImageMemoryBarrier copyBarriers[]={
+		arrayBarrier(texture.native->image,0,1,sampled,transferSource,
+		             VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT),
+		arrayBarrier(page.image,layer,1,sampled,transferDestination,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_WRITE_BIT)
+	};
+	vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT,
+	                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+	                     0,0,nil,0,nil,2,copyBarriers);
+	const VkImageCopy region={{VK_IMAGE_ASPECT_COLOR_BIT,0,0,1},{},{VK_IMAGE_ASPECT_COLOR_BIT,0,layer,1},{},
+	                          {page.width,page.height,1}};
+	vkCmdCopyImage(command,texture.native->image,transferSource,page.image,transferDestination,1,&region);
+	const VkImageMemoryBarrier sampleBarriers[]={
+		arrayBarrier(texture.native->image,0,1,transferSource,sampled,VK_ACCESS_TRANSFER_READ_BIT,VK_ACCESS_SHADER_READ_BIT),
+		arrayBarrier(page.image,layer,1,transferDestination,sampled,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT)
+	};
+	vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+	                     0,0,nil,0,nil,2,sampleBarriers);
+	if(!endOneShot(command)) return false;
+	page.initialized=true;
+	return true;
+}
+
+}
+
+bool getStaticArrayTexture(Raster *raster,uint32 filter,uint32 u,uint32 v,StaticArrayTexture &out)
+{
+	if(!raster || raster->platform!=PLATFORM_VULKAN || (raster->type&0xF)!=Raster::TEXTURE ||
+	   (raster->parent && raster->parent!=raster) ||
+	   raster->width<=0 || raster->height<=0 || raster->width>256 || raster->height>256 ||
+	   filter<Texture::NEAREST || filter>Texture::LINEARMIPLINEAR ||
+	   u<Texture::WRAP || u>Texture::CLAMP || v<Texture::WRAP || v>Texture::CLAMP) return false;
+	auto *native=PLUGINOFFSET(VulkanRaster,raster,nativeRasterOffset);
+	if(!native->staticArrayCopySource || native->numLevels!=1 || native->hasAlpha ||
+	   !native->image || !native->view || native->lockedLevel>=0 ||
+	   native->layout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) return false;
+	const uint32 key=makeSamplerKey(filter,u,v,0);
+	const VkSampler sampler=getSampler(key,filter,u,v);
+	if(!sampler) return false;
+	out={native,(uint32)raster->width,(uint32)raster->height,key,sampler};
+	return true;
+}
+
+StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 preferredPage,bool residentOnly,
+                                     const StaticArrayTexture *companion)
+{
+	using Result=StaticArrayBatch::Result;
+	const bool preferred=preferredPage!=StaticArrayBatch::MaxPages;
+	bool elsewhere=false;
+	auto found=staticArrayLocations.find(texture.native);
+	if(found!=staticArrayLocations.end()){
+		for(const auto &location:found->second){
+			if(preferred && preferredPage!=location.page){
+				if(staticArrayResidency.sampled && matchesTextureShape(staticArrayPages[location.page],texture))
+					elsewhere=true;
+				continue;
+			}
+			auto &page=staticArrayPages[location.page];
+			if(!matchesTextureShape(page,texture)) continue;
+			const auto descriptor=getStaticArrayPageDescriptor(page,texture);
+			if(!descriptor) return {VK_NULL_HANDLE,0,Result::PageAllocation};
+			page.slots[location.layer].lastReference=staticArrayFrame;
+			return {descriptor,location.layer,Result::Ready,location.page,
+			        staticArrayResidency.sampled && &location!=&found->second.front()};
+		}
+	}
+	const auto finishMiss=[&](StaticArrayLayer layer){
+		if(staticArrayResidency.sampled)
+			staticArrayResidency.Observe(texture.width,texture.height,elsewhere,
+				residentOnly?StaticArrayBatch::ResidentOnlyMiss:unsigned(layer.result));
+		return layer;
+	};
+	if(residentOnly) return finishMiss({VK_NULL_HANDLE,0,Result::PreferredPageFull});
+	const size_t bytes=size_t(texture.width)*texture.height*4;
+	if(staticArrayUploads>=16 || staticArrayUploadBytes>=StaticArrayUploadLimit ||
+	   bytes>StaticArrayUploadLimit-staticArrayUploadBytes)
+		return finishMiss({VK_NULL_HANDLE,0,Result::TextureUploadBudget});
+	const bool alreadyResident=found!=staticArrayLocations.end() && !found->second.empty();
+	const auto installLayer=[&](uint32 pageIndex,uint32 layer){
+		auto &page=staticArrayPages[pageIndex];
+		auto &slot=page.slots[layer];
+		const auto descriptor=getStaticArrayPageDescriptor(page,texture);
+		if(!descriptor) return StaticArrayLayer{VK_NULL_HANDLE,0,Result::PageAllocation};
+		auto &locations=staticArrayLocations[texture.native];
+		locations.reserve(locations.size()+1);
+		// The caller has excluded slots referenced in this recording. Earlier
+		// draws run on the same queue, and the layer upload waits for their reads.
+		if(!uploadStaticArrayLayer(texture,page,layer))
+			return StaticArrayLayer{VK_NULL_HANDLE,0,Result::TextureUpload};
+		if(slot.owner){
+			auto victim=staticArrayLocations.find(slot.owner);
+			auto &oldLocations=victim->second;
+			const auto old=std::find_if(oldLocations.begin(),oldLocations.end(),[&](const LayerLocation &loc){
+				return loc.page==pageIndex && loc.layer==layer;
+			});
+			oldLocations.erase(old);
+			if(oldLocations.empty()) staticArrayLocations.erase(victim);
+			++staticArrayDemandReplacements;
+			staticArrayDemandUploadBytes+=(uint32)bytes;
+		}
+		slot.owner=texture.native;
+		slot.lastReference=staticArrayFrame;
+		locations.push_back({pageIndex,layer});
+		texture.native->staticArrayDemand={};
+		staticArrayUploadBytes+=bytes;
+		++staticArrayUploads;
+		return StaticArrayLayer{descriptor,layer,Result::Ready,pageIndex,
+		                        staticArrayResidency.sampled && elsewhere};
+	};
+	Result allocationFailure=Result::PreferredPageFull;
+	for(size_t pageIndex=0;pageIndex<=staticArrayPages.size();++pageIndex){
+		if(pageIndex==staticArrayPages.size()){
+			if(preferred) break;
+			const auto result=createStaticArrayPage(texture);
+			if(result!=Result::Ready){allocationFailure=result;break;}
+		}
+		auto &page=staticArrayPages[pageIndex];
+		if((preferred && pageIndex!=preferredPage) || !matchesTextureShape(page,texture)) continue;
+		for(uint32 layer=0;layer<page.layers;++layer){
+			auto &slot=page.slots[layer];
+			if(slot.owner || slot.releasedFrame==staticArrayFrame) continue;
+			return finishMiss(installLayer((uint32)pageIndex,layer));
+		}
+	}
+	const bool capacityLimited=allocationFailure==Result::PreferredPageFull ||
+	                           allocationFailure==Result::PageMemoryLimit ||
+	                           allocationFailure==Result::PageCountLimit ||
+	                           allocationFailure==Result::SmallTextureReserve;
+	if(capacityLimited && !alreadyResident && (preferred || companion) &&
+	   texture.width==texture.height && (texture.width==64 || texture.width==128) &&
+	   texture.native->staticArrayDemand.Observe(staticArrayFrame) &&
+	   staticArrayDemandProbes<8 && staticArrayDemandReplacements<2){
+		++staticArrayDemandProbes;
+		uint32 victimPage=StaticArrayBatch::MaxPages,victimLayer=0;
+		uint64_t oldestReference=staticArrayFrame;
+		const auto considerPage=[&](uint32 pageIndex){
+			const auto &page=staticArrayPages[pageIndex];
+			if(!matchesTextureShape(page,texture)) return;
+			for(uint32 layer=0;layer<page.layers;++layer){
+				const auto &slot=page.slots[layer];
+				if(!slot.owner || (companion && slot.owner==companion->native) ||
+				   slot.lastReference>=oldestReference ||
+				   !StaticArrayBatch::CanReplaceLayer(slot.lastReference,staticArrayFrame)) continue;
+				oldestReference=slot.lastReference;
+				victimPage=pageIndex;
+				victimLayer=layer;
+			}
+		};
+		if(preferred && preferredPage<staticArrayPages.size()){
+			considerPage(preferredPage);
+		}else if(companion && companion->native==texture.native){
+			for(uint32 i=0;i<staticArrayPages.size();++i) considerPage(i);
+		}else if(companion){
+			const auto placement=staticArrayLocations.find(companion->native);
+			if(placement!=staticArrayLocations.end())
+				for(const auto &location:placement->second) considerPage(location.page);
+		}
+		if(victimPage!=StaticArrayBatch::MaxPages)
+			return finishMiss(installLayer(victimPage,victimLayer));
+	}
+	return finishMiss({VK_NULL_HANDLE,0,allocationFailure});
+}
+
+void invalidateStaticArrayRaster(VulkanRaster *native)
+{
+	if(!native->staticArrayCopySource) return;
+	native->staticArrayDemand={};
+	auto found=staticArrayLocations.find(native);
+	if(found==staticArrayLocations.end()) return;
+	// This frame's upload buffers run before ALL of its draws. Keep old
+	// contents until the next recording even if the raster has been replaced.
+	for(const auto &location:found->second){
+		auto &slot=staticArrayPages[location.page].slots[location.layer];
+		slot.owner=nullptr;
+		slot.releasedFrame=staticArrayFrame;
+	}
+	staticArrayLocations.erase(found);
+}
+
+void syncStaticArrayRasterUpload(VulkanRaster *native,VkCommandBuffer command)
+{
+	const auto found=staticArrayLocations.find(native);
+	if(found==staticArrayLocations.end()) return;
+	// This is the original texture's upload command. Mirror the same bytes
+	// before submission so draws recorded earlier in this frame see the same
+	// updated texels through either descriptor.
+	constexpr auto sampled=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	constexpr auto destination=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	for(const auto &location:found->second){
+		const auto &page=staticArrayPages[location.page];
+		const auto writable=arrayBarrier(page.image,location.layer,1,sampled,destination,
+		                                 VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_WRITE_BIT);
+		vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,
+		                     0,0,nil,0,nil,1,&writable);
+		VkBufferImageCopy copy={};
+		copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,location.layer,1};
+		copy.imageExtent={page.width,page.height,1};
+		vkCmdCopyBufferToImage(command,native->stagingBuffer,page.image,destination,1,&copy);
+		staticArrayUploadBytes+=size_t(page.width)*page.height*4;
+		const auto readable=arrayBarrier(page.image,location.layer,1,destination,sampled,
+		                                 VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT);
+		vkCmdPipelineBarrier(command,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		                     0,0,nil,0,nil,1,&readable);
+	}
+}
+
+void clearStaticArrayPages(void)
+{
+	for(auto &page:staticArrayPages) destroyStaticArrayPage(page);
+	staticArrayPages.clear();
+	staticArrayLocations.clear();
+	staticArrayMinimumPageBytes.clear();
+	staticArrayBudget={};
+}
+
+void resetStaticArrayFrame(void)
+{
+	++staticArrayFrame;
+	staticArrayUploadBytes=0;
+	staticArrayPageAttempts=staticArrayUploads=0;
+	staticArrayPageSizeRetries=staticArrayPageMemoryCacheHits=0;
+	staticArrayDemandProbes=staticArrayDemandReplacements=staticArrayDemandUploadBytes=0;
+	resetStaticArrayGeometryFrame();
+}
+
+void getStaticArrayPageStats(StaticArrayBatch::Stats &stats)
+{
+	stats.pageBytes=staticArrayBudget.bytes;
+	stats.pageUploadBytes=(uint32)staticArrayUploadBytes;
+	stats.pageSizeRetries=staticArrayPageSizeRetries;
+	stats.pageMemoryCacheHits=staticArrayPageMemoryCacheHits;
+	stats.demandProbes=staticArrayDemandProbes;
+	stats.demandReplacements=staticArrayDemandReplacements;
+	stats.demandUploadBytes=staticArrayDemandUploadBytes;
+}
+
+void getStaticArrayOccupancy(StaticArrayBatch::Occupancy &out)
+{
+	out.sampled=true;
+	out.count=0;
+	for(const auto &page:staticArrayPages){
+		auto &sample=out.pages[out.count++];
+		sample={page.width,page.height,StaticArrayBatch::SharedPageSamplerKey,page.layers,0,0,page.bytes};
+		for(uint32 i=0;i<page.layers;++i){
+			const auto &slot=page.slots[i];
+			if(slot.owner) ++sample.live;
+			else if(slot.releasedFrame==staticArrayFrame) ++sample.held;
+		}
+	}
+	// The first location is the primary copy for this raster. Additional
+	// locations are physical replicas. Sampler descriptors share each copy.
+	for(const auto &entry:staticArrayLocations)
+		for(size_t i=1;i<entry.second.size();++i)
+			++out.pages[entry.second[i].page].duplicateLayers;
+}
+
+void setStaticArrayResidencySampling(bool enabled)
+{
+	staticArrayResidency.sampled=enabled;
+	staticArrayResidency.count=0;
+	staticArrayResidency.overflow=0;
+}
+
+void getStaticArrayResidencyStats(StaticArrayBatch::ResidencyStats &out)
+{
+	out=staticArrayResidency;
 }
 
 VkImageView getFallbackTextureView(void) { return gs.whiteView; }
@@ -1774,10 +2283,23 @@ allocateStaticInstanceTransforms(unsigned count,VkBuffer *buffer,VkDeviceSize *o
 void
 resetDynamic(void)
 {
+	resetStaticArrayFrame();
 	StateFrame &sf = gs.frames[gs.activeFrame];
 	sf.dynamicOffset = 0;
 	sf.instanceOffset = 0;
+	sf.crossArrayCursor = {};
 	sf.dynamicOverflowReported = 0;
+}
+
+bool allocateCrossArrayStream(unsigned count,CrossArrayStream &out)
+{
+	auto &frame=gs.frames[gs.activeFrame];
+	if(!frame.crossArrayDescriptor || !frame.crossArrayMapped) return false;
+	const uint32 stride=(uint32)((CrossArrayUniformBytes+gs.boneAlignment-1)/gs.boneAlignment*gs.boneAlignment);
+	if(!frame.crossArrayCursor.Allocate(count,stride,CrossArrayCapacity,out.pageOffset,out.firstObject)) return false;
+	out.descriptor=frame.crossArrayDescriptor;
+	out.mapped=frame.crossArrayMapped+out.pageOffset+out.firstObject*sizeof(CrossArrayObject);
+	return true;
 }
 
 }
