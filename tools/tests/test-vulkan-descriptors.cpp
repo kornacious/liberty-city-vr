@@ -139,6 +139,7 @@ struct StaticTexturePage {
     VkImageView view=0;
     uint32 width=64,height=64,layers=2;
     struct Slot { VulkanRaster *owner=nullptr; uint64_t releasedFrame=0,lastReference=0; } slots[2];
+    StaticArrayBatch::DemandPageSearch demandSearch;
     struct Descriptor { uint32 key; VkDescriptorSet set; };
     std::vector<Descriptor> descriptors;
 };
@@ -151,6 +152,7 @@ static unsigned staticArrayUploads=0;
 static size_t staticArrayUploadBytes=0;
 static StaticArrayBatch::ResidencyStats staticArrayResidency;
 static uint32 staticArrayDemandProbes=0,staticArrayDemandReplacements=0,staticArrayDemandUploadBytes=0;
+static uint32 staticArrayDemandPageDeferrals=0;
 static bool arrayUploadFails=false;
 static StaticArrayBatch::Result createStaticArrayPage(const StaticArrayTexture &) {
     return StaticArrayBatch::Result::PageCountLimit;
@@ -321,7 +323,7 @@ int main() {
         const auto promoted=getStaticArrayLayer(missingTexture,1);
         Check(promoted.page && promoted.layer==coldLayer.layer &&
               staticArrayLocations.count(&cold)==0 && getStaticArrayLayer(linearTexture,1).duplicate &&
-              staticArrayDemandProbes==2 && staticArrayDemandReplacements==1 &&
+              staticArrayDemandProbes==1 && staticArrayDemandReplacements==1 &&
               staticArrayDemandUploadBytes==64*64*4,
               "a repeated miss replaces only the cold layer and preserves the live duplicate");
         VulkanRaster unrelated{};

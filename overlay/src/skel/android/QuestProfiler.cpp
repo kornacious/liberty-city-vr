@@ -321,7 +321,7 @@ StartFrameCapture(void)
 	details += "cross_array_submission_policy,packed_uniform_pages_v1\n";
 	details += "static_array_page_policy,small_texture_reserve_shared_samplers_v1\n";
 	details += "static_array_residency,source_frame_sampled_every_8_v1\n";
-	details += "static_array_demand_admission,repeated_compatible_misses_v1\n";
+	details += "static_array_demand_admission,cached_page_candidates_v2\n";
 	details += "static_submission_cache_counter_scope,one_vk_static_atomic_calls_entry_per_measured_collector_flush\n";
 	details += "static_reuse_policy,disabled_for_static_instance_benchmark\n";
 	details += "opaque_mesh_batch_at_start," + std::to_string(rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0) + "\n";

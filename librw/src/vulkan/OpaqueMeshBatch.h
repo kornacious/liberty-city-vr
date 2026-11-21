@@ -13,18 +13,69 @@ constexpr uint64_t DemandMaxGap=24;
 constexpr uint64_t DemandColdFrames=240;
 struct DemandHistory {
     uint64_t lastFrame;
+    uint64_t retryFrame;
     uint32_t frames;
     bool Observe(uint64_t frame){
         if(lastFrame==frame) return false;
         if(!lastFrame || frame-lastFrame>DemandMaxGap) frames=0;
         lastFrame=frame;
         if(frames<DemandMinFrames) ++frames;
-        return frames==DemandMinFrames;
+        return frames==DemandMinFrames && frame>=retryFrame;
     }
+    void Defer(uint64_t frame){retryFrame=frame+8;}
 };
 inline bool CanReplaceLayer(uint64_t lastReference,uint64_t frame){
     return frame>lastReference && frame-lastReference>=DemandColdFrames;
 }
+constexpr unsigned DemandPageScanLimit=8;
+struct DemandPageSearch {
+    static constexpr uint32_t NoLayer=UINT32_MAX;
+    struct Candidate {
+        uint32_t layer=NoLayer;
+        uint64_t lastReference=0;
+    } oldest[2];
+    bool known=false;
+
+    void Invalidate(){known=false;}
+
+    template<class Slot,class Owner>
+    uint32_t Find(const Slot *slots,uint32_t count,uint64_t frame,const Owner *companion,
+                  uint32_t &scans,uint32_t &deferrals){
+        const auto candidate=[&]() -> const Candidate & {
+            // A raster occupies at most one layer on a physical page.
+            return oldest[oldest[0].layer!=NoLayer && companion &&
+                          slots[oldest[0].layer].owner==companion];
+        };
+        if(known){
+            const auto &prior=candidate();
+            // References only move forward. A refresh can delay this deadline.
+            if(prior.layer==NoLayer || !CanReplaceLayer(prior.lastReference,frame)){
+                ++deferrals;
+                return NoLayer;
+            }
+            const auto &slot=slots[prior.layer];
+            if(slot.owner && slot.lastReference==prior.lastReference) return prior.layer;
+        }
+        if(scans>=DemandPageScanLimit) return NoLayer;
+        ++scans;
+        oldest[0]={};
+        oldest[1]={};
+        for(uint32_t i=0;i<count;++i){
+            const auto &slot=slots[i];
+            if(!slot.owner) continue;
+            const Candidate entry={i,slot.lastReference};
+            if(oldest[0].layer==NoLayer || entry.lastReference<oldest[0].lastReference){
+                oldest[1]=oldest[0];
+                oldest[0]=entry;
+            }else if(oldest[1].layer==NoLayer || entry.lastReference<oldest[1].lastReference){
+                oldest[1]=entry;
+            }
+        }
+        known=true;
+        const auto &selected=candidate();
+        return selected.layer!=NoLayer && CanReplaceLayer(selected.lastReference,frame)?selected.layer:NoLayer;
+    }
+};
 struct CrossObjectCursor {
     uint32_t pageOffset=0, nextObject=0;
     bool Allocate(unsigned count,uint32_t stride,uint32_t capacity,
@@ -193,6 +244,7 @@ struct Stats {
     uint32_t crossPipelineBinds=0,crossDescriptorBinds=0,crossTransformBinds=0;
     uint32_t duplicateMergedLayers=0;
     uint32_t demandProbes=0,demandReplacements=0,demandUploadBytes=0;
+    uint32_t demandPageDeferrals=0;
     double crossFlushMs=0;
     uint32_t fallbackReasons[FallbackCount]={};
     unsigned Fallback(Result reason){

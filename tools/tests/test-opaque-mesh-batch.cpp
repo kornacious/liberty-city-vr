@@ -63,6 +63,36 @@ int main(){
     assert(!StaticArrayBatch::UsesCrossGeometry(replaced,2));
     assert(!StaticArrayBatch::UsesCrossGeometry(ordered,0));
     {
+        using StaticArrayBatch::DemandPageSearch;
+        unsigned a=0,b=0,c=0;
+        struct Slot { const unsigned *owner; uint64_t lastReference; };
+        Slot slots[]={{&a,100},{&b,110},{&c,120}};
+        DemandPageSearch search;
+        uint32_t scans=0,deferrals=0;
+        assert(search.Find(slots,3,200,&a,scans,deferrals)==DemandPageSearch::NoLayer && scans==1);
+        assert(search.Find(slots,3,340,&a,scans,deferrals)==DemandPageSearch::NoLayer && scans==1 && deferrals==1);
+        assert(search.Find(slots,3,350,&a,scans,deferrals)==1 && scans==1);
+        slots[1].lastReference=350;
+        assert(search.Find(slots,3,350,&a,scans,deferrals)==DemandPageSearch::NoLayer && scans==2);
+        assert(search.Find(slots,3,351,&a,scans,deferrals)==DemandPageSearch::NoLayer && scans==2);
+        assert(search.Find(slots,3,360,&a,scans,deferrals)==2 && scans==2);
+        slots[2].owner=nullptr;
+        scans=0;
+        assert(search.Find(slots,3,360,&a,scans,deferrals)==DemandPageSearch::NoLayer && scans==1);
+        slots[2]={&c,360};
+        search.Invalidate();
+        assert(search.Find(slots,3,600,&a,scans,deferrals)==1 && scans==2);
+        scans=StaticArrayBatch::DemandPageScanLimit;
+        assert(search.Find(slots,3,600,&a,scans,deferrals)==1);
+        slots[1].lastReference=600;
+        assert(search.Find(slots,3,600,&a,scans,deferrals)==DemandPageSearch::NoLayer);
+
+        StaticArrayBatch::DemandHistory history={};
+        assert(!history.Observe(1) && !history.Observe(2) && history.Observe(3));
+        history.Defer(3);
+        assert(!history.Observe(3) && !history.Observe(10) && history.Observe(11));
+    }
+    {
         StaticArrayBatch::ResidencyStats sample;
         const unsigned uploaded=unsigned(StaticArrayBatch::Result::Ready);
         for(unsigned i=1;i<=StaticArrayBatch::MaxResidencyEvents;++i)

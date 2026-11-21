@@ -1667,6 +1667,7 @@ struct StaticTexturePage {
 		uint64 releasedFrame=0;
 		uint64 lastReference=0;
 	} slots[StaticArrayLayerLimit];
+	StaticArrayBatch::DemandPageSearch demandSearch;
 };
 
 static bool matchesTextureShape(const StaticTexturePage &page,const StaticArrayTexture &texture)
@@ -1682,6 +1683,7 @@ static size_t staticArrayUploadBytes=0;
 static uint32 staticArrayPageAttempts=0,staticArrayUploads=0;
 static uint32 staticArrayPageSizeRetries=0,staticArrayPageMemoryCacheHits=0;
 static uint32 staticArrayDemandProbes=0,staticArrayDemandReplacements=0,staticArrayDemandUploadBytes=0;
+static uint32 staticArrayDemandPageDeferrals=0;
 static uint64 staticArrayFrame=1;
 // A two-layer image's minimum allocation depends on its shape, not its sampler.
 // Keep this device-local and bounded. The cache is cleared with the page pool.
@@ -1932,6 +1934,9 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 			if(oldLocations.empty()) staticArrayLocations.erase(victim);
 			++staticArrayDemandReplacements;
 			staticArrayDemandUploadBytes+=(uint32)bytes;
+		}else{
+			// A newly occupied slot may supply a candidate absent from the cache.
+			page.demandSearch.Invalidate();
 		}
 		slot.owner=texture.native;
 		slot.lastReference=staticArrayFrame;
@@ -1963,23 +1968,19 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 	                           allocationFailure==Result::SmallTextureReserve;
 	if(capacityLimited && !alreadyResident && (preferred || companion) &&
 	   texture.width==texture.height && (texture.width==64 || texture.width==128) &&
-	   texture.native->staticArrayDemand.Observe(staticArrayFrame) &&
-	   staticArrayDemandProbes<8 && staticArrayDemandReplacements<2){
-		++staticArrayDemandProbes;
+	   texture.native->staticArrayDemand.Observe(staticArrayFrame) && staticArrayDemandReplacements<2){
 		uint32 victimPage=StaticArrayBatch::MaxPages,victimLayer=0;
 		uint64_t oldestReference=staticArrayFrame;
 		const auto considerPage=[&](uint32 pageIndex){
-			const auto &page=staticArrayPages[pageIndex];
+			auto &page=staticArrayPages[pageIndex];
 			if(!matchesTextureShape(page,texture)) return;
-			for(uint32 layer=0;layer<page.layers;++layer){
-				const auto &slot=page.slots[layer];
-				if(!slot.owner || (companion && slot.owner==companion->native) ||
-				   slot.lastReference>=oldestReference ||
-				   !StaticArrayBatch::CanReplaceLayer(slot.lastReference,staticArrayFrame)) continue;
-				oldestReference=slot.lastReference;
-				victimPage=pageIndex;
-				victimLayer=layer;
-			}
+			const auto layer=page.demandSearch.Find(page.slots,page.layers,staticArrayFrame,
+				companion?companion->native:nil,staticArrayDemandProbes,staticArrayDemandPageDeferrals);
+			if(layer==StaticArrayBatch::DemandPageSearch::NoLayer ||
+			   page.slots[layer].lastReference>=oldestReference) return;
+			oldestReference=page.slots[layer].lastReference;
+			victimPage=pageIndex;
+			victimLayer=layer;
 		};
 		if(preferred && preferredPage<staticArrayPages.size()){
 			considerPage(preferredPage);
@@ -1992,6 +1993,7 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 		}
 		if(victimPage!=StaticArrayBatch::MaxPages)
 			return finishMiss(installLayer(victimPage,victimLayer));
+		texture.native->staticArrayDemand.Defer(staticArrayFrame);
 	}
 	return finishMiss({VK_NULL_HANDLE,0,allocationFailure});
 }
@@ -2055,6 +2057,7 @@ void resetStaticArrayFrame(void)
 	staticArrayPageAttempts=staticArrayUploads=0;
 	staticArrayPageSizeRetries=staticArrayPageMemoryCacheHits=0;
 	staticArrayDemandProbes=staticArrayDemandReplacements=staticArrayDemandUploadBytes=0;
+	staticArrayDemandPageDeferrals=0;
 	resetStaticArrayGeometryFrame();
 }
 
@@ -2067,6 +2070,7 @@ void getStaticArrayPageStats(StaticArrayBatch::Stats &stats)
 	stats.demandProbes=staticArrayDemandProbes;
 	stats.demandReplacements=staticArrayDemandReplacements;
 	stats.demandUploadBytes=staticArrayDemandUploadBytes;
+	stats.demandPageDeferrals=staticArrayDemandPageDeferrals;
 }
 
 void getStaticArrayOccupancy(StaticArrayBatch::Occupancy &out)

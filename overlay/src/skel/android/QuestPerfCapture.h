@@ -327,7 +327,8 @@ class Writer {
                 if(i) std::fputc('|',frames);
                 std::fprintf(frames,"%u:%u",page.live-page.duplicateLayers,page.duplicateLayers);
             }
-        std::fprintf(frames,",%u,%u,%u",array.demandProbes,array.demandReplacements,array.demandUploadBytes);
+        std::fprintf(frames,",%u,%u,%u,%u",array.demandProbes,array.demandReplacements,
+                     array.demandUploadBytes,array.demandPageDeferrals);
         std::fputc('\n',frames);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
@@ -435,7 +436,8 @@ public:
             ",static_array_page_size_retries,static_array_page_memory_cache_hits,static_array_occupancy_sampled,static_array_page_occupancy"
             ",static_array_residency_sampled,static_array_residency_overflow,static_array_duplicate_merged_layers"
             ",static_array_residency_misses,static_array_page_copies"
-            ",static_array_demand_probes,static_array_demand_replacements,static_array_demand_upload_bytes\n",frames);
+            ",static_array_demand_probes,static_array_demand_replacements,static_array_demand_upload_bytes"
+            ",static_array_demand_page_deferrals\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

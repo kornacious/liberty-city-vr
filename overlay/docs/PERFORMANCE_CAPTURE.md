@@ -717,11 +717,17 @@ can reuse a cold layer of the same size. The replacement must be on the
 page already chosen for the run or on a page containing the next compatible
 texture. A slot must have gone at least 240 frames without a reference.
 Resident-only probes and textures that already have a copy do not trigger
-replacement. The renderer allows up to eight victim searches and two
-successful replacements per frame, within the existing upload limit.
+replacement. Each page caches its two oldest candidates so it can defer
+a search until a layer can age out and still exclude a companion texture.
+A request that finds no victim waits eight frames before trying again.
+The renderer allows up to eight full page scans and two successful
+replacements per frame, within the existing upload limit.
 `static_array_demand_probes`, `static_array_demand_replacements`, and
 `static_array_demand_upload_bytes` report this activity on every frame.
-Demand upload bytes are included in the normal page upload total.
+With `cached_page_candidates_v2`, probes count full page scans and
+`static_array_demand_page_deferrals` counts page searches avoided because
+the cached candidates are too recent or unavailable for the requested
+pair. Demand upload bytes are included in the normal page upload total.
 
 ### Cross-object array batching
 

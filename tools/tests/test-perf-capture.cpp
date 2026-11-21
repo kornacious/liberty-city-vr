@@ -186,6 +186,7 @@ int main()
         frame.staticArrayBatch.demandProbes=5;
         frame.staticArrayBatch.demandReplacements=2;
         frame.staticArrayBatch.demandUploadBytes=32768;
+        frame.staticArrayBatch.demandPageDeferrals=42;
         frame.staticArrayOccupancy={};
         frame.staticArrayResidency={};
         if(i%2){
@@ -348,6 +349,7 @@ int main()
           assert(row[column("static_array_demand_probes")]=="5");
           assert(row[column("static_array_demand_replacements")]=="2");
           assert(row[column("static_array_demand_upload_bytes")]=="32768");
+          assert(row[column("static_array_demand_page_deferrals")]=="42");
           unsigned totalFallbacks=0;
           for(unsigned i=0;i<StaticArrayBatch::FallbackCount;++i){
               const std::string key="static_array_fallback_"+std::string(StaticArrayBatch::FallbackName(i));
