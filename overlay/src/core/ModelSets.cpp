@@ -6,6 +6,13 @@
 #include "AssetVariants.h"
 #include "crossplatform.h"
 
+#ifdef __ANDROID__
+#include "QuestAstcCache.h"
+#include "QuestPackageHash.h"
+#include "vulkan/rwvk.h"
+#include <atomic>
+#endif
+
 #if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "platform_android.h"
 #include "RuntimeLog.h"
@@ -47,6 +54,51 @@ char gGameRoot[1024] = {};
 char gSettingsPath[1024] = {};
 std::string gContentRoot;
 bool gPcAvailable;
+
+#ifdef __ANDROID__
+bool gAstcRequested;
+bool gAstcConfigured;
+bool gAstcCacheAvailable[2];
+QuestAstcCache::Index gAstcCache;
+
+rw::Raster *LoadAstcTexture(rw::Stream *stream, rw::uint32 start, rw::uint32 size,
+	rw::int32 width, rw::int32 height)
+{
+	// The Vulkan device is initialized by the time the first native texture is read.
+	static const bool supported = rw::vulkan::deviceSupportsAstc6x6();
+	const rw::uint32 rasterStart = stream->tell();
+	if(!supported || size < 88 || size > 64 * 1024 * 1024 ||
+	   start > INT32_MAX || size > rw::uint32(INT32_MAX) - start ||
+	   rasterStart != start + 88)
+		return nullptr;
+
+	questpackage::Sha256 hash;
+	uint8_t buffer[4096];
+	stream->seek(rw::int32(start), SEEK_SET);
+	for(rw::uint32 remaining = size; remaining;){
+		const auto bytes = std::min(remaining, rw::uint32(sizeof(buffer)));
+		if(stream->read8(buffer, bytes) != bytes){
+			stream->seek(rw::int32(rasterStart), SEEK_SET);
+			return nullptr;
+		}
+		hash.update(buffer, bytes);
+		remaining -= bytes;
+	}
+	const auto *entry = gAstcCache.Find(hash.finish());
+	std::vector<uint8_t> blocks;
+	if(entry && entry->width == width && entry->height == height && gAstcCache.Read(*entry, blocks)){
+		if(auto *raster = rw::vulkan::rasterFromAstc6x6(width, height, entry->alpha, blocks.data(),
+			entry->size, entry->levelSizes.data(), entry->levels)){
+			static std::atomic_flag reported = ATOMIC_FLAG_INIT;
+			if(!reported.test_and_set(std::memory_order_relaxed))
+				ALOG("Quest ASTC 6x6 texture cache upload active.");
+			return raster;
+		}
+	}
+	stream->seek(rw::int32(rasterStart), SEEK_SET);
+	return nullptr;
+}
+#endif
 
 const char *const gCategoryNames[MODEL_CATEGORY_COUNT] = {
 	"WORLD / BUILDINGS",
@@ -231,6 +283,22 @@ void InitializeStartup(const char *gameRoot)
     const int selected = assetvariants::Select(gGameRoot);
     gActiveModelSet = gRequestedModelSet = selected == 1 ? MODEL_SET_MODERN : MODEL_SET_CLASSIC;
     gContentRoot = selected < 0 ? "" : assetvariants::ContentRoot(gGameRoot,selected);
+#ifdef __ANDROID__
+    gAstcRequested = GetPrivateProfileIntA("VR", "AstcTextures", 0, gSettingsPath) != 0;
+    for(int variant = 0; variant < 2; variant++){
+        const auto root = assetvariants::ContentRoot(gGameRoot, variant);
+        gAstcCacheAvailable[variant] = !root.empty() &&
+            FileExists((root + "/" + QuestAstcCache::FileName).c_str());
+    }
+    if(selected >= 0 && gAstcRequested && gAstcCacheAvailable[selected]){
+        gAstcConfigured = gAstcCache.Open(gContentRoot + "/" + QuestAstcCache::FileName);
+        gAstcCacheAvailable[selected] = gAstcConfigured;
+        if(gAstcConfigured)
+            rw::d3d8::setNativeTextureCacheLookup(LoadAstcTexture);
+        else
+            ALOG("Invalid ASTC texture cache; using original textures.");
+    }
+#endif
     gOriginalXboxProfiles[MODEL_SET_MODERN] = gModernArchivePairAvailable;
     gXboxAvailable = false;
     if(gModernArchivePairAvailable) {
@@ -310,6 +378,25 @@ bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size
 }
 
 bool IsRestartRequired() { return gRequestedModelSet != gActiveModelSet; }
+
+#ifdef __ANDROID__
+bool IsAstcTextureAvailable()
+{
+	return gAstcCacheAvailable[gRequestedModelSet] && rw::vulkan::deviceSupportsAstc6x6();
+}
+
+bool IsAstcTextureRequested() { return gAstcRequested && IsAstcTextureAvailable(); }
+bool IsAstcTextureActive() { return gAstcConfigured && rw::vulkan::deviceSupportsAstc6x6(); }
+bool IsTextureRestartRequired() { return IsAstcTextureRequested() != IsAstcTextureActive(); }
+
+void ToggleAstcTextures()
+{
+	if(!IsAstcTextureAvailable())
+		return;
+	gAstcRequested = !gAstcRequested;
+	WritePrivateProfileStringA("VR", "AstcTextures", gAstcRequested ? "1" : "0", gSettingsPath);
+}
+#endif
 
 bool IsAvailable(eModelSet modelSet)
 {

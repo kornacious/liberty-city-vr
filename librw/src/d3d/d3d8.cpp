@@ -729,14 +729,28 @@ readAsImageAnyFormat(Stream *stream, int32 width, int32 height, int32 depth,
 	return ras;
 }
 
+#ifdef __ANDROID__
+static NativeTextureCacheLookup nativeTextureCacheLookup;
+
+void
+setNativeTextureCacheLookup(NativeTextureCacheLookup lookup)
+{
+	nativeTextureCacheLookup = lookup;
+}
+#endif
+
 Texture*
 readNativeTexture(Stream *stream)
 {
 	uint32 platform;
-	if(!findChunk(stream, ID_STRUCT, nil, nil)){
+	uint32 structSize;
+	if(!findChunk(stream, ID_STRUCT, &structSize, nil)){
 		RWERROR((ERR_CHUNK, "STRUCT"));
 		return nil;
 	}
+#ifdef __ANDROID__
+	const uint32 structStart = stream->tell();
+#endif
 	platform = stream->readU32();
 	if(platform != PLATFORM_D3D8){
 		RWERROR((ERR_PLATFORM, platform));
@@ -760,6 +774,14 @@ readNativeTexture(Stream *stream)
 	int32 numLevels = stream->readU8();
 	int32 type = stream->readU8();
 	int32 compression = stream->readU8();
+
+#ifdef __ANDROID__
+	if(rw::platform == PLATFORM_VULKAN && nativeTextureCacheLookup){
+		tex->raster = nativeTextureCacheLookup(stream, structStart, structSize, width, height);
+		if(tex->raster)
+			return tex;
+	}
+#endif
 
 	// A backend with no D3D device cannot sample a PLATFORM_D3D8 raster, so
 	// everything -- palettised, compressed, raw -- goes through an Image and

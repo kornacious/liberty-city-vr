@@ -130,6 +130,37 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
         return source;
     }
 
+    public async Task<string> AstcEncoder(CancellationToken token)
+    {
+        if (AstcTextureCache.FindEncoder(settings) is { } executable)
+            return executable;
+        if (!string.IsNullOrWhiteSpace(settings.AstcEncoder))
+            throw new IOException("The configured Arm ASTC encoder was not found.");
+        if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
+            throw new IOException("Install a native Arm astcenc or choose its executable in Manager Settings.");
+        const string version = "5.7.1";
+        var platform = OperatingSystem.IsWindows() ? "windows" : "linux";
+        var name = $"astcenc-{version}-{platform}-x64.zip";
+        var directory = Path.Combine(Tools, Path.GetFileNameWithoutExtension(name));
+        var fallback = Path.Combine(directory, "bin", "astcenc-sse2" + Exe);
+        if (!File.Exists(fallback))
+        {
+            var digest = OperatingSystem.IsWindows() ?
+                "117ED7CC2B0CC4F3D5774EAA1BDE3A2BA75695C2F490E84E4A08D1726C963DB8" :
+                "F1D576F0801E7701548DA78D782F4BF70DFDE3673A238D1A2AC0EBD3511B2F37";
+            var zip = await Download($"https://github.com/ARM-software/astc-encoder/releases/download/{version}/{name}",
+                name, digest, token);
+            ExtractZip(zip, directory, token);
+        }
+        if (!File.Exists(fallback))
+            throw new IOException("Arm ASTC encoder was not found in the verified tool archive.");
+        var avx2 = Path.Combine(directory, "bin", "astcenc-avx2" + Exe);
+        var useAvx2 = System.Runtime.Intrinsics.X86.Avx2.IsSupported &&
+            System.Runtime.Intrinsics.X86.Popcnt.IsSupported &&
+            (System.Runtime.Intrinsics.X86.X86Base.CpuId(1, 0).Ecx & (1 << 29)) != 0;
+        return useAvx2 && File.Exists(avx2) ? avx2 : fallback;
+    }
+
     public string FindCMake() => !string.IsNullOrWhiteSpace(settings.CMake)
         ? Paths.FindExecutable(settings.CMake) ?? throw new IOException("Configured CMake was not found.")
         : Paths.FindExecutable("cmake") ?? (File.Exists(Path.Combine(Sdk, "cmake/3.22.1/bin/cmake" + Exe))

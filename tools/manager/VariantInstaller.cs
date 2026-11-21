@@ -41,7 +41,7 @@ public static class VariantInstaller
         foreach(var (p,h) in hashes)if(!Digests.Sha256(Paths.Child(root,p)).Equals(h,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Variant checksum mismatch: "+p);
         return hashes;
     }
-    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token)
+    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token,string? astcEncoder = null)
     {
         ValidateSource(s,o); var prepared=new Dictionary<string,string>();
         foreach(var id in new[]{"pc","xbox"}.Where(id=>id=="pc"?WantsPc(o):o.InstallXboxVariant)) {
@@ -65,6 +65,8 @@ public static class VariantInstaller
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(source,target,true);
             }
             Workflows.RefreshWindowsPortFiles(s.Repository,stage,token);
+            if (astcEncoder is not null)
+                await AstcTextureCache.Build(stage, astcEncoder, runner, log, token);
             // Normalize overlay file casing too, so runtime inventories are portable.
             Seal(stage,id); Validate(stage,id);prepared[id]=stage;
             log.Write("Complete "+id+" variant prepared and checksummed locally.");

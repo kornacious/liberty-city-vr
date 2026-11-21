@@ -295,6 +295,9 @@ StartFrameCapture(void)
 		details += "enabled_astc,"+std::to_string(matchedGraphics.enabledFeatures.textureCompressionASTC_LDR)+"\n";
 		details += "enabled_etc2,"+std::to_string(matchedGraphics.enabledFeatures.textureCompressionETC2)+"\n";
 	}
+#ifdef __ANDROID__
+	details += ModelSets::IsAstcTextureActive() ? "texture_format,astc_6x6\n" : "texture_format,original\n";
+#endif
 	details += "display_mode_at_start," + std::to_string(gCaptureDisplayMode) + "\n";
 	details += "postfx_native_colour_policy,uniform_gain_v1_normalized_coefficients\n";
 	details += "postfx_native_sampling_policy,filtered_or_integer_stencil_toggle_v2\n";

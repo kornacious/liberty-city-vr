@@ -96,6 +96,8 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             throw new IOException("This version needs updated bundled assets. Use Build and install instead of Update.");
         // Validate requested retail inputs before changing anything on a device.
         if(!options.BuildOnly && !updateOnly) VariantInstaller.ValidateSource(settings,options);
+        var astcEncoder = !options.BuildOnly && !updateOnly && options.CacheAstcTextures && VariantInstaller.WantsAny(options)
+            ? await tools.AstcEncoder(token) : null;
         await tools.EnsureJava(token);
         await tools.EnsureSdk(options.AcceptSdkLicenses, token);
         var git = await tools.Git(token);
@@ -105,7 +107,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         log.Write("Assembling private Quest source. Previous build directories are preserved.");
         await Assemble(settings.Repository, source, assembled, git, runner, log, token);
         var variants = !options.BuildOnly && !updateOnly
-            ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token)
+            ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token,astcEncoder)
             : new Dictionary<string,string>();
         var gradle = await tools.Gradle(token);
         var variant = options.Release ? "release" : "debug";

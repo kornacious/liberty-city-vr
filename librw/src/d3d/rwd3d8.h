@@ -67,6 +67,10 @@ ObjPipeline *makeMatFXPipeline(void);
 // Native Texture and Raster
 
 Texture *readNativeTexture(Stream *stream);
+#ifdef __ANDROID__
+using NativeTextureCacheLookup = Raster *(*)(Stream *, uint32, uint32, int32, int32);
+void setNativeTextureCacheLookup(NativeTextureCacheLookup lookup);
+#endif
 void writeNativeTexture(Texture *tex, Stream *stream);
 uint32 getSizeNativeTexture(Texture *tex);
 

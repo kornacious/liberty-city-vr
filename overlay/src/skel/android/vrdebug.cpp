@@ -773,6 +773,9 @@ enum eVrWeaponsMenuItem {
 
 enum eVrModelAssetsMenuItem {
 	VR_MODEL_ASSETS_PRESET = 0,
+#ifdef __ANDROID__
+	VR_MODEL_ASSETS_TEXTURES,
+#endif
 	VR_MODEL_ASSETS_NEO,
 	VR_MODEL_ASSETS_DROPLETS,
 	VR_MODEL_ASSETS_SKIN,
@@ -3391,6 +3394,10 @@ VrDebugUpdate(const PadInput &in)
 			if(gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET){
 				ModelSets::CycleRequested(direction);
 
+#ifdef __ANDROID__
+			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_TEXTURES){
+				ModelSets::ToggleAstcTextures();
+#endif
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_NEO){
 				gNeoEffects=!gNeoEffects;SaveVrInteger("XboxNeoEffects",gNeoEffects);
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_DROPLETS){
@@ -4910,13 +4917,28 @@ DrawQuestModelAssetsPage(void)
 		ModelSets::GetSourceName(ModelSets::GetRequested()),
 		ModelSets::IsRestartRequired() ? "  RESTART" : "");
 	DrawFullVrMenuRow(row, 210, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_PRESET, true);
+#ifdef __ANDROID__
+	constexpr int textureRowSpace = 42;
+	snprintf(row, sizeof(row), "TEXTURE FORMAT  < %s >%s",
+		ModelSets::IsAstcTextureRequested() ? "ASTC 6X6" : "ORIGINAL",
+		ModelSets::IsTextureRestartRequired() ? "  RESTART" : "");
+	DrawFullVrMenuRow(row, 252, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_TEXTURES, ModelSets::IsAstcTextureAvailable());
+#else
+	constexpr int textureRowSpace = 0;
+#endif
 	snprintf(row,sizeof(row),"XBOX NEO MATERIALS  < %s >",gNeoEffects?"ON":"OFF");
-	DrawFullVrMenuRow(row,252,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_NEO,true);
+	DrawFullVrMenuRow(row,252 + textureRowSpace,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_NEO,true);
 	snprintf(row,sizeof(row),"XBOX RAIN DROPLETS  < %s >",gNeoDroplets?"ON":"OFF");
-	DrawFullVrMenuRow(row,294,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_DROPLETS,true);
+	DrawFullVrMenuRow(row,294 + textureRowSpace,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_DROPLETS,true);
 	snprintf(row, sizeof(row), "PLAYER SKIN  < %.48s >", QuestGameSettings::SkinName());
-	DrawFullVrMenuRow(row, 336, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
-	DrawFullVrMenuRow("BACK TO SETTINGS", 378, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+	DrawFullVrMenuRow(row, 336 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
+	DrawFullVrMenuRow("BACK TO SETTINGS", 378 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+#ifdef __ANDROID__
+	DrawVrMenuText(ModelSets::IsAstcTextureActive() ? "ACTIVE TEXTURES: ASTC 6X6 CACHE" :
+		"ACTIVE TEXTURES: ORIGINAL", VR_MENU_WIDTH/2, 466, 2, 245, 205, 90);
+	if(!ModelSets::IsAstcTextureAvailable())
+		DrawVrMenuText("ASTC UNAVAILABLE FOR SELECTED ASSET SOURCE", VR_MENU_WIDTH/2, 497, 2, 210, 190, 145);
+#endif
 	DrawVrMenuText(ModelSets::IsOriginalXboxAudioActive() ? "ACTIVE AUDIO: ORIGINAL XBOX - SPEECH, SFX AND RADIO" :
 		ModelSets::IsModernActive() ? "ACTIVE AUDIO: CLASSIC - REIMPORT XBOX ISO TO ADD AUDIO" : "ACTIVE AUDIO: CLASSIC PC",
 		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
@@ -4926,7 +4948,11 @@ DrawQuestModelAssetsPage(void)
 		DrawVrMenuText("PC BASE NOT INSTALLED", VR_MENU_WIDTH/2, 530, 2, 210, 190, 145);
 	if(!ModelSets::IsAvailable(ModelSets::MODEL_SET_MODERN))
 		DrawVrMenuText("XBOX BASE NOT INSTALLED", VR_MENU_WIDTH/2, 550, 2, 210, 190, 145);
+#ifdef __ANDROID__
+	DrawVrMenuText("ASSET SOURCE AND TEXTURE CHANGES NEED A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+#else
 	DrawVrMenuText("ASSET SOURCE CHANGES REQUIRE A FULL RESTART", VR_MENU_WIDTH/2, 650, 2, 245, 205, 90);
+#endif
 }
 
 static void

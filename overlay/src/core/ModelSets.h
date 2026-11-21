@@ -40,6 +40,13 @@ bool UseXboxParticles();
 // Resolves audio only within the complete Xbox variant captured at startup.
 bool GetOriginalXboxAudioPath(const char *originalPath, char *resolvedPath, size_t size);
 bool IsRestartRequired();
+#ifdef __ANDROID__
+bool IsAstcTextureAvailable();
+bool IsAstcTextureRequested();
+bool IsAstcTextureActive();
+bool IsTextureRestartRequired();
+void ToggleAstcTextures();
+#endif
 bool IsAvailable(eModelSet modelSet);
 const char *GetName(eModelSet modelSet);
 // Describes where files are actually read from. "Classic" is a promise made

@@ -1385,15 +1385,15 @@ stopGeneratedMips(void)
 	discardGeneratedMipJobs();
 }
 
-// Creates a texture directly from DXT blocks, no CPU decode. Adreno 740
-// reports full BC support, so stream data reaches the GPU the same way the
-// desktop D3D12 build uploads it. Decoding on the CPU instead cost
-// milliseconds per streamed texture, which surfaced as frame drops -- the
-// world lurching -- whenever driving streamed new map sectors in.
+// Creates a texture directly from DXT blocks when the reported device
+// features allow it. Devices without BC use the caller's CPU decode path.
 //
 // levelSizes holds one entry per level the TXD carried, and blocks holds
 // them back to back. Such a chain is used as it stands when this backend
 // is not building one of its own -- see the note where that is decided.
+static Raster *uploadBlockTexture(Raster *raster, const uint8 *blocks, uint32 size,
+                                  const uint32 *levelSizes, int32 uploadLevels, bool32 promote);
+
 Raster *
 rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
               const uint8 *blocks, uint32 size,
@@ -1475,6 +1475,49 @@ rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
 		}
 	}
 
+	raster = uploadBlockTexture(raster, blocks, size, levelSizes, txdChain ? txdLevels : 1, promote);
+	if(raster && native->generateMips && native->numLevels > 1)
+		queueGeneratedMips(native, sourceFormat, format,
+			(uint32)width, (uint32)height, native->numLevels,
+			blocks, levelSizes != nil ? levelSizes[0] : sourceSize);
+	return raster;
+}
+
+bool32
+deviceSupportsAstc6x6(void)
+{
+	if(!gvk.physicalDevice || !gvk.deviceFeatures.textureCompressionASTC_LDR)
+		return 0;
+	VkFormatProperties properties;
+	vkGetPhysicalDeviceFormatProperties(gvk.physicalDevice, VK_FORMAT_ASTC_6x6_UNORM_BLOCK, &properties);
+	const VkFormatFeatureFlags required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+		VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+	return (properties.optimalTilingFeatures & required) == required;
+}
+
+Raster *
+rasterFromAstc6x6(int32 width, int32 height, bool32 hasAlpha, const uint8 *blocks,
+                  uint32 size, const uint32 *levelSizes, int32 levels)
+{
+	Raster *raster = Raster::create(width, height, 32,
+		Raster::TEXTURE | Raster::C8888 | Raster::DONTALLOCATE);
+	if(!raster)
+		return nil;
+	VulkanRaster *native = GETVULKANRASTER(raster);
+	native->format = VK_FORMAT_ASTC_6x6_UNORM_BLOCK;
+	native->numLevels = levels;
+	native->generateMips = 0;
+	native->hasAlpha = hasAlpha;
+	return uploadBlockTexture(raster, blocks, size, levelSizes, levels, 0);
+}
+
+static Raster *
+uploadBlockTexture(Raster *raster, const uint8 *blocks, uint32 size,
+                   const uint32 *levelSizes, int32 uploadLevels, bool32 promote)
+{
+	VulkanRaster *native = GETVULKANRASTER(raster);
+	const int32 width = raster->width, height = raster->height;
+	const VkFormat format = native->format;
 	VkImageCreateInfo imageInfo = {};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1523,8 +1566,7 @@ rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
 	// A generated chain is not there yet, so the view starts at level 0
 	// and is replaced once the worker lands it. One that came out of the
 	// dictionary is uploaded below and can be exposed at once.
-	viewInfo.subresourceRange.levelCount =
-		txdChain ? (uint32)native->numLevels : 1;
+	viewInfo.subresourceRange.levelCount = (uint32)uploadLevels;
 	viewInfo.subresourceRange.layerCount = 1;
 	if(vkCreateImageView(gvk.device, &viewInfo, nil, &native->view) != VK_SUCCESS){
 		raster->destroy();
@@ -1557,14 +1599,20 @@ rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
 	vkUnmapMemory(gvk.device, stagingMemory);
 
 	VkCommandBuffer commandBuffer = beginOneShot();
-	if(commandBuffer != VK_NULL_HANDLE){
+	if(commandBuffer == VK_NULL_HANDLE){
+		vkDestroyBuffer(gvk.device, staging, nil);
+		vkFreeMemory(gvk.device, stagingMemory, nil);
+		raster->destroy();
+		return nil;
+	}
+	{
 		transitionImageLayout(commandBuffer, native->image,
 		                      VK_IMAGE_ASPECT_COLOR_BIT,
 		                      (uint32)native->numLevels,
 		                      VK_IMAGE_LAYOUT_UNDEFINED,
 		                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 		VkDeviceSize levelOffset = 0;
-		for(int32 level = 0; level < (txdChain ? txdLevels : 1); level++){
+		for(int32 level = 0; level < uploadLevels; level++){
 			VkBufferImageCopy region = {};
 			region.bufferOffset = levelOffset;
 			region.imageSubresource.aspectMask =
@@ -1591,11 +1639,6 @@ rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
 	// endOneShot is asynchronous during a live frame. The active frame fence
 	// retires this staging allocation after both the copy and its consumers.
 	retireBuffer(staging, stagingMemory);
-
-	if(native->generateMips && native->numLevels > 1)
-		queueGeneratedMips(native, sourceFormat, format,
-			(uint32)width, (uint32)height, native->numLevels,
-			blocks, levelSizes != nil ? levelSizes[0] : sourceSize);
 
 	return raster;
 }
@@ -1959,11 +2002,7 @@ rasterHasNormalizedAlpha(const Raster *raster)
 bool32
 allocateCompressed(Raster *raster, int32 dxt, int32 numLevels, bool32 hasAlpha)
 {
-	// Adreno exposes ETC2 and ASTC but not BC/DXT, and every Vice City TXD is
-	// DXT1/3/5. The blocks therefore cannot be uploaded as-is the way the
-	// D3D12 backend does; they have to be decoded, or transcoded offline into
-	// ASTC during data staging. Reporting failure here lets the caller fall
-	// back to the decompressed path rather than creating an unsampleable image.
+	// Devices with BC disabled need the caller's decompressed path for DXT.
 	(void)raster;
 	(void)numLevels;
 	(void)hasAlpha;

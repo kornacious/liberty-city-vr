@@ -31,6 +31,31 @@ reimported. Old visual/audio Xbox overlays are preserved but are not complete
 variants: reimport the ISO through Build and install. No application uninstall,
 save deletion or original-data replacement is part of this migration.
 
+### Quest 3 texture comparison
+
+In the Manager's Quest 3 **Build and install** page, enable **Cache ASTC textures
+for Quest 3** and select each variant you want to convert. The Manager can
+download a checksum-verified [Arm astcenc](https://github.com/ARM-software/astc-encoder/releases)
+on x64 with tool downloads enabled. You can also supply a local encoder on
+PATH or in Manager Settings. The Manager
+encodes supported D3D8 textures from loose TXDs and IMG archives to ASTC 6×6 LDR,
+including their authored mip levels, and installs a checksummed cache alongside
+each selected variant. Encoding runs locally and adds time and storage to
+installation.
+
+On the headset, open **Appearance > Texture Format**, choose **Original** or
+**ASTC 6×6**, and fully restart. The page shows the active mode. Original uses the
+existing texture loader, which can upload DXT as BC on supporting devices. ASTC
+uploads the cached levels directly. Textures with no matching entry, such as
+changed mod textures, use the original loader. ASTC also requires support for
+the Vulkan format on the active device.
+
+Quest performance captures record the selected active path as `texture_format`.
+For a format comparison, disable generated mipmaps before both runs and keep
+the asset source and workload the same. ASTC uses the authored mip chain from
+the cache. The original path can use runtime-generated mips or, on devices
+without BC support, load some textures with only the base level.
+
 ## Preparation and integrity
 
 The importer reads full Xbox DVD and trimmed XISO layouts directly through the

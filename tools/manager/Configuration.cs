@@ -13,6 +13,7 @@ public sealed record ManagerSettings
     public string Adb { get; set; } = "";
     public string Ffprobe { get; set; } = "ffprobe";
     public string Ffmpeg { get; set; } = "ffmpeg";
+    public string AstcEncoder { get; set; } = "";
     public string CMake { get; set; } = "";
     public string Python { get; set; } = "";
     public string PowerShell { get; set; } = "";
@@ -90,6 +91,7 @@ public sealed record ActionOptions
 {
     public bool InstallPcVariant { get; set; }
     public bool InstallXboxVariant { get; set; }
+    public bool CacheAstcTextures { get; set; }
     public string XboxIsoPath { get; set; } = "";
     // Internal preparation mode; legacy overlay commands remain readable.
     public bool CompleteVariant { get; set; }

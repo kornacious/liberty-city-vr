@@ -682,6 +682,10 @@ uint32 getSceneSampleCount(void);
 Raster *rasterFromDXT(int32 width, int32 height, int32 dxt, bool32 hasAlpha,
                       const uint8 *blocks, uint32 size,
                       const uint32 *levelSizes, int32 txdLevels);
+bool32 deviceSupportsAstc6x6(void);
+Raster *rasterFromAstc6x6(int32 width, int32 height, bool32 hasAlpha,
+                         const uint8 *blocks, uint32 size,
+                         const uint32 *levelSizes, int32 levels);
 
 // Immediate mode, implemented in vkim.cpp and wired into the device table.
 void im2DRenderLine(void *vertices, int32 numVertices, int32 vert1, int32 vert2);

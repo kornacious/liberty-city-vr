@@ -235,6 +235,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
                 Field("ADB executable (blank: SDK/PATH)", draft.Adb, v => draft.Adb = v, OpenMode.File);
                 Field("ffprobe executable", draft.Ffprobe, v => draft.Ffprobe = v, OpenMode.File);
                 Field("FFmpeg executable", draft.Ffmpeg, v => draft.Ffmpeg = v, OpenMode.File);
+                Field("Arm ASTC encoder executable (blank: PATH)", draft.AstcEncoder, v => draft.AstcEncoder = v, OpenMode.File);
                 Field("CMake executable (blank: PATH/SDK)", draft.CMake, v => draft.CMake = v, OpenMode.File);
                 Field("Python 3 executable (auxiliary tools)", draft.Python, v => draft.Python = v, OpenMode.File);
                 Field("PowerShell 7 executable (auxiliary tests)", draft.PowerShell, v => draft.PowerShell = v, OpenMode.File);
@@ -407,6 +408,13 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         Field("Original Xbox US 1.0 ISO",options.XboxIsoPath,v=>options.XboxIsoPath=v,OpenMode.File,true,options.InstallXboxVariant);
         void Refresh() {foreach(var read in readFields.ToArray())read();app.Invoke(()=>{if(!disposed && selected==0)Render(0,preserveDraft:true);});}
         pc.ValueChanged+=(_,_)=>Refresh();xbox.ValueChanged+=(_,_)=>Refresh();
+        if (options.Target == GameTarget.Quest)
+        {
+            var astc = Toggle("Cache ASTC textures for Quest 3", options.CacheAstcTextures, v => options.CacheAstcTextures = v);
+            astc.Enabled = VariantInstaller.WantsAny(options);
+            if (astc.Enabled)
+                Note("Uses Arm astcenc to prepare an optional texture cache for each selected variant.");
+        }
         Note("Select either or both variants. Leave both unchecked to update only the application. Saves and existing variants are preserved.");
     }
     private void Licenses()
