@@ -721,8 +721,12 @@ readAsImageAnyFormat(Stream *stream, int32 width, int32 height, int32 depth,
 		Raster::imageFindRasterFormat(img, Raster::TEXTURE,
 			&newWidth, &newHeight, &newDepth, &newFormat);
 		ras = Raster::create(newWidth, newHeight, newDepth, newFormat);
-		if(ras != nil)
-			ras->setFromImage(img);
+		if(ras != nil && ras->setFromImage(img)){
+#ifdef RW_VULKAN
+			if(ras->platform==PLATFORM_VULKAN)
+				rw::vulkan::sealNativeTextureAlpha(ras);
+#endif
+		}
 	}
 
 	img->destroy();

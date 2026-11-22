@@ -25,6 +25,7 @@ struct Context {
     int model=-1,entityClass=4; // building, vehicle, ped, object, unknown
     unsigned flags=0;
     char name[24]="unattributed";
+    bool classicFoliage=false;
 };
 inline Context Entity(int model,int entityClass,const char *name,unsigned flags){
     Context out;out.model=model;out.entityClass=entityClass;out.flags=flags;

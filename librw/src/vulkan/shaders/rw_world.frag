@@ -1,6 +1,9 @@
 #version 450
 
 #include "rw_common.glsl"
+#ifdef RW_WORLD_EARLY_DEPTH
+layout(early_fragment_tests) in;
+#endif
 #ifndef RW_NEO_RESOURCES
 #define RW_NEO_RESOURCES 0
 #endif
@@ -95,6 +98,7 @@ void main()
 #endif
 
 #ifndef RW_STATIC_ARRAY_CROSS
+#ifndef RW_WORLD_EARLY_DEPTH
 	if(RW_ALPHA_TEST == 1){
 		// The PS2 rule splits a blended mesh in two: the solid half is
 		// drawn with depth writes, the faint half without. A negative
@@ -107,6 +111,7 @@ void main()
 		}else if(colour.a >= -reference)
 			discard;
 	}
+#endif
 
     // Preserve alpha coverage, then bypass effects and fog for diagnostics.
     int view=RW_VISUALIZATION != 0 ? int(scene.debugVisualization.x) : 0;

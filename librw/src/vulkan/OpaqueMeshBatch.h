@@ -1,12 +1,58 @@
 #pragma once
 #include <cstdint>
 #include <array>
+#include <bitset>
+#include <cstring>
 
 namespace StaticArrayBatch {
 constexpr unsigned MaxPages=32;
 constexpr unsigned OccupancySampleInterval=8;
 constexpr uint32_t SharedPageSamplerKey=512;
 constexpr unsigned CrossObjectLimit=8;
+constexpr uint32_t CrossIndexLimit=4096;
+constexpr uint32_t CrossGeometryCapacity=16*1024*1024;
+constexpr uint32_t CrossGeometryBlockBytes=2048;
+template<unsigned FrameSlots>
+struct CrossGeometryArena {
+    static constexpr uint32_t BlockCount=CrossGeometryCapacity/CrossGeometryBlockBytes;
+    static constexpr uint32_t Invalid=BlockCount;
+    std::bitset<BlockCount> used;
+    std::bitset<BlockCount> retired[FrameSlots];
+
+    static uint32_t Blocks(uint32_t bytes){
+        return (bytes+CrossGeometryBlockBytes-1)/CrossGeometryBlockBytes;
+    }
+    uint32_t Reserve(uint32_t blocks){
+        if(!blocks || blocks>BlockCount) return Invalid;
+        uint32_t free=0;
+        for(uint32_t i=0;i<BlockCount;++i){
+            free=used[i]?0:free+1;
+            if(free==blocks){
+                const uint32_t first=i+1-blocks;
+                for(uint32_t j=first;j<=i;++j) used.set(j);
+                return first;
+            }
+        }
+        return Invalid;
+    }
+    void Release(uint32_t first,uint32_t blocks){
+        for(uint32_t i=first;i<first+blocks;++i) used.reset(i);
+    }
+    void Retire(unsigned slot,uint32_t first,uint32_t blocks){
+        for(uint32_t i=first;i<first+blocks;++i) retired[slot].set(i);
+    }
+    void Reclaim(unsigned slot){
+        used &= ~retired[slot];
+        retired[slot].reset();
+    }
+    bool HasRetired() const {
+        for(const auto &slot:retired) if(slot.any()) return true;
+        return false;
+    }
+};
+inline bool FitsCrossBatch(unsigned queued,uint32_t indices,uint32_t next){
+    return queued<CrossObjectLimit && indices<=CrossIndexLimit && next<=CrossIndexLimit-indices;
+}
 constexpr unsigned CrossObjectPageSize=128;
 constexpr unsigned DemandMinFrames=3;
 constexpr uint64_t DemandMaxGap=24;
@@ -99,22 +145,27 @@ struct CrossArrayBindings {
     Pipeline pipeline{};
     Descriptor texture{},transforms{};
     uint32_t offset=0;
-    bool known=false;
+    bool drawKnown=false,transformsKnown=false;
 
-    unsigned Update(Pipeline nextPipeline,Descriptor nextTexture,
-                    Descriptor nextTransforms,uint32_t nextOffset){
+    unsigned UpdateDraw(Pipeline nextPipeline,Descriptor nextTexture){
         unsigned changes=0;
-        if(!known || pipeline!=nextPipeline) changes|=BindPipeline;
-        if(!known || texture!=nextTexture) changes|=BindTexture;
-        if(!known || transforms!=nextTransforms || offset!=nextOffset) changes|=BindTransforms;
+        if(!drawKnown || pipeline!=nextPipeline) changes|=BindPipeline;
+        if(!drawKnown || texture!=nextTexture) changes|=BindTexture;
         pipeline=nextPipeline;
         texture=nextTexture;
-        transforms=nextTransforms;
-        offset=nextOffset;
-        known=true;
+        drawKnown=true;
         return changes;
     }
-    void Invalidate(){known=false;}
+    unsigned Update(Pipeline nextPipeline,Descriptor nextTexture,
+                    Descriptor nextTransforms,uint32_t nextOffset){
+        unsigned changes=UpdateDraw(nextPipeline,nextTexture);
+        if(!transformsKnown || transforms!=nextTransforms || offset!=nextOffset) changes|=BindTransforms;
+        transforms=nextTransforms;
+        offset=nextOffset;
+        transformsKnown=true;
+        return changes;
+    }
+    void Invalidate(){drawKnown=transformsKnown=false;}
 };
 using CrossGeometryKey=std::array<uint64_t,CrossObjectLimit>;
 inline bool UsesCrossGeometry(const CrossGeometryKey &key,uint64_t generation){
@@ -125,8 +176,14 @@ inline bool UsesCrossGeometry(const CrossGeometryKey &key,uint64_t generation){
 constexpr uint32_t EncodeCrossLayer(uint32_t layer,uint32_t object){
     return layer|(object<<6);
 }
-inline void OffsetCrossIndices(uint32_t *indices,uint32_t count,uint32_t vertexBase){
-    for(uint32_t i=0;i<count;++i) indices[i]+=vertexBase;
+inline void CopyRebasedCrossIndices(uint8_t *destination,const uint8_t *source,
+                                    uint32_t count,uint32_t vertexBase){
+    for(uint32_t i=0;i<count;++i){
+        uint32_t index;
+        std::memcpy(&index,source+i*sizeof(index),sizeof(index));
+        index+=vertexBase;
+        std::memcpy(destination+i*sizeof(index),&index,sizeof(index));
+    }
 }
 constexpr uint32_t InitialPageLayers=8;
 inline uint32_t PageLayerTarget(uint32_t largestPage,uint32_t limit){
@@ -241,11 +298,16 @@ struct Stats {
     uint32_t crossBatches=0,crossSavedDraws=0,crossUploadBytes=0,crossFallbacks=0;
     uint32_t crossCacheHits=0,crossCacheMisses=0,crossCacheBuilds=0;
     uint32_t crossCacheBytes=0,crossCacheUploadBytes=0;
+    uint32_t crossArenaBytes=0,crossArenaReservedBytes=0,crossArenaMisses=0;
     uint32_t crossPipelineBinds=0,crossDescriptorBinds=0,crossTransformBinds=0;
+    uint32_t crossOrdinaryDraws=0,crossOrdinaryPipelineBinds=0,crossOrdinaryTextureBinds=0;
     uint32_t duplicateMergedLayers=0;
     uint32_t demandProbes=0,demandReplacements=0,demandUploadBytes=0;
     uint32_t demandPageDeferrals=0;
+    uint32_t adjacentMisses=0,adjacentAdmissions=0,adjacentMerged=0;
     double crossFlushMs=0;
+    bool crossFlushBreakdownSampled=false;
+    double crossLookupMs=0,crossBuildMs=0,crossTransformMs=0,crossRecordMs=0,crossFallbackMs=0;
     uint32_t fallbackReasons[FallbackCount]={};
     unsigned Fallback(Result reason){
         ++fallbacks;

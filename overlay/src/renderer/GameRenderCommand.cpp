@@ -5,6 +5,7 @@
 #include "GameRenderCommand.h"
 #ifdef RW_VULKAN
 #include "ModelInfo.h"
+#include "ModelSets.h"
 #include "vulkan/rwvk.h"
 #include "vulkan/DebugVisualization.h"
 #endif
@@ -27,11 +28,19 @@ namespace GameRender
 ProfileEntity::ProfileEntity(CEntity *entity){
 #ifdef RW_VULKAN
 	previousPedestrianRim=rw::vulkan::setPedestrianRimPass(entity && entity->IsPed())!=0;
-	if(entity && (rw::vulkan::getStaticInstancesEnabled()||rw::vulkan::getWorldBackfaceEnabled()||rw::vulkan::getWorldOcclusionEnabled()))
+	const bool foliageCutout=rw::vulkan::getClassicFoliageCutoutEnabled();
+	if(entity && (rw::vulkan::getStaticInstancesEnabled()||rw::vulkan::getWorldBackfaceEnabled()||
+	              rw::vulkan::getWorldOcclusionEnabled()||foliageCutout)){
+		const char *name=CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName();
+		const bool classicFoliage=foliageCutout && entity->IsBuilding() && !entity->bDistanceFade &&
+			!entity->bRenderDamaged && !entity->bRenderScorched &&
+			ModelSets::GetActive()==ModelSets::MODEL_SET_CLASSIC &&
+			(strcmp(name,"veg_tree3")==0 || strcmp(name,"veg_treenew05")==0 ||
+			 strcmp(name,"veg_bush14")==0);
 		instanceActive=rw::vulkan::beginStaticInstanceEntity(entity->GetModelIndex(),
 			entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
-			CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),
-			entity->bDistanceFade?DrawProfile::Distance:0)!=0;
+			name,entity->bDistanceFade?DrawProfile::Distance:0,classicFoliage)!=0;
+	}
 	if(entity&&rw::vulkan::gpuProfileSampling())active=rw::vulkan::beginGpuProfileEntity(entity->GetModelIndex(),
 		entity->IsBuilding()?0:entity->IsVehicle()?1:entity->IsPed()?2:entity->IsObject()?3:4,
 		CModelInfo::GetModelInfo(entity->GetModelIndex())->GetModelName(),

@@ -62,6 +62,10 @@ int main(){
     assert(StaticArrayBatch::UsesCrossGeometry(ordered,2));
     assert(!StaticArrayBatch::UsesCrossGeometry(replaced,2));
     assert(!StaticArrayBatch::UsesCrossGeometry(ordered,0));
+    assert(StaticArrayBatch::FitsCrossBatch(7,4093,3));
+    assert(!StaticArrayBatch::FitsCrossBatch(8,0,3));
+    assert(!StaticArrayBatch::FitsCrossBatch(1,4094,3));
+    assert(!StaticArrayBatch::FitsCrossBatch(1,UINT32_MAX,3));
     {
         using StaticArrayBatch::DemandPageSearch;
         unsigned a=0,b=0,c=0;
@@ -136,10 +140,42 @@ int main(){
         assert(bindings.Update(2,4,5,12288)==Bindings::BindTransforms);
         bindings.Invalidate();
         assert(bindings.Update(2,4,5,12288)==all);
+        bindings.Invalidate();
+        assert(bindings.UpdateDraw(1,2)==(Bindings::BindPipeline|Bindings::BindTexture));
+        assert(bindings.UpdateDraw(1,2)==0);
+        assert(bindings.Update(2,2,3,0)==(Bindings::BindPipeline|Bindings::BindTransforms));
+        assert(bindings.UpdateDraw(1,2)==Bindings::BindPipeline);
+        assert(bindings.UpdateDraw(1,4)==Bindings::BindTexture);
+        assert(bindings.Update(2,4,3,0)==Bindings::BindPipeline);
+        bindings.Invalidate();
+        assert(bindings.UpdateDraw(1,4)==(Bindings::BindPipeline|Bindings::BindTexture));
+        assert(bindings.Update(2,4,3,0)==(Bindings::BindPipeline|Bindings::BindTransforms));
     }
-    uint32_t crossIndices[]={2,0,1,1,0,2};
-    StaticArrayBatch::OffsetCrossIndices(crossIndices+3,3,3);
+    uint32_t crossIndices[]={2,0,1,0,0,0};
+    const uint32_t sourceIndices[]={1,0,2};
+    StaticArrayBatch::CopyRebasedCrossIndices(reinterpret_cast<uint8_t *>(crossIndices+3),
+        reinterpret_cast<const uint8_t *>(sourceIndices),3,3);
     assert((std::vector<uint32_t>(crossIndices,crossIndices+6)==std::vector<uint32_t>{2,0,1,4,3,5}));
+    {
+        using Arena=StaticArrayBatch::CrossGeometryArena<2>;
+        Arena arena;
+        assert(Arena::Blocks(2049)==2);
+        const auto first=arena.Reserve(2);
+        const auto middle=arena.Reserve(Arena::BlockCount-3);
+        const auto tail=arena.Reserve(1);
+        assert(first==0 && middle==2 && tail==Arena::BlockCount-1);
+        assert(arena.Reserve(1)==Arena::Invalid);
+        arena.Retire(0,first,2);
+        arena.Retire(1,tail,1);
+        assert(arena.HasRetired() && arena.Reserve(1)==Arena::Invalid);
+        arena.Reclaim(1);
+        assert(arena.Reserve(2)==Arena::Invalid);
+        assert(arena.Reserve(1)==tail);
+        arena.Reclaim(0);
+        assert(!arena.HasRetired() && arena.Reserve(2)==first);
+        arena.Release(middle,Arena::BlockCount-3);
+        assert(arena.Reserve(3)==middle);
+    }
     {
         using StaticArrayBatch::Result;
         std::vector<uint32_t> probes;

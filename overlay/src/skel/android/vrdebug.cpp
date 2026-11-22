@@ -222,6 +222,7 @@ static int gCrossArrayBatch = 0;
 static int gWorldBackface = 0;
 static int gWorldOcclusion = 0;
 static int gMaskedAlphaPassSkip = 0;
+static int gClassicFoliageCutout = 0;
 // The game's point lights -- headlights, explosions, street lamps --
 // evaluated per pixel against the world instead of being folded into the
 // per-entity directionals the fixed function used. 0 off, 1 on, 2 adds the
@@ -707,6 +708,7 @@ enum eVrOptimizationMenuItem {
 	VR_OPT_FXAA_INTEGER,
 	VR_OPT_OPAQUE_WORLD,
 	VR_OPT_MASKED_ALPHA_SKIP,
+	VR_OPT_CLASSIC_FOLIAGE_CUTOUT,
 	VR_OPT_OPAQUE_MESH_BATCH,
 	VR_OPT_STATIC_INSTANCES,
 	VR_OPT_STATIC_SUBMISSION_CACHE,
@@ -1347,6 +1349,7 @@ LoadVrSettings(void)
 	gCrossArrayBatch = GetPrivateProfileIntA("VR", "CrossArrayBatch", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueMeshBatch = GetPrivateProfileIntA("VR", "OpaqueMeshBatch", 0, ".\\vr_settings.ini") != 0;
 	gMaskedAlphaPassSkip = GetPrivateProfileIntA("VR", "MaskedAlphaPassSkip", 0, ".\\vr_settings.ini") != 0;
+	gClassicFoliageCutout = GetPrivateProfileIntA("VR", "ClassicFoliageCutout", 0, ".\\vr_settings.ini") != 0;
 	gOpaqueWorldAlphaFastPath = GetPrivateProfileIntA("VR",
 		"OpaqueWorldAlphaFastPath", 1, ".\\vr_settings.ini") != 0 ? 1 : 0;
 	gDynamicLights = clamp((int)(int32)GetPrivateProfileIntA("VR",
@@ -3234,6 +3237,10 @@ VrDebugUpdate(const PadInput &in)
 				gMaskedAlphaPassSkip = !gMaskedAlphaPassSkip;
 				SaveVrInteger("MaskedAlphaPassSkip", gMaskedAlphaPassSkip);
 				rw::vulkan::setMaskedAlphaPassSkipEnabled(gMaskedAlphaPassSkip);
+			}else if(gVrOptimizationSelection == VR_OPT_CLASSIC_FOLIAGE_CUTOUT){
+				gClassicFoliageCutout = !gClassicFoliageCutout;
+				SaveVrInteger("ClassicFoliageCutout", gClassicFoliageCutout);
+				rw::vulkan::setClassicFoliageCutoutEnabled(gClassicFoliageCutout);
 			}else if(gVrOptimizationSelection == VR_OPT_OPAQUE_ORDER){
 				gOpaqueOrderExperiment = !gOpaqueOrderExperiment;
 				SaveVrInteger("OpaqueOrderExperiment", gOpaqueOrderExperiment);
@@ -4373,6 +4380,7 @@ DrawQuestOptimizationsPage(void)
 	snprintf(rows[VR_OPT_WORLD_LOD],sizeof(rows[0]),"WORLD MODEL LOD  < %s >",mode);
 	snprintf(rows[VR_OPT_OPAQUE_WORLD],sizeof(rows[0]),"OPAQUE WORLD FAST PATH  < %s >",gOpaqueWorldAlphaFastPath?"ON":"OFF");
 	snprintf(rows[VR_OPT_MASKED_ALPHA_SKIP],sizeof(rows[0]),"MASKED ALPHA PASS SKIP  < %s >",gMaskedAlphaPassSkip?"ON":"OFF");
+	snprintf(rows[VR_OPT_CLASSIC_FOLIAGE_CUTOUT],sizeof(rows[0]),"CLASSIC FOLIAGE CUTOUT  < %s >",gClassicFoliageCutout?"ON":"OFF");
 	snprintf(rows[VR_OPT_OPAQUE_MESH_BATCH],sizeof(rows[0]),"OPAQUE MESH BATCH  < %s >",gOpaqueMeshBatch?"ON":"OFF");
 	snprintf(rows[VR_OPT_STATIC_INSTANCES],sizeof(rows[0]),"STATIC INSTANCING  < %s >",gStaticInstances?"ON":"OFF");
 	snprintf(rows[VR_OPT_STATIC_SUBMISSION_CACHE],sizeof(rows[0]),"STATIC SUBMISSION CACHE  < %s >",gStaticSubmissionCache?"ON":"OFF");
@@ -4389,11 +4397,12 @@ DrawQuestOptimizationsPage(void)
 	int visibleRow = 0;
 	for(int item=0;item<VR_OPT_ITEM_COUNT;++item){
 		if(item == VR_OPT_SIMULATION && !IsSimulationReplayAvailable()) continue;
-		DrawFullVrMenuRow(rows[item],160+visibleRow++*26,2,item==gVrOptimizationSelection,true,false,
+		DrawFullVrMenuRow(rows[item],160+visibleRow++*24,2,item==gVrOptimizationSelection,true,false,
 			item!=VR_OPT_BACK && item!=VR_OPT_SIMULATION, item==VR_OPT_SIMULATION);
 	}
 	DrawVrMenuText(gVrOptimizationSelection==VR_OPT_FXAA_INTEGER?"NATIVE 1:1 ONLY; OFF FILTERED / ON INTEGER STENCIL":
         gVrOptimizationSelection==VR_OPT_LOD_FADE?"LOD DISTANCE FADES; ASSET-LOADING FADES ARE SEPARATE":
+        gVrOptimizationSelection==VR_OPT_CLASSIC_FOLIAGE_CUTOUT?"SELECTED CLASSIC FOLIAGE; SHARPER ALPHA EDGES":
         gVrOptimizationSelection==VR_OPT_WORLD_OCCLUSION?"BOTH EYES MUST BE HIDDEN; SWITCHES BACKFACE CULL OFF":
         gVrOptimizationSelection==VR_OPT_WORLD_BACKFACE?"CLOSED OPAQUE MESHES; SWITCHES WORLD OCCLUSION OFF":
         gVrOptimizationSelection==VR_OPT_STATIC_SUBMISSION_CACHE?"REQUIRES STATIC INSTANCING":
@@ -6816,6 +6825,7 @@ static const Control controls[]={
 {"CrossArrayBatch",0,1,false,[](){LoadVrSettings();return gCrossArrayBatch;},[](int value){gCrossArrayBatch=value;}},
 {"OpaqueMeshBatch",0,1,false,[](){LoadVrSettings();return int(gOpaqueMeshBatch);},[](int value){gOpaqueMeshBatch=static_cast<decltype(gOpaqueMeshBatch)>(value);}},
 {"MaskedAlphaPassSkip",0,1,false,[](){LoadVrSettings();return int(gMaskedAlphaPassSkip);},[](int value){gMaskedAlphaPassSkip=static_cast<decltype(gMaskedAlphaPassSkip)>(value);}},
+{"ClassicFoliageCutout",0,1,false,[](){LoadVrSettings();return gClassicFoliageCutout;},[](int value){gClassicFoliageCutout=value;}},
 {"OpaqueWorldAlphaFastPath",0,1,false,[](){LoadVrSettings();return int(gOpaqueWorldAlphaFastPath);},[](int value){gOpaqueWorldAlphaFastPath=static_cast<decltype(gOpaqueWorldAlphaFastPath)>(value);}},
 {"DynamicLights",0,2,false,[](){LoadVrSettings();return int(gDynamicLights);},[](int value){gDynamicLights=static_cast<decltype(gDynamicLights)>(value);}},
 {"DynamicLightIntensity",25,200,false,[](){LoadVrSettings();return int(gDynamicLightIntensity);},[](int value){gDynamicLightIntensity=static_cast<decltype(gDynamicLightIntensity)>(value);}},
@@ -6896,6 +6906,7 @@ Frame ApplyFrame(bool theaterFrame){
 	rw::vulkan::setCrossArrayBatchEnabled(gCrossArrayBatch);
 	rw::vulkan::setOpaqueMeshBatchEnabled(androidgame::VrOpaqueMeshBatch());
 	rw::vulkan::setMaskedAlphaPassSkipEnabled(androidgame::VrMaskedAlphaPassSkip());
+	rw::vulkan::setClassicFoliageCutoutEnabled(gClassicFoliageCutout);
 	rw::vulkan::setOpaqueWorldAlphaFastPathEnabled(androidgame::VrOpaqueWorldAlphaFastPath());
 	rw::vulkan::setPs2AlphaTestEnabled(androidgame::VrPs2AlphaTest());
 	rw::vulkan::setRenderDiagnostics(androidgame::VrRenderDiagnostics());

@@ -6289,15 +6289,24 @@ $brace=$source.IndexOf('{',$match.Index);$depth=1;$end=$brace+1
 while($depth-gt0-and$end-lt$source.Length){if($source[$end]-eq'{'){$depth++};if($source[$end]-eq'}'){$depth--};$end++}
 [IO.File]::AppendAllText((Join-Path $PSScriptRoot 'uniform-alpha-production.inc'),
     ("`nstatic bool`n"+$source.Substring($match.Index,$end-$match.Index)),[Text.UTF8Encoding]::new($false))
-# Exercise the actual lookup/state-restoration block, including failure returns.
-$pipeline=[regex]::Match($source,'(?s)const uint32 savedAlphaFunction = gstate.alphaTestFunction;.*?gstate.alphaTestFunction = savedAlphaFunction;')
-if(-not $pipeline.Success){throw 'Missing atomic pipeline state block'}
-[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'opaque-world-pipeline.inc'),$pipeline.Value,[Text.UTF8Encoding]::new($false))
+# Exercise the ordinary lookup and its alpha/depth state. Other submission
+# paths between these statements use their own independent test harnesses.
+$alphaState=[regex]::Match($source,'(?s)const uint32 savedAlphaFunction = gstate.alphaTestFunction;.*?const bool profileAlphaTest = gstate.alphaTestFunction != ALPHAALWAYS;')
+$lookup=[regex]::Match($source,'(?s)flushPendingCrossArray\(\);\s*VkPipeline pipeline = getPipeline\(shader,.*?;')
+$restore=[regex]::Match($source,'gstate.zWriteEnabled = savedZWrite;\s*gstate.alphaTestFunction = savedAlphaFunction;\s*if\(pipeline == VK_NULL_HANDLE\)')
+if(-not ($alphaState.Success -and $lookup.Success -and $restore.Success)){throw 'Missing ordinary atomic alpha/depth lookup or restoration'}
+$lookupBody=$lookup.Value.Substring($lookup.Value.IndexOf('VkPipeline'))
+$restoreBody=$restore.Value.Substring(0,$restore.Value.IndexOf('if(pipeline'))
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'opaque-world-pipeline.inc'),
+    ($alphaState.Value+"`n"+$lookupBody+"`n"+$restoreBody),[Text.UTF8Encoding]::new($false))
 $shader=[IO.File]::ReadAllText((Join-Path $kit 'librw/src/vulkan/shaders/rw_world.frag'))
 foreach($rule in @('if(colour.a &lt; reference)','else if(colour.a &gt;= -reference)')){
     if(-not $shader.Contains($rule)){throw 'Shader alpha rules changed; update the differential coverage test'}
 }
 $skip=$source.IndexOf('if(!(alphaPasses&amp;(1u&lt;&lt;gsPass)))continue;')
+$foliage=[regex]::Match($source,'(?ms)^\s*if\(foliageCutout &amp;&amp; masked &amp;&amp; gsSplit &amp;&amp;.*?\+\+gAlphaBoundStats\.foliageFaintSkipped;\s*\}')
+if(-not $foliage.Success -or $foliage.Index-ge$skip){throw 'Missing foliage pass decision before submission'}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'foliage-alpha-production.inc'),$foliage.Value,[Text.UTF8Encoding]::new($false))
 $state=$source.IndexOf('if((vehicleAlphaPass &amp;&amp; wantsBlend &amp;&amp; !vehicleSplit)')
 if($skip-lt0-or$skip-ge$state){throw 'Empty-pass rejection must precede render-state changes'}
 if(-not $source.Contains('(gsPass==firstGsPass?DrawProfile::Mesh:DrawProfile::Extra)')){

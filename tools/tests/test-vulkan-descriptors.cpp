@@ -134,11 +134,12 @@ struct StaticArrayLayer {
     StaticArrayBatch::Result result=StaticArrayBatch::Result::Ready;
     uint32 pageIndex=StaticArrayBatch::MaxPages;
     bool duplicate=false;
+    bool adjacentAdmitted=false;
 };
 struct StaticTexturePage {
     VkImageView view=0;
     uint32 width=64,height=64,layers=2;
-    struct Slot { VulkanRaster *owner=nullptr; uint64_t releasedFrame=0,lastReference=0; } slots[2];
+    struct Slot { VulkanRaster *owner=nullptr; uint64_t releasedFrame=0,lastReference=0; bool adjacentAdmitted=false; } slots[2];
     StaticArrayBatch::DemandPageSearch demandSearch;
     struct Descriptor { uint32 key; VkDescriptorSet set; };
     std::vector<Descriptor> descriptors;
@@ -153,6 +154,7 @@ static size_t staticArrayUploadBytes=0;
 static StaticArrayBatch::ResidencyStats staticArrayResidency;
 static uint32 staticArrayDemandProbes=0,staticArrayDemandReplacements=0,staticArrayDemandUploadBytes=0;
 static uint32 staticArrayDemandPageDeferrals=0;
+static uint32 staticArrayAdjacentMisses=0,staticArrayAdjacentAdmissions=0;
 static bool arrayUploadFails=false;
 static StaticArrayBatch::Result createStaticArrayPage(const StaticArrayTexture &) {
     return StaticArrayBatch::Result::PageCountLimit;
@@ -161,7 +163,8 @@ static bool uploadStaticArrayLayer(const StaticArrayTexture &,StaticTexturePage 
     return !arrayUploadFails;
 }
 StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &,uint32,bool residentOnly=false,
-                                     const StaticArrayTexture *companion=nullptr);
+                                     const StaticArrayTexture *companion=nullptr,
+                                     uint32 adjacentPage=StaticArrayBatch::MaxPages);
 #include "vulkan-descriptors-production.inc"
 
 static void Use(VkDescriptorSet set, uint32 slot) {
@@ -342,6 +345,23 @@ int main() {
               getStaticArrayLayer(missingTexture,1).layer==promoted.layer &&
               staticArrayLocations.at(linearTexture.native).size()==1,
               "replacement selects the companion page and keeps the companion resident");
+        auto &target=staticArrayPages.emplace_back();
+        target.view=22;
+        VulkanRaster singleton{};
+        auto singletonTexture=linearTexture;
+        singletonTexture.native=&singleton;
+        constexpr auto anyPage=StaticArrayBatch::MaxPages;
+        Check(!getStaticArrayLayer(singletonTexture,anyPage,true).page &&
+              staticArrayAdjacentMisses==0,"an ordinary singleton stays resident-only");
+        for(unsigned i=0;i<2;++i,++staticArrayFrame)
+            Check(!getStaticArrayLayer(singletonTexture,anyPage,true,nullptr,2).page,
+                  "adjacent singleton admission requires repeated misses");
+        const auto adjacent=getStaticArrayLayer(singletonTexture,anyPage,true,nullptr,2);
+        Check(adjacent.pageIndex==2 && adjacent.adjacentAdmitted &&
+              staticArrayAdjacentMisses==3 && staticArrayAdjacentAdmissions==1,
+              "adjacent admission fills only the queued page after repeated demand");
+        Check(getStaticArrayLayer(singletonTexture,anyPage,true).adjacentAdmitted,
+              "subsequent resident draws retain the admission tag");
         Complete(0);
         Complete(1);
         for(auto &arrayPage:staticArrayPages)

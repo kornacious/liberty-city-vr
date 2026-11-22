@@ -119,8 +119,9 @@ int main()
         frame.renderdocCaptureActive = i==10?1:0;
         frame.opaqueOrderExperimentEnabled=i%2;
         frame.opaqueOrder={40,30,i%7};
-        frame.alphaBound={30+i%21,i%21,6000000000ULL+i};
+        frame.alphaBound={30+i%21,i%21,6000000000ULL+i,i%19,i%17,i%13};
         frame.maskedAlphaPassSkipEnabled=i%2;
+        frame.classicFoliageCutoutEnabled=(i/2)%2;
         frame.worldOcclusionEnabled=i%2;frame.worldOcclusion.rejected=19;frame.worldOcclusion.vertices=6000000000ULL+i;frame.worldOcclusion.buildMs=.234567;
         frame.worldOcclusion.rasterRows=125;frame.worldOcclusion.selectedTriangles=219;
         frame.worldOcclusion.cacheBuilds=2;frame.worldOcclusion.cacheHits=27;frame.worldOcclusion.cacheScanned=1000;
@@ -175,18 +176,35 @@ int main()
         frame.staticArrayBatch.crossUploadBytes=2048;
         frame.staticArrayBatch.crossFallbacks=1;
         frame.staticArrayBatch.crossFlushMs=.125;
+        if(i%2){
+            frame.staticArrayBatch.crossFlushBreakdownSampled=true;
+            frame.staticArrayBatch.crossLookupMs=.025;
+            frame.staticArrayBatch.crossBuildMs=.010;
+            frame.staticArrayBatch.crossTransformMs=.015;
+            frame.staticArrayBatch.crossRecordMs=.040;
+            frame.staticArrayBatch.crossFallbackMs=.035;
+        }
         frame.staticArrayBatch.crossCacheHits=9;
         frame.staticArrayBatch.crossCacheMisses=3;
         frame.staticArrayBatch.crossCacheBuilds=2;
         frame.staticArrayBatch.crossCacheBytes=65536;
         frame.staticArrayBatch.crossCacheUploadBytes=8192;
+        frame.staticArrayBatch.crossArenaBytes=16777216;
+        frame.staticArrayBatch.crossArenaReservedBytes=67584;
+        frame.staticArrayBatch.crossArenaMisses=1;
         frame.staticArrayBatch.crossPipelineBinds=4;
         frame.staticArrayBatch.crossDescriptorBinds=5;
         frame.staticArrayBatch.crossTransformBinds=3;
+        frame.staticArrayBatch.crossOrdinaryDraws=12;
+        frame.staticArrayBatch.crossOrdinaryPipelineBinds=8;
+        frame.staticArrayBatch.crossOrdinaryTextureBinds=6;
         frame.staticArrayBatch.demandProbes=5;
         frame.staticArrayBatch.demandReplacements=2;
         frame.staticArrayBatch.demandUploadBytes=32768;
         frame.staticArrayBatch.demandPageDeferrals=42;
+        frame.staticArrayBatch.adjacentMisses=7;
+        frame.staticArrayBatch.adjacentAdmissions=1;
+        frame.staticArrayBatch.adjacentMerged=5;
         frame.staticArrayOccupancy={};
         frame.staticArrayResidency={};
         if(i%2){
@@ -249,6 +267,10 @@ int main()
         assert(std::stoul(row[column("masked_alpha_bound_candidates")]) == 30+id%21);
         assert(std::stoul(row[column("masked_alpha_bound_solid_passes_skipped")]) == id%21);
         assert(std::stoull(row[column("masked_alpha_bound_indices_skipped")]) == 6000000000ULL+id);
+        assert(std::stoul(row[column("masked_alpha_uploaded_solid_passes_skipped")]) == id%19);
+        assert(std::stoul(row[column("masked_alpha_uploaded_faint_passes_skipped")]) == id%17);
+        assert(std::stoi(row[column("classic_foliage_cutout_enabled")]) == int((id/2)%2));
+        assert(std::stoul(row[column("classic_foliage_faint_passes_skipped")]) == id%13);
         assert(std::stoi(row[column("masked_alpha_pass_skip_enabled")]) == int(id%2));
         assert(std::stoi(row[column("opaque_mesh_batch_enabled")]) == int(id%2));
         assert(std::stoi(row[column("opaque_mesh_batch_saved_draws")]) == 62);
@@ -327,14 +349,26 @@ int main()
           assert(std::stoi(row[column("cross_array_upload_bytes")])==2048);
           assert(std::stoi(row[column("cross_array_fallbacks")])==1);
           assert(std::stod(row[column("cross_array_flush_ms")])==.125);
+          assert(row[column("cross_array_flush_breakdown_sampled")]==(id%2?"1":"0"));
+          assert(std::stod(row[column("cross_array_lookup_ms")])==(id%2?.025:0));
+          assert(std::stod(row[column("cross_array_build_ms")])==(id%2?.010:0));
+          assert(std::stod(row[column("cross_array_transform_ms")])==(id%2?.015:0));
+          assert(std::stod(row[column("cross_array_record_ms")])==(id%2?.040:0));
+          assert(std::stod(row[column("cross_array_fallback_ms")])==(id%2?.035:0));
           assert(row[column("cross_array_cache_hits")]=="9");
           assert(row[column("cross_array_cache_misses")]=="3");
           assert(row[column("cross_array_cache_builds")]=="2");
           assert(row[column("cross_array_cache_bytes")]=="65536");
           assert(row[column("cross_array_cache_upload_bytes")]=="8192");
+          assert(row[column("cross_array_arena_bytes")]=="16777216");
+          assert(row[column("cross_array_arena_reserved_bytes")]=="67584");
+          assert(row[column("cross_array_arena_misses")]=="1");
           assert(row[column("cross_array_pipeline_binds")]=="4");
           assert(row[column("cross_array_descriptor_binds")]=="5");
           assert(row[column("cross_array_transform_binds")]=="3");
+          assert(row[column("cross_array_ordinary_draws")]=="12");
+          assert(row[column("cross_array_ordinary_pipeline_binds")]=="8");
+          assert(row[column("cross_array_ordinary_texture_binds")]=="6");
           assert(std::stoi(row[column("static_array_page_size_retries")])==1);
           assert(std::stoi(row[column("static_array_page_memory_cache_hits")])==4);
           assert(std::stoi(row[column("static_array_occupancy_sampled")])==int(id%2));
@@ -350,6 +384,9 @@ int main()
           assert(row[column("static_array_demand_replacements")]=="2");
           assert(row[column("static_array_demand_upload_bytes")]=="32768");
           assert(row[column("static_array_demand_page_deferrals")]=="42");
+          assert(row[column("static_array_adjacent_misses")]=="7");
+          assert(row[column("static_array_adjacent_admissions")]=="1");
+          assert(row[column("static_array_adjacent_merged")]=="5");
           unsigned totalFallbacks=0;
           for(unsigned i=0;i<StaticArrayBatch::FallbackCount;++i){
               const std::string key="static_array_fallback_"+std::string(StaticArrayBatch::FallbackName(i));

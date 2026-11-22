@@ -84,6 +84,7 @@ Image *rasterToImage(Raster *raster);
 void setRasterHasAlpha(Raster *raster, bool32 hasAlpha);
 bool32 rasterHasAlpha(Raster *raster);
 bool32 rasterHasNormalizedAlpha(const Raster *raster);
+void sealNativeTextureAlpha(Raster *raster);
 
 // Vehicle alpha atomics can contain both opaque bodywork and transparent
 // side-window meshes.  The game scopes this flag to its vehicle alpha list so
@@ -317,13 +318,15 @@ bool32 getCrossArrayBatchEnabled(void);
 StaticArrayBatch::Stats getStaticArrayBatchStats(void);
 void getStaticArrayOccupancy(StaticArrayBatch::Occupancy &out);
 void setStaticArrayResidencySampling(bool enabled);
+void setCrossArrayTimingSampling(bool enabled);
 void getStaticArrayResidencyStats(StaticArrayBatch::ResidencyStats &out);
 StaticInstances::Stats getStaticInstancesStats(void);
 void flushStaticInstances(void);
 // Hidden-line geometry fills depth first; edges replay after world/effects.
 void flushDebugWires(void);
 void discardDebugWires(void);
-bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags);
+bool32 beginStaticInstanceEntity(int32 model,int32 entityClass,const char *name,uint32 flags,
+                                 bool32 classicFoliage=0);
 void endStaticInstanceEntity(void);
 void resetStaticReuseSample(bool32 sampled,uint64 sourceFrame);
 void staticReuseBoundary(void);
@@ -334,6 +337,8 @@ bool32 getOpaqueMeshBatchEnabled(void);
 OpaqueMeshBatch::Stats getOpaqueMeshBatchStats(void);
 void setMaskedAlphaPassSkipEnabled(bool32 enabled);
 bool32 getMaskedAlphaPassSkipEnabled(void);
+void setClassicFoliageCutoutEnabled(bool32 enabled);
+bool32 getClassicFoliageCutoutEnabled(void);
 
 // True only when the most recent DEVICEOPEN failed while creating one of the
 // full-resolution colour/depth targets or its framebuffer. This lets the

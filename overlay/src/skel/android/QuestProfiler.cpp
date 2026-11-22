@@ -317,11 +317,17 @@ StartFrameCapture(void)
 	details += "static_mesh_cull_at_start," + std::to_string(rw::vulkan::getStaticMeshCullEnabled()?1:0) + "\n";
 	details += "static_array_batch_at_start," + std::to_string(rw::vulkan::getStaticArrayBatchEnabled()?1:0) + "\n";
 	details += "cross_array_batch_at_start," + std::to_string(rw::vulkan::getCrossArrayBatchEnabled()?1:0) + "\n";
-	details += "cross_array_geometry_policy,device_local_cache_v1\n";
-	details += "cross_array_submission_policy,packed_uniform_pages_v1\n";
+	details += "cross_array_geometry_policy,device_local_arena_v2\n";
+	details += "cross_array_submission_policy,shared_array_bindings_v2\n";
 	details += "static_array_page_policy,small_texture_reserve_shared_samplers_v1\n";
 	details += "static_array_residency,source_frame_sampled_every_8_v1\n";
 	details += "static_array_demand_admission,cached_page_candidates_v2\n";
+	details += "static_array_adjacent_admission,queued_cross_run_v1\n";
+	details += "cross_array_flush_breakdown,source_frame_sampled_every_8_v1\n";
+	details += "world_fragment_depth_policy,explicit_early_opaque_v1\n";
+	details += "masked_alpha_uploaded_policy,complete_rgba8_mip_envelope_v1\n";
+	details += "classic_foliage_cutout_at_start," +
+		std::to_string(rw::vulkan::getClassicFoliageCutoutEnabled() ? 1 : 0) + "\n";
 	details += "static_submission_cache_counter_scope,one_vk_static_atomic_calls_entry_per_measured_collector_flush\n";
 	details += "static_reuse_policy,disabled_for_static_instance_benchmark\n";
 	details += "opaque_mesh_batch_at_start," + std::to_string(rw::vulkan::getOpaqueMeshBatchEnabled() ? 1 : 0) + "\n";
@@ -998,6 +1004,7 @@ UpdateProfilerRecording(bool enabled)
 	if(enabled) StartFrameCapture();
 	else {
 		rw::vulkan::setStaticArrayResidencySampling(false);
+		rw::vulkan::setCrossArrayTimingSampling(false);
 		gCaptureWriter.Stop();
 	}
 	if(gLogFile != nil){
@@ -1357,8 +1364,10 @@ QuestProfilerBeginAppFrame(void)
 	gCaptureFrame.id = ++gCaptureId;
 	gCaptureFrame.startNs = NowNanoseconds();
 	rw::vulkan::setGpuProfileFrame(gCaptureFrame.id,gCaptureFrame.startNs);
-	rw::vulkan::setStaticArrayResidencySampling(gRecordingEnabled &&
-		gCaptureFrame.id%StaticArrayBatch::OccupancySampleInterval==0);
+	const bool sampleStaticArray=gRecordingEnabled &&
+		gCaptureFrame.id%StaticArrayBatch::OccupancySampleInterval==0;
+	rw::vulkan::setStaticArrayResidencySampling(sampleStaticArray);
+	rw::vulkan::setCrossArrayTimingSampling(sampleStaticArray);
 	gCaptureFrame.intervalMs = gPreviousCaptureStartNs ?
 		(double)(gCaptureFrame.startNs-gPreviousCaptureStartNs)/1000000.0 : -1.0;
 	gAppFrameOpen = true;
@@ -1390,6 +1399,7 @@ QuestProfilerCancelAppFrame(void)
 {
 	rw::vulkan::setGpuProfileFrame(0,0);
 	rw::vulkan::setStaticArrayResidencySampling(false);
+	rw::vulkan::setCrossArrayTimingSampling(false);
 	gAppFrameOpen = false;
 	gVkBeginOpen = false;
 	gStepOpen = false;
@@ -1656,6 +1666,7 @@ QuestProfilerEndAppFrame(void)
 		gCaptureFrame.opaqueMeshBatch = rw::vulkan::getOpaqueMeshBatchStats();
 		gCaptureFrame.alphaBound = rw::vulkan::getAlphaBoundStats();
 		gCaptureFrame.maskedAlphaPassSkipEnabled = rw::vulkan::getMaskedAlphaPassSkipEnabled() ? 1 : 0;
+		gCaptureFrame.classicFoliageCutoutEnabled = rw::vulkan::getClassicFoliageCutoutEnabled() ? 1 : 0;
 		rw::vulkan::FrameBeginStats begin = {};
 		if(rw::vulkan::getFrameBeginStats(&begin)){
 			gCaptureFrame.begin.valid = 1;

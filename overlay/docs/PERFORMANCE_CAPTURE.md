@@ -21,6 +21,30 @@ split the scene pass or add query waits. Existing `gpu_pass_*_ms` capture column
 contain these timings; use their valid mask/status and deduplicate by GPU source
 frame ID when comparing samples. Logical scene buckets retain `-1` GPU times.
 
+The `explicit_early_opaque_v1` fragment policy requests early depth tests for
+eligible unblended world and instanced triangles with depth testing and
+writes enabled. The fragment module omits alpha discard and is selected
+for the world path with alpha test, world effects, Neo and mesh debug
+disabled. Pipeline creation falls back to the ordinary module if needed.
+Use the sampled scene GPU interval and the same route, resolution and
+texture format to compare the policy across builds.
+
+Masked Alpha Pass Skip also checks the alpha range of fully uploaded RGBA8
+native texture assets, including their mip levels. It can omit either PS2 alpha pass when
+every sampled alpha is on the same side of the split threshold. Incomplete
+uploads, unsupported formats, or a fallback texture descriptor retain the
+baseline decision. The replay counts additional savings in
+`masked_alpha_uploaded_solid_passes_skipped` and
+`masked_alpha_uploaded_faint_passes_skipped`.
+
+**Graphics → Optimizations → Classic Foliage Cutout** defaults to OFF and
+applies immediately. In first-person stereo with PS2 Alpha enabled, it keeps
+the depth-writing half of eligible masks on `veg_tree3`, `veg_treenew05`, and
+`veg_bush14` in the Classic asset set. Removing the faint half can make leaf
+edges sharper. Use `classic_foliage_cutout_enabled` and
+`classic_foliage_faint_passes_skipped` to compare same-session replays with
+the toggle off and on, and check canopies in motion in both eyes.
+
 Use **Graphics → Active Performance Profiling → ON** to record the existing
 performance metrics. It defaults to **OFF**. Select **OFF** after the route to
 drain accepted samples and close the files. Display changes preserve a running
@@ -717,7 +741,7 @@ can reuse a cold layer of the same size. The replacement must be on the
 page already chosen for the run or on a page containing the next compatible
 texture. A slot must have gone at least 240 frames without a reference.
 Resident-only probes and textures that already have a copy do not trigger
-replacement. Each page caches its two oldest candidates so it can defer
+ordinary replacement. Each page caches its two oldest candidates so it can defer
 a search until a layer can age out and still exclude a companion texture.
 A request that finds no victim waits eight frames before trying again.
 The renderer allows up to eight full page scans and two successful
@@ -729,6 +753,18 @@ With `cached_page_candidates_v2`, probes count full page scans and
 the cached candidates are too recent or unavailable for the requested
 pair. Demand upload bytes are included in the normal page upload total.
 
+A missing 64×64 or 128×128 texture from a single-range object can qualify
+when the immediately preceding queued draw belongs to another object and
+the pipeline, sampler, page dimensions and batch limits agree. After three
+recent qualifying misses, the renderer may admit one such texture per
+frame on that exact page, within the existing upload and replacement
+budgets. The initial geometry upload can drain the queue. Subsequent
+draws can reuse the admitted layer with cached geometry.
+`static_array_adjacent_misses` counts qualifying requests,
+`static_array_adjacent_admissions` counts uploads, and
+`static_array_adjacent_merged` counts admitted single ranges that actually
+participate in an emitted cross-object batch.
+
 ### Cross-object array batching
 
 **Cross-Object Array Batching** is a default-off control in the same menu.
@@ -738,10 +774,13 @@ submissions from static road and building objects with the same array descriptor
 and Vulkan pipeline. It retains primitive order and each object's transform,
 lighting, and fog state. Other draws and render-pass boundaries drain pending
 work. Each draw groups at most eight source submissions and 4,096 indices.
-Merged vertices and indices are cached in device-local buffers keyed by the
-ordered source geometry. Reinstancing or retiring a source invalidates its
-merged buffers. The cache holds up to 512 entries and 16 MiB of geometry payload.
-It attempts at most four builds and 512 KiB of geometry per frame. Each in-flight
+Merged vertices and indices are cached in a 16 MiB device-local buffer keyed
+by the ordered source geometry. The cache holds up to 512 entries and stores
+each entry in contiguous 2 KiB blocks. Reinstancing or retiring a source
+invalidates its merged entries. Retired blocks stay reserved until the frame
+fence completes. Cold builds pack directly into 512 KiB of persistently mapped
+staging space per frame slot and record the copy before the draw submission.
+The cache attempts at most four builds and 512 KiB of geometry per frame. Each in-flight
 frame slot has a 144 KiB uniform stream for current transforms and lighting,
 with 128 object records per page. Each merged draw uses its first instance
 index to select its records inside the page. Consecutive merged draws reuse
@@ -756,6 +795,10 @@ Compare `cross_array_saved_draws`, `cross_array_fallbacks`, and
 Add `cross_array_cache_upload_bytes` to compare with the combined upload total
 reported by the previous stream. The cache also reports hits, misses, successful
 builds, and resident geometry bytes.
+`cross_array_arena_bytes` is the device buffer size.
+`cross_array_arena_reserved_bytes` includes alignment padding and blocks
+waiting for fences. `cross_array_arena_misses` counts attempts blocked by
+cache capacity or lack of a contiguous writable range.
 Compare `cross_array_pipeline_binds`, `cross_array_descriptor_binds`, and
 `cross_array_transform_binds` with `cross_array_batches` to measure binding
 reuse. Transform page binds are included in the descriptor bind count.
@@ -763,6 +806,27 @@ Merged draws contribute their complete index count to the render phase. The
 combined model attribution is unknown because a draw can contain multiple
 owners. The per-frame timings still include eligibility and collection costs
 outside the flush timer.
+
+The flush breakdown is sampled on the same one-in-eight source frames as
+texture-array residency. Use rows with
+`cross_array_flush_breakdown_sampled=1`. The CPU timing buckets are
+`cross_array_lookup_ms` for run eligibility, key construction and cache
+lookup, `cross_array_build_ms` for attempted cold geometry builds,
+`cross_array_transform_ms` for uniform allocation and writes,
+`cross_array_record_ms` for merged command recording and draw attribution,
+and `cross_array_fallback_ms` for ordinary draws emitted by the cross-object
+queue. The buckets add to `cross_array_flush_ms` on sampled rows within CSV
+rounding. Compare frame pacing on unsampled rows if the extra clock reads
+affect measurements.
+
+Ordinary array draws drained from the cross-object queue share its
+pipeline and texture binding cache. Ordinary and merged draws use the same
+layout, so the transform page stays valid across ordinary draws. Renderer
+boundaries invalidate the cache. Compare pipeline and texture binds in
+`cross_array_ordinary_pipeline_binds` and
+`cross_array_ordinary_texture_binds` against
+`cross_array_ordinary_draws`. These counters exclude immediate array draws
+outside the cross-object queue.
 
 ### Opaque mesh batching experiment
 

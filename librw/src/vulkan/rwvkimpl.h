@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 #include "GpuPassProfile.h"
 #include "OpaqueMeshBatch.h"
+#include "UniformAlphaPolicy.h"
 
 namespace rw {
 namespace vulkan {
@@ -44,12 +45,15 @@ struct VulkanRaster
 	// texture that arrived without one and has to be filled in here.
 	bool32 generateMips;
 	bool32 hasAlpha;
+	UniformAlphaPolicy::UploadedRange uploadedAlpha;
+	bool32 nativeAssetAlpha;
 	bool32 isCompressed;
 	// Set when the source was a DXT/BC texture that this device cannot sample
 	// natively and had to be decompressed on upload.
 	bool32 wasTranscoded;
 	bool32 staticArrayCopySource;
 	StaticArrayBatch::DemandHistory staticArrayDemand;
+	StaticArrayBatch::DemandHistory staticArrayAdjacentDemand;
 
 	// Immutable texture descriptors are owned by vkstate's raster/view/sampler
 	// cache. Keep them outside this memset-initialised plugin record.
@@ -606,12 +610,14 @@ struct StaticArrayLayer {
 	StaticArrayBatch::Result result=StaticArrayBatch::Result::Ready;
 	uint32 pageIndex=StaticArrayBatch::MaxPages;
 	bool duplicate=false;
+	bool adjacentAdmitted=false;
 };
 bool getStaticArrayTexture(Raster *raster, uint32 filter, uint32 u, uint32 v, StaticArrayTexture &out);
 StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,
                                      uint32 preferredPage=StaticArrayBatch::MaxPages,
                                      bool residentOnly=false,
-                                     const StaticArrayTexture *companion=nullptr);
+                                     const StaticArrayTexture *companion=nullptr,
+                                     uint32 adjacentPage=StaticArrayBatch::MaxPages);
 struct CrossArrayObject {
 	float32 model[16],ambient[4],directional[4];
 };
@@ -630,6 +636,7 @@ void resetStaticArrayFrame(void);
 void resetStaticArrayGeometryFrame(void);
 void clearStaticArrayGeometry(void);
 VkImageView getFallbackTextureView(void);
+bool isFallbackTextureDescriptor(VkDescriptorSet set);
 VkDescriptorSet getSceneDescriptor(void);
 
 // Descriptor set 2: the bone matrix block, a dynamic uniform buffer aliased

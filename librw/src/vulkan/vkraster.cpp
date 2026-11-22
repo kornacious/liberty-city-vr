@@ -1728,6 +1728,7 @@ rasterLock(Raster *raster, int32 level, int32 lockMode)
 
 	native->lockedLevel = level;
 	native->lockedFlags = (uint32)lockMode;
+	native->nativeAssetAlpha = 0;
 	raster->stride = (int32)(width * bytesPerPixel);
 	raster->width = (int32)width;
 	raster->height = (int32)height;
@@ -1811,8 +1812,9 @@ rasterUnlock(Raster *raster, int32 level)
 		if(native->staticArrayCopySource)
 			syncStaticArrayRasterUpload(native,commandBuffer);
 
-		if(gvk.generateMipmaps && native->generateMips &&
-		   level == 0 && native->numLevels > 1)
+		const bool generatesChain=gvk.generateMipmaps && native->generateMips &&
+			level==0 && native->numLevels>1;
+		if(generatesChain)
 			uploadGeneratedMips(native, width, height,
 				(uint32)(raster->depth/8), commandBuffer);
 		transitionImageLayout(commandBuffer, native->image,
@@ -1820,10 +1822,24 @@ rasterUnlock(Raster *raster, int32 level)
 		                      (uint32)native->numLevels,
 		                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		auto alpha=native->uploadedAlpha;
+		if((raster->type&0xF)==Raster::TEXTURE && native->format==VK_FORMAT_R8G8B8A8_UNORM){
+			if(generatesChain || native->numLevels==1)alpha={};
+			const bool written=native->hasAlpha && (native->lockedFlags&Raster::LOCKWRITE) &&
+				level==native->lockedLevel && raster->depth==32;
+			const uint8 *pixels=native->stagingCpu?native->stagingCpu:native->stagingMapped;
+			// The RGBA8 mip generator rounds an average of the source alphas.
+			// Every generated level therefore stays inside the base envelope.
+			alpha.Observe(written?pixels:nil,size_t(width)*height,unsigned(level),
+			              generatesChain?unsigned(native->numLevels):1u);
+		}
 		if(native->stagingCpu)
 			memcpy(native->stagingMapped, native->stagingCpu, (size_t)native->stagingBytes);
-		if(endOneShot(commandBuffer))
+		if(endOneShot(commandBuffer)){
 			native->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			native->uploadedAlpha=alpha;
+		}else
+			native->uploadedAlpha={};
 	}
 
 	vkUnmapMemory(gvk.device, native->stagingMemory);
@@ -1997,6 +2013,18 @@ rasterHasNormalizedAlpha(const Raster *raster)
 	// Prove sampled alpha is bounded, rather than infer it from the hasAlpha
 	// hint. Unknown/compressed/float images retain both passes conservatively.
 	return native->view != VK_NULL_HANDLE && native->format == VK_FORMAT_R8G8B8A8_UNORM;
+}
+
+void
+sealNativeTextureAlpha(Raster *raster)
+{
+	// Native TXD imports publish a new raster for each asset. Runtime-written
+	// textures never use this content proof because live uploads run before
+	// the frame's recorded draws.
+	if(rasterHasNormalizedAlpha(raster)){
+		auto *native=GETVULKANRASTER(raster);
+		native->nativeAssetAlpha=native->uploadedAlpha.Complete(unsigned(native->numLevels));
+	}
 }
 
 bool32

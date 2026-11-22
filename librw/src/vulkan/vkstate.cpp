@@ -53,6 +53,9 @@ static const uint32_t kWorldFragSpv[] =
 static const uint32_t kWorldNoEffectsFragSpv[] =
 #include "rw_world_noeffects_frag.h"
 ;
+static const uint32_t kWorldEarlyDepthFragSpv[] =
+#include "rw_world_early_depth_frag.h"
+;
 static const uint32_t kIm2DVertSpv[] =
 #include "rw_im2d_vert.h"
 ;
@@ -168,6 +171,7 @@ struct State
 	VkShaderModule modules[SHADER_COUNT][2];	// [variant][0=vert,1=frag]
 	VkShaderModule im2dCoverageModule;
 	VkShaderModule worldNoEffectsModule;
+	VkShaderModule worldEarlyDepthModule;
 	VkShaderModule neoModules[2];
 
 	std::vector<PipelineEntry> pipelines;
@@ -927,6 +931,7 @@ stateInit(void)
 		sizeof(kWorldNoEffectsFragSpv));
 	if(gs.worldNoEffectsModule == VK_NULL_HANDLE)
 		return 0;
+	gs.worldEarlyDepthModule = createModule(kWorldEarlyDepthFragSpv,sizeof(kWorldEarlyDepthFragSpv));
 	gs.modules[SHADER_IM2D][0] = createModule(kIm2DVertSpv, sizeof(kIm2DVertSpv));
 	gs.modules[SHADER_IM2D][1] = createModule(kIm2DNoCoverageFragSpv,
 		sizeof(kIm2DNoCoverageFragSpv));
@@ -1104,6 +1109,9 @@ stateShutdown(void)
 	if(gs.worldNoEffectsModule)
 		vkDestroyShaderModule(gvk.device, gs.worldNoEffectsModule, nil);
 	gs.worldNoEffectsModule = VK_NULL_HANDLE;
+	if(gs.worldEarlyDepthModule)
+		vkDestroyShaderModule(gvk.device,gs.worldEarlyDepthModule,nil);
+	gs.worldEarlyDepthModule=VK_NULL_HANDLE;
 	for(auto &module:gs.neoModules){if(module) vkDestroyShaderModule(gvk.device,module,nil);module=VK_NULL_HANDLE;}
 
 	// SHADER_IM3D's fragment module aliases SHADER_WORLD's, so it must not be
@@ -1352,6 +1360,13 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	if((key & (uint64(1) << 23)) != 0)
 		stages[1].module = gs.im2dCoverageModule;
 	if(key & (uint64(1)<<24)) stages[1].module=gs.neoModules[(key>>22)&1];
+	const bool earlyWorldDepth=gs.worldEarlyDepthModule && stages[1].module==gs.worldNoEffectsModule &&
+		(shader==SHADER_WORLD || shader==SHADER_WORLD_INSTANCED) &&
+		topology==VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST &&
+		!alphaTest && !gstate.vertexAlphaEnabled && gstate.zTestEnabled && gstate.zWriteEnabled &&
+		!(key & (uint64(1)<<26));
+	if(earlyWorldDepth)
+		stages[1].module=gs.worldEarlyDepthModule;
 	stages[1].pName = "main";
 	stages[1].pSpecializationInfo = &specInfo;
 
@@ -1566,8 +1581,14 @@ getPipelineForKey(uint32 shader, VkPrimitiveTopology topology, uint64 key)
 	PipelineEntry entry;
 	entry.key = key;
 	entry.pipeline = VK_NULL_HANDLE;
-	if(vkCreateGraphicsPipelines(gvk.device, gs.pipelineCache, 1, &info, nil,
-	                             &entry.pipeline) != VK_SUCCESS){
+	VkResult created=vkCreateGraphicsPipelines(gvk.device,gs.pipelineCache,1,&info,nil,&entry.pipeline);
+	if(created!=VK_SUCCESS && earlyWorldDepth){
+		if(entry.pipeline) vkDestroyPipeline(gvk.device,entry.pipeline,nil);
+		entry.pipeline=VK_NULL_HANDLE;
+		stages[1].module=gs.worldNoEffectsModule;
+		created=vkCreateGraphicsPipelines(gvk.device,gs.pipelineCache,1,&info,nil,&entry.pipeline);
+	}
+	if(created!=VK_SUCCESS){
 		VKERR("vkCreateGraphicsPipelines failed for key %llu",
 		      (unsigned long long)key);
 		return VK_NULL_HANDLE;
@@ -1666,6 +1687,7 @@ struct StaticTexturePage {
 		VulkanRaster *owner=nullptr;
 		uint64 releasedFrame=0;
 		uint64 lastReference=0;
+		bool adjacentAdmitted=false;
 	} slots[StaticArrayLayerLimit];
 	StaticArrayBatch::DemandPageSearch demandSearch;
 };
@@ -1684,6 +1706,7 @@ static uint32 staticArrayPageAttempts=0,staticArrayUploads=0;
 static uint32 staticArrayPageSizeRetries=0,staticArrayPageMemoryCacheHits=0;
 static uint32 staticArrayDemandProbes=0,staticArrayDemandReplacements=0,staticArrayDemandUploadBytes=0;
 static uint32 staticArrayDemandPageDeferrals=0;
+static uint32 staticArrayAdjacentMisses=0,staticArrayAdjacentAdmissions=0;
 static uint64 staticArrayFrame=1;
 // A two-layer image's minimum allocation depends on its shape, not its sampler.
 // Keep this device-local and bounded. The cache is cleared with the page pool.
@@ -1879,10 +1902,10 @@ bool getStaticArrayTexture(Raster *raster,uint32 filter,uint32 u,uint32 v,Static
 }
 
 StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 preferredPage,bool residentOnly,
-                                     const StaticArrayTexture *companion)
+                                     const StaticArrayTexture *companion,uint32 adjacentPage)
 {
 	using Result=StaticArrayBatch::Result;
-	const bool preferred=preferredPage!=StaticArrayBatch::MaxPages;
+	bool preferred=preferredPage!=StaticArrayBatch::MaxPages;
 	bool elsewhere=false;
 	auto found=staticArrayLocations.find(texture.native);
 	if(found!=staticArrayLocations.end()){
@@ -1898,7 +1921,20 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 			if(!descriptor) return {VK_NULL_HANDLE,0,Result::PageAllocation};
 			page.slots[location.layer].lastReference=staticArrayFrame;
 			return {descriptor,location.layer,Result::Ready,location.page,
-			        staticArrayResidency.sampled && &location!=&found->second.front()};
+			        staticArrayResidency.sampled && &location!=&found->second.front(),
+			        page.slots[location.layer].adjacentAdmitted};
+		}
+	}
+	const bool demandShape=texture.width==texture.height && (texture.width==64 || texture.width==128);
+	const bool alreadyResident=found!=staticArrayLocations.end() && !found->second.empty();
+	const bool adjacent=residentOnly && !preferred && !alreadyResident && demandShape &&
+		adjacentPage<staticArrayPages.size() && matchesTextureShape(staticArrayPages[adjacentPage],texture);
+	if(adjacent){
+		++staticArrayAdjacentMisses;
+		if(texture.native->staticArrayAdjacentDemand.Observe(staticArrayFrame) && staticArrayAdjacentAdmissions<1){
+			preferredPage=adjacentPage;
+			preferred=true;
+			residentOnly=false;
 		}
 	}
 	const auto finishMiss=[&](StaticArrayLayer layer){
@@ -1912,7 +1948,6 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 	if(staticArrayUploads>=16 || staticArrayUploadBytes>=StaticArrayUploadLimit ||
 	   bytes>StaticArrayUploadLimit-staticArrayUploadBytes)
 		return finishMiss({VK_NULL_HANDLE,0,Result::TextureUploadBudget});
-	const bool alreadyResident=found!=staticArrayLocations.end() && !found->second.empty();
 	const auto installLayer=[&](uint32 pageIndex,uint32 layer){
 		auto &page=staticArrayPages[pageIndex];
 		auto &slot=page.slots[layer];
@@ -1940,12 +1975,15 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 		}
 		slot.owner=texture.native;
 		slot.lastReference=staticArrayFrame;
+		slot.adjacentAdmitted=adjacent;
 		locations.push_back({pageIndex,layer});
 		texture.native->staticArrayDemand={};
+		texture.native->staticArrayAdjacentDemand={};
+		if(adjacent) ++staticArrayAdjacentAdmissions;
 		staticArrayUploadBytes+=bytes;
 		++staticArrayUploads;
 		return StaticArrayLayer{descriptor,layer,Result::Ready,pageIndex,
-		                        staticArrayResidency.sampled && elsewhere};
+		                        staticArrayResidency.sampled && elsewhere,adjacent};
 	};
 	Result allocationFailure=Result::PreferredPageFull;
 	for(size_t pageIndex=0;pageIndex<=staticArrayPages.size();++pageIndex){
@@ -1967,8 +2005,8 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 	                           allocationFailure==Result::PageCountLimit ||
 	                           allocationFailure==Result::SmallTextureReserve;
 	if(capacityLimited && !alreadyResident && (preferred || companion) &&
-	   texture.width==texture.height && (texture.width==64 || texture.width==128) &&
-	   texture.native->staticArrayDemand.Observe(staticArrayFrame) && staticArrayDemandReplacements<2){
+	   demandShape && (adjacent || texture.native->staticArrayDemand.Observe(staticArrayFrame)) &&
+	   staticArrayDemandReplacements<2){
 		uint32 victimPage=StaticArrayBatch::MaxPages,victimLayer=0;
 		uint64_t oldestReference=staticArrayFrame;
 		const auto considerPage=[&](uint32 pageIndex){
@@ -1993,7 +2031,8 @@ StaticArrayLayer getStaticArrayLayer(const StaticArrayTexture &texture,uint32 pr
 		}
 		if(victimPage!=StaticArrayBatch::MaxPages)
 			return finishMiss(installLayer(victimPage,victimLayer));
-		texture.native->staticArrayDemand.Defer(staticArrayFrame);
+		auto &history=adjacent?texture.native->staticArrayAdjacentDemand:texture.native->staticArrayDemand;
+		history.Defer(staticArrayFrame);
 	}
 	return finishMiss({VK_NULL_HANDLE,0,allocationFailure});
 }
@@ -2002,6 +2041,7 @@ void invalidateStaticArrayRaster(VulkanRaster *native)
 {
 	if(!native->staticArrayCopySource) return;
 	native->staticArrayDemand={};
+	native->staticArrayAdjacentDemand={};
 	auto found=staticArrayLocations.find(native);
 	if(found==staticArrayLocations.end()) return;
 	// This frame's upload buffers run before ALL of its draws. Keep old
@@ -2058,6 +2098,7 @@ void resetStaticArrayFrame(void)
 	staticArrayPageSizeRetries=staticArrayPageMemoryCacheHits=0;
 	staticArrayDemandProbes=staticArrayDemandReplacements=staticArrayDemandUploadBytes=0;
 	staticArrayDemandPageDeferrals=0;
+	staticArrayAdjacentMisses=staticArrayAdjacentAdmissions=0;
 	resetStaticArrayGeometryFrame();
 }
 
@@ -2071,6 +2112,8 @@ void getStaticArrayPageStats(StaticArrayBatch::Stats &stats)
 	stats.demandReplacements=staticArrayDemandReplacements;
 	stats.demandUploadBytes=staticArrayDemandUploadBytes;
 	stats.demandPageDeferrals=staticArrayDemandPageDeferrals;
+	stats.adjacentMisses=staticArrayAdjacentMisses;
+	stats.adjacentAdmissions=staticArrayAdjacentAdmissions;
 }
 
 void getStaticArrayOccupancy(StaticArrayBatch::Occupancy &out)
@@ -2106,6 +2149,7 @@ void getStaticArrayResidencyStats(StaticArrayBatch::ResidencyStats &out)
 }
 
 VkImageView getFallbackTextureView(void) { return gs.whiteView; }
+bool isFallbackTextureDescriptor(VkDescriptorSet set) { return !set || set==gs.whiteDescriptor; }
 
 VkDescriptorSet
 getTextureDescriptor(Raster *raster)

@@ -169,6 +169,7 @@ struct Frame {
     StaticArrayBatch::Occupancy staticArrayOccupancy{};
     StaticArrayBatch::ResidencyStats staticArrayResidency{};
     int maskedAlphaPassSkipEnabled=0;
+    int classicFoliageCutoutEnabled=0;
     int activeModels[5]{}, requestedModel = 0;
     float renderScale = -1;
     uint32_t events = 0, weaponUses = 0, renderCalls[3]{};
@@ -329,6 +330,16 @@ class Writer {
             }
         std::fprintf(frames,",%u,%u,%u,%u",array.demandProbes,array.demandReplacements,
                      array.demandUploadBytes,array.demandPageDeferrals);
+        std::fprintf(frames,",%u,%u,%u",array.adjacentMisses,array.adjacentAdmissions,array.adjacentMerged);
+        std::fprintf(frames,",%d,%.6f,%.6f,%.6f,%.6f,%.6f",array.crossFlushBreakdownSampled?1:0,
+                     array.crossLookupMs,array.crossBuildMs,array.crossTransformMs,
+                     array.crossRecordMs,array.crossFallbackMs);
+        std::fprintf(frames,",%u,%u,%u",array.crossOrdinaryDraws,array.crossOrdinaryPipelineBinds,
+                     array.crossOrdinaryTextureBinds);
+        std::fprintf(frames,",%u,%u,%u",array.crossArenaBytes,array.crossArenaReservedBytes,
+                     array.crossArenaMisses);
+        std::fprintf(frames,",%u,%u",f.alphaBound.uploadedSolidSkipped,f.alphaBound.uploadedFaintSkipped);
+        std::fprintf(frames,",%d,%u",f.classicFoliageCutoutEnabled,f.alphaBound.foliageFaintSkipped);
         std::fputc('\n',frames);
         if(g.frameId && g.frameId!=lastDrawFrame){
             lastDrawFrame=g.frameId;
@@ -437,7 +448,14 @@ public:
             ",static_array_residency_sampled,static_array_residency_overflow,static_array_duplicate_merged_layers"
             ",static_array_residency_misses,static_array_page_copies"
             ",static_array_demand_probes,static_array_demand_replacements,static_array_demand_upload_bytes"
-            ",static_array_demand_page_deferrals\n",frames);
+            ",static_array_demand_page_deferrals,static_array_adjacent_misses"
+            ",static_array_adjacent_admissions,static_array_adjacent_merged"
+            ",cross_array_flush_breakdown_sampled,cross_array_lookup_ms,cross_array_build_ms"
+            ",cross_array_transform_ms,cross_array_record_ms,cross_array_fallback_ms"
+            ",cross_array_ordinary_draws,cross_array_ordinary_pipeline_binds,cross_array_ordinary_texture_binds"
+            ",cross_array_arena_bytes,cross_array_arena_reserved_bytes,cross_array_arena_misses"
+            ",masked_alpha_uploaded_solid_passes_skipped,masked_alpha_uploaded_faint_passes_skipped"
+            ",classic_foliage_cutout_enabled,classic_foliage_faint_passes_skipped\n",frames);
         if(std::ferror(frames) || std::ferror(metadata) || std::ferror(draws)) {
             std::fclose(frames); std::fclose(metadata); std::fclose(draws);
             frames = metadata = draws = nullptr;

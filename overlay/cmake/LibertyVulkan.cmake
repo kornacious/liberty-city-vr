@@ -96,6 +96,9 @@ set(SHADER_OUTPUTS "")
 compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment
                "rw_world_noeffects_frag" "${LIBRW_SPIRV_DIR}"
                "${LIBRW_SHADER_DIR}" -DRW_WORLD_EFFECTS_RESOURCES=0)
+compile_shader("${LIBRW_SHADER_DIR}/rw_world.frag" fragment
+               "rw_world_early_depth_frag" "${LIBRW_SPIRV_DIR}"
+               "${LIBRW_SHADER_DIR}" -DRW_WORLD_EFFECTS_RESOURCES=0 -DRW_WORLD_EARLY_DEPTH=1)
 list(APPEND LIBRW_SPIRV_HEADERS ${SHADER_OUTPUTS})
 
 set(SHADER_OUTPUTS "")

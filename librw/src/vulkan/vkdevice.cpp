@@ -4,6 +4,7 @@
 #include <math.h>
 #include <time.h>
 #include <vector>
+#include <new>
 
 #include "../rwbase.h"
 #include "../rwerror.h"
@@ -383,7 +384,12 @@ endOneShot(VkCommandBuffer commandBuffer)
 		// Do not submit (or wait) once for every streamed texture/mesh. endFrame
 		// prepends all of these command buffers to the main frame in one batch;
 		// its fence then provides an exact lifetime boundary for staging data.
-		frameUploadCommands[gvk.activeFrame].push_back(commandBuffer);
+		try {
+			frameUploadCommands[gvk.activeFrame].push_back(commandBuffer);
+		} catch(const std::bad_alloc &) {
+			vkFreeCommandBuffers(gvk.device,gvk.commandPool,1,&commandBuffer);
+			return 0;
+		}
 		return 1;
 	}
 
@@ -2829,7 +2835,7 @@ endFrame(void)
 		depthBarrier.subresourceRange.levelCount = 1;
 		depthBarrier.subresourceRange.layerCount = gvk.viewCount;
 		vkCmdPipelineBarrier(gvk.frameCommands,
-		                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+		                     VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 		                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		                     0, 0, nil, 0, nil, 1, &depthBarrier);
 

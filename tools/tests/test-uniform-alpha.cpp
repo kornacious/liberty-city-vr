@@ -10,23 +10,38 @@ using uint32=unsigned;
 using bool32=int;
 #define nil nullptr
 enum {SHADER_WORLD,SHADER_SKIN,SHADER_IM3D,ALPHAALWAYS=10,ALPHAGREATEREQUAL=11,PLATFORM_VULKAN=12};
+enum {BLENDSRCALPHA=1,BLENDINVSRCALPHA=2};
 struct InstanceData {bool vertexAlpha=false;unsigned numIndex=120;};
-struct Material {struct {unsigned char alpha=255;}color;};
+struct Material {struct {unsigned char alpha=255;}color;bool effects=false;};
+struct MatFX {static bool get(const Material *material){return material->effects;}};
 enum {VK_NULL_HANDLE=0,VK_FORMAT_R8G8B8A8_UNORM=37};
-struct VulkanRaster {int view=1,format=VK_FORMAT_R8G8B8A8_UNORM;};
+struct VulkanRaster {
+    int view=1,format=VK_FORMAT_R8G8B8A8_UNORM,numLevels=1;
+    UniformAlphaPolicy::UploadedRange uploadedAlpha{};
+    bool nativeAssetAlpha=false;
+};
 struct Raster {enum {TEXTURE=4,CAMERATEXTURE=5};int platform=PLATFORM_VULKAN,type=TEXTURE;Raster *parent=nullptr;VulkanRaster native;};
 #define GETVULKANRASTER(raster) (&(raster)->native)
+#define PLUGINOFFSET(type, raster, offset) GETVULKANRASTER(raster)
 struct Geometry {enum {MODULATE=1};unsigned flags=MODULATE;};
 struct Texture {enum {WRAP=1,MIRROR,CLAMP,BORDER};};
 static bool vehicleAlphaPass=false,dynamicObjectPass=false;
 static struct {unsigned alphaTestFunction=ALPHAGREATEREQUAL,alphaTestRef=2;
     bool vertexAlphaEnabled=false;unsigned zWriteEnabled=1;
+    bool zTestEnabled=true;
+    unsigned srcBlend=BLENDSRCALPHA,dstBlend=BLENDINVSRCALPHA;
     unsigned textureAddressU=Texture::WRAP,textureAddressV=Texture::WRAP;}gstate;
 static bool opaqueFastPathEnabled=true;
 static UniformAlphaPolicy::BoundStats gAlphaBoundStats;
 static bool32 gMaskedAlphaPassSkipEnabled;
 static bool getOpaqueWorldAlphaFastPathEnabled(){return opaqueFastPathEnabled;}
 #include "uniform-alpha-production.inc"
+static unsigned InspectFoliagePass(bool foliageCutout,bool masked,bool gsSplit,bool textureAlpha,
+                                   const Material *material,const InstanceData *inst,
+                                   unsigned alphaPasses,float splitReference){
+#include "foliage-alpha-production.inc"
+    return alphaPasses;
+}
 using VkPipeline=unsigned;
 using VkPrimitiveTopology=unsigned;
 static unsigned lookupAlpha=0,lookupDepth=0;
@@ -170,6 +185,50 @@ int main(){
     geometry.flags=0;assert(guarded()==Both);geometry.flags=Geometry::MODULATE;
     for(float ref:{0.f,1.f,.5f,Margin,1-Margin,std::numeric_limits<float>::quiet_NaN()})
         assert(FromUpperBound(.5f,ref)==Both);
+    const uint8_t bright[]={0,0,0,160, 0,0,0,240};
+    const uint8_t faint[]={0,0,0,15, 0,0,0,95};
+    auto &range=raster.native.uploadedAlpha;
+    raster.native.numLevels=2;
+    material.color.alpha=255;
+    auto observed=[&](){
+        unsigned uploaded=Both;
+        const unsigned baseline=selectAtomicAlphaPasses(&inst,&material,&raster,&geometry,
+            SHADER_WORLD,nullptr,true,false,true,.5f,&uploaded);
+        assert(baseline==Both);
+        return uploaded;
+    };
+    range.Observe(bright,2,0,1);
+    assert(observed()==Both); // Uninitialized mip.
+    range.Observe(bright,2,1,1);
+    assert(observed()==Both); // Runtime-writable raster.
+    raster.native.nativeAssetAlpha=true;
+    assert(observed()==Solid);
+    setMaskedAlphaPassSkipEnabled(false);
+    assert(observed()==Both);
+    setMaskedAlphaPassSkipEnabled(true);
+    range.Observe(nullptr,0,1,1);
+    assert(observed()==Both); // Unknown rewrite invalidates the proof.
+    range.Observe(faint,2,1,1);
+    assert(observed()==Both); // The levels cross the threshold.
+    range={};range.Observe(faint,2,0,2);
+    assert(observed()==Faint); // Generated mip averaging stays in the base range.
+    range.Observe(bright,2,1,1);
+    assert(observed()==Both);
+    range={};raster.native.numLevels=1;raster.native.nativeAssetAlpha=false;
+    auto foliage=[&](bool enabled,bool masked=true,bool split=true,bool textureAlpha=true,
+                     unsigned baseline=Both,float reference=.5f){
+        return InspectFoliagePass(enabled,masked,split,textureAlpha,&material,&inst,baseline,reference);
+    };
+    assert(foliage(false)==Both && foliage(true)==Solid);
+    assert(foliage(true,false)==Both && foliage(true,true,false)==Both);
+    assert(foliage(true,true,true,false)==Both);
+    assert(foliage(true,true,true,true,Faint)==Faint);
+    assert(foliage(true,true,true,true,Both,0.f)==Both);
+    material.color.alpha=128;assert(foliage(true)==Both);material.color.alpha=255;
+    material.effects=true;assert(foliage(true)==Both);material.effects=false;
+    inst.vertexAlpha=true;assert(foliage(true)==Both);inst.vertexAlpha=false;
+    gstate.zTestEnabled=false;assert(foliage(true)==Both);gstate.zTestEnabled=true;
+    assert(gAlphaBoundStats.foliageFaintSkipped==1);
     std::printf("PASS: %u masked-texture differential coverage checks, %u empty solid passes and exact decision counters.\n",boundedChecks,skipped);
     material.color.alpha=64;
     for(float alpha:{.5f,.5f-Margin,.5f+Margin})assert(Select(alpha,.5f)==Both);
