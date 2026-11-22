@@ -469,6 +469,35 @@ index 1752c4cdcdeb4f11e513ee31b667a355c55ce984..92dea4bc677603cd261e5944d6e6e2f6
  	void UpdateReflections();
  #endif
  	void AddReleasingSounds();
+diff --git a/src/audio/MusicManager.cpp b/src/audio/MusicManager.cpp
+index 132d102176c03614168da6643f371234267aee1e..ec1d385f2bb5fc18759ced801b53ea6a491c2259 100644
+--- a/src/audio/MusicManager.cpp
++++ b/src/audio/MusicManager.cpp
+@@ -14,6 +14,9 @@
+ #include "Timer.h"
+ #include "World.h"
+ #include "sampman.h"
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++#include "QuestHudNotifications.h"
++#endif
+ 
+ #ifdef GTA_PS2
+ #include <libcdvd.h>
+@@ -193,6 +196,14 @@ cMusicManager::DisplayRadioStationName()
+ 		default: return;
+ 		};
+ 
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++		if (!androidgame::VrHudNotificationEnabled(androidgame::HudNotification::RadioStation)) {
++			pCurrentStation = string;
++			cDisplay = 0;
++			return;
++		}
++#endif
++
+ 		if(pCurrentStation != string ||
+ 			m_nNextTrack == STREAMED_SOUND_RADIO_MP3_PLAYER && m_nPlayingTrack != STREAMED_SOUND_RADIO_MP3_PLAYER) {
+ 			pCurrentStation = string;
 diff --git a/src/audio/sampman_null.cpp b/src/audio/sampman_null.cpp
 index 6fda39b60c7ad384309619276fbf74ef927d88c1..ddcb256506a9d012ca15f7f47a0f14eb2d489312 100644
 --- a/src/audio/sampman_null.cpp
@@ -10387,7 +10416,7 @@ index 5e30aca2acba0c6208bc39562765b6b20c8a9732..a9b25d2f12763445ac721eb5057f7dac
  		}
  	}
 diff --git a/src/renderer/Clouds.cpp b/src/renderer/Clouds.cpp
-index 957844a5dc438bde3d69f584cc20119bcfb6d5c3..0f3e0334a0536ed9880917aa778387da6906c9c2 100644
+index 957844a5dc438bde3d69f584cc20119bcfb6d5c3..a194959c97fc6648f09f247f30dfb802a18dcbf3 100644
 --- a/src/renderer/Clouds.cpp
 +++ b/src/renderer/Clouds.cpp
 @@ -14,6 +14,149 @@
@@ -11235,10 +11264,10 @@ index cc45648c8533356e88d5cd04a3443025bbdc0c9d..a96b8c19106c915e0109eec5fa8d76a6
  
  		TempBufferIndicesStoredReflection  = TEMPBUFFERINDEXREFLECTIONOFFSET;
 diff --git a/src/renderer/Hud.cpp b/src/renderer/Hud.cpp
-index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef938b9615 100644
+index 3446f620736da852d5387e038a6836e28d6054c3..76890d459d1081ca9dd61aae12be05ec8476bdd5 100644
 --- a/src/renderer/Hud.cpp
 +++ b/src/renderer/Hud.cpp
-@@ -20,6 +20,45 @@
+@@ -20,6 +20,46 @@
  #include "TxdStore.h"
  #include "User.h"
  #include "World.h"
@@ -11247,6 +11276,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
 +#include "OculusVR.h"
 +#endif
 +#if defined(RW_VULKAN) && (defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)))
++#include "QuestHudNotifications.h"
 +namespace androidgame {
 +bool VrGameplayHudEnabled(void);
 +bool VrShouldUseTheaterMode(void);
@@ -11284,7 +11314,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  
  #ifdef PS2_HUD
  #define MONEY_X 100.0f
-@@ -321,6 +360,474 @@ void CHud::SetVehicleName(wchar *name)
+@@ -321,6 +361,474 @@ void CHud::SetVehicleName(wchar *name)
  	m_pVehicleName = name;
  }
  
@@ -11759,7 +11789,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  void CHud::Draw()
  {
  	// disable hud via second controller
-@@ -332,13 +839,32 @@ void CHud::Draw()
+@@ -332,13 +840,32 @@ void CHud::Draw()
  		return;
  #endif
  
@@ -11794,7 +11824,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  		int32 Mode = TheCamera.Cams[TheCamera.ActiveCam].Mode;
  
  		if (Mode == CCam::MODE_SNIPER || Mode == CCam::MODE_ROCKETLAUNCHER || Mode == CCam::MODE_M16_1STPERSON
-@@ -359,13 +885,31 @@ void CHud::Draw()
+@@ -359,13 +886,31 @@ void CHud::Draw()
  		*/
  		if (TheCamera.Cams[TheCamera.ActiveCam].Using3rdPersonMouseCam() &&
  		    (!CPad::GetPad(0)->GetLookBehindForPed() || TheCamera.m_bPlayerIsInGarage) || Mode == CCam::MODE_1STPERSON_RUNABOUT) {
@@ -11827,7 +11857,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  		if ( DrawCrossHair 
  #ifdef GTA_PC
  			|| DrawCrossHairPC  
-@@ -451,33 +995,70 @@ void CHud::Draw()
+@@ -451,33 +996,70 @@ void CHud::Draw()
  				}
  				else {
  					// Sniper
@@ -11914,7 +11944,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  				}
  			}
  			RwRenderStateSet(rwRENDERSTATETEXTUREFILTER, (void *)rwFILTERLINEAR);
-@@ -488,189 +1069,85 @@ void CHud::Draw()
+@@ -488,189 +1070,85 @@ void CHud::Draw()
  			SpriteBrightness = 0;
  		}
  
@@ -11924,7 +11954,9 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
 -		wchar sPrint[16];
 -		wchar sPrintIcon[16];
 -		char sTemp[16];
--
++		if (CrossHairHidesHud)
++			return;
+ 
 -		sprintf(sTemp, "$%08d", CWorld::Players[CWorld::PlayerInFocus].m_nVisibleMoney);
 -		AsciiToUnicode(sTemp, sPrint);
 -
@@ -12012,9 +12044,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
 -		CFont::SetRightJustifyOn();
 -		CFont::SetPropOff();
 -		CFont::SetFontStyle(FONT_HEADING);
-+		if (CrossHairHidesHud)
-+			return;
- 
+-
 -		if (m_ItemToFlash == ITEM_HEALTH && FRAMECOUNTER & 8
 -			|| m_ItemToFlash != ITEM_HEALTH
 -			|| FindPlayerPed()->m_fHealth < 10
@@ -12169,7 +12199,95 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  
  		/*
  			DrawZoneName
-@@ -870,6 +1347,17 @@ void CHud::Draw()
+@@ -746,23 +1224,28 @@ void CHud::Draw()
+ #endif
+ 				{
+ 					m_ZoneNameTimer += CTimer::GetTimeStepInMilliseconds();
+-					CFont::SetJustifyOff();
+-					CFont::SetPropOn();
+-					CFont::SetBackgroundOff();
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++					if (androidgame::VrHudNotificationEnabled(androidgame::HudNotification::AreaName))
++#endif
++					{
++						CFont::SetJustifyOff();
++						CFont::SetPropOn();
++						CFont::SetBackgroundOff();
+ 
+-					if (FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_SPANISH)
+-						CFont::SetScale(SCREEN_SCALE_X(1.2f * 0.8f), SCREEN_SCALE_Y(1.2f));
+-					else
+-						CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.2f));
++						if (FrontEndMenuManager.m_PrefsLanguage == CMenuManager::LANGUAGE_SPANISH)
++							CFont::SetScale(SCREEN_SCALE_X(1.2f * 0.8f), SCREEN_SCALE_Y(1.2f));
++						else
++							CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.2f));
+ 
+-					CFont::SetRightJustifyOn();
+-					CFont::SetRightJustifyWrap(0.0f);
+-					CFont::SetBackGroundOnlyTextOff();
+-					CFont::SetFontStyle(FONT_BANK);
+-					CFont::SetColor(CRGBA(0, 0, 0, fZoneAlpha));
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f) + SCREEN_SCALE_X_FIX(1.0f), SCREEN_SCALE_FROM_BOTTOM(ZONE_Y) + SCREEN_SCALE_Y_FIX(1.0f), m_ZoneToPrint);
+-					CFont::SetColor(CRGBA(ZONE_COLOR.r, ZONE_COLOR.g, ZONE_COLOR.b, fZoneAlpha));
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(ZONE_Y), m_ZoneToPrint);
++						CFont::SetRightJustifyOn();
++						CFont::SetRightJustifyWrap(0.0f);
++						CFont::SetBackGroundOnlyTextOff();
++						CFont::SetFontStyle(FONT_BANK);
++						CFont::SetColor(CRGBA(0, 0, 0, fZoneAlpha));
++						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f) + SCREEN_SCALE_X_FIX(1.0f), SCREEN_SCALE_FROM_BOTTOM(ZONE_Y) + SCREEN_SCALE_Y_FIX(1.0f), m_ZoneToPrint);
++						CFont::SetColor(CRGBA(ZONE_COLOR.r, ZONE_COLOR.g, ZONE_COLOR.b, fZoneAlpha));
++						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(ZONE_Y), m_ZoneToPrint);
++					}
+ 				}
+ 			}
+ 		}
+@@ -840,23 +1323,28 @@ void CHud::Draw()
+ #endif
+ 				{
+ 					m_VehicleNameTimer += CTimer::GetTimeStepInMilliseconds();
+-					CFont::SetJustifyOff();
+-					CFont::SetPropOn();
+-					CFont::SetBackgroundOff();
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++					if (androidgame::VrHudNotificationEnabled(androidgame::HudNotification::VehicleName))
++#endif
++					{
++						CFont::SetJustifyOff();
++						CFont::SetPropOn();
++						CFont::SetBackgroundOff();
+ 
+-					if (FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_ITALIAN && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_SPANISH)
+-						CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.2f));
+-					else
+-						CFont::SetScale(SCREEN_SCALE_X(1.2f * 0.85f), SCREEN_SCALE_Y(1.2f));
++						if (FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_ITALIAN && FrontEndMenuManager.m_PrefsLanguage != CMenuManager::LANGUAGE_SPANISH)
++							CFont::SetScale(SCREEN_SCALE_X(1.2f), SCREEN_SCALE_Y(1.2f));
++						else
++							CFont::SetScale(SCREEN_SCALE_X(1.2f * 0.85f), SCREEN_SCALE_Y(1.2f));
+ 
+-					CFont::SetRightJustifyOn();
+-					CFont::SetRightJustifyWrap(0.0f);
+-					CFont::SetBackGroundOnlyTextOff();
+-					CFont::SetFontStyle(FONT_BANK);
+-					CFont::SetColor(CRGBA(0, 0, 0, fVehicleAlpha));
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f) + SCREEN_SCALE_X_FIX(1.0f), SCREEN_SCALE_FROM_BOTTOM(VEHICLE_Y) + SCREEN_SCALE_Y_FIX(1.0f), m_pVehicleNameToPrint);
+-					CFont::SetColor(CRGBA(VEHICLE_COLOR.r, VEHICLE_COLOR.g, VEHICLE_COLOR.b, fVehicleAlpha));
+-					CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(VEHICLE_Y), m_pVehicleNameToPrint);
++						CFont::SetRightJustifyOn();
++						CFont::SetRightJustifyWrap(0.0f);
++						CFont::SetBackGroundOnlyTextOff();
++						CFont::SetFontStyle(FONT_BANK);
++						CFont::SetColor(CRGBA(0, 0, 0, fVehicleAlpha));
++						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f) + SCREEN_SCALE_X_FIX(1.0f), SCREEN_SCALE_FROM_BOTTOM(VEHICLE_Y) + SCREEN_SCALE_Y_FIX(1.0f), m_pVehicleNameToPrint);
++						CFont::SetColor(CRGBA(VEHICLE_COLOR.r, VEHICLE_COLOR.g, VEHICLE_COLOR.b, fVehicleAlpha));
++						CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(32.0f), SCREEN_SCALE_FROM_BOTTOM(VEHICLE_Y), m_pVehicleNameToPrint);
++					}
+ 				}
+ 			}
+ 		}
+@@ -870,6 +1358,17 @@ void CHud::Draw()
  		/*
  			DrawClock
  		*/
@@ -12187,7 +12305,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  		CFont::SetJustifyOff();
  		CFont::SetCentreOff();
  		CFont::SetBackgroundOff();
-@@ -887,6 +1375,7 @@ void CHud::Draw()
+@@ -887,6 +1386,7 @@ void CHud::Draw()
  		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X) + SCREEN_SCALE_X_FIX(2.0f), SCREEN_SCALE_Y(22.0f) + SCREEN_SCALE_Y_FIX(2.0f), sPrint);
  		CFont::SetColor(CLOCK_COLOR);
  		CFont::PrintString(SCREEN_SCALE_FROM_RIGHT(CLOCK_X), SCREEN_SCALE_Y(22.0f), sPrint);
@@ -12195,7 +12313,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  
  		/*
  			DrawOnScreenTimer
-@@ -948,6 +1437,19 @@ void CHud::Draw()
+@@ -948,6 +1448,19 @@ void CHud::Draw()
  				}
  
  				if (FRAMECOUNTER & 4 || !CounterFlashTimer) {
@@ -12215,7 +12333,7 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
  					if (CUserDisplay::OnscnTimer.m_sEntries[0].m_nType == COUNTER_DISPLAY_NUMBER) {
  						AsciiToUnicode(CUserDisplay::OnscnTimer.m_sEntries[0].m_bCounterBuffer, sTimer);
  						CFont::SetPropOn();
-@@ -1060,25 +1562,13 @@ void CHud::Draw()
+@@ -1060,25 +1573,13 @@ void CHud::Draw()
  			DrawRadar
  		*/
  		if (m_ItemToFlash == ITEM_RADAR && FRAMECOUNTER & 8 || m_ItemToFlash != ITEM_RADAR) {
@@ -12244,6 +12362,69 @@ index 3446f620736da852d5387e038a6836e28d6054c3..0092d8dc210362743bea93d2800eb9ef
 -			Sprites[HUD_RADARDISC].Draw(rect, RADARDISC_COLOR);
 -			CRadar::DrawBlips();
 +			DrawRadarContents();
+ 		}
+ 	}
+ 
+@@ -1390,35 +1891,40 @@ void CHud::DrawAfterFade()
+ 			}
+ 
+ 			m_HelpMessageTimer += CTimer::GetTimeStepInMilliseconds();
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++			if (androidgame::VrHudNotificationEnabled(androidgame::HudNotification::Tips))
++#endif
++			{
+ 
+-			CFont::SetAlphaFade(fAlpha);
+-			CFont::SetCentreOff();
+-			CFont::SetPropOn();
++				CFont::SetAlphaFade(fAlpha);
++				CFont::SetCentreOff();
++				CFont::SetPropOn();
+ 
+-			if (CGame::germanGame)
+-				CFont::SetScale(SCREEN_SCALE_X(0.52f * 0.85f), SCREEN_SCALE_Y(1.1f * 0.85f));
++				if (CGame::germanGame)
++					CFont::SetScale(SCREEN_SCALE_X(0.52f * 0.85f), SCREEN_SCALE_Y(1.1f * 0.85f));
+ #ifdef MORE_LANGUAGES
+-			else if (CFont::IsJapanese())
+-				CFont::SetScale(SCREEN_SCALE_X(0.52f) * 1.35f, SCREEN_SCALE_Y(1.1f) * 1.25f);
++				else if (CFont::IsJapanese())
++					CFont::SetScale(SCREEN_SCALE_X(0.52f) * 1.35f, SCREEN_SCALE_Y(1.1f) * 1.25f);
+ #endif
+-			else
+-				CFont::SetScale(SCREEN_SCALE_X(0.52f), SCREEN_SCALE_Y(1.1f));
++				else
++					CFont::SetScale(SCREEN_SCALE_X(0.52f), SCREEN_SCALE_Y(1.1f));
+ 
+-			CFont::SetColor(CRGBA(175, 175, 175, 255));
+-			CFont::SetJustifyOff();			
++				CFont::SetColor(CRGBA(175, 175, 175, 255));
++				CFont::SetJustifyOff();			
+ #ifdef MORE_LANGUAGES
+-			if (CFont::IsJapanese())
+-				CFont::SetWrapx(SCREEN_SCALE_X(229.0f) + SCREEN_SCALE_X(26.0f) - SCREEN_SCALE_X_FIX(4.0f));
+-			else
++				if (CFont::IsJapanese())
++					CFont::SetWrapx(SCREEN_SCALE_X(229.0f) + SCREEN_SCALE_X(26.0f) - SCREEN_SCALE_X_FIX(4.0f));
++				else
+ #endif
+-				CFont::SetWrapx(SCREEN_SCALE_X(200.0f) + SCREEN_SCALE_X(26.0f) - SCREEN_SCALE_X_FIX(4.0f));
+-			CFont::SetFontStyle(FONT_LOCALE(FONT_BANK));
+-			CFont::SetBackgroundOn();
+-			CFont::SetBackGroundOnlyTextOff();
+-			CFont::SetBackgroundColor(CRGBA(0, 0, 0, fAlpha * 0.9f));
+-			CFont::SetColor(CRGBA(175, 175, 175, 255));
+-			CFont::PrintString(SCREEN_SCALE_X(26.0f), SCREEN_SCALE_Y(28.0f) + SCREEN_SCALE_Y_FIX((150.0f - PagerXOffset) * 0.6f), m_HelpMessageToPrint);
+-			CFont::SetAlphaFade(255.0f);
++					CFont::SetWrapx(SCREEN_SCALE_X(200.0f) + SCREEN_SCALE_X(26.0f) - SCREEN_SCALE_X_FIX(4.0f));
++				CFont::SetFontStyle(FONT_LOCALE(FONT_BANK));
++				CFont::SetBackgroundOn();
++				CFont::SetBackGroundOnlyTextOff();
++				CFont::SetBackgroundColor(CRGBA(0, 0, 0, fAlpha * 0.9f));
++				CFont::SetColor(CRGBA(175, 175, 175, 255));
++				CFont::PrintString(SCREEN_SCALE_X(26.0f), SCREEN_SCALE_Y(28.0f) + SCREEN_SCALE_Y_FIX((150.0f - PagerXOffset) * 0.6f), m_HelpMessageToPrint);
++				CFont::SetAlphaFade(255.0f);
++			}
  		}
  	}
  
@@ -15798,7 +15979,7 @@ index 54a6240383f9c0201c43998b91e2f46fbc982d13..230a47bd3149ad3c3cb5b09f3541912a
  typedef struct
  {
 diff --git a/src/text/Messages.cpp b/src/text/Messages.cpp
-index c9821bb24a5c70a4e8c7b3ec8011c57538329388..ea82c27cd46cd95ef7d542bf81500eff892324a0 100644
+index c9821bb24a5c70a4e8c7b3ec8011c57538329388..a735fc6bfaac773d4674ff151e71f1e8a2d00540 100644
 --- a/src/text/Messages.cpp
 +++ b/src/text/Messages.cpp
 @@ -1,4 +1,5 @@
@@ -15807,7 +15988,38 @@ index c9821bb24a5c70a4e8c7b3ec8011c57538329388..ea82c27cd46cd95ef7d542bf81500eff
  
  #include "Messages.h"
  #include "RwHelper.h"
-@@ -445,50 +446,23 @@ void
+@@ -10,6 +11,9 @@
+ #include "ControllerConfig.h"
+ 
+ #include "Font.h"
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++#include "QuestHudNotifications.h"
++#endif
+ 
+ tMessage CMessages::BriefMessages[NUMBRIEFMESSAGES];
+ tPreviousBrief CMessages::PreviousBriefs[NUMPREVIOUSBRIEFS];
+@@ -124,6 +128,20 @@ CMessages::Display()
+ 	DefinedState();
+ 
+ 	for (int32 i = 0; i < NUMBIGMESSAGES; i++) {
++#if defined(RW_VULKAN) && (defined(__ANDROID__) || defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
++		using androidgame::HudNotification;
++		using androidgame::VrHudNotificationEnabled;
++
++		const wchar *text = BIGMessages[i].m_Stack[0].m_pText;
++		// Style 1 is the mission title. The mission-passed key also appears
++		// in styles shared with other results, including mission failures.
++		if (text && ((i == 1 && !VrHudNotificationEnabled(HudNotification::MissionTitle)) ||
++		    (!VrHudNotificationEnabled(HudNotification::MissionPassed) && text == TheText.Get("M_PASS")))) {
++			outstr[0] = 0;
++			CHud::SetBigMessage(outstr, i);
++			continue;
++		}
++#endif
+ 		InsertNumberInString(
+ 			BIGMessages[i].m_Stack[0].m_pText,
+ 			BIGMessages[i].m_Stack[0].m_nNumber[0],
+@@ -445,50 +463,23 @@ void
  CMessages::InsertPlayerControlKeysInString(wchar *str)
  {
  #ifdef GTA_PC_CONTROLS

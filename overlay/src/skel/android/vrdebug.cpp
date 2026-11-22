@@ -15,6 +15,7 @@
 #include "OculusVR.h"
 #include "QuestRadio.h"
 #include "QuestGameSettings.h"
+#include "QuestHudNotifications.h"
 #include "QuestNativeSettings.h"
 #include "QuestSettingsMenu.h"
 #include "QuestSpeedometer.h"
@@ -466,6 +467,22 @@ static const char *const kWristPanelKey[WRIST_PANEL_COUNT] = {
 // what a new player gets: the immersive layout is what switches them off.
 static bool gHudWeaponPanel = true;
 static bool gHudClock = true;
+static struct HudNotificationSetting {
+	const char *label;
+	const char *key;
+	bool enabled;
+} gHudNotifications[] = {
+	{ "AREA NAME", "HudAreaName", true },
+	{ "VEHICLE NAME", "HudVehicleName", true },
+	{ "MISSION START TITLE", "HudMissionTitle", true },
+	{ "MISSION PASSED", "HudMissionPassed", true },
+	{ "GAMEPLAY TIPS", "HudTips", true },
+	{ "RADIO STATION NAME", "HudRadioStation", true },
+};
+static constexpr int kHudNotificationCount = static_cast<int>(androidgame::HudNotification::Count);
+static_assert(ARRAY_SIZE(gHudNotifications) == kHudNotificationCount,
+	"Every HUD notification needs a setting");
+
 static int gHudWidthPercent = 100;
 static int gHudScalePercent = 130;
 static int gHudOffsetXCm;
@@ -514,6 +531,7 @@ static int gVrLightingSelection;
 static int gVrWaterSelection;
 static int gVrWeaponsSelection;
 static int gVrHudSelection;
+static int gVrHudNotificationSelection;
 static int gVrWristRadarSelection;
 static bool gVrWristCalibrationTurbo;
 static bool gVrWristCalibrationTurboDown;
@@ -669,6 +687,7 @@ enum eVrHudMenuItem {
 	VR_HUD_WEAPON_PANEL,
 	VR_HUD_CLOCK,
 	VR_HUD_SPEEDOMETER,
+	VR_HUD_NOTIFICATIONS,
 	VR_HUD_BACK,
 	VR_HUD_ITEM_COUNT
 };
@@ -1588,6 +1607,9 @@ LoadVrSettings(void)
 		".\\vr_settings.ini") != 0;
 	gHudClock = GetPrivateProfileIntA("VR", "HudClock", 0,
 		".\\vr_settings.ini") != 0;
+	for(auto &notification : gHudNotifications)
+		notification.enabled = GetPrivateProfileIntA("VR", notification.key, 1,
+			".\\vr_settings.ini") != 0;
 	gGameplayHudEnabled =
 		GetPrivateProfileIntA("VR", "GameplayHud", 1,
 			".\\vr_settings.ini") != 0;
@@ -2352,6 +2374,7 @@ CurrentMenuSelection(void)
 	case VR_MENU_PAGE_WATER: return &gVrWaterSelection;
 	case VR_MENU_PAGE_WEAPONS: return &gVrWeaponsSelection;
 	case VR_MENU_PAGE_HUD: return &gVrHudSelection;
+	case VR_MENU_PAGE_HUD_NOTIFICATIONS: return &gVrHudNotificationSelection;
 	case VR_MENU_PAGE_WRIST_RADAR: return &gVrWristRadarSelection;
 	case VR_MENU_PAGE_TRAFFIC: return &gVrTrafficSelection;
 	case VR_MENU_PAGE_RAGDOLL: return &gVrRagdollSelection;
@@ -2392,6 +2415,7 @@ CurrentMenuItemCount(void)
 	case VR_MENU_PAGE_WATER: return VR_WATER_ITEM_COUNT;
 	case VR_MENU_PAGE_WEAPONS: return VR_WEAPONS_ITEM_COUNT;
 	case VR_MENU_PAGE_HUD: return VR_HUD_ITEM_COUNT;
+	case VR_MENU_PAGE_HUD_NOTIFICATIONS: return kHudNotificationCount+1;
 	case VR_MENU_PAGE_WRIST_RADAR: return VR_WRIST_ITEM_COUNT;
 	case VR_MENU_PAGE_TRAFFIC: return VR_TRAFFIC_ITEM_COUNT;
 	case VR_MENU_PAGE_RAGDOLL: return VR_RAGDOLL_ITEM_COUNT;
@@ -2702,7 +2726,8 @@ ReturnFromCurrentMenuPage(void)
 		gVrMenuPage = VR_MENU_PAGE_VEHICLE;
 		return;
 	}
-	if(gVrMenuPage == VR_MENU_PAGE_WRIST_RADAR){
+	if(gVrMenuPage == VR_MENU_PAGE_WRIST_RADAR ||
+	   gVrMenuPage == VR_MENU_PAGE_HUD_NOTIFICATIONS){
 		gVrMenuPage = VR_MENU_PAGE_HUD;
 		return;
 	}
@@ -3684,9 +3709,21 @@ VrDebugUpdate(const PadInput &in)
 				gVrSpeedometerReturnPage = VR_MENU_PAGE_HUD;
 				gVrMenuPage = VR_MENU_PAGE_SPEEDOMETER;
 				break;
+			case VR_HUD_NOTIFICATIONS:
+				gVrMenuPage = VR_MENU_PAGE_HUD_NOTIFICATIONS;
+				break;
 			case VR_HUD_BACK:
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
 				break;
+			}
+		}else if(gVrMenuPage == VR_MENU_PAGE_HUD_NOTIFICATIONS &&
+		         (positivePulse || decreasePulse)){
+			if(gVrHudNotificationSelection == kHudNotificationCount)
+				gVrMenuPage = VR_MENU_PAGE_HUD;
+			else{
+				auto &notification = gHudNotifications[gVrHudNotificationSelection];
+				notification.enabled = !notification.enabled;
+				SaveVrInteger(notification.key, notification.enabled ? 1 : 0);
 			}
 		}else if(gVrMenuPage == VR_MENU_PAGE_WRIST_RADAR &&
 		         (positivePulse || decreasePulse)){
@@ -5013,6 +5050,7 @@ DrawQuestHudPage(void)
 	snprintf(rows[VR_HUD_CLOCK], sizeof(rows[0]),
 		"CLOCK  < %s >", gHudClock ? "ON" : "OFF");
 	strcpy(rows[VR_HUD_SPEEDOMETER], "VEHICLE SPEEDOMETER  < OPEN >");
+	strcpy(rows[VR_HUD_NOTIFICATIONS], "NOTIFICATIONS  < OPEN >");
 	strcpy(rows[VR_HUD_BACK], "BACK TO SETTINGS");
 	int visibleRow = 0;
 	for(int item = 0; item < VR_HUD_ITEM_COUNT; item++){
@@ -5023,6 +5061,23 @@ DrawQuestHudPage(void)
 	}
 	DrawVrMenuText(
 		"LEFT STICK SELECT   L2 MINUS   R2 OR A PLUS   B BACK",
+		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
+}
+
+static void
+DrawQuestHudNotificationsPage(void)
+{
+	BeginFullVrMenuPage("HUD NOTIFICATIONS");
+	for(int item = 0; item < kHudNotificationCount; item++){
+		const auto &notification = gHudNotifications[item];
+		char row[80];
+		snprintf(row, sizeof(row), "%s  < %s >",
+			notification.label, notification.enabled ? "ON" : "OFF");
+		DrawFullVrMenuRow(row, 172+item*48, 3, item == gVrHudNotificationSelection);
+	}
+	DrawFullVrMenuRow("BACK TO HUD SETTINGS", 172+kHudNotificationCount*48, 3,
+		gVrHudNotificationSelection == kHudNotificationCount);
+	DrawVrMenuText("LEFT STICK SELECT   A TOGGLE   B BACK",
 		VR_MENU_WIDTH/2, 718, 2, 210, 190, 145);
 }
 
@@ -5816,6 +5871,9 @@ DrawSharedSettingsPage()
 			break;
 		case VR_MENU_PAGE_HUD:
 			DrawQuestHudPage();
+			break;
+		case VR_MENU_PAGE_HUD_NOTIFICATIONS:
+			DrawQuestHudNotificationsPage();
 			break;
 		case VR_MENU_PAGE_WRIST_RADAR:
 			DrawQuestWristRadarPage();
@@ -6678,6 +6736,13 @@ VrHudClockEnabled(void)
 {
 	LoadVrSettings();
 	return gHudClock;
+}
+
+bool
+VrHudNotificationEnabled(HudNotification notification)
+{
+	LoadVrSettings();
+	return gHudNotifications[static_cast<int>(notification)].enabled;
 }
 
 bool
