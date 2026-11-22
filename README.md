@@ -19,8 +19,10 @@
 > prerequisites, embedded auxiliary runtimes, logs and standalone publishing.
 
 > [!TIP]
-> **Join the Flat2VR Discord!** Development updates, player feedback, testing,
-> and discussion of the mod take place in the Flat2VR community.
+> **[Join the Flat2VR Discord!][flat2vr-discord]** Development updates, player
+> feedback, testing, and discussion of the mod take place there.
+
+[flat2vr-discord]: https://discord.com/channels/747967102895390741/1574137259706548284
 
 Liberty City VR brings GTA III to VR using re3, OpenXR and the bundled librw
 Vulkan renderer. The project covers **standalone Meta Quest 3**, **Windows PCVR**
@@ -69,8 +71,8 @@ persistent user directory. Reimport existing Xbox assets to get the corrected
 head texture coordinates for Maria, Curly Bob and Catalina.
 
 Please report mission progression issues, VR comfort problems and compatibility bugs
-in the Flat2VR community. See [the changelog](CHANGELOG.md#095--release-candidate) for changes
-since 0.9.0.
+in the [Flat2VR Discord][flat2vr-discord]. See
+[the changelog](CHANGELOG.md#095--release-candidate) for changes since 0.9.0.
 
 The port started from **Vice City VR v0.5.6**. **v0.6.0** marks the port of that
 foundation from GTA Vice City to GTA III. **v0.7.0** covers the features and fixes
