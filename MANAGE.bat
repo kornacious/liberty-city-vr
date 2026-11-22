@@ -11,6 +11,8 @@ exit /b %errorlevel%
 set "LCVR_MANAGER_CONHOST="
 if exist "%~dp0out\manager-windows\LibertyManager.exe" (
   "%~dp0out\manager-windows\LibertyManager.exe" %*
+) else if exist "%~dp0Setup\LibertyManager.exe" (
+  "%~dp0Setup\LibertyManager.exe" %*
 ) else (
   dotnet run --project "%~dp0tools\manager\LibertyManager.csproj" -c Release -- %*
 )

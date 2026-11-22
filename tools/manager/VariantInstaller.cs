@@ -97,16 +97,23 @@ public static class VariantInstaller
         File.WriteAllText(Path.Combine(variants,"MANAGED.txt"),"Liberty City VR complete variants v1\n");
         File.WriteAllText(Path.Combine(root,".libertyvr-pcvr-data"),"Liberty City VR local Windows data v1\n");
     }
-    public static async Task InstallQuest(QuestDevice device,string id,string source,CancellationToken token)
+    public static Task InstallQuest(QuestDevice device, string id, string source, CancellationToken token) =>
+        InstallQuest(device, id, source, token, null);
+
+    internal static async Task InstallQuest(QuestDevice device,string id,string source,CancellationToken token,
+        Action<int, int>? onVerified)
     {
         var hashes=Validate(source,id);hashes[".variant-hashes.json"]=Digests.Sha256(Path.Combine(source,".variant-hashes.json"));
         var root=QuestDevice.GameData+"/variants";var stamp=Guid.NewGuid().ToString("N");
         var stage=root+"/.stage-"+id+"-"+stamp;
         var created=new HashSet<string>(StringComparer.Ordinal);
+        var verified = 0;
+        onVerified?.Invoke(verified, hashes.Count);
         foreach(var (p,h) in hashes) {var remote=stage+"/"+p;
             var directory="variants/.stage-"+id+"-"+stamp+"/"+(p.Contains('/')?p[..p.LastIndexOf('/')]:"");
             if(created.Add(directory))await device.Run(["shell","content","call","--uri",QuestDevice.SaveUri,"--method","mkdir","--arg",QuestDevice.Quote(directory.TrimEnd('/'))],token);
             await device.Push(Paths.Child(source,p),remote,token,h);
+            onVerified?.Invoke(++verified, hashes.Count);
         }
         await ActivateQuest(device,id,".stage-"+id+"-"+stamp,token);
     }

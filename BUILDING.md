@@ -13,7 +13,8 @@ data/save locations and pinned dependencies. See the
 and automatic default-prefix dependency builds. Quest APK installation and its
 ADB steps below apply only to the Quest target.
 
-The supported entrypoint on Windows and Linux is the .NET 10 console manager:
+For a guided installation on Windows or Linux, open [Liberty City VR Setup](tools/setup/README.md).
+The rest of this guide covers the .NET 10 terminal manager and advanced workflows.
 
 ```text
 dotnet run --project tools/manager -c Release

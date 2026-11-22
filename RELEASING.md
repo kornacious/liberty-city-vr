@@ -19,8 +19,7 @@ Before a tag or GitHub release:
 2. Confirm the repository contains no APK/AAB/SO/DLL, signing key,
    `release-signing.properties`, game data, save, profiler CSV, log, prepared
    game variant, `.codex*`, `.claude`, `.agents`, `build`, `dist` or cache.
-   No prebuilt executable belongs in the source kit; the retired texture
-   compressor is no longer an exception.
+   Keep compiled installers in separately staged Setup release archives.
    Exclude host-generated test `.inc` files and local iteration reports;
    preserve authored librw shader/font includes and source regression tests.
 3. Assemble from a clean public `mrxenginner/re3` `master` checkout at commit
@@ -48,12 +47,17 @@ Before a tag or GitHub release:
    metadata/resources and the arm64 `liblibertyvr.so`, `libc++_shared.so` and
    Khronos OpenXR loader. Do not add the APK to this source repository.
 7. Review [NOTICE.md](NOTICE.md), [tools/README.md](tools/README.md) and the
-   manager's locked package inventory whenever dependencies change. Local
-   self-contained manager/editor distributions must retain the actual runtime,
-   NuGet and native component license/notice files; CMake installs editor notices.
+   manager and Setup lock files whenever dependencies change. Retain the actual
+   .NET runtime, NuGet and native component license and notice files in each
+   self-contained distribution. For Setup, include Avalonia and the target’s
+   ANGLE or Linux native dependencies, plus SkiaSharp and HarfBuzzSharp notices.
+   Use the pinned package metadata and the corresponding upstream license files
+   when a restored package provides only a license identifier.
 8. Publish the commit/tag only after reviewing the complete GitHub file list.
-   If desired, use GitHub's automatic source archive; do not attach an APK, desktop binary,
-   assembled re3 tree, retail data or a prepared asset variant.
+   Prepare the Windows x64 and Linux x64 [Setup kits](tools/setup/README.md#build-and-package-setup)
+   alongside the automatic source archive. Verify a clean extraction launches
+   on each native desktop. Keep APKs, desktop game binaries, assembled re3,
+   retail data, and prepared asset variants out of release attachments.
 
 For the Windows PCVR RC, build the desktop game and run its CTest checks on
 Windows with the [desktop build workflow](overlay/desktop/README.md). Record the

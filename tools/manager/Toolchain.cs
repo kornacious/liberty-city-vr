@@ -12,7 +12,20 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
     private string Downloads => Path.Combine(settings.Workplace, ".downloads");
     private string Tools => Path.Combine(settings.Workplace, ".tools");
     private static string Exe => OperatingSystem.IsWindows() ? ".exe" : "";
+    private string PortableGit => Path.Combine(Tools, "mingit-2.55.0.3", "cmd/git.exe");
+    internal bool HasGit => Paths.FindExecutable("git") is not null || (OperatingSystem.IsWindows() && File.Exists(PortableGit));
     public string Sdk => string.IsNullOrWhiteSpace(settings.AndroidSdk) ? Path.Combine(settings.Workplace, ".android-sdk") : Path.GetFullPath(settings.AndroidSdk);
+    private string JavaHome => string.IsNullOrWhiteSpace(settings.JavaHome) ? Path.Combine(Tools, "jdk-21.0.11+10") : Path.GetFullPath(settings.JavaHome);
+    internal bool HasJava => File.Exists(Path.Combine(JavaHome, "bin", "java" + Exe));
+    private static readonly Dictionary<string, string> SdkPackages = new()
+    {
+        ["platforms;android-35"] = "platforms/android-35/android.jar",
+        ["build-tools;34.0.0"] = "build-tools/34.0.0/source.properties",
+        ["platform-tools"] = "platform-tools/adb" + Exe,
+        ["ndk;27.2.12479018"] = "ndk/27.2.12479018/source.properties",
+        ["cmake;3.22.1"] = "cmake/3.22.1/bin/cmake" + Exe
+    };
+    internal bool NeedsSdkPackages => SdkPackages.Values.Any(path => !File.Exists(Path.Combine(Sdk, path)));
     public string Java { get; private set; } = "";
 
     public string? FindAdb()
@@ -29,13 +42,12 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
         var git = Paths.FindExecutable("git");
         if (git is not null) return git;
         if (!OperatingSystem.IsWindows()) throw new IOException("Install Git using your Linux package manager.");
-        var home = Path.Combine(Tools, "mingit-2.55.0.3");
-        git = Path.Combine(home, "cmd/git.exe");
+        git = PortableGit;
         if (!File.Exists(git))
         {
             var archive = await Download("https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.3/MinGit-2.55.0.3-64-bit.zip",
                 "MinGit-2.55.0.3-64-bit.zip", "F48E2D2DC74A24454ADC6D8FD0AC25BF9C2386F19CFB06202B9465AAAD4F9F05", token);
-            ExtractZip(archive, home, token);
+            ExtractZip(archive, Path.GetDirectoryName(Path.GetDirectoryName(git))!, token);
         }
         runner.EnvironmentOverrides["PATH"] = Path.GetDirectoryName(git) + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
         return git;
@@ -43,7 +55,7 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
 
     public async Task EnsureJava(CancellationToken token)
     {
-        var home = string.IsNullOrWhiteSpace(settings.JavaHome) ? Path.Combine(Tools, "jdk-21.0.11+10") : Path.GetFullPath(settings.JavaHome);
+        var home = JavaHome;
         Java = Path.Combine(home, "bin", "java" + Exe);
         if (!File.Exists(Java))
         {
@@ -84,14 +96,7 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
             Paths.CopyTree(Path.Combine(stage, "cmdline-tools"), toolHome, token);
             Directory.Delete(stage, true);
         }
-        var packages = new Dictionary<string, string>
-        {
-            ["platforms;android-35"] = "platforms/android-35/android.jar",
-            ["build-tools;34.0.0"] = "build-tools/34.0.0/source.properties",
-            ["platform-tools"] = "platform-tools/adb" + Exe,
-            ["ndk;27.2.12479018"] = "ndk/27.2.12479018/source.properties",
-            ["cmake;3.22.1"] = "cmake/3.22.1/bin/cmake" + Exe
-        };
+        var packages = SdkPackages;
         var missing = packages.Where(p => !File.Exists(Path.Combine(Sdk, p.Value))).Select(p => p.Key).ToArray();
         if (missing.Length == 0) return;
         if (!acceptLicenses) throw new IOException("SDK packages are missing. Read Google's Android SDK licenses, then enable the license acceptance option to install them.");
@@ -130,6 +135,15 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
         return source;
     }
 
+    private const string AstcVersion = "5.7.1";
+    private static string AstcArchive => $"astcenc-{AstcVersion}-{(OperatingSystem.IsWindows() ? "windows" : "linux")}-x64.zip";
+    private string AstcDirectory => Path.Combine(Tools, Path.GetFileNameWithoutExtension(AstcArchive));
+    private string AstcFallback => Path.Combine(AstcDirectory, "bin", "astcenc-sse2" + Exe);
+
+    internal bool CanUseAstcEncoder => AstcTextureCache.FindEncoder(settings) is not null ||
+        (string.IsNullOrWhiteSpace(settings.AstcEncoder) &&
+            (File.Exists(AstcFallback) || File.Exists(Path.Combine(Downloads, AstcArchive)) || settings.AllowToolDownloads));
+
     public async Task<string> AstcEncoder(CancellationToken token)
     {
         if (AstcTextureCache.FindEncoder(settings) is { } executable)
@@ -138,17 +152,15 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
             throw new IOException("The configured Arm ASTC encoder was not found.");
         if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
             throw new IOException("Install a native Arm astcenc or choose its executable in Manager Settings.");
-        const string version = "5.7.1";
-        var platform = OperatingSystem.IsWindows() ? "windows" : "linux";
-        var name = $"astcenc-{version}-{platform}-x64.zip";
-        var directory = Path.Combine(Tools, Path.GetFileNameWithoutExtension(name));
-        var fallback = Path.Combine(directory, "bin", "astcenc-sse2" + Exe);
+        var name = AstcArchive;
+        var directory = AstcDirectory;
+        var fallback = AstcFallback;
         if (!File.Exists(fallback))
         {
             var digest = OperatingSystem.IsWindows() ?
                 "117ED7CC2B0CC4F3D5774EAA1BDE3A2BA75695C2F490E84E4A08D1726C963DB8" :
                 "F1D576F0801E7701548DA78D782F4BF70DFDE3673A238D1A2AC0EBD3511B2F37";
-            var zip = await Download($"https://github.com/ARM-software/astc-encoder/releases/download/{version}/{name}",
+            var zip = await Download($"https://github.com/ARM-software/astc-encoder/releases/download/{AstcVersion}/{name}",
                 name, digest, token);
             ExtractZip(zip, directory, token);
         }
@@ -164,7 +176,29 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
     public string FindCMake() => !string.IsNullOrWhiteSpace(settings.CMake)
         ? Paths.FindExecutable(settings.CMake) ?? throw new IOException("Configured CMake was not found.")
         : Paths.FindExecutable("cmake") ?? (File.Exists(Path.Combine(Sdk, "cmake/3.22.1/bin/cmake" + Exe))
-            ? Path.Combine(Sdk, "cmake/3.22.1/bin/cmake" + Exe) : throw new IOException("Install CMake 3.22+ or configure its executable in Settings."));
+            ? Path.Combine(Sdk, "cmake/3.22.1/bin/cmake" + Exe) : FindCompilerTool("cmake") ??
+                throw new IOException("Install CMake 3.22+ or configure its executable in Settings."));
+
+    internal string? FindCompilerTool(string name)
+    {
+        if (runner.EnvironmentOverrides.TryGetValue("PATH", out var search))
+            foreach (var directory in search.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var path = Path.Combine(directory.Trim('"'), name + Exe);
+                if (File.Exists(path)) return path;
+            }
+        return Paths.FindExecutable(name);
+    }
+
+    internal string? FindNinja(string cmake)
+    {
+        var directory = Path.GetDirectoryName(cmake)!;
+        return FindCompilerTool("ninja") ?? new[]
+        {
+            Path.Combine(directory, "ninja" + Exe),
+            Path.GetFullPath(Path.Combine(directory, "../../Ninja/ninja" + Exe))
+        }.FirstOrDefault(File.Exists);
+    }
 
     public async Task<string> Download(string url, string name, string sha256, CancellationToken token)
     {

@@ -2,21 +2,19 @@
 
 > **0.9.5 Release Candidate is a source-only release for Quest 3 and Windows PCVR. Linux PCVR is experimental.**
 >
-> Open the cross-platform **Liberty City VR Manager** with `MANAGE.bat` on
-> Windows or `./MANAGE.sh` on Linux. Both also support
-> `dotnet run --project tools/manager -c Release`.
-> Select **Build and install**, configure the action, then choose **Perform**.
-> The .NET 10 / Terminal.Gui 2.5.0 application also includes the vehicle editor
-> builder, music importer, Original Xbox importer, game-file repair, updater,
-> shared settings, file browsing, and auxiliary tools/tests.
+> Start with **Liberty City VR Setup**. Open `Setup/LibertySetup.exe` on Windows or
+> `Setup/LibertySetup` from a packaged Linux kit. Choose where you’ll play,
+> select your GTA III files, and follow the checklist. A source checkout
+> can also start Setup with `sh SETUP.sh` on Linux and the .NET 10 SDK.
 >
 > Downloads of portable build tools retain pinned SHA256 checks. SDK package
 > installation requires explicit license consent. Game data comes only from
 > your local GTA III PC installation or supported Original Xbox US 1.0 disc image. Existing app data and saves
 > are preserved; an incompatible Quest signing key stops APK installation.
 >
-> See [the manager guide](tools/manager/README.md) for configuration,
-> prerequisites, embedded auxiliary runtimes, logs and standalone publishing.
+> See the [Setup guide](tools/setup/README.md) for first-time setup. Open
+> `MANAGE.bat` or `./MANAGE.sh` for the [terminal manager](tools/manager/README.md),
+> advanced options, and automated installs.
 
 > [!TIP]
 > **[Join the Flat2VR Discord!][flat2vr-discord]** Development updates, player

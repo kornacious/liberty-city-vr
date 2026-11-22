@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="LibertySetup.SetupWindow"
+        Title="Liberty City VR Setup" Icon="avares://LibertySetup/Assets/StreetMarker.png" Width="960" Height="682"
+        MinWidth="650" MinHeight="460" WindowStartupLocation="CenterScreen">
+  <Grid ColumnDefinitions="202,*">
+    <Border Background="{StaticResource SideBrush}" BorderBrush="{StaticResource LineBrush}"
+            BorderThickness="0,0,1,0" ClipToBounds="True">
+      <DockPanel LastChildFill="False">
+        <StackPanel DockPanel.Dock="Top" Margin="25,28,18,0" Spacing="19">
+          <StackPanel Spacing="5">
+            <Border Background="{StaticResource AmberBrush}" Height="4" Width="36"
+                    CornerRadius="2" HorizontalAlignment="Left" Margin="0,0,0,9" />
+            <TextBlock Text="LIBERTY&#10;CITY VR" FontWeight="Black" FontSize="29" LineHeight="29" />
+            <TextBlock Text="SETUP" FontWeight="Bold" Foreground="{StaticResource CyanBrush}" FontSize="14"
+                       LetterSpacing="3" />
+          </StackPanel>
+          <Border Background="{StaticResource LineBrush}" Height="1" />
+          <StackPanel x:Name="StepList" Spacing="13" />
+        </StackPanel>
+        <!-- Original street-grid illustration, drawn from geometric primitives. -->
+        <Viewbox DockPanel.Dock="Bottom" Stretch="Uniform" Opacity="0.8" IsHitTestVisible="False">
+          <Canvas Width="202" Height="150">
+            <Path Fill="#142D45" Data="M0,68 L62,35 98,43 144,13 202,21 202,150 0,150 Z" />
+            <Path Fill="#1A3850" Data="M0,105 L56,71 103,82 165,37 202,47 202,150 0,150 Z" />
+            <Path Stroke="#2B5871" StrokeThickness="2" Data="M-12,130 L58,88 109,99 174,54 215,64 M-12,144 L62,101 113,113 179,68 215,77 M21,97 L37,128 69,150 M53,77 L75,120 99,150 M87,78 L97,112 126,150 M117,73 L142,120 163,150 M145,56 L172,113 190,150 M173,34 L196,81 212,103 M0,149 L67,113 116,126 186,81 210,86" />
+            <Path Stroke="#67CBDE" StrokeThickness="2" Data="M-6,122 L57,83 108,93 171,48 206,55" />
+            <Ellipse Canvas.Left="100" Canvas.Top="87" Width="11" Height="11" Fill="#FFC56E" />
+          </Canvas>
+        </Viewbox>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Column="1" RowDefinitions="*,Auto">
+      <ScrollViewer x:Name="PageScroll" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="Page" Margin="34,28,34,21" Spacing="14" />
+      </ScrollViewer>
+      <Border Grid.Row="1" BorderBrush="{StaticResource LineBrush}" BorderThickness="0,1,0,0"
+              Padding="22,13">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <Button x:Name="HelpButton" Content="Setup help" HorizontalAlignment="Left" />
+          <Button x:Name="BackButton" Grid.Column="1" Content="Back" Margin="0,0,8,0" />
+          <Button x:Name="NextButton" Grid.Column="2" Classes="accent" MinWidth="110" Content="Continue" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

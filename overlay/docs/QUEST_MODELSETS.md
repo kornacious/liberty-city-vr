@@ -33,7 +33,9 @@ save deletion or original-data replacement is part of this migration.
 
 ### Quest 3 texture comparison
 
-In the Manager's Quest 3 **Build and install** page, enable **Cache ASTC textures
+The graphical [Liberty City VR Setup](../../tools/setup/README.md) prepares
+an ASTC cache for each Quest 3 import automatically. When using the terminal
+Manager's Quest 3 **Build and install** page, enable **Cache ASTC textures
 for Quest 3** and select each variant you want to convert. The Manager can
 download a checksum-verified [Arm astcenc](https://github.com/ARM-software/astc-encoder/releases)
 on x64 with tool downloads enabled. You can also supply a local encoder on

@@ -1,0 +1,71 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="LibertySetup.SetupApp"
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <SolidColorBrush x:Key="CanvasBrush" Color="#091424" />
+    <SolidColorBrush x:Key="SideBrush" Color="#0D1C31" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#13263C" />
+    <SolidColorBrush x:Key="LineBrush" Color="#314861" />
+    <SolidColorBrush x:Key="CreamBrush" Color="#FFF1D6" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#AFC1D2" />
+    <SolidColorBrush x:Key="CyanBrush" Color="#72DFF1" />
+    <SolidColorBrush x:Key="AmberBrush" Color="#FFC56E" />
+    <SolidColorBrush x:Key="AccentButtonForeground" Color="#091424" />
+    <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#091424" />
+    <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#091424" />
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#72DFF1" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource CanvasBrush}" />
+      <Setter Property="Foreground" Value="{StaticResource CreamBrush}" />
+      <Setter Property="FontFamily" Value="Segoe UI, Noto Sans, DejaVu Sans" />
+      <Setter Property="FontSize" Value="15" />
+    </Style>
+    <Style Selector="TextBlock">
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="LineHeight" Value="23" />
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="TextBlock.heading">
+      <Setter Property="FontSize" Value="33" />
+      <Setter Property="LineHeight" Value="40" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="17" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.status">
+      <Setter Property="Foreground" Value="{StaticResource AmberBrush}" />
+    </Style>
+    <Style Selector="TextBlock.current">
+      <Setter Property="Foreground" Value="{StaticResource CyanBrush}" />
+      <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="9" />
+      <Setter Property="Padding" Value="16,12" />
+    </Style>
+    <Style Selector="Button">
+      <Setter Property="Padding" Value="14,9" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="RadioButton">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+  </Application.Styles>
+</Application>

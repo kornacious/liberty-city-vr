@@ -89,7 +89,10 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
     }
     public async Task<MusicLibrarySnapshot> MusicLibrary(CancellationToken token) => await new MusicLibraryClient(await Connect(token) ?? throw new IOException("Connect an authorized Quest 3 and press Refresh."), settings, log).Read(token);
 
-    public async Task Build(ActionOptions options, bool updateOnly, CancellationToken token)
+    public Task Build(ActionOptions options, bool updateOnly, CancellationToken token) =>
+        Build(options, updateOnly, token, null);
+
+    internal async Task Build(ActionOptions options, bool updateOnly, CancellationToken token, InstallRun? install)
     {
         if (options.Target != GameTarget.Quest) throw new InvalidDataException("The updater builds Quest only. Select Windows PCVR under Build and install for desktop updates.");
         if (updateOnly && File.Exists(Path.Combine(settings.Repository, "tools/update-required-assets.txt")))
@@ -104,6 +107,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         var source = await tools.Re3(token);
         var assembled = Path.Combine(settings.Workplace, "liberty-city-vr-build");
         if (Directory.Exists(assembled) || File.Exists(assembled)) assembled += "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6];
+        install?.Report(InstallStage.PreparingGameFiles);
         log.Write("Assembling private Quest source. Previous build directories are preserved.");
         await Assemble(settings.Repository, source, assembled, git, runner, log, token);
         var variants = !options.BuildOnly && !updateOnly
@@ -111,18 +115,37 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             : new Dictionary<string,string>();
         var gradle = await tools.Gradle(token);
         var variant = options.Release ? "release" : "debug";
+        install?.Report(InstallStage.BuildingGame);
         await runner.Run(tools.Java, ["-Xmx64m", "-Xms64m", "-Dorg.gradle.appname=gradle", "-classpath",
             Path.Combine(gradle, "lib/gradle-gradle-cli-main-8.13.jar"), "org.gradle.launcher.GradleMain",
             ":app:assemble" + (options.Release ? "Release" : "Debug"), "--no-daemon"], Path.Combine(assembled, "android"), token: token);
         var apk = Path.Combine(assembled, $"android/app/build/outputs/apk/{variant}/app-{variant}.apk");
         if (!File.Exists(apk)) throw new IOException("Build did not produce the expected signed APK. Configure release signing for release builds.");
         LastApk = apk;
+        if (install is not null) install.Built = true;
         log.Write("APK: " + apk);
         log.Write("APK SHA256: " + Digests.Sha256(apk));
         if (options.BuildOnly) { log.Write("Build complete. Installation disabled by Build only."); return; }
+        install?.Report(InstallStage.ConnectingHeadset);
         var device = await Connect(token);
         if (device is null) return;
-        await device.Run(["install", "-r", apk], token);
+        install?.Report(InstallStage.InstallingApplication);
+        if (install is null) await device.Run(["install", "-r", apk], token);
+        else
+        {
+            var result = await device.Run(["install", "-r", apk], token, check: false);
+            if (result.ExitCode != 0)
+            {
+                var reason = result.Output.Contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE", StringComparison.Ordinal)
+                    ? "This build uses a different signing key from the installed game. Use the original key to keep your game data and saves."
+                    : result.Output.Contains("INSTALL_FAILED_VERSION_DOWNGRADE", StringComparison.Ordinal)
+                        ? "A newer game version is installed. Open Setup from a source kit at least as recent as that version."
+                        : result.Output.Contains("INSTALL_FAILED_INSUFFICIENT_STORAGE", StringComparison.Ordinal)
+                            ? "Free some storage on your Quest 3 and try again."
+                            : "The headset did not accept the application.";
+                throw new IOException(reason);
+            }
+        }
         log.Write("APK updated on personal Quest 3 device.");
         if (updateOnly) { log.Write("Update complete. Launch the game from the headset when ready."); return; }
         await device.Bootstrap(token);
@@ -130,10 +153,16 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         if (options.ConvertRadioStations && !VariantInstaller.WantsAny(options))
             await new RadioStations(settings, runner, log).ConvertAndInstall(device,
                 null, token);
-        foreach(var (id,prepared) in variants) await VariantInstaller.InstallQuest(device,id,prepared,token);
+        foreach (var (id, prepared) in variants)
+        {
+            install?.Report(InstallStage.InstallingGameFiles);
+            await VariantInstaller.InstallQuest(device, id, prepared, token, install is null ? null :
+                (completed, total) => install.Report(InstallStage.InstallingGameFiles, completed, total, countingFiles: true));
+        }
         // Preserve the legacy-root repair path for application-only updates.
         if(variants.Count==0) await CopyPortAssets(device,Path.Combine(assembled,"gamefiles"),includeHands:true,token);
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
+        if (install is not null) install.Installed = true;
         log.Write("Installation complete. Launch Liberty City VR from the headset.");
     }
 

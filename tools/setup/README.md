@@ -1,0 +1,59 @@
+# Liberty City VR Setup
+
+Use Setup on a Windows x64 or Linux x64 computer. It builds Liberty City VR
+locally and installs it on your Quest 3 or on this computer for PCVR. Bring
+your own original GTA III PC installation folder, Original Xbox US 1.0
+disc image, or both.
+
+1. Extract the entire Setup kit to a writable folder. On Windows, open
+   `Setup/LibertySetup.exe` or use `SETUP.bat`. On Linux, open
+   `Setup/LibertySetup`. Linux needs the
+   X11, ICE, SM, and fontconfig libraries and uses XWayland in a Wayland session.
+   If the window doesn’t open, use the package manager to install the missing
+   libraries. On Debian or Ubuntu, the packages are `libx11-6`, `libice6`,
+   `libsm6`, and `libfontconfig1`. On Arch or CachyOS, install `libx11`,
+   `libice`, `libsm`, and `fontconfig`.
+2. Choose **Quest 3 standalone** or your computer’s **PCVR** target. Linux PCVR
+   is experimental. For Quest, enable Developer Mode, connect the headset by USB
+   and accept the USB debugging prompt inside the headset.
+3. Select your GTA III files and follow the checklist. Setup can obtain pinned
+   build tools. Windows PCVR requires Visual Studio C++ tools, the Vulkan SDK,
+   and the [desktop dependency build](../../overlay/desktop/README.md#dependencies).
+   Linux PCVR needs the development packages on that same page. If a check fails,
+   open **Setup help** and use **Check again** after resolving the item.
+4. Select **Install**. The first build can take a while. Use the desktop shortcut
+   for PCVR, or open Liberty City VR under Unknown Sources in the Quest app library.
+   If the headset installation is pending, connect or authorize the headset and retry.
+
+Setup reads the existing manager’s configuration and applies help-page changes
+for the current session. Reuse the same build folder and signing key on Quest
+when reinstalling. Setup preserves your original files and uses the manager’s
+existing install and save locations. The progress screen can open a local,
+sanitized setup log if you need technical details.
+
+On Linux, open **Setup help** and choose **Add Setup to app menu** to use the
+Street Marker launcher. If you move the kit, use the button again to update the
+launcher’s location.
+
+Use the [terminal manager](../manager/README.md) for command-line parameters,
+tool-specific settings, the vehicle editor, diagnostics, or developer tools.
+
+## Build and package Setup
+
+From the checkout with the .NET 10 SDK, run
+`dotnet run --project tools/setup -c Release --artifacts-path out/setup-local-build`.
+Use a native Windows or Linux x64 host to verify its release build.
+
+```text
+dotnet publish tools/setup -c Release -r win-x64 --self-contained true -p:RestoreLockedMode=true -o out/setup-win-x64
+dotnet publish tools/setup -c Release -r linux-x64 --self-contained true -p:RestoreLockedMode=true -o out/setup-linux-x64
+```
+
+For each release archive, start with the tracked files of the corresponding
+source tag and put that target’s complete publish output in a top-level
+`Setup/` folder. Keep the launchers at the archive root. Make
+`Setup/LibertySetup` and `Setup/LibertyManager` executable before creating the Linux tarball. The Windows
+kit is a ZIP. Include the runtime license and third-party notices described in
+the [release checklist](../../RELEASING.md). Each archive contains the
+installer and source kit. Game binaries, assembled re3, original game files,
+prepared variants, and saves stay local.

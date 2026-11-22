@@ -135,19 +135,12 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             return (cm,nj,"","",linuxShader);
         }
         await WindowsCompiler.Configure(runner,token);
-        string? Find(string name)
-        {
-            if (runner.EnvironmentOverrides.TryGetValue("PATH",out var search))
-                foreach (var dir in search.Split(Path.PathSeparator))
-                { var path=Path.Combine(dir,name+".exe"); if (File.Exists(path)) return path; }
-            return Paths.FindExecutable(name);
-        }
-        if (Find("cl") is null) throw new IOException("Install Visual Studio C++ x64 build tools.");
-        var cmake=string.IsNullOrWhiteSpace(settings.CMake) ? Find("cmake") : Paths.FindExecutable(settings.CMake);
+        var tools = new Toolchain(settings, runner, log);
+        if (tools.FindCompilerTool("cl") is null) throw new IOException("Install Visual Studio C++ x64 build tools.");
+        var cmake=string.IsNullOrWhiteSpace(settings.CMake) ? tools.FindCompilerTool("cmake") : Paths.FindExecutable(settings.CMake);
         if (cmake is null) throw new IOException("Install CMake and configure its executable in Settings.");
-        var ninja=Find("ninja") ?? new[] { Path.Combine(Path.GetDirectoryName(cmake)!,"ninja.exe"),
-            Path.GetFullPath(Path.Combine(Path.GetDirectoryName(cmake)!,"../../Ninja/ninja.exe")) }.FirstOrDefault(File.Exists) ?? "";
-        if (!File.Exists(ninja)) throw new IOException("Install Ninja (included with Visual Studio CMake tools) and add it to PATH.");
+        var ninja = tools.FindNinja(cmake);
+        if (ninja is null) throw new IOException("Install Ninja (included with Visual Studio CMake tools) and add it to PATH.");
         var sdk=settings.VulkanSdk;
         if (string.IsNullOrWhiteSpace(sdk)) throw new IOException("Install a Vulkan SDK and select its directory in Settings (or set VULKAN_SDK).");
         var include=Path.Combine(sdk,"Include");
@@ -183,25 +176,48 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             if (!File.Exists(Paths.Child(source,file))) throw new IOException("Choose the complete OpenXR-SDK 1.1.58 source directory, or leave it blank for the pinned download.");
         return source;
     }
+    private bool HasDependencies => Directory.Exists(Path.Combine(Prefix, "include", "SDL3")) &&
+        Directory.Exists(Path.Combine(Prefix, "include", "libavcodec")) &&
+        File.Exists(Path.Combine(Prefix, "share", "libertyvr-dependencies", "config.mak"));
+
+    private bool CanBuildDependencies => Linux && string.IsNullOrWhiteSpace(settings.LinuxPcvrDependencyPrefix);
+
+    private static readonly string[] DependencyTools = ["curl", "tar", "sha256sum", "make", "pkg-config", "nasm"];
+
+    internal async Task<bool> CheckSetupTools(CancellationToken token)
+    {
+        RequireHost();
+        Layout();
+        var tools = await FindTools(token);
+        if (!File.Exists(Path.Combine(Path.GetDirectoryName(tools.Cmake)!, Executable("ctest"))))
+            throw new IOException("Install CMake with CTest.");
+        if (HasDependencies) return true;
+        if (!CanBuildDependencies)
+            throw new IOException("Prepare the desktop libraries using the PCVR build guide, then check again.");
+        var missing = DependencyTools.Prepend("bash").Where(name => Paths.FindExecutable(name) is null).ToArray();
+        if (missing.Length > 0)
+            throw new IOException("Install these Linux build tools: " + string.Join(", ", missing) + ".");
+        return false;
+    }
+
     private async Task EnsureDependencies(CancellationToken token)
     {
-        bool Available() => Directory.Exists(Path.Combine(Prefix,"include","SDL3")) &&
-            Directory.Exists(Path.Combine(Prefix,"include","libavcodec")) &&
-            File.Exists(Path.Combine(Prefix,"share","libertyvr-dependencies","config.mak"));
-        if (Available()) return;
-        if (!Linux || !string.IsNullOrWhiteSpace(settings.LinuxPcvrDependencyPrefix))
+        if (HasDependencies) return;
+        if (!CanBuildDependencies)
             throw new IOException("Desktop dependencies are missing or incomplete at " + Prefix +
                 ". Build them with tools/desktop/build-deps.sh CACHE PREFIX linux (Linux) or tools/desktop/build-deps.ps1 (Windows). On Linux, clear the dependency prefix setting to build them automatically at the default location. See overlay/desktop/README.md for prerequisites.");
         var bash=Paths.FindExecutable("bash") ?? throw new IOException("Install Bash to build Linux desktop dependencies.");
-        foreach (var command in new[] { "curl", "tar", "sha256sum", "make", "pkg-config", "nasm" })
+        foreach (var command in DependencyTools)
             if (Paths.FindExecutable(command) is null)
                 throw new IOException("Install " + command + " to build Linux desktop dependencies. See overlay/desktop/README.md for prerequisites.");
         log.Write("Building pinned SDL3 and FFmpeg dependencies. The first build downloads verified source archives and can take several minutes. Linux X11, Wayland/EGL and audio development packages must already be installed; see overlay/desktop/README.md.");
         await runner.Run(bash,[Path.Combine(settings.Repository,"tools","desktop","build-deps.sh"),
             Path.Combine(settings.Repository,".cache","desktop-deps"),Prefix,"linux"],settings.Repository,token:token);
-        if (!Available()) throw new IOException("Desktop dependency build did not produce a complete prefix at " + Prefix + ". See the preceding build output.");
+        if (!HasDependencies) throw new IOException("Desktop dependency build did not produce a complete prefix at " + Prefix + ". See the preceding build output.");
     }
-    public async Task Build(ActionOptions options,CancellationToken token)
+    public Task Build(ActionOptions options, CancellationToken token) => Build(options, token, null);
+
+    internal async Task Build(ActionOptions options, CancellationToken token, InstallRun? progress)
     {
         RequireHost(); var paths=Layout();
         if (!options.PcvrBuildOnly)
@@ -217,8 +233,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         var id=DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..6];
         var work=Path.Combine(settings.Workplace,Linux?"linux-pcvr-builds":"windows-pcvr-builds",id);
         var assembled=Path.Combine(work,"source"); var build=Path.Combine(work,"build");
+        progress?.Report(InstallStage.PreparingGameFiles);
         await Workflows.Assemble(settings.Repository,source,assembled,git,runner,log,token);
         var variants = !options.PcvrBuildOnly ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token) : new Dictionary<string,string>();
+        progress?.Report(InstallStage.BuildingGame);
         await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"desktop"),"-B",build,"-G","Ninja",
             "-DCMAKE_BUILD_TYPE=Release","-DCMAKE_MAKE_PROGRAM="+found.Ninja,"-DLIBERTYVR_RE3_ROOT="+assembled,
             "-DLIBERTYVR_DESKTOP_PREFIX="+Prefix,"-DGLSLC="+found.Shader,
@@ -228,26 +246,42 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         await runner.Run(found.Cmake,["--build",build,"--parallel","8"],token:token);
         var ctest=Path.Combine(Path.GetDirectoryName(found.Cmake)!,Executable("ctest"));
         await runner.Run(ctest,["--test-dir",build,"--output-on-failure"],token:token);
+        if (progress is not null) progress.Built = true;
         log.Write(Name+" Release build and selected checks passed: "+build);
         if (options.PcvrBuildOnly) { log.Write("Build only: installation and game-data preparation skipped."); return; }
         Directory.CreateDirectory(paths.Data);
         Directory.CreateDirectory(Path.Combine(paths.Data,"variants"));
-        foreach(var (variant,prepared) in variants)VariantInstaller.InstallLocal(paths.Data,variant,prepared,token);
+        var installedVariants = 0;
+        foreach (var (variant, prepared) in variants)
+        {
+            progress?.Report(InstallStage.InstallingGameFiles, installedVariants, variants.Count);
+            VariantInstaller.InstallLocal(paths.Data, variant, prepared, token);
+            progress?.Report(InstallStage.InstallingGameFiles, ++installedVariants, variants.Count);
+        }
         File.WriteAllText(Path.Combine(paths.Data,".libertyvr-pcvr-data"),"Liberty City VR local Windows data v1\n");
         Workflows.RefreshWindowsPortFiles(settings.Repository,paths.Data,token);
         Directory.CreateDirectory(paths.Install);
         var install=Path.Combine(work,"package");
+        progress?.Report(InstallStage.InstallingApplication);
         await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
         foreach (var notice in new[] { "LICENSE", "NOTICE.md" })
             File.Copy(Path.Combine(settings.Repository,notice),Path.Combine(install,notice),true);
         File.WriteAllText(Path.Combine(install,PcvrBuilds.Identity),id+"\n");
         PcvrBuilds.WritePaths(install,Path.Combine(paths.Install,"current"),paths.Data,paths.User);
         PcvrBuilds.Publish(paths.Install,install,id,paths,token);
+        if (progress is not null)
+        {
+            progress.Installed = true;
+            progress.OutputPath = Path.Combine(paths.Install, "current");
+        }
         if (options.PcvrDesktopShortcut)
         {
             try { await PcvrShortcuts.Create(paths,token); }
             catch (Exception error)
-            { log.Write("Build installed; desktop shortcut was not updated: "+error.Message); }
+            {
+                if (progress is not null) progress.ShortcutFailed = true;
+                log.Write("Build installed; desktop shortcut was not updated: " + error.Message);
+            }
         }
         log.Write(Name+" installed: "+Path.Combine(paths.Install,"current")+". Previous versions, game data and saves preserved.");
         log.Write("Use Launch PCVR to play, or PCVR diagnostics to check the active runtime.");

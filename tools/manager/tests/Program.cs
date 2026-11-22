@@ -52,6 +52,32 @@ File.WriteAllText(Path.Combine(repository, "overlay/android/app/build.gradle.kts
 var config = new ManagerSettings { Repository = repository, Workplace = Path.Combine(root, "work") };
 const string goodProbe = """{"streams":[{"codec_type":"audio","codec_name":"mp3","channels":2,"sample_rate":"44100"}],"format":{"duration":"10.2"}}""";
 
+await Test("Graphical setup validates local game selections without creating a workplace", async () =>
+{
+    var pc = Path.Combine(root, "setup-retail-fixture");
+    foreach (var folder in new[] { "data", "TEXT", "anim", "models", "movies", "Audio" })
+        Directory.CreateDirectory(Path.Combine(pc, folder));
+    File.WriteAllText(Path.Combine(pc, "Audio", "sfx.RAW"), "");
+    File.WriteAllText(Path.Combine(pc, "Audio", "sfx.SDT"), "");
+    var invalidIso = Path.Combine(root, "setup-wrong-disc.iso");
+    File.WriteAllText(invalidIso, "fixture");
+    SetupInstaller.CheckGameFiles(new(GameTarget.Quest, pc, null));
+    Throws<InvalidDataException>(() => SetupInstaller.CheckGameFiles(new(GameTarget.Quest, pc, invalidIso)));
+    Throws<InvalidDataException>(() => SetupInstaller.CheckGameFiles(new(GameTarget.Quest, null, null)));
+
+    using var log = new PrivateLog();
+    var workspace = Path.Combine(root, "setup-unused-workspace");
+    var installer = new SetupInstaller(config with { Workplace = workspace }, log);
+    var result = await installer.Install(new(GameTarget.Quest, null, null), null, default);
+    Assert(result is { Status: InstallStatus.Failed, Stage: InstallStage.CheckingSetup, Built: false });
+    Assert(result.Message.Contains("Choose the folder"));
+    using var cancelled = new CancellationTokenSource();
+    cancelled.Cancel();
+    result = await installer.Install(new(GameTarget.Quest, pc, null), null, cancelled.Token);
+    Assert(result is { Status: InstallStatus.Cancelled, Stage: InstallStage.CheckingSetup, Built: false });
+    Assert(!Directory.Exists(workspace));
+});
+
 await Test("File browser places, expansion, navigation and layout", FileBrowserChecks.Run);
 await Test("Windows and Linux workplace defaults", () =>
 { Assert(ManagerSettings.DefaultWorkplace(true) == @"C:\LCVRBuild"); Assert(ManagerSettings.DefaultWorkplace(false).EndsWith("LCVRBuild")); return Task.CompletedTask; });

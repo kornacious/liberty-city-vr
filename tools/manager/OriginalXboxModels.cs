@@ -161,8 +161,8 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
         var tools = new Toolchain(settings, runner as CommandRunner ?? new CommandRunner(log), log);
         var cmake = tools.FindCMake(); var build = Path.Combine(settings.Workplace, "original-xbox/converter");
         var args = new List<string> { "-S", Path.Combine(settings.Repository, "tools/modelsets"), "-B", build, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_TRY_COMPILE_CONFIGURATION=Release" };
-        var ninja = Paths.FindExecutable("ninja") ?? Path.Combine(Path.GetDirectoryName(cmake)!, "ninja" + (OperatingSystem.IsWindows() ? ".exe" : ""));
-        if (File.Exists(ninja)) args.Add("-DCMAKE_MAKE_PROGRAM=" + ninja);
+        var ninja = tools.FindNinja(cmake);
+        if (ninja is not null) args.Add("-DCMAKE_MAKE_PROGRAM=" + ninja);
         await runner.Run(cmake, args, token: token);
         await runner.Run(cmake, ["--build", build, "--config", "Release", "--parallel", "4"], token: token);
         var ctest = Path.Combine(Path.GetDirectoryName(cmake)!, "ctest" + (OperatingSystem.IsWindows() ? ".exe" : ""));
