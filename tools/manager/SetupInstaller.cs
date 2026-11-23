@@ -150,6 +150,13 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                         SetupCheckStatus.Automatic);
                 });
         }
+        else if (PcvrWorkflow.SetupBundle(local.Repository, selection.Target) is { } bundle)
+            await Probe("Prebuilt PCVR package", () =>
+            {
+                PcvrWorkflow.ValidateSetupBundle(bundle, selection.Target);
+                Add("Prebuilt PCVR package", "Found the desktop game and the Original Xbox converter.");
+                return Task.CompletedTask;
+            });
         else
             await Probe("PCVR build tools", async () =>
             {
@@ -206,7 +213,8 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                     return Result(InstallStatus.HeadsetPending, "Connect your Quest 3, accept USB debugging inside the headset, then retry.");
                 return Result(InstallStatus.Installed, "Open the app library on your Quest 3, choose Unknown Sources, and open Liberty City VR.");
             }
-            await new PcvrWorkflow(local, runner, log, options.Target).Build(options, token, run);
+            var bundle = PcvrWorkflow.SetupBundle(local.Repository, options.Target);
+            await new PcvrWorkflow(local, runner, log, options.Target).Build(options, token, run, bundle);
             return Result(InstallStatus.Installed, run.ShortcutFailed
                 ? "Open the install folder to start the game. Setup could not create a desktop shortcut."
                 : "Connect your headset through your PCVR software, then open Liberty City VR from your desktop.");

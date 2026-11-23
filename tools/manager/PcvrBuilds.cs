@@ -165,7 +165,7 @@ public static class PcvrBuilds
         }
     }
 
-    private static void CopyPackage(string source, string destination, CancellationToken token)
+    internal static void CopyPackage(string source, string destination, CancellationToken token)
     {
         Paths.NoLinks(source); Directory.CreateDirectory(destination);
         foreach (var entry in Directory.EnumerateFileSystemEntries(source))

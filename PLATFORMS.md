@@ -1,14 +1,14 @@
 # Liberty City VR platform scope
 
-Liberty City VR 0.9.5 Release Candidate is a source-only GTA III VR project built on re3,
+Liberty City VR 0.9.5 Release Candidate is a GTA III VR project built on re3,
 OpenXR and the bundled librw Vulkan renderer. Its official repository is
 [kornacious/liberty-city-vr](https://github.com/kornacious/liberty-city-vr).
 
 | Game target | Status | Current workflow |
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Release candidate | Manager source assembly, APK build and local headset installation. |
-| Windows PCVR, x64, OpenXR + Vulkan | Release candidate | Manager target selection, source build/checks, isolated data preparation, versioned local install, launch and runtime diagnostics; direct CMake remains available. |
-| Linux PCVR, x64, OpenXR + Vulkan | Experimental, pending native retest | Manager build/install/launch, separate target data/save settings and XDG runtime discovery. |
+| Windows PCVR, x64, OpenXR + Vulkan | Release candidate | Setup supports prebuilt kits. The manager supports source builds, isolated data preparation, versioned installs, launch and runtime diagnostics. |
+| Linux PCVR, x64, OpenXR + Vulkan | Experimental, pending native retest | Setup supports prebuilt kits. The manager supports native builds, separate data/save settings, and XDG runtime discovery. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.

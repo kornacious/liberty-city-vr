@@ -41,7 +41,7 @@ public static class VariantInstaller
         foreach(var (p,h) in hashes)if(!Digests.Sha256(Paths.Child(root,p)).Equals(h,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Variant checksum mismatch: "+p);
         return hashes;
     }
-    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token,string? astcEncoder = null)
+    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token,string? astcEncoder = null, string? xboxConverter = null)
     {
         ValidateSource(s,o); var prepared=new Dictionary<string,string>();
         foreach(var id in new[]{"pc","xbox"}.Where(id=>id=="pc"?WantsPc(o):o.InstallXboxVariant)) {
@@ -52,10 +52,12 @@ public static class VariantInstaller
                 foreach(var dir in Workflows.ValidateGameDirectory(s.GameDirectory).Where(p=>Path.GetFileName(p).ToLowerInvariant() is not ("mp3" or "skins"))) CopyLower(dir,Path.Combine(stage,Path.GetFileName(dir).ToLowerInvariant()),token);
                 if(o.ConvertRadioStations)await new RadioStations(s,runner,log).ConvertLocal(Path.Combine(stage,"audio"),token);
             } else {
-                await new OriginalXboxModels(s,runner,log).Prepare(o with { CompleteVariant=true,ModelArchive=o.XboxIsoPath,ModelOutput=stage,ModelSource="",DownloadModels=false },token);
+                await new OriginalXboxModels(s,runner,log).Prepare(o with { CompleteVariant=true,ModelArchive=o.XboxIsoPath,ModelOutput=stage,ModelSource="",DownloadModels=false },token,xboxConverter);
             }
             foreach(var p in Workflows.PortAssets(true)) {
-                var source=Path.Combine(portFiles,p);if(!File.Exists(source))throw new IOException("Missing bundled port asset: "+p);
+                var source = Path.Combine(portFiles, p);
+                if (!File.Exists(source)) source = Path.Combine(s.Repository, "overlay", "gamefiles", p);
+                if (!File.Exists(source)) throw new IOException("Missing bundled port asset: " + p);
                 var relative=p.Replace('\\','/').ToLowerInvariant();var target=Paths.Child(stage,relative);
                 if(id=="xbox" && relative.StartsWith("text/",StringComparison.Ordinal)) {
                     if(File.Exists(target))GxtMerge.Merge(target,source);

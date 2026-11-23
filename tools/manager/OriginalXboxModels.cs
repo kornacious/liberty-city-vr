@@ -48,7 +48,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
         if (expected * 2048 != new FileInfo(Path.Combine(root, "models/gta3.img")).Length) throw new InvalidDataException("Unexpected IMG bytes.");
         return hashes;
     }
-    public async Task<string> Prepare(ActionOptions options, CancellationToken token)
+    public async Task<string> Prepare(ActionOptions options, CancellationToken token, string? bundledConverter = null)
     {
         if (options.DownloadModels || !string.IsNullOrWhiteSpace(options.ModelSource))
             throw new InvalidDataException("Original Xbox preparation accepts only a user-provided US 1.0 .iso or .xiso.iso. Downloads and extracted mod packs are not supported.");
@@ -102,7 +102,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
                 }
             }
             File.WriteAllText(Path.Combine(stage, "data/particle.cfg"), OriginalXboxParticles.Normalize(File.ReadAllText(Path.Combine(discRoot, "data/particle.cfg"))));
-            var converter = await Converter(token);
+            var converter = bundledConverter ?? await Converter(token);
             if(options.CompleteVariant) {
                 await runner.Run(converter,["--frontend",Path.Combine(stage,"models/frontend.txd")],token:token);
                 File.WriteAllText(Path.Combine(stage,"PORT_FRONTEND.txt"),"Liberty City VR generated frontend icons v1\n");

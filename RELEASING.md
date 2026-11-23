@@ -1,4 +1,4 @@
-# Source-only release checklist
+# Release checklist
 
 The **0.9.5 Release Candidate** covers Quest 3 and Windows PCVR. Linux PCVR
 remains experimental pending a native retest. See
@@ -56,8 +56,17 @@ Before a tag or GitHub release:
 8. Publish the commit/tag only after reviewing the complete GitHub file list.
    Prepare the Windows x64 and Linux x64 [Setup kits](tools/setup/README.md#build-and-package-setup)
    alongside the automatic source archive. Verify a clean extraction launches
-   on each native desktop. Keep APKs, desktop game binaries, assembled re3,
-   retail data, and prepared asset variants out of release attachments.
+   on each available desktop. Quest users build the APK locally. Keep APKs,
+   assembled re3, retail data, and prepared asset variants out of release attachments.
+
+For a prebuilt PCVR Setup kit, compile the full Release game from the same source
+revision and run CTest. Stage it with `cmake --install` under the matching
+`PCVR/<rid>/app` directory in the Setup kit. Build and test `tools/modelsets`
+for that target and copy only its `xbox-convert` executable beside `app`.
+Include its lzokay license, the pinned dependency source archives and notices
+installed by CMake, and the Setup runtime notices. Verify the extracted
+executables and library resolution, and include SHA-256 checksums for the
+archives. Document the Linux build baseline and any limits on runtime testing.
 
 For the Windows PCVR RC, build the desktop game and run its CTest checks on
 Windows with the [desktop build workflow](overlay/desktop/README.md). Record the

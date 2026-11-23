@@ -1,11 +1,13 @@
 # Liberty City VR — source build kit
 
-> **0.9.5 Release Candidate is a source-only release for Quest 3 and Windows PCVR. Linux PCVR is experimental.**
+> **0.9.5 Release Candidate covers Quest 3 and Windows PCVR. Linux PCVR is experimental.**
 >
 > Start with **Liberty City VR Setup**. Open `Setup/LibertySetup.exe` on Windows or
 > `Setup/LibertySetup` from a packaged Linux kit. Choose where you’ll play,
 > select your GTA III files, and follow the checklist. A source checkout
 > can also start Setup with `sh SETUP.sh` on Linux and the .NET 10 SDK.
+> PCVR Setup kits with bundled desktop binaries install without a compiler.
+> Quest 3 builds the APK on your computer.
 >
 > Downloads of portable build tools retain pinned SHA256 checks. SDK package
 > installation requires explicit license consent. Game data comes only from

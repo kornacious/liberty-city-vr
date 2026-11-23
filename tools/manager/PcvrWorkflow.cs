@@ -44,6 +44,28 @@ public sealed record PcvrInstallation(int Version, string Directory, GameTarget 
 public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner, PrivateLog log, GameTarget target = GameTarget.WindowsPcvr)
 {
     public static GameTarget HostTarget => OperatingSystem.IsLinux() ? GameTarget.LinuxPcvr : GameTarget.WindowsPcvr;
+    public static string? SetupBundle(string repository, GameTarget target)
+    {
+        var folder = target switch
+        {
+            GameTarget.WindowsPcvr => "win-x64",
+            GameTarget.LinuxPcvr => "linux-x64",
+            _ => null
+        };
+        if (folder is null) return null;
+        var bundle = Path.Combine(repository, "PCVR", folder);
+        return Directory.Exists(bundle) ? bundle : null;
+    }
+
+    internal static string ValidateSetupBundle(string bundle, GameTarget target)
+    {
+        var app = Paths.Child(bundle, "app");
+        ValidateBinaries(app, target);
+        var converter = Paths.Child(bundle, target == GameTarget.WindowsPcvr ? "xbox-convert.exe" : "xbox-convert");
+        Paths.NoLinks(converter);
+        if (!File.Exists(converter)) throw new IOException("PCVR package is missing the Original Xbox converter. Extract the complete Setup kit again.");
+        return converter;
+    }
     private bool Linux => target == GameTarget.LinuxPcvr;
     private string Name => Linux ? "Linux PCVR" : "Windows PCVR";
     private string Executable(string name) => name + (Linux ? "" : ".exe");
@@ -217,7 +239,7 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     }
     public Task Build(ActionOptions options, CancellationToken token) => Build(options, token, null);
 
-    internal async Task Build(ActionOptions options, CancellationToken token, InstallRun? progress)
+    internal async Task Build(ActionOptions options, CancellationToken token, InstallRun? progress, string? setupBundle = null)
     {
         RequireHost(); var paths=Layout();
         if (!options.PcvrBuildOnly)
@@ -225,29 +247,35 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             VariantInstaller.ValidateSource(settings,options);
             // An application-only installation is allowed before importing assets.
         }
-        var found=await FindTools(token);
-        await EnsureDependencies(token);
+        var converter = setupBundle is null ? null : ValidateSetupBundle(setupBundle, target);
+        var found = setupBundle is null ? await FindTools(token) : default;
+        if (setupBundle is null) await EnsureDependencies(token);
         var tools=new Toolchain(settings,runner,log);
-        var sdk=await OpenXrSource(tools,token);
-        var source=await tools.Re3(token); var git=await tools.Git(token);
+        var sdk = setupBundle is null ? await OpenXrSource(tools,token) : "";
+        var source=await tools.Re3(token);
         var id=DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..6];
         var work=Path.Combine(settings.Workplace,Linux?"linux-pcvr-builds":"windows-pcvr-builds",id);
         var assembled=Path.Combine(work,"source"); var build=Path.Combine(work,"build");
         progress?.Report(InstallStage.PreparingGameFiles);
-        await Workflows.Assemble(settings.Repository,source,assembled,git,runner,log,token);
-        var variants = !options.PcvrBuildOnly ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token) : new Dictionary<string,string>();
-        progress?.Report(InstallStage.BuildingGame);
-        await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"desktop"),"-B",build,"-G","Ninja",
-            "-DCMAKE_BUILD_TYPE=Release","-DCMAKE_MAKE_PROGRAM="+found.Ninja,"-DLIBERTYVR_RE3_ROOT="+assembled,
-            "-DLIBERTYVR_DESKTOP_PREFIX="+Prefix,"-DGLSLC="+found.Shader,
-            "-DCMAKE_DISABLE_FIND_PACKAGE_OpenXR=TRUE","-DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK="+sdk,
-            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON","-DLIBERTYVR_GPU_TESTS="+(options.PcvrGpuTests ? "ON" : "OFF"),
-            "-DLIBERTYVR_AUDIO_TESTS="+(options.PcvrAudioTests ? "ON" : "OFF"),..(Linux?Array.Empty<string>():new[]{"-DVulkan_INCLUDE_DIR="+found.Include,"-DVulkan_LIBRARY="+found.Library})],token:token);
-        await runner.Run(found.Cmake,["--build",build,"--parallel","8"],token:token);
-        var ctest=Path.Combine(Path.GetDirectoryName(found.Cmake)!,Executable("ctest"));
-        await runner.Run(ctest,["--test-dir",build,"--output-on-failure"],token:token);
-        if (progress is not null) progress.Built = true;
-        log.Write(Name+" Release build and selected checks passed: "+build);
+        if (setupBundle is null)
+            await Workflows.Assemble(settings.Repository,source,assembled,await tools.Git(token),runner,log,token);
+        var portFiles = Path.Combine(setupBundle is null ? assembled : source, "gamefiles");
+        var variants = !options.PcvrBuildOnly ? await VariantInstaller.Prepare(settings,options,portFiles,runner,log,token,xboxConverter:converter) : new Dictionary<string,string>();
+        if (setupBundle is null)
+        {
+            progress?.Report(InstallStage.BuildingGame);
+            await runner.Run(found.Cmake,["-S",Path.Combine(assembled,"desktop"),"-B",build,"-G","Ninja",
+                "-DCMAKE_BUILD_TYPE=Release","-DCMAKE_MAKE_PROGRAM="+found.Ninja,"-DLIBERTYVR_RE3_ROOT="+assembled,
+                "-DLIBERTYVR_DESKTOP_PREFIX="+Prefix,"-DGLSLC="+found.Shader,
+                "-DCMAKE_DISABLE_FIND_PACKAGE_OpenXR=TRUE","-DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK="+sdk,
+                "-DFETCHCONTENT_FULLY_DISCONNECTED=ON","-DLIBERTYVR_GPU_TESTS="+(options.PcvrGpuTests ? "ON" : "OFF"),
+                "-DLIBERTYVR_AUDIO_TESTS="+(options.PcvrAudioTests ? "ON" : "OFF"),..(Linux?Array.Empty<string>():new[]{"-DVulkan_INCLUDE_DIR="+found.Include,"-DVulkan_LIBRARY="+found.Library})],token:token);
+            await runner.Run(found.Cmake,["--build",build,"--parallel","8"],token:token);
+            var ctest=Path.Combine(Path.GetDirectoryName(found.Cmake)!,Executable("ctest"));
+            await runner.Run(ctest,["--test-dir",build,"--output-on-failure"],token:token);
+            if (progress is not null) progress.Built = true;
+            log.Write(Name+" Release build and selected checks passed: "+build);
+        }
         if (options.PcvrBuildOnly) { log.Write("Build only: installation and game-data preparation skipped."); return; }
         Directory.CreateDirectory(paths.Data);
         Directory.CreateDirectory(Path.Combine(paths.Data,"variants"));
@@ -263,7 +291,10 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         Directory.CreateDirectory(paths.Install);
         var install=Path.Combine(work,"package");
         progress?.Report(InstallStage.InstallingApplication);
-        await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
+        if (setupBundle is null)
+            await runner.Run(found.Cmake,["--install",build,"--prefix",install],token:token);
+        else
+            PcvrBuilds.CopyPackage(Paths.Child(setupBundle, "app"), install, token);
         foreach (var notice in new[] { "LICENSE", "NOTICE.md" })
             File.Copy(Path.Combine(settings.Repository,notice),Path.Combine(install,notice),true);
         File.WriteAllText(Path.Combine(install,PcvrBuilds.Identity),id+"\n");

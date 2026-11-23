@@ -84,8 +84,8 @@ into the matching base/Upstate save folder using the new names, retaining backup
 
 Local installations include the SDL/FFmpeg shared libraries and notices,
 FFmpeg build configuration and matching source archives. Linux uses `$ORIGIN`
-library lookup; the host's Vulkan driver is never bundled. No public binary
-release or Linux distribution package is established by this change.
+library lookup. PCVR Setup kits can use these same CMake install files.
+The host supplies the Vulkan driver and an OpenXR runtime.
 
 ## Runtime and controls
 

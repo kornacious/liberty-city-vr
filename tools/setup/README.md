@@ -1,7 +1,8 @@
 # Liberty City VR Setup
 
-Use Setup on a Windows x64 or Linux x64 computer. It builds Liberty City VR
-locally and installs it on your Quest 3 or on this computer for PCVR. Bring
+Use Setup on a Windows x64 or Linux x64 computer. A prebuilt PCVR kit installs
+the desktop game on this computer. Quest standalone builds its APK locally.
+Source kits also support local PCVR builds. Bring
 your own original GTA III PC installation folder, Original Xbox US 1.0
 disc image, or both.
 
@@ -16,12 +17,13 @@ disc image, or both.
 2. Choose **Quest 3 standalone** or your computer’s **PCVR** target. Linux PCVR
    is experimental. For Quest, enable Developer Mode, connect the headset by USB
    and accept the USB debugging prompt inside the headset.
-3. Select your GTA III files and follow the checklist. Setup can obtain pinned
-   build tools. Windows PCVR requires Visual Studio C++ tools, the Vulkan SDK,
-   and the [desktop dependency build](../../overlay/desktop/README.md#dependencies).
-   Linux PCVR needs the development packages on that same page. If a check fails,
-   open **Setup help** and use **Check again** after resolving the item.
-4. Select **Install**. The first build can take a while. Use the desktop shortcut
+3. Select your GTA III files and follow the checklist. Prebuilt PCVR kits need
+   a working Vulkan driver and OpenXR runtime. Windows may also need the x64
+   Microsoft Visual C++ Redistributable. Setup uses Git to obtain the pinned
+   re3 files it needs for data preparation and uses FFmpeg and ffprobe for Xbox
+   disc imports. If building PCVR from source, see the [desktop build prerequisites](../../overlay/desktop/README.md#dependencies).
+   If a check fails, open **Setup help** and use **Check again** after resolving the item.
+4. Select **Install**. The first install can take a while. Use the desktop shortcut
    for PCVR, or open Liberty City VR under Unknown Sources in the Quest app library.
    If the headset installation is pending, connect or authorize the headset and retry.
 
@@ -54,6 +56,9 @@ source tag and put that target’s complete publish output in a top-level
 `Setup/` folder. Keep the launchers at the archive root. Make
 `Setup/LibertySetup` and `Setup/LibertyManager` executable before creating the Linux tarball. The Windows
 kit is a ZIP. Include the runtime license and third-party notices described in
-the [release checklist](../../RELEASING.md). Each archive contains the
-installer and source kit. Game binaries, assembled re3, original game files,
-prepared variants, and saves stay local.
+the [release checklist](../../RELEASING.md). Each archive contains the installer
+and source kit. A prebuilt PCVR kit also contains the matching desktop CMake
+install under `PCVR/win-x64/app` or `PCVR/linux-x64/app` and the matching
+`xbox-convert` (`.exe` on Windows) beside the `app` folder. Preserve Linux
+library symlinks and executable modes in the tarball. Assembled re3, original
+game files, prepared variants, and saves stay local.

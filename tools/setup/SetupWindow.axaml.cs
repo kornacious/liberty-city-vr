@@ -174,7 +174,9 @@ public sealed partial class SetupWindow : Window
 
     private void RenderChecklist()
     {
+        var prebuilt = PcvrWorkflow.SetupBundle(settings.Repository, target) is not null;
         Page.Children.Add(Copy(Quest ? "Setup builds the game on this computer before installing it on your headset." :
+            prebuilt ? "Setup installs the included PCVR build. Close the game first if you’re reinstalling." :
             "Setup builds the game on this computer. Close the game first if you’re reinstalling."));
         if (work is not null)
         {
@@ -219,7 +221,7 @@ public sealed partial class SetupWindow : Window
             if (logPath is not null && File.Exists(logPath)) Page.Children.Add(Link("Open setup log", logPath));
             return;
         }
-        Page.Children.Add(Copy($"Installing for {TargetName()}. The first build can take a while."));
+        Page.Children.Add(Copy($"Installing for {TargetName()}. Preparing the game files can take a while."));
         progressLabel = Copy("", "label");
         progressBar = new ProgressBar();
         AutomationProperties.SetName(progressBar, "Installation stage progress");
