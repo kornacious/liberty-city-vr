@@ -28,7 +28,7 @@ internal sealed class InstallRun(IProgress<InstallProgress>? progress)
 }
 
 public sealed record SetupSelection(GameTarget Target, string? PcFolder, string? XboxImage,
-    bool AcceptAndroidLicenses = false, bool? UseReleaseSigning = null);
+    bool AcceptAndroidLicenses = false, bool? UseReleaseSigning = null, bool AllowUnverifiedXboxIso = false);
 
 public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
 {
@@ -47,6 +47,7 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             InstallPcVariant = pc,
             InstallXboxVariant = xbox,
             XboxIsoPath = selection.XboxImage ?? "",
+            AllowUnverifiedXboxIso = selection.AllowUnverifiedXboxIso,
             CacheAstcTextures = quest && (pc || xbox),
             ConvertRadioStations = quest && pc,
             AcceptSdkLicenses = quest && selection.AcceptAndroidLicenses,
@@ -55,7 +56,8 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
         });
     }
 
-    public static void CheckGameFiles(SetupSelection selection)
+    // An integrity check returns the first mismatch only when an unverified import is eligible.
+    public static string? CheckGameFiles(SetupSelection selection, bool checkXboxIntegrity = false, CancellationToken token = default)
     {
         if (string.IsNullOrWhiteSpace(selection.PcFolder) && string.IsNullOrWhiteSpace(selection.XboxImage))
             throw new InvalidDataException("Choose the folder for your PC copy, the disc image for your Original Xbox copy, or both.");
@@ -64,10 +66,15 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
         if (!string.IsNullOrWhiteSpace(selection.XboxImage))
         {
             using var image = new XboxIso(selection.XboxImage);
-            foreach (var (name, entry) in OriginalXboxModels.Disc.Files)
-                if (!image.Files.TryGetValue(name, out var file) || file.Length != entry.Bytes)
-                    throw new InvalidDataException("Choose a supported GTA III Original Xbox US 1.0 disc image.");
+            if (checkXboxIntegrity && !selection.AllowUnverifiedXboxIso)
+            {
+                var mismatch = OriginalXboxModels.FindDiscMismatch(image, token);
+                if (mismatch is not null) OriginalXboxModels.CheckDiscFiles(image, allowUnverified: true);
+                return mismatch;
+            }
+            OriginalXboxModels.CheckDiscFiles(image, selection.AllowUnverifiedXboxIso);
         }
+        return null;
     }
 
     public async Task<SetupReadiness> Check(SetupSelection selection, CancellationToken token)
@@ -112,7 +119,9 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
         await Probe("Your game files", () =>
         {
             CheckGameFiles(selection);
-            Add("Your game files", "Found the selected files. Setup verifies them as it prepares the game.");
+            Add("Your game files", selection.AllowUnverifiedXboxIso
+                ? "The unverified Xbox image has the required files. Setup checks conversions during installation."
+                : "Found the selected files. Setup verifies them as it prepares the game.");
             return Task.CompletedTask;
         });
         if (tools.HasGit) Add("Git", "Found.");

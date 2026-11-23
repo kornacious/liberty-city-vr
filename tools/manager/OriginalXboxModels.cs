@@ -10,11 +10,35 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
 {
     public static XboxDisc Disc { get; } = ReadDisc();
     public const string Identity = "ORIGINAL_XBOX_US_1_0";
+    public const string UnverifiedImportNotice = "Only continue with a disc image you trust. Required files and conversions must still pass, and the resulting game files may have issues.";
     private static XboxDisc ReadDisc()
     {
         var assembly = Assembly.GetExecutingAssembly();
         using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(n => n.EndsWith("xbox-disc.json")))!;
         return JsonSerializer.Deserialize<XboxDisc>(stream)!;
+    }
+
+    internal static void CheckDiscFiles(XboxIso iso, bool allowUnverified)
+    {
+        if (allowUnverified) iso.RequireNorthAmericanGta3();
+        foreach (var (name, expected) in Disc.Files)
+        {
+            if (!iso.Files.TryGetValue(name, out var file) || file.Length == 0)
+                throw new InvalidDataException("Required Xbox disc file is missing or empty: " + name);
+            if (!allowUnverified && file.Length != expected.Bytes)
+                throw new InvalidDataException("Unsupported Xbox disc revision or unexpected file size: " + name);
+        }
+    }
+
+    internal static string? FindDiscMismatch(XboxIso iso, CancellationToken token)
+    {
+        foreach (var (name, expected) in Disc.Files)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!iso.Files.TryGetValue(name, out var file) || file.Length != expected.Bytes || iso.Sha256(file, token) != expected.Sha256)
+                return name;
+        }
+        return null;
     }
     public static IEnumerable<string> SafeFiles(string root)
     {
@@ -51,9 +75,9 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
     public async Task<string> Prepare(ActionOptions options, CancellationToken token, string? bundledConverter = null)
     {
         if (options.DownloadModels || !string.IsNullOrWhiteSpace(options.ModelSource))
-            throw new InvalidDataException("Original Xbox preparation accepts only a user-provided US 1.0 .iso or .xiso.iso. Downloads and extracted mod packs are not supported.");
+            throw new InvalidDataException("Original Xbox preparation requires a local US GTA III .iso or .xiso.iso from your own disc.");
         if (string.IsNullOrWhiteSpace(options.ModelArchive) || !File.Exists(options.ModelArchive))
-            throw new IOException("Select your local Original Xbox GTA III US 1.0 .iso or .xiso.iso; the Manager never downloads game assets.");
+            throw new IOException("Select your local Original Xbox GTA III US .iso or .xiso.iso.");
         var output = string.IsNullOrWhiteSpace(options.ModelOutput) ? Path.Combine(settings.Workplace, options.CompleteVariant ? "prepared-variants/xbox" : "original-xbox/modelsets/modern") : Path.GetFullPath(options.ModelOutput);
         if (Path.GetFileName(Path.TrimEndingDirectorySeparator(output)) != (options.CompleteVariant ? "xbox" : "modern") || Paths.Within(settings.Repository, output) || Paths.Within(output, settings.Repository) || Paths.Within(output, options.ModelArchive))
             throw new IOException("Choose a separate prepared output folder outside the repository and source ISO.");
@@ -67,15 +91,20 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
         Directory.CreateDirectory(scratch); Directory.CreateDirectory(stage);
         try
         {
+            var allowUnverified = options.AllowUnverifiedXboxIso;
             using (var iso = new XboxIso(options.ModelArchive))
             {
-                log.Write("Reading and verifying Original Xbox US disc assets locally. The source image is read-only.");
+                log.Write(allowUnverified
+                    ? "Importing an unverified Original Xbox US disc image by request. Retail checksums are skipped."
+                    : "Reading and verifying Original Xbox US disc assets locally. The source image is read-only.");
+                CheckDiscFiles(iso, allowUnverified);
                 foreach (var (relative, expected) in Disc.Files)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (!iso.Files.TryGetValue(relative, out var file) || file.Length != expected.Bytes) throw new InvalidDataException("Unsupported Xbox disc revision or missing asset: " + relative);
+                    if (relative == "default.xbe" && allowUnverified) continue;
                     var target = Paths.Child(scratch, "disc/" + relative); iso.Extract(relative, target, token);
-                    if (Digests.Sha256(target) != expected.Sha256) throw new InvalidDataException("Xbox US source fingerprint mismatch: " + relative);
+                    if (!allowUnverified && Digests.Sha256(target) != expected.Sha256)
+                        throw new InvalidDataException("Xbox US source fingerprint mismatch: " + relative);
                 }
             }
             var raw = Path.Combine(scratch, "assets"); Directory.CreateDirectory(raw); Directory.CreateDirectory(Path.Combine(raw, "archive"));
@@ -135,13 +164,15 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             File.WriteAllLines(Path.Combine(stage, "vehicle_models.txt"), vehicles);
             await new OriginalXboxAudio(settings, runner, log).Prepare(discRoot, stage, scratch, token);
             File.WriteAllText(Path.Combine(stage, "asset_categories.json"), JsonSerializer.Serialize(new {
-                source = Disc.Disc, entries = selected.Length, vehicles = vehicles.Count, vegetation = vegetation.Count,
+                source = allowUnverified ? "GTA III Original Xbox US (unverified)" : Disc.Disc,
+                entries = selected.Length, vehicles = vehicles.Count, vegetation = vegetation.Count,
                 audio = "Xbox SFX decoded to PCM16 with rebuilt SDT; speech and nine radio stations decoded to lossless FLAC at their authored rates",
                 excluded = options.CompleteVariant ? "Xbox executable, console frontend runtime and cutscene ANM/hand extensions; scripts, gameplay data, collision and standard animations are included from the disc" :
                     "Xbox executable, scripts, console frontend, cutscene ANM/hand extensions; identical PC gameplay and cutscene animation archives retained",
                 rendering = "Quest Vulkan Neo adaptation: Xbox particles, world lightmaps, rim lighting, road gloss and vehicle highlights; optional stereo visor rain droplets; Quest reflection source retained"
             }, new JsonSerializerOptions { WriteIndented = true }));
             List<string> manifest = ["Profile=MODERN", "Source=" + Identity, "BuilderVersion=" + Disc.BuilderVersion];
+            if (allowUnverified) manifest.Add("SourceVerification=Unverified");
             foreach (var file in SafeFiles(stage).Order(StringComparer.Ordinal)) manifest.Add("SHA256 " + Path.GetRelativePath(stage, file).Replace('\\', '/') + "=" + Digests.Sha256(file));
             File.WriteAllLines(Path.Combine(stage, "BUILD_INFO.txt"), manifest); ValidateOverlay(stage);
             var existed = Directory.Exists(output); if (existed) Directory.Move(output, backup);

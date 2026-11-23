@@ -3,7 +3,7 @@
 Use Setup on a Windows x64 or Linux x64 computer. A prebuilt PCVR kit installs
 the desktop game on this computer. Quest standalone builds its APK locally.
 Source kits also support local PCVR builds. Bring
-your own original GTA III PC installation folder, Original Xbox US 1.0
+your own original GTA III PC installation folder, Original Xbox US
 disc image, or both.
 
 1. Extract the entire Setup kit to a writable folder. On Windows, open
@@ -23,6 +23,10 @@ disc image, or both.
    re3 files it needs for data preparation and uses FFmpeg and ffprobe for Xbox
    disc imports. If building PCVR from source, see the [desktop build prerequisites](../../overlay/desktop/README.md#dependencies).
    If a check fails, open **Setup help** and use **Check again** after resolving the item.
+   If an Xbox image has all required files and reports the North American GTA III
+   title and region but fails the retail US 1.0 fingerprint check, Setup offers
+   **Continue with unverified ISO** or **Cancel**. Continue only if you trust the
+   image. The import still requires successful conversion.
 4. Select **Install**. The first install can take a while. Use the desktop shortcut
    for PCVR, or open Liberty City VR under Unknown Sources in the Quest app library.
    If the headset installation is pending, connect or authorize the headset and retry.

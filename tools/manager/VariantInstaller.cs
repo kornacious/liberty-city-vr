@@ -17,7 +17,7 @@ public static class VariantInstaller
     {
         if (WantsPc(o)) Workflows.ValidateGameDirectory(s.GameDirectory);
         if (o.InstallXboxVariant && (string.IsNullOrWhiteSpace(o.XboxIsoPath) || !File.Exists(o.XboxIsoPath)))
-            throw new IOException("Choose your local Original Xbox GTA III US 1.0 ISO.");
+            throw new IOException("Choose your local Original Xbox GTA III US ISO.");
     }
     public static Dictionary<string,string> Seal(string root, string id)
     {

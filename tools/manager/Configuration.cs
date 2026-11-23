@@ -93,6 +93,7 @@ public sealed record ActionOptions
     public bool InstallXboxVariant { get; set; }
     public bool CacheAstcTextures { get; set; }
     public string XboxIsoPath { get; set; } = "";
+    public bool AllowUnverifiedXboxIso { get; set; }
     // Internal preparation mode; legacy overlay commands remain readable.
     public bool CompleteVariant { get; set; }
     public GameTarget Target { get; set; }

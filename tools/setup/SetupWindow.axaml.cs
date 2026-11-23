@@ -19,6 +19,7 @@ public sealed partial class SetupWindow : Window
     private GameTarget target = GameTarget.Quest;
     private string? pcFolder;
     private string? xboxImage;
+    private bool allowUnverifiedXboxIso;
     private int step;
     private bool helpOpen;
     private bool toolLocationsOpen;
@@ -36,7 +37,7 @@ public sealed partial class SetupWindow : Window
     private TextBlock? progressCount;
 
     private bool Quest => target == GameTarget.Quest;
-    private SetupSelection Selection => new(target, pcFolder, xboxImage, accepted, releaseSigning);
+    private SetupSelection Selection => new(target, pcFolder, xboxImage, accepted, releaseSigning, allowUnverifiedXboxIso);
 
     public SetupWindow()
     {
@@ -168,7 +169,11 @@ public sealed partial class SetupWindow : Window
             return;
         }
         AddPath("PC copy", "Choose the folder that contains the data, models, and audio folders.", pcFolder, false, value => pcFolder = value);
-        AddPath("Original Xbox copy", "Choose your GTA III US 1.0 disc image (.iso or .xiso.iso).", xboxImage, true, value => xboxImage = value,
+        AddPath("Original Xbox copy", "Choose your GTA III US disc image (.iso or .xiso.iso).", xboxImage, true, value =>
+        {
+            xboxImage = value;
+            allowUnverifiedXboxIso = false;
+        },
             [new FilePickerFileType("Xbox disc image") { Patterns = ["*.iso", "*.ISO"] }]);
     }
 
@@ -382,19 +387,61 @@ public sealed partial class SetupWindow : Window
 
     private async Task CheckSources()
     {
+        allowUnverifiedXboxIso = false;
         var selection = Selection;
+        string? mismatch = null;
         using var check = new CancellationTokenSource();
         work = check;
         Render();
-        try { await Task.Run(() => SetupInstaller.CheckGameFiles(selection), check.Token); }
+        try
+        {
+            mismatch = await Task.Run(() => SetupInstaller.CheckGameFiles(selection, checkXboxIntegrity: true, token: check.Token), check.Token);
+        }
         catch (OperationCanceledException) when (check.IsCancellationRequested) { }
         catch (Exception exception) { error = exception.Message; }
         finally { work = null; }
         if (closeAfterWork) { Close(); return; }
         if (check.IsCancellationRequested || error is not null) { Render(); return; }
+        if (mismatch is not null)
+        {
+            allowUnverifiedXboxIso = await ConfirmUnverifiedXboxImport(mismatch);
+            if (!allowUnverifiedXboxIso) { Render(); return; }
+        }
         step = 2;
         ResetChecks();
         await Check();
+    }
+
+    private async Task<bool> ConfirmUnverifiedXboxImport(string mismatch)
+    {
+        var dialog = new Window
+        {
+            Title = "Xbox disc integrity check",
+            Width = 520,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var proceed = new Button { Content = "Continue with unverified ISO" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        proceed.Click += (_, _) => dialog.Close(true);
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 8,
+            Children = { cancel, proceed }
+        };
+        var content = Column(
+            Copy($"The file {mismatch} differs from the verified GTA III US 1.0 disc."),
+            Copy(OriginalXboxModels.UnverifiedImportNotice),
+            actions);
+        content.Margin = new Thickness(24);
+        content.Spacing = 14;
+        dialog.Content = content;
+        dialog.Opened += (_, _) => cancel.Focus();
+        return await dialog.ShowDialog<bool>(this);
     }
 
     private async Task Check()

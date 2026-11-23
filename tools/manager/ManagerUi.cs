@@ -37,6 +37,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
 #pragma warning restore CS0618
     private readonly ConcurrentQueue<string> pending = new();
     private readonly List<Action> readFields = [];
+    private CheckBox? unverifiedXboxToggle;
     private readonly List<Button> navigationButtons = [];
     private readonly Queue<string> lines = new();
     private readonly Button cancel = new() { Text = "_Cancel", X = 1, Y = Pos.AnchorEnd(1) };
@@ -124,6 +125,7 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             options = IsActionPage(page) && settings.Actions.TryGetValue((ManagerAction)page, out var saved) ? saved with { } : new();
         }
         auxiliary = null; music = null; musicRefresh = false; readFields.Clear(); row = 0;
+        unverifiedXboxToggle = null;
         if (form is not null) { configuration.Remove(form); form.Dispose(); }
         form = new View { X = 0, Y = 0, Width = Dim.Fill(), Height = Dim.Fill(2), CanFocus = true,
             ViewportSettings = ViewportSettingsFlags.HasVerticalScrollBar };
@@ -405,7 +407,15 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         var pc=Toggle("Install PC variant",options.InstallPcVariant,v=>options.InstallPcVariant=v);
         Field("Owned GTA III PC installation",draft.GameDirectory,v=>draft.GameDirectory=v,OpenMode.Directory,true,options.InstallPcVariant);
         var xbox=Toggle("Install Original Xbox variant",options.InstallXboxVariant,v=>options.InstallXboxVariant=v);
-        Field("Original Xbox US 1.0 ISO",options.XboxIsoPath,v=>options.XboxIsoPath=v,OpenMode.File,true,options.InstallXboxVariant);
+        var image = Field("Original Xbox US GTA III ISO",options.XboxIsoPath,v=>options.XboxIsoPath=v,OpenMode.File,true,options.InstallXboxVariant);
+        if (options.InstallXboxVariant)
+        {
+            var allow = Toggle("Allow unverified US Xbox ISO for this import", options.AllowUnverifiedXboxIso, v => options.AllowUnverifiedXboxIso = v);
+            unverifiedXboxToggle = allow;
+            image.TextChanged += (_, _) => allow.Value = CheckState.UnChecked;
+            Note("Use only a disc image you trust. This skips retail file verification.");
+        }
+        else options.AllowUnverifiedXboxIso = false;
         void Refresh() {foreach(var read in readFields.ToArray())read();app.Invoke(()=>{if(!disposed && selected==0)Render(0,preserveDraft:true);});}
         pc.ValueChanged+=(_,_)=>Refresh();xbox.ValueChanged+=(_,_)=>Refresh();
         if (options.Target == GameTarget.Quest)
@@ -451,8 +461,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
             if (selected == ToolsPage && auxiliary is null) { pending.Enqueue("Select a tool first."); return; }
             if (IsActionPage(selected) && !musicRefresh)
             {
-                // License consent is explicit for each run rather than inferred from a saved checkbox.
-                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [], ModOperation = ModOperation.Status };
+                // License consent and unverified import consent apply to the current run.
+                draft.Actions[(ManagerAction)selected] = options with { AcceptSdkLicenses = false, AllowUnverifiedXboxIso = false, MusicRevision = "", MusicOrder = [], MusicDeleted = [], ModOperation = ModOperation.Status };
                 store.Save(draft); settings = draft with { Actions = new(draft.Actions) };
             }
         }
@@ -462,6 +472,8 @@ public sealed class ManagerUi(IApplication app, SettingsStore store, ManagerSett
         var action = (ManagerAction)selected;
         var snapshot = draft with { };
         var selectedOptions = options with { };
+        if (unverifiedXboxToggle is not null) unverifiedXboxToggle.Value = CheckState.UnChecked;
+        options.AllowUnverifiedXboxIso = false;
         var selectedTool = auxiliary;
         var arguments = auxiliaryArguments;
         var refresh = musicRefresh; musicRefresh = false; var musicTarget = music;

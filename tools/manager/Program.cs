@@ -33,6 +33,7 @@ internal static class Program
                          LaunchPcvr, DiagnosePcvr.
                 BuildAndInstall Target: 0 Quest (default), 1 WindowsPcvr, 2 LinuxPcvr.
                 Variant options: InstallPcVariant, InstallXboxVariant, XboxIsoPath.
+                AllowUnverifiedXboxIso opts into importing a trusted US GTA III image without retail fingerprints.
                 Both variants may be selected. PC uses Settings.GameDirectory.
                 Leave both unchecked for an application-only build/update.
                 PCVR options: PcvrBuildOnly, PcvrGpuTests, PcvrAudioTests.

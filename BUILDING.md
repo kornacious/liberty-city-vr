@@ -46,7 +46,11 @@ are never printed or saved in settings/logs.
 
 Choose **Build and install**, select Quest standalone, Windows PCVR or experimental Linux PCVR, and enable **Install
 PC variant**, **Install Original Xbox variant**, or both. The PC checkbox enables
-its installation-folder field; Xbox enables the supported US 1.0 ISO field.
+its installation-folder field. Xbox enables the US GTA III ISO field.
+The Manager checks the retail US 1.0 fingerprints by default. If you trust a
+disc image that fails this check, select **Allow unverified US Xbox ISO for this
+import**. The image must contain the North American GTA III executable metadata
+and all required non-empty files. The import still requires successful conversion.
 Each is prepared as a complete independent installation under `variants/pc` or
 `variants/xbox`. The engine automatically selects the sole complete variant, or
 uses the saved choice when both are available. Switching requires restart.

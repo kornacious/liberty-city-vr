@@ -13,7 +13,7 @@ settings compatibility; new installations do not use `modelsets/modern`.
 In **Build and install**, select the target and enable **Install PC variant**,
 **Install Original Xbox variant**, or both. Each checkbox enables its folder or
 ISO field. PC requires a complete local PC installation; Xbox requires the user's
-local GTA III **Original Xbox US 1.0** `.iso`/`.xiso.iso`. The application builds
+local GTA III **Original Xbox US** `.iso`/`.xiso.iso`. The application builds
 once for the target and each selected variant is prepared independently. Neither
 checkbox means an application-only update. **Build only** skips data preparation
 and deployment. Original game files and conversion products remain local.
@@ -61,10 +61,13 @@ without BC support, load some textures with only the base level.
 ## Preparation and integrity
 
 The importer reads full Xbox DVD and trimmed XISO layouts directly through the
-read-only XDVDFS reader. It fingerprints the supported executable and all consumed
-retail inputs against `tools/modelsets/xbox-disc.json`; the executable is never
-installed or run. Unsupported or modified revisions fail before conversion. It
-never downloads a game image or replacement asset pack.
+read-only XDVDFS reader. By default it fingerprints the US 1.0 executable and
+all required retail inputs against `tools/modelsets/xbox-disc.json`. Setup and
+the Manager also offer an unverified import for a disc image you trust. The
+executable must identify GTA III for the North American region and every
+required file must be present and non-empty. Conversion and output checks still
+apply. The executable is never installed or run. The importer never downloads a
+game image or replacement asset pack.
 
 Conversion requires FFmpeg/ffprobe, CMake 3.22+, Ninja and a C++17 compiler. The
 bundled librw and MIT-licensed lzokay decoder are built locally. Xbox LZO wrappers
@@ -116,7 +119,7 @@ size check. The other variant and shared user state are preserved.
 The entire Xbox audio inventory is prepared and installed with its complete
 variant. No PC audio fallback is needed or selected for an Xbox installation.
 
-The Manager fingerprints all 197 retail audio files. It decodes Xbox ADPCM sound
+By default, the Manager fingerprints all 197 retail audio files. It decodes Xbox ADPCM sound
 effects to mono PCM16 and rebuilds the SDT offsets, lengths and loop points while
 preserving all 3,032 sample IDs and authored playback rates. Xbox speech/ambience
 and WMA radio are decoded to lossless FLAC at their original rates and channel

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace LibertyManager;
@@ -76,19 +77,64 @@ public sealed class XboxIso : IDisposable
         }
         Node(0, 0);
     }
+    public void RequireNorthAmericanGta3()
+    {
+        const int headerBytes = 0x11C;
+        const int certificateBytes = 0xA4;
+        const uint gta3TitleId = 0x5454000E;
+        const uint northAmerica = 1;
+        const string error = "Unverified import requires an Original Xbox GTA III executable marked for the US / Canada region.";
+        if (!Files.TryGetValue("default.xbe", out var file) || file.Length < headerBytes)
+            throw new InvalidDataException(error);
+        var header = Read(file.Offset, headerBytes);
+        var headersSize = U32(header, 0x108);
+        var certificateOffset = (long)U32(header, 0x118) - U32(header, 0x104);
+        if (!header.AsSpan(0, 4).SequenceEqual("XBEH"u8) || headersSize > file.Length ||
+            certificateOffset < headerBytes || certificateOffset + certificateBytes > headersSize)
+            throw new InvalidDataException(error);
+        var certificate = Read(file.Offset + certificateOffset, certificateBytes);
+        var size = U32(certificate, 0);
+        if (size < certificateBytes || certificateOffset + size > headersSize ||
+            U32(certificate, 8) != gta3TitleId || U32(certificate, 0xA0) != northAmerica)
+            throw new InvalidDataException(error);
+    }
+
     public void Extract(string relative, string target, CancellationToken token)
     {
-        var file = Files[relative]; Paths.NoLinks(target);
+        var file = Files[relative];
+        Paths.NoLinks(target);
         System.IO.Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
-        stream.Position = file.Offset; var buffer = new byte[1024 * 1024]; var remaining = file.Length;
-        while (remaining > 0)
+        ReadFile(file, output, token);
+    }
+
+    public string Sha256(XboxIsoFile file, CancellationToken token)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        ReadFile(file, Stream.Null, token, hash);
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
+
+    private void ReadFile(XboxIsoFile file, Stream output, CancellationToken token, IncrementalHash? hash = null)
+    {
+        token.ThrowIfCancellationRequested();
+        Bounds(file.Offset, file.Length);
+        stream.Position = file.Offset;
+        var remaining = file.Length;
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent((int)Math.Clamp(remaining, 1, 1024 * 1024));
+        try
         {
-            token.ThrowIfCancellationRequested();
-            var n = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
-            if (n == 0) throw new EndOfStreamException("Truncated Xbox image.");
-            output.Write(buffer, 0, n); remaining -= n;
+            while (remaining > 0)
+            {
+                token.ThrowIfCancellationRequested();
+                var n = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                if (n == 0) throw new EndOfStreamException("Truncated Xbox image.");
+                output.Write(buffer, 0, n);
+                hash?.AppendData(buffer, 0, n);
+                remaining -= n;
+            }
         }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
     }
     public void Dispose() => stream.Dispose();
 }

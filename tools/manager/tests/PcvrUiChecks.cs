@@ -42,6 +42,7 @@ internal static class PcvrUiChecks
                         buildOnly.Value=CheckState.UnChecked;
                         Check(!All(ui.Window).OfType<Button>().Single(b=>b.Text=="Original Xbox assets").Visible,"Separate Xbox action remains visible.");
                         Check(All(ui.Window).OfType<TextField>().Take(2).All(f=>!f.Enabled),"Unselected variant paths are enabled.");
+                        Check(!All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.StartsWith("Allow unverified US Xbox ISO")),"Unverified import is shown without selecting Xbox.");
                         Prepare().Value=CheckState.Checked;
                         All(ui.Window).OfType<CheckBox>().Single(c=>c.Text=="Install Original Xbox variant").Value=CheckState.Checked;
                         All(ui.Window).OfType<OptionSelector>().Single().Value=0;
@@ -49,6 +50,11 @@ internal static class PcvrUiChecks
                     case 1:
                         Check(All(ui.Window).OfType<CheckBox>().Any(c=>c.Text.Contains("Convert and compress radio")),"Quest controls did not return after switching target.");
                         Check(All(ui.Window).OfType<TextField>().Take(2).All(f=>f.Enabled),"Selected variant paths did not become editable.");
+                        var allowUnverified = All(ui.Window).OfType<CheckBox>().Single(c=>c.Text.StartsWith("Allow unverified US Xbox ISO"));
+                        Check(allowUnverified.Value==CheckState.UnChecked, "Unverified import must be opt-in.");
+                        allowUnverified.Value = CheckState.Checked;
+                        All(ui.Window).OfType<TextField>().ElementAt(1).Text = "new.iso";
+                        Check(allowUnverified.Value==CheckState.UnChecked, "Selecting another image must clear consent.");
                         All(ui.Window).OfType<OptionSelector>().Single().Value=1;
                         break;
                     case 2:

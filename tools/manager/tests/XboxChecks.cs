@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 using LibertyManager;
 
@@ -35,10 +36,51 @@ internal static class XboxChecks
             using (var iso = new XboxIso(path))
             {
                 assert(iso.Files.Count == 1 && iso.Files.ContainsKey("DEFAULT.XBE"), "Case-insensitive Xbox catalogue");
+                assert(iso.Sha256(iso.Files["default.xbe"], default) == Convert.ToHexString(SHA256.HashData("test"u8)),
+                    "Integrity checks hash only the file extent");
                 var output = Path.Combine(root, "extracted/test"); iso.Extract("default.xbe", output, default);
                 assert(File.ReadAllText(output) == "test", "Exact file length without sector padding");
             }
             assert(File.ReadAllBytes(path).SequenceEqual(bytes), "Source ISO must remain unchanged");
+            return Task.CompletedTask;
+        });
+        await test("Unverified Xbox import checks the title, region and required files", () =>
+        {
+            var path = Path.Combine(root, "unverified.iso");
+            void Check(uint title, uint region, uint certificateAddress, string? expectedError)
+            {
+                var bytes = Image();
+                const int executable = 34 * 2048;
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(33 * 2048 + 8), 0x400);
+                "XBEH"u8.CopyTo(bytes.AsSpan(executable));
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x104), 0x10000);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x108), 0x400);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x118), certificateAddress);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x180), 0x1D0);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x188), title);
+                BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(executable + 0x220), region);
+                File.WriteAllBytes(path, bytes);
+                using (var iso = new XboxIso(path))
+                {
+                    try
+                    {
+                        iso.RequireNorthAmericanGta3();
+                        assert(expectedError is null, "Ineligible Xbox executable was accepted");
+                    }
+                    catch (InvalidDataException error) when (expectedError is not null)
+                    {
+                        assert(error.Message.Contains(expectedError, StringComparison.Ordinal), "Unexpected title or region rejection");
+                    }
+                }
+                if (expectedError is not null) return;
+                try { SetupInstaller.CheckGameFiles(new(GameTarget.WindowsPcvr, null, path), checkXboxIntegrity: true); }
+                catch (InvalidDataException error) when (error.Message.StartsWith("Required Xbox disc file is missing or empty", StringComparison.Ordinal)) { return; }
+                throw new Exception("Setup offered to continue with an incomplete disc.");
+            }
+            Check(0x5454000E, 1, 0x10180, null);
+            Check(0x5454000E, 4, 0x10180, "US / Canada");
+            Check(0x5454000F, 1, 0x10180, "GTA III");
+            Check(0x5454000E, 1, 0x103F0, "GTA III");
             return Task.CompletedTask;
         });
         await test("Xbox image reader rejects traversal, recursive trees, bounds and bad descriptors", () =>
