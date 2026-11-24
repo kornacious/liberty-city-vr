@@ -223,13 +223,22 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
     public async Task<string> Download(string url, string name, string sha256, CancellationToken token)
     {
         if (RuntimeInformation.ProcessArchitecture != Architecture.X64) throw new PlatformNotSupportedException("Automatic tool downloads support x64. Configure native tools on this platform.");
+        var path = Paths.Child(Downloads, name);
         Directory.CreateDirectory(Downloads);
-        var path = Path.Combine(Downloads, name);
         if (!File.Exists(path))
         {
             if (!settings.AllowToolDownloads) throw new IOException("Tool downloads are disabled in Settings.");
             log.Write("Downloading " + name);
-            await DownloadFile(url, path, log, token);
+            var incoming = path + ".verified-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                await DownloadFile(url, incoming, log, token);
+                if (!Digests.Sha256(incoming).Equals(sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("Download checksum mismatch: " + name);
+                try { File.Move(incoming, path); }
+                catch (IOException) when (File.Exists(path)) { }
+            }
+            finally { File.Delete(incoming); }
         }
         if (!Digests.Sha256(path).Equals(sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Download checksum mismatch. Remove the cached archive and retry: " + name);

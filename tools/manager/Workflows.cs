@@ -92,7 +92,8 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
     public Task Build(ActionOptions options, bool updateOnly, CancellationToken token) =>
         Build(options, updateOnly, token, null);
 
-    internal async Task Build(ActionOptions options, bool updateOnly, CancellationToken token, InstallRun? install)
+    internal async Task Build(ActionOptions options, bool updateOnly, CancellationToken token, InstallRun? install,
+        string? xboxConverter = null, string? preparedUpstate = null)
     {
         if (options.Target != GameTarget.Quest) throw new InvalidDataException("The updater builds Quest only. Select Windows PCVR under Build and install for desktop updates.");
         if (updateOnly && File.Exists(Path.Combine(settings.Repository, "tools/update-required-assets.txt")))
@@ -111,7 +112,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         log.Write("Assembling private Quest source. Previous build directories are preserved.");
         await Assemble(settings.Repository, source, assembled, git, runner, log, token);
         var variants = !options.BuildOnly && !updateOnly
-            ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token,astcEncoder)
+            ? await VariantInstaller.Prepare(settings,options,Path.Combine(assembled,"gamefiles"),runner,log,token,astcEncoder,xboxConverter)
             : new Dictionary<string,string>();
         var gradle = await tools.Gradle(token);
         var variant = options.Release ? "release" : "debug";
@@ -121,6 +122,7 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
             ":app:assemble" + (options.Release ? "Release" : "Debug"), "--no-daemon"], Path.Combine(assembled, "android"), token: token);
         var apk = Path.Combine(assembled, $"android/app/build/outputs/apk/{variant}/app-{variant}.apk");
         if (!File.Exists(apk)) throw new IOException("Build did not produce the expected signed APK. Configure release signing for release builds.");
+        if (preparedUpstate is not null) RequireUpstateApk(apk);
         LastApk = apk;
         if (install is not null) install.Built = true;
         log.Write("APK: " + apk);
@@ -161,9 +163,26 @@ public sealed class Workflows(ManagerSettings settings, CommandRunner runner, Pr
         }
         // Preserve the legacy-root repair path for application-only updates.
         if(variants.Count==0) await CopyPortAssets(device,Path.Combine(assembled,"gamefiles"),includeHands:true,token);
+        if (preparedUpstate is not null)
+        {
+            install?.Report(InstallStage.InstallingGameFiles);
+            var status = await new CuratedMods(settings, runner, log).Install(device, CuratedMods.Upstate,
+                preparedUpstate, token, verifiedApkSupport: true);
+            if (!status.Installed || !status.Enabled) throw new IOException("Setup could not verify Upstate Liberty activation on Quest.");
+        }
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
         if (install is not null) install.Installed = true;
         log.Write("Installation complete. Launch Liberty City VR from the headset.");
+    }
+
+    internal static void RequireUpstateApk(string path)
+    {
+        using var apk = System.IO.Compression.ZipFile.OpenRead(path);
+        // The full Quest CMake build links the selector with Upstate support
+        // and packages both engines. A bring-up APK only contains libertyvr.
+        foreach (var name in new[] { "libertyvr", "libertyvr_classic", "libertyvr_upstate" })
+            if (apk.GetEntry($"lib/arm64-v8a/lib{name}.so") is not { Length: > 0 })
+                throw new InvalidDataException("The built Quest APK does not include Upstate Liberty runtime support.");
     }
 
     public static async Task Assemble(string repository, string re3, string destination, string git,

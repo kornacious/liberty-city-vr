@@ -65,16 +65,33 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
     {
         if (!string.IsNullOrWhiteSpace(settings.SevenZip)) return Paths.FindExecutable(settings.SevenZip)
             ?? throw new IOException("Configured 7-Zip executable was not found.");
+        if (SetupKitTools.Find(settings.Repository, OperatingSystem.IsWindows() ? "7za.exe" : "7zz") is { } bundled)
+            return bundled;
         foreach (var name in new[] { "7zz", "7z", "7za", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "7-Zip/7z.exe") })
             if (Paths.FindExecutable(name) is { } executable) return executable;
-        throw new IOException("Install 7-Zip (7zz/7z), or select its executable in Settings.");
+        throw new IOException("Install 7-Zip (7zz/7z), or select its executable in Setup help or Settings.");
+    }
+
+    private string CacheRoot => Path.Combine(settings.Workplace, "mods");
+    private string CachedArchive(CuratedMod mod) => Path.Combine(CacheRoot, mod.Id + "-" + mod.Version + ".7z");
+    private string Prepared(CuratedMod mod) => Path.Combine(CacheRoot, mod.Id + "-" + mod.Version);
+
+    internal bool CheckSetupArchive(CuratedMod mod, string? supplied)
+    {
+        var local = !string.IsNullOrWhiteSpace(supplied) ? supplied : CachedArchive(mod);
+        var cached = File.Exists(local);
+        if (cached || !string.IsNullOrWhiteSpace(supplied)) ValidateArchive(local, mod);
+        else if (!settings.AllowToolDownloads)
+            throw new IOException("Select the official Upstate Liberty UL.7z or allow verified downloads in Setup help.");
+        if (!Directory.Exists(Prepared(mod))) SevenZip();
+        return cached;
     }
 
     public async Task<string> Prepare(CuratedMod mod, string suppliedArchive, CancellationToken token)
     {
-        var home = Path.Combine(settings.Workplace, "mods");
+        var home = CacheRoot;
         Paths.NoLinks(home); Directory.CreateDirectory(home);
-        var archive = Path.Combine(home, mod.Id + "-" + mod.Version + ".7z");
+        var archive = CachedArchive(mod);
         var incoming = Path.Combine(home, ".archive-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -88,6 +105,8 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
             }
             else if (!File.Exists(archive))
             {
+                if (!settings.AllowToolDownloads)
+                    throw new IOException("Select the official Upstate Liberty UL.7z or allow verified downloads.");
                 log.Write("Downloading " + mod.Name + " v" + mod.Version + " from the curated release.");
                 await Toolchain.DownloadFile(mod.Url, incoming, log, token);
             }
@@ -96,7 +115,7 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
         }
         finally { if (File.Exists(incoming)) File.Delete(incoming); }
         log.Write("Verified " + mod.Name + " v" + mod.Version + " release archive.");
-        var output = Path.Combine(home, mod.Id + "-" + mod.Version);
+        var output = Prepared(mod);
         if (Directory.Exists(output)) { ValidatePackage(output, mod); return output; }
         var stage = Path.Combine(home, ".extract-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(stage);
@@ -175,11 +194,16 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
         await device.Run(["shell", "am", "force-stop", QuestDevice.Package], token);
     }
 
-    public async Task<ModStatus> Install(QuestDevice device, CuratedMod mod, string output, CancellationToken token)
+    public Task<ModStatus> Install(QuestDevice device, CuratedMod mod, string output, CancellationToken token) =>
+        Install(device, mod, output, token, verifiedApkSupport: false);
+
+    internal async Task<ModStatus> Install(QuestDevice device, CuratedMod mod, string output, CancellationToken token,
+        bool verifiedApkSupport)
     {
         var package = ValidatePackage(output, mod);
         await Stop(device, token);
         var before = await Status(device, mod, token);
+        var supported = before.Supported || verifiedApkSupport;
         var final = DirectoryPath(mod);
         var suffix = Guid.NewGuid().ToString("N");
         var stage = RemoteRoot + "/.incoming-" + suffix;
@@ -204,7 +228,7 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
                 "rollback() { if [ \"$moved\" = 1 ]; then rm -rf " + Q(final) + "; fi; if [ \"$had\" = 1 ]; then mv " + Q(backup) + " " + Q(final) + "; fi; }; " +
                 "trap rollback EXIT; if [ -d " + Q(final) + " ]; then mv " + Q(final) + " " + Q(backup) + "; had=1; fi; " +
                 "mv " + Q(stage) + " " + Q(final) + "; moved=1; " +
-                (before.Supported ? "printf '%s\\n' " + Q(Marker(mod)) + " > " + Q(enabled + ".new") + "; mv " + Q(enabled + ".new") + " " + Q(enabled) + "; " : "rm -f " + Q(enabled) + "; ") +
+                (supported ? "printf '%s\\n' " + Q(Marker(mod)) + " > " + Q(enabled + ".new") + "; mv " + Q(enabled + ".new") + " " + Q(enabled) + "; " : "rm -f " + Q(enabled) + "; ") +
                 "trap - EXIT; rm -rf " + Q(backup);
             await device.Shell(script, token);
             activated = true;
@@ -215,9 +239,9 @@ public sealed class CuratedMods(ManagerSettings settings, ICommandRunner runner,
             try { await device.Shell("rm -rf " + Q(stage) + "; rm -f " + Q(enabled + ".new"), cleanup.Token); }
             catch (Exception error) when (error is IOException or OperationCanceledException) { log.Write("Mod staging cleanup could not finish. Previous saves were preserved."); }
         }
-        if (activated) log.Write(before.Supported ? "Upstate Liberty installed and enabled. Fully restart the game." :
+        if (activated) log.Write(supported ? "Upstate Liberty installed and enabled. Fully restart the game." :
             "Upstate Liberty installed, disabled. This APK has not advertised Upstate runtime support; engine adaptation is still required.");
-        return await Status(device, mod, token);
+        return (await Status(device, mod, token)) with { Supported = supported };
     }
 
     public async Task<ModStatus> Change(QuestDevice device, CuratedMod mod, ModOperation operation, CancellationToken token)

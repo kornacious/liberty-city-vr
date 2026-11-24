@@ -91,6 +91,12 @@ internal static class ModChecks
             await Reject(() => mods.Change(device, CuratedMods.Upstate, ModOperation.Enable, default));
             Check(!File.Exists(shell.Enabled));
         });
+        await Fixture("Verified Setup APK enables Upstate before its first launch", async (mods, device, shell, local) =>
+        {
+            var status = await mods.Install(device, CuratedMods.Upstate, local, default, verifiedApkSupport: true);
+            Check(status.Installed && status.Enabled && status.Supported);
+            Check(File.Exists(shell.Enabled));
+        });
         await Fixture("Supported runtime installs enabled, disables, re-enables and deletes while preserving saves", async (mods, device, shell, local) =>
         {
             shell.Support(); var saves = Path.Combine(shell.Root, "mod-saves/upstate-liberty/save.b"); Directory.CreateDirectory(Path.GetDirectoryName(saves)!); File.WriteAllText(saves, "personal save fixture");

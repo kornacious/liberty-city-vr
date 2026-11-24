@@ -28,7 +28,8 @@ internal sealed class InstallRun(IProgress<InstallProgress>? progress)
 }
 
 public sealed record SetupSelection(GameTarget Target, string? PcFolder, string? XboxImage,
-    bool AcceptAndroidLicenses = false, bool? UseReleaseSigning = null, bool AllowUnverifiedXboxIso = false);
+    bool AcceptAndroidLicenses = false, bool? UseReleaseSigning = null, bool AllowUnverifiedXboxIso = false,
+    bool InstallUpstate = false, string? UpstateArchive = null);
 
 public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
 {
@@ -124,6 +125,15 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                 : "Found the selected files. Setup verifies them as it prepares the game.");
             return Task.CompletedTask;
         });
+        if (selection.InstallUpstate)
+            await Probe("Upstate Liberty", () =>
+            {
+                var available = new CuratedMods(local, runner, log).CheckSetupArchive(CuratedMods.Upstate, selection.UpstateArchive);
+                Add("Upstate Liberty", available ? "Verified the official v1.1.2 archive." :
+                    "Setup will download and verify the official v1.1.2 archive.",
+                    available ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
+                return Task.CompletedTask;
+            });
         if (tools.HasGit) Add("Git", "Found.");
         else if (OperatingSystem.IsWindows() && local.AllowToolDownloads)
             Add("Git", "Setup can use or download a verified copy.", SetupCheckStatus.Automatic);
@@ -147,28 +157,15 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             });
             Add("Quest 3", "Enable Developer Mode, connect the headset by USB and accept the USB debugging prompt. Setup checks the connection after the local build.",
                 SetupCheckStatus.Automatic);
-            if (options.InstallXboxVariant)
-                await Probe("Xbox conversion tools", async () =>
-                {
-                    if (OperatingSystem.IsWindows()) await WindowsCompiler.Configure(runner, token);
-                    else if (Paths.FindExecutable("c++") is null) throw new IOException("Install GCC or Clang C++ tools, then check again.");
-                    if (!tools.NeedsSdkPackages || !string.IsNullOrWhiteSpace(local.CMake))
-                    {
-                        var cmake = tools.FindCMake();
-                        if (tools.FindNinja(cmake) is null)
-                            throw new IOException("Install Ninja or select a CMake installation that includes it.");
-                        if (!File.Exists(Path.Combine(Path.GetDirectoryName(cmake)!, OperatingSystem.IsWindows() ? "ctest.exe" : "ctest")))
-                            throw new IOException("Choose a CMake installation that includes CTest.");
-                    }
-                    Add("Xbox conversion tools", "Setup uses CMake, Ninja and your computer’s C++ compiler to prepare the disc image.",
-                        SetupCheckStatus.Automatic);
-                });
         }
         else if (PcvrWorkflow.SetupBundle(local.Repository, selection.Target) is { } bundle)
             await Probe("Prebuilt PCVR package", () =>
             {
-                PcvrWorkflow.ValidateSetupBundle(bundle, selection.Target);
-                Add("Prebuilt PCVR package", "Found the desktop game and the Original Xbox converter.");
+                var app = Paths.Child(bundle, "app");
+                PcvrWorkflow.ValidateBinaries(app, selection.Target);
+                if (selection.InstallUpstate && !PcvrMods.Supports(app, selection.Target, CuratedMods.Upstate))
+                    throw new IOException("The PCVR package is missing Upstate runtime support. Extract a complete compatible Setup kit.");
+                Add("Prebuilt PCVR package", "Found the desktop game.");
                 return Task.CompletedTask;
             });
         else
@@ -176,26 +173,54 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             {
                 var ready = await new PcvrWorkflow(local, runner, log, selection.Target).CheckSetupTools(token);
                 Add("PCVR build tools", ready ? "Found the compiler, build tools and desktop libraries." :
-                    "Setup builds the desktop libraries using verified source downloads. See Setup help for Linux development packages.",
+                    "Setup will prepare the desktop libraries using verified downloads.",
                     ready ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
             });
 
-        if (quest || options.InstallXboxVariant)
-            await Probe("Game file preparation", async () =>
+        if (options.InstallXboxVariant)
+            await Probe("Xbox conversion tools", async () =>
             {
-                if (options.ConvertRadioStations || options.InstallXboxVariant)
-                    foreach (var (name, configured) in new[] { ("FFmpeg", local.Ffmpeg), ("ffprobe", local.Ffprobe) })
-                    {
-                        var executable = Paths.FindExecutable(configured);
-                        if (executable is null)
-                            throw new IOException($"Install {name} or select its executable in Setup help, then check again.");
-                        if ((await runner.Run(executable, ["-version"], showOutput: false, check: false, token: token)).ExitCode != 0)
-                            throw new IOException($"{name} did not start successfully. Check its installation and try again.");
-                    }
+                if (SetupKitTools.XboxConverter(local.Repository) is { } converter)
+                {
+                    await SetupKitTools.TestXboxConverter(runner, converter, token);
+                    Add("Xbox conversion tools", "Verified the converter included with Setup.");
+                    return;
+                }
+                if (!quest && PcvrWorkflow.SetupBundle(local.Repository, selection.Target) is { } legacyBundle)
+                {
+                    await SetupKitTools.TestXboxConverter(runner, PcvrWorkflow.ValidateSetupBundle(legacyBundle, selection.Target), token);
+                    Add("Xbox conversion tools", "Found the converter included with the PCVR package.");
+                    return;
+                }
+                if (OperatingSystem.IsWindows()) await WindowsCompiler.Configure(runner, token);
+                else if (Paths.FindExecutable("c++") is null) throw new IOException("Install GCC or Clang C++ tools, then check again.");
+                if (!quest || !tools.NeedsSdkPackages || !string.IsNullOrWhiteSpace(local.CMake))
+                {
+                    var cmake = tools.FindCMake();
+                    if (tools.FindNinja(cmake) is null)
+                        throw new IOException("Install Ninja or select a CMake installation that includes it.");
+                    if (!File.Exists(Path.Combine(Path.GetDirectoryName(cmake)!, OperatingSystem.IsWindows() ? "ctest.exe" : "ctest")))
+                        throw new IOException("Choose a CMake installation that includes CTest.");
+                }
+                Add("Xbox conversion tools", "Setup will compile the Xbox converter using CMake, Ninja and your C++ compiler.",
+                    SetupCheckStatus.Automatic);
+            });
+
+        if (options.ConvertRadioStations || options.InstallXboxVariant)
+            await Probe("FFmpeg tools", async () =>
+            {
+                var ready = await new FfmpegTools(local, runner, log).Check(token);
+                Add("FFmpeg tools", ready ? "Found FFmpeg and ffprobe." : "Setup will prepare verified copies of FFmpeg and ffprobe.",
+                    ready ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
+            });
+        if (quest || options.InstallXboxVariant)
+            await Probe("Game file preparation", () =>
+            {
                 if (quest && !tools.CanUseAstcEncoder)
                     throw new IOException("Choose the required game-file preparation tool in Setup help or allow verified tool downloads.");
                 Add("Game file preparation", "Setup prepares a separate copy. Your original files stay in place.",
                     quest ? SetupCheckStatus.Automatic : SetupCheckStatus.Ready);
+                return Task.CompletedTask;
             });
         return new(checks, needsConsent);
     }
@@ -219,16 +244,22 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             Paths.NoLinks(lockPath);
             using var installLock = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             var runner = new CommandRunner(log);
+            run.Report(InstallStage.PreparingGameFiles);
+            if (options.ConvertRadioStations || options.InstallXboxVariant)
+                local = await new FfmpegTools(local, runner, log).Resolve(token);
+            var preparedMod = selection.InstallUpstate
+                ? await new CuratedMods(local, runner, log).Prepare(CuratedMods.Upstate, selection.UpstateArchive ?? "", token) : null;
+            var converter = options.InstallXboxVariant ? SetupKitTools.XboxConverter(local.Repository) : null;
             if (options.Target == GameTarget.Quest)
             {
                 var workflow = new Workflows(local, runner, log, _ => throw new SeveralHeadsetsException());
-                await workflow.Build(options, false, token, run);
+                await workflow.Build(options, false, token, run, converter, preparedMod);
                 if (!run.Installed)
                     return Result(InstallStatus.HeadsetPending, "Connect your Quest 3, accept USB debugging inside the headset, then retry.");
                 return Result(InstallStatus.Installed, "Open the app library on your Quest 3, choose Unknown Sources, and open Liberty City VR.");
             }
             var bundle = PcvrWorkflow.SetupBundle(local.Repository, options.Target);
-            await new PcvrWorkflow(local, runner, log, options.Target).Build(options, token, run, bundle);
+            await new PcvrWorkflow(local, runner, log, options.Target).Build(options, token, run, bundle, converter, preparedMod);
             return Result(InstallStatus.Installed, run.ShortcutFailed
                 ? "Open the install folder to start the game. Setup could not create a desktop shortcut."
                 : "Connect your headset through your PCVR software, then open Liberty City VR from your desktop.");

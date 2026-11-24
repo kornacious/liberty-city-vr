@@ -61,8 +61,12 @@ Before a tag or GitHub release:
 
 For a prebuilt PCVR Setup kit, compile the full Release game from the same source
 revision and run CTest. Stage it with `cmake --install` under the matching
-`PCVR/<rid>/app` directory in the Setup kit. Build and test `tools/modelsets`
-for that target and copy only its `xbox-convert` executable beside `app`.
+`PCVR/<rid>/app` directory in the Setup kit. For every Setup kit, build and test
+`tools/modelsets` on the host target and use the
+[Setup tool staging script](tools/setup/Stage-SetupTools.ps1) to include the
+converter and standalone 7-Zip. Test the Windows converter on a clean system
+without compiler tools or the VC++ redistributable. For source-build kits,
+stage the dependency manifest and attach its matching desktop library archive.
 Include its lzokay license, the pinned dependency source archives and notices
 installed by CMake, and the Setup runtime notices. Verify the extracted
 executables and library resolution, and include SHA-256 checksums for the

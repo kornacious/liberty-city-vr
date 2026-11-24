@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 project(XboxAssetConverter LANGUAGES C CXX)
+if(MSVC)
+  # Setup ships the converter independently of the desktop game and its CRT.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)

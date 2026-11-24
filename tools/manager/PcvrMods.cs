@@ -19,7 +19,7 @@ public static class PcvrMods
         PcvrWorkflow.ValidatePreparedData(paths.Data);
         return paths;
     }
-    private static void RequireStopped()
+    internal static void RequireStopped()
     {
         foreach (var name in OperatingSystem.IsLinux()?new[]{"libertyvr-game","libertyvr-upstate","libertyvr-upstat"}:new[] { "libertyvr-game", "libertyvr-upstate" })
         {
@@ -39,11 +39,15 @@ public static class PcvrMods
              File.Exists(Paths.Child(paths.Install,paths.Target==GameTarget.LinuxPcvr?"libertyvr-game":"libertyvr-game.exe"))))
         {
             var install = PcvrWorkflow.ResolveInstallation(paths.Install,paths.Target);
-            var capabilities = Paths.Child(install, Capabilities);
-            supported = File.Exists(Paths.Child(install, EngineFor(paths.Target))) && File.Exists(capabilities) &&
-                File.ReadAllLines(capabilities).Contains(mod.Capability, StringComparer.Ordinal);
+            supported = Supports(install, paths.Target, mod);
         }
         return new(installed, enabled, supported);
+    }
+    internal static bool Supports(string install, GameTarget target, CuratedMod mod)
+    {
+        var capabilities = Paths.Child(install, Capabilities);
+        return File.Exists(Paths.Child(install, EngineFor(target))) && File.Exists(capabilities) &&
+            File.ReadAllLines(capabilities).Contains(mod.Capability, StringComparer.Ordinal);
     }
     public static string SelectEngine(PcvrPaths paths)
     {

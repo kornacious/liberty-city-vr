@@ -11,6 +11,9 @@ inline bool Active() {
 #endif
 }
 bool Initialize(const char *gameRoot);
+bool Available(const char *gameRoot);
+bool Requested(const char *gameRoot);
+bool Request(const char *gameRoot, bool enabled);
 const char *Resolve(const char *path, char *out, size_t capacity);
 bool IsAssetPath(const char *path);
 bool HasTrait(int id, const char *trait);

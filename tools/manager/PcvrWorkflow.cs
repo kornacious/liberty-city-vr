@@ -69,7 +69,11 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     private bool Linux => target == GameTarget.LinuxPcvr;
     private string Name => Linux ? "Linux PCVR" : "Windows PCVR";
     private string Executable(string name) => name + (Linux ? "" : ".exe");
-    private string Prefix => Path.GetFullPath(string.IsNullOrWhiteSpace(Linux ? settings.LinuxPcvrDependencyPrefix : settings.PcvrDependencyPrefix) ? Path.Combine(settings.Repository,".cache","desktop-deps",Linux ? "linux" : "windows") : (Linux ? settings.LinuxPcvrDependencyPrefix : settings.PcvrDependencyPrefix));
+    private string ConfiguredPrefix => Linux ? settings.LinuxPcvrDependencyPrefix : settings.PcvrDependencyPrefix;
+    private string LocalPrefix => Path.GetFullPath(string.IsNullOrWhiteSpace(ConfiguredPrefix)
+        ? Path.Combine(settings.Repository, ".cache", "desktop-deps", Linux ? "linux" : "windows") : ConfiguredPrefix);
+    private string Prefix => resolvedDependencyPrefix ?? LocalPrefix;
+    private string? resolvedDependencyPrefix;
     private const string OpenXrArchive = "https://github.com/KhronosGroup/OpenXR-SDK/archive/refs/tags/release-1.1.58.zip";
     private const string OpenXrHash = "43d75ce00e31be8f662b58e8c74af8c04156bcaa7acbfc19112aa2880f3a3669";
     private void RequireHost()
@@ -198,9 +202,63 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             if (!File.Exists(Paths.Child(source,file))) throw new IOException("Choose the complete OpenXR-SDK 1.1.58 source directory, or leave it blank for the pinned download.");
         return source;
     }
-    private bool HasDependencies => Directory.Exists(Path.Combine(Prefix, "include", "SDL3")) &&
-        Directory.Exists(Path.Combine(Prefix, "include", "libavcodec")) &&
-        File.Exists(Path.Combine(Prefix, "share", "libertyvr-dependencies", "config.mak"));
+    internal static bool HasDependencies(string prefix, bool linux)
+    {
+        string[] required = ["include/SDL3/SDL.h", "include/libavcodec/avcodec.h", "include/libavformat/avformat.h",
+            "include/libavutil/avutil.h", "include/libswresample/swresample.h",
+            "share/libertyvr-dependencies/config.mak", "share/libertyvr-dependencies/SDL_LICENSE.txt",
+            "share/libertyvr-dependencies/FFMPEG_LICENSE.txt"];
+        if (required.Any(file => !File.Exists(Path.Combine(prefix, file)))) return false;
+        foreach (var (name, major) in new[] { ("SDL3", "0"), ("avcodec", "63"), ("avformat", "63"), ("avutil", "61"), ("swresample", "7") })
+        {
+            if (linux)
+            {
+                var link = Path.Combine(prefix, "lib", "lib" + name + ".so");
+                var runtime = link + "." + major;
+                if (!File.Exists(link) || !File.Exists(runtime)) return false;
+                ValidateBundledLibrary(prefix, link);
+                ValidateBundledLibrary(prefix, runtime);
+            }
+            else
+            {
+                var library = "lib/" + name + ".lib";
+                var runtime = name == "SDL3" ? "SDL3.dll" : name + "-" + major + ".dll";
+                if ((!File.Exists(Paths.Child(prefix, library)) && !File.Exists(Paths.Child(prefix, "bin/" + name + ".lib"))) ||
+                    !File.Exists(Paths.Child(prefix, "bin/" + runtime))) return false;
+            }
+        }
+        return true;
+    }
+
+    private sealed record DependencyBundle(string Url, string Sha256);
+    private DependencyBundle? PinnedDependencies()
+    {
+        if (!string.IsNullOrWhiteSpace(ConfiguredPrefix)) return null;
+        var manifest = Paths.Child(settings.Repository, $"Setup/tools/{SetupKitTools.HostRid}/desktop-deps.json");
+        if (!File.Exists(manifest)) return null;
+        var bundle = JsonSerializer.Deserialize<DependencyBundle>(File.ReadAllText(manifest));
+        var extension = Linux ? ".tar.gz" : ".zip";
+        if (bundle is null || !Uri.TryCreate(bundle.Url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != "https" || uri.Host != "github.com" ||
+            !uri.AbsolutePath.StartsWith("/kornacious/liberty-city-vr/releases/download/", StringComparison.Ordinal) ||
+            !uri.AbsolutePath.EndsWith(extension, StringComparison.Ordinal) ||
+            bundle.Sha256 is not { Length: 64 } || !bundle.Sha256.All(Uri.IsHexDigit))
+            throw new InvalidDataException("Invalid pinned desktop dependency bundle in the Setup kit.");
+        return bundle;
+    }
+
+    private string BundlePrefix(DependencyBundle bundle) => Paths.Child(settings.Workplace, ".tools/desktop-deps-" + bundle.Sha256.ToLowerInvariant());
+    private string BundleArchive(DependencyBundle bundle) => "desktop-deps-" + bundle.Sha256.ToLowerInvariant() + (Linux ? ".tar.gz" : ".zip");
+
+    private bool CheckDependencyBundle(DependencyBundle bundle)
+    {
+        if (HasDependencies(BundlePrefix(bundle), Linux)) return true;
+        if (!settings.AllowToolDownloads && !File.Exists(Paths.Child(settings.Workplace, ".downloads/" + BundleArchive(bundle))))
+            throw new IOException("Choose a complete desktop dependency prefix or allow verified tool downloads in Setup help.");
+        if (Linux && Paths.FindExecutable("tar") is null)
+            throw new IOException("Install tar to unpack the desktop libraries.");
+        return false;
+    }
 
     private bool CanBuildDependencies => Linux && string.IsNullOrWhiteSpace(settings.LinuxPcvrDependencyPrefix);
 
@@ -213,7 +271,8 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         var tools = await FindTools(token);
         if (!File.Exists(Path.Combine(Path.GetDirectoryName(tools.Cmake)!, Executable("ctest"))))
             throw new IOException("Install CMake with CTest.");
-        if (HasDependencies) return true;
+        if (HasDependencies(Prefix, Linux)) return true;
+        if (PinnedDependencies() is { } bundle) return CheckDependencyBundle(bundle);
         if (!CanBuildDependencies)
             throw new IOException("Prepare the desktop libraries using the PCVR build guide, then check again.");
         var missing = DependencyTools.Prepend("bash").Where(name => Paths.FindExecutable(name) is null).ToArray();
@@ -224,7 +283,31 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
 
     private async Task EnsureDependencies(CancellationToken token)
     {
-        if (HasDependencies) return;
+        if (HasDependencies(Prefix, Linux)) return;
+        if (PinnedDependencies() is { } bundle)
+        {
+            var prefix = BundlePrefix(bundle);
+            if (!CheckDependencyBundle(bundle))
+            {
+                var tools = new Toolchain(settings, runner, log);
+                var archive = await tools.Download(bundle.Url, BundleArchive(bundle), bundle.Sha256, token);
+                var stage = Paths.Child(settings.Workplace, ".tools/.desktop-deps-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(stage);
+                try
+                {
+                    if (Linux) await runner.Run(Paths.FindExecutable("tar")!, ["-xzf", archive, "-C", stage], token: token);
+                    else Toolchain.ExtractZip(archive, stage, token);
+                    if (!HasDependencies(stage, Linux)) throw new InvalidDataException("The desktop dependency bundle is incomplete.");
+                    token.ThrowIfCancellationRequested();
+                    if (Directory.Exists(prefix))
+                        throw new IOException("The cached desktop dependency prefix is incomplete. Move it aside, then retry: " + prefix);
+                    Directory.Move(stage, prefix);
+                }
+                finally { if (Directory.Exists(stage)) Directory.Delete(stage, recursive: true); }
+            }
+            resolvedDependencyPrefix = prefix;
+            return;
+        }
         if (!CanBuildDependencies)
             throw new IOException("Desktop dependencies are missing or incomplete at " + Prefix +
                 ". Build them with tools/desktop/build-deps.sh CACHE PREFIX linux (Linux) or tools/desktop/build-deps.ps1 (Windows). On Linux, clear the dependency prefix setting to build them automatically at the default location. See overlay/desktop/README.md for prerequisites.");
@@ -235,19 +318,26 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         log.Write("Building pinned SDL3 and FFmpeg dependencies. The first build downloads verified source archives and can take several minutes. Linux X11, Wayland/EGL and audio development packages must already be installed; see overlay/desktop/README.md.");
         await runner.Run(bash,[Path.Combine(settings.Repository,"tools","desktop","build-deps.sh"),
             Path.Combine(settings.Repository,".cache","desktop-deps"),Prefix,"linux"],settings.Repository,token:token);
-        if (!HasDependencies) throw new IOException("Desktop dependency build did not produce a complete prefix at " + Prefix + ". See the preceding build output.");
+        if (!HasDependencies(Prefix, Linux)) throw new IOException("Desktop dependency build did not produce a complete prefix at " + Prefix + ". See the preceding build output.");
     }
     public Task Build(ActionOptions options, CancellationToken token) => Build(options, token, null);
 
-    internal async Task Build(ActionOptions options, CancellationToken token, InstallRun? progress, string? setupBundle = null)
+    internal async Task Build(ActionOptions options, CancellationToken token, InstallRun? progress, string? setupBundle = null,
+        string? xboxConverter = null, string? preparedUpstate = null)
     {
         RequireHost(); var paths=Layout();
+        if (preparedUpstate is not null) PcvrMods.RequireStopped();
         if (!options.PcvrBuildOnly)
         {
             VariantInstaller.ValidateSource(settings,options);
             // An application-only installation is allowed before importing assets.
         }
-        var converter = setupBundle is null ? null : ValidateSetupBundle(setupBundle, target);
+        var converter = xboxConverter;
+        if (setupBundle is not null)
+        {
+            ValidateBinaries(Paths.Child(setupBundle, "app"), target);
+            if (options.InstallXboxVariant && converter is null) converter = ValidateSetupBundle(setupBundle, target);
+        }
         var found = setupBundle is null ? await FindTools(token) : default;
         if (setupBundle is null) await EnsureDependencies(token);
         var tools=new Toolchain(settings,runner,log);
@@ -299,7 +389,16 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
             File.Copy(Path.Combine(settings.Repository,notice),Path.Combine(install,notice),true);
         File.WriteAllText(Path.Combine(install,PcvrBuilds.Identity),id+"\n");
         PcvrBuilds.WritePaths(install,Path.Combine(paths.Install,"current"),paths.Data,paths.User);
+        if (preparedUpstate is not null && !PcvrMods.Supports(install, target, CuratedMods.Upstate))
+            throw new IOException("The PCVR build does not include Upstate Liberty runtime support.");
         PcvrBuilds.Publish(paths.Install,install,id,paths,token);
+        if (preparedUpstate is not null)
+        {
+            progress?.Report(InstallStage.InstallingGameFiles);
+            var status = PcvrMods.Install(paths, CuratedMods.Upstate, preparedUpstate, token);
+            if (!status.Installed || !status.Enabled || !status.Supported)
+                throw new IOException("Setup could not verify Upstate Liberty activation on PCVR.");
+        }
         if (progress is not null)
         {
             progress.Installed = true;

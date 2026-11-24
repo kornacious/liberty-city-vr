@@ -19,6 +19,8 @@ public sealed partial class SetupWindow : Window
     private GameTarget target = GameTarget.Quest;
     private string? pcFolder;
     private string? xboxImage;
+    private bool installUpstate;
+    private string? upstateArchive;
     private bool allowUnverifiedXboxIso;
     private int step;
     private bool helpOpen;
@@ -37,7 +39,8 @@ public sealed partial class SetupWindow : Window
     private TextBlock? progressCount;
 
     private bool Quest => target == GameTarget.Quest;
-    private SetupSelection Selection => new(target, pcFolder, xboxImage, accepted, releaseSigning, allowUnverifiedXboxIso);
+    private SetupSelection Selection => new(target, pcFolder, xboxImage, accepted, releaseSigning, allowUnverifiedXboxIso,
+        installUpstate, upstateArchive);
 
     public SetupWindow()
     {
@@ -143,6 +146,12 @@ public sealed partial class SetupWindow : Window
         AddTarget(GameTarget.Quest, "Quest 3 standalone", "Install on your headset. Play without a PC.");
         AddTarget(SetupInstaller.DesktopTarget, OperatingSystem.IsWindows() ? "Windows PCVR" : "Linux PCVR (experimental)",
             "Run the game on this computer and play through your connected headset.");
+        const string warning = "Enabling Upstate Liberty may reduce performance on Quest 3.";
+        var upstate = new CheckBox { IsChecked = installUpstate, Content = Copy("Install Upstate Liberty", "label") };
+        AutomationProperties.SetName(upstate, "Install Upstate Liberty");
+        AutomationProperties.SetHelpText(upstate, warning);
+        upstate.IsCheckedChanged += (_, _) => installUpstate = upstate.IsChecked == true;
+        Page.Children.Add(Card(Column(upstate, Copy(warning, "caption"))));
     }
 
     private void AddTarget(GameTarget value, string name, string description)
@@ -180,6 +189,10 @@ public sealed partial class SetupWindow : Window
             allowUnverifiedXboxIso = false;
         },
             [new FilePickerFileType("Xbox disc image") { Patterns = ["*.iso", "*.ISO"] }]);
+        if (installUpstate)
+            AddPath("Upstate Liberty archive", "Choose the official v1.1.2 UL.7z or leave this blank to download it.",
+                upstateArchive, true, value => upstateArchive = value,
+                [new FilePickerFileType("Upstate Liberty archive") { Patterns = ["*.7z"] }]);
     }
 
     private void RenderChecklist()
@@ -294,6 +307,7 @@ public sealed partial class SetupWindow : Window
         AddTool(toolPaths, "CMake executable", settings.CMake, value => settings.CMake = value);
         AddTool(toolPaths, "FFmpeg executable", settings.Ffmpeg == "ffmpeg" ? "" : settings.Ffmpeg, value => settings.Ffmpeg = string.IsNullOrEmpty(value) ? "ffmpeg" : value);
         AddTool(toolPaths, "ffprobe executable", settings.Ffprobe == "ffprobe" ? "" : settings.Ffprobe, value => settings.Ffprobe = string.IsNullOrEmpty(value) ? "ffprobe" : value);
+        AddTool(toolPaths, "7-Zip executable", settings.SevenZip, value => settings.SevenZip = value);
         var locations = new Expander { Header = "Tool locations", Content = toolPaths, IsExpanded = toolLocationsOpen };
         locations.PropertyChanged += (_, args) =>
         {

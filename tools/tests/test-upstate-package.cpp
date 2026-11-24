@@ -43,8 +43,13 @@ int main(int argc,char **argv) {
     std::string digest=hash("abc");
     UpstateFile fixture[]={ {"data/fixture.dat",3,digest.c_str()} };
     require(!Enabled(root.string()),"missing activation marker selects Classic");
+    require(Installed(root.string()),"installed payload appears in Assets");
+    require(!Installed((root/"missing").string()),"missing payload is unavailable");
     std::ofstream(root/"mods/upstate-liberty.enabled",std::ios::binary)<<UpstateMarker<<"\n";
     require(Enabled(root.string()),"exact curated marker accepted");
+    require(SetEnabled(root.string(),false) && !Enabled(root.string()),"disable removes the activation marker");
+    require(!SetEnabled(root.string(),true) && !Enabled(root.string()),"enable refuses an incomplete package");
+    require(!SetEnabled((root/"missing").string(),true),"unavailable payload cannot be enabled");
     require(PackageFilesValid(root.string(),fixture,1),"complete synthetic payload accepted");
     require(PackageFilesValid(root.string()+"/",fixture,1),"trailing game-root separator accepted");
     std::ofstream(package/"data/fixture.dat")<<"abd";

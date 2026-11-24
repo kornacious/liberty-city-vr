@@ -12,6 +12,9 @@
 #include <vector>
 #include <cstdio>
 #include <unistd.h>
+#if !defined(__ANDROID__) && (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
+#include "PcvrStartup.h"
+#endif
 #if defined(__ANDROID__) || (defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP))
 #include "RuntimeLog.h"
 #endif
@@ -32,6 +35,33 @@ std::string gameRoot, packageRoot;
 std::map<std::string,std::vector<std::string>> traits;
 std::map<std::string,std::vector<uint16_t>> text;
 std::string lower(std::string s) { for(char &c:s) { if(c=='\\') c='/'; if(c>='A'&&c<='Z') c+=32; } return s; }
+}
+bool Available(const char *root) {
+    if(!root || !questpackage::Installed(root)) return false;
+#if defined(__ANDROID__)
+    return true;
+#elif defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
+    try {
+#ifdef _WIN32
+        const char *engine="libertyvr-upstate.exe";
+#else
+        const char *engine="libertyvr-upstate";
+#endif
+        const auto directory=pcvrstartup::ExecutableDirectory();
+        if(!questpackage::Regular(directory/engine)) return false;
+        std::ifstream capabilities(directory/"pcvr-mod-capabilities.txt");
+        std::string line;
+        while(std::getline(capabilities,line))
+            if(line=="upstate-liberty/1" || line=="upstate-liberty/1\r") return true;
+    } catch(const std::exception&) {}
+    return false;
+#else
+    return false;
+#endif
+}
+bool Requested(const char *root) { return root && questpackage::Enabled(root); }
+bool Request(const char *root, bool enabled) {
+    return Available(root) && questpackage::SetEnabled(root,enabled);
 }
 bool Initialize(const char *root) {
     if(!Active()) return true;

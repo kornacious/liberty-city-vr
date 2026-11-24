@@ -46,6 +46,7 @@ if(args is ["--desktop"])
     Console.WriteLine($"{total-failures}/{total} desktop checks passed.");
     return failures==0?0:1;
 }
+await SetupChecks.Run(root, Test);
 var repository = Path.Combine(root, "source");
 Directory.CreateDirectory(Path.Combine(repository, "patches")); Directory.CreateDirectory(Path.Combine(repository, "overlay/android/app"));
 File.WriteAllText(Path.Combine(repository, "overlay/android/app/build.gradle.kts"), "versionCode = 600\n");

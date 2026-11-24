@@ -1,6 +1,7 @@
 #pragma once
 #include "QuestPackageHash.h"
 #include "QuestUpstateInventory.h"
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 
@@ -46,6 +47,15 @@ inline bool Regular(const std::filesystem::path &path) {
     std::error_code error;
     return std::filesystem::is_regular_file(std::filesystem::symlink_status(path,error)) && !error;
 }
+inline bool Installed(const std::string &root) {
+    namespace fs=std::filesystem;
+    if(root.empty()) return false;
+    auto mods=fs::u8path(root)/"mods";
+    std::error_code error;
+    return fs::is_directory(fs::symlink_status(mods,error)) && !error &&
+        fs::is_directory(fs::symlink_status(mods/"upstate-liberty",error)) && !error &&
+        Regular(mods/"upstate-liberty/.lcvr-package.json");
+}
 inline bool PackageFilesValid(const std::string &root, const UpstateFile *files, size_t count) {
     namespace fs=std::filesystem;
     fs::path base=fs::path(root).lexically_normal();
@@ -66,7 +76,7 @@ inline bool PackageFilesValid(const std::string &root, const UpstateFile *files,
 }
 inline bool PackageFilesValid(const std::string &root) { return PackageFilesValid(root,UpstateFiles,sizeof(UpstateFiles)/sizeof(UpstateFiles[0])); }
 inline bool Enabled(const std::string &root) {
-    auto marker=std::filesystem::path(root)/"mods/upstate-liberty.enabled";
+    auto marker=std::filesystem::u8path(root)/"mods/upstate-liberty.enabled";
     if(!Regular(marker)) return false;
     std::ifstream input(marker,std::ios::binary);
     std::string line;
@@ -74,4 +84,35 @@ inline bool Enabled(const std::string &root) {
     return input.peek()==std::char_traits<char>::eof();
 }
 inline bool CanActivate(const std::string &root) { return Enabled(root)&&PackageFilesValid(root); }
+
+inline bool SetEnabled(const std::string &root, bool enabled) {
+    namespace fs=std::filesystem;
+    if(!Installed(root)) return false;
+    auto mods=fs::u8path(root)/"mods";
+    auto marker=mods/"upstate-liberty.enabled";
+    std::error_code error;
+    const auto status=fs::symlink_status(marker,error);
+    if(error && error!=std::errc::no_such_file_or_directory) return false;
+    if(fs::exists(status) && !fs::is_regular_file(status)) return false;
+    if(!enabled) {
+        fs::remove(marker,error);
+        return !error;
+    }
+    if(!PackageFilesValid(root)) return false;
+    const auto nonce=std::chrono::steady_clock::now().time_since_epoch().count();
+    auto stage=mods/(".upstate-toggle-"+std::to_string(nonce));
+    if(!fs::create_directory(stage,error)) return false;
+    auto temporary=stage/"enabled";
+    std::ofstream output(temporary,std::ios::binary);
+    output<<UpstateMarker<<'\n';
+    output.close();
+    bool saved=false;
+    if(output) {
+        fs::rename(temporary,marker,error);
+        saved=!error;
+    }
+    fs::remove(temporary,error);
+    fs::remove(stage,error);
+    return saved;
+}
 }

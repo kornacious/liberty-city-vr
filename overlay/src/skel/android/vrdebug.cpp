@@ -551,6 +551,7 @@ static int gVrTrafficSelection;
 static int gVrRagdollSelection;
 static int gVrDeformationSelection;
 static int gVrModelAssetsSelection;
+static bool gVrUpstateAvailable, gVrUpstateRequested, gVrUpstateSaveFailed;
 static int gVrCheatSelection;
 static int gVrSpawnVehiclePage;
 static bool gVrSpawnInsideVehicle;
@@ -800,6 +801,7 @@ enum eVrModelAssetsMenuItem {
 	VR_MODEL_ASSETS_NEO,
 	VR_MODEL_ASSETS_DROPLETS,
 	VR_MODEL_ASSETS_SKIN,
+	VR_MODEL_ASSETS_UPSTATE,
 	VR_MODEL_ASSETS_BACK,
 	VR_MODEL_ASSETS_ITEM_COUNT
 };
@@ -3168,6 +3170,12 @@ VrDebugUpdate(const PadInput &in)
 		   (positivePulse || decreasePulse)){
 			const int category = gVrMenuSelection;
 			gVrMenuPage = QuestSettingsCategories[category].page;
+			if(gVrMenuPage == VR_MENU_PAGE_MODEL_ASSETS){
+				const char *root = platform::gameDataRoot();
+				gVrUpstateAvailable = !WorldSession::IsViewer() && QuestUpstate::Available(root);
+				gVrUpstateRequested = gVrUpstateAvailable && QuestUpstate::Requested(root);
+				gVrUpstateSaveFailed = false;
+			}
 			if(category != VR_MAIN_ABOUT) *CurrentMenuSelection() = 0;
 			if(category == VR_MAIN_VEHICLE_SETTINGS) gVrVehicleSubpage = 0;
 			if(category == VR_MAIN_CHEATS) OpenCheatMenu();
@@ -3436,6 +3444,9 @@ VrDebugUpdate(const PadInput &in)
 				gNeoDroplets=!gNeoDroplets;SaveVrInteger("XboxNeoDroplets",gNeoDroplets);
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN){
 				QuestGameSettings::CycleSkin(direction);
+			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_UPSTATE && gVrUpstateAvailable){
+				gVrUpstateSaveFailed = !QuestUpstate::Request(platform::gameDataRoot(), !gVrUpstateRequested);
+				if(!gVrUpstateSaveFailed) gVrUpstateRequested = !gVrUpstateRequested;
 			}else if(gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK &&
 			         positivePulse)
 				gVrMenuPage = VR_MENU_PAGE_SETTINGS;
@@ -4978,7 +4989,11 @@ DrawQuestModelAssetsPage(void)
 	DrawFullVrMenuRow(row,294 + textureRowSpace,2,gVrModelAssetsSelection==VR_MODEL_ASSETS_DROPLETS,true);
 	snprintf(row, sizeof(row), "PLAYER SKIN  < %.48s >", QuestGameSettings::SkinName());
 	DrawFullVrMenuRow(row, 336 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_SKIN, true);
-	DrawFullVrMenuRow("BACK TO SETTINGS", 378 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
+	snprintf(row, sizeof(row), "UPSTATE LIBERTY  %s%s",
+		gVrUpstateAvailable ? (gVrUpstateRequested ? "< ON >" : "< OFF >") : "N/A",
+		gVrUpstateAvailable && gVrUpstateRequested != QuestUpstate::Active() ? "  RESTART REQUIRED" : "");
+	DrawFullVrMenuRow(row, 378 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_UPSTATE, gVrUpstateAvailable);
+	DrawFullVrMenuRow("BACK TO SETTINGS", 420 + textureRowSpace, 2, gVrModelAssetsSelection == VR_MODEL_ASSETS_BACK, true);
 #ifdef __ANDROID__
 	DrawVrMenuText(ModelSets::IsAstcTextureActive() ? "ACTIVE TEXTURES: ASTC 6X6 CACHE" :
 		"ACTIVE TEXTURES: ORIGINAL", VR_MENU_WIDTH/2, 466, 2, 245, 205, 90);
@@ -4988,7 +5003,9 @@ DrawQuestModelAssetsPage(void)
 	DrawVrMenuText(ModelSets::IsOriginalXboxAudioActive() ? "ACTIVE AUDIO: ORIGINAL XBOX - SPEECH, SFX AND RADIO" :
 		ModelSets::IsModernActive() ? "ACTIVE AUDIO: CLASSIC - REIMPORT XBOX ISO TO ADD AUDIO" : "ACTIVE AUDIO: CLASSIC PC",
 		VR_MENU_WIDTH/2, 610, 2, 245, 205, 90);
-	if(QuestUpstate::Active())
+	if(gVrUpstateSaveFailed)
+		DrawVrMenuText("COULD NOT CHANGE UPSTATE LIBERTY", VR_MENU_WIDTH/2, 570, 2, 245, 205, 90);
+	else if(QuestUpstate::Active())
 		DrawVrMenuText("UPSTATE OVERRIDES THE SELECTED BASE ASSETS", VR_MENU_WIDTH/2, 570, 2, 245, 205, 90);
 	if(!ModelSets::IsAvailable(ModelSets::MODEL_SET_CLASSIC))
 		DrawVrMenuText("PC BASE NOT INSTALLED", VR_MENU_WIDTH/2, 530, 2, 210, 190, 145);
