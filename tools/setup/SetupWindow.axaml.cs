@@ -155,7 +155,12 @@ public sealed partial class SetupWindow : Window
         };
         AutomationProperties.SetName(radio, name);
         AutomationProperties.SetHelpText(radio, description);
-        radio.IsCheckedChanged += (_, _) => { if (radio.IsChecked == true) target = value; };
+        radio.IsCheckedChanged += (_, _) =>
+        {
+            if (radio.IsChecked != true || target == value) return;
+            target = value;
+            ResetChecks();
+        };
         Page.Children.Add(Card(radio));
     }
 
@@ -190,6 +195,18 @@ public sealed partial class SetupWindow : Window
             return;
         }
         if (readiness is null) return;
+        if (readiness.NeedsAndroidConsent)
+        {
+            var consent = new CheckBox { Content = Copy("I accept Google’s Android SDK license terms"), IsChecked = accepted };
+            AutomationProperties.SetName(consent, "I accept Google’s Android SDK license terms");
+            consent.IsCheckedChanged += (_, _) =>
+            {
+                accepted = consent.IsChecked == true;
+                NextButton.IsEnabled = accepted && readiness.CanInstall;
+            };
+            Page.Children.Add(Card(Column(Copy("Required to install Quest 3 standalone.", "caption"),
+                Link("Read Android SDK license terms", AndroidTerms), consent)));
+        }
         foreach (var check in readiness.Checks)
         {
             var status = check.Status switch
@@ -200,16 +217,6 @@ public sealed partial class SetupWindow : Window
             };
             Page.Children.Add(Card(Column(Copy($"{check.Title}  ·  {status}", check.Status == SetupCheckStatus.NeedsAttention ? "status" : "label"),
                 Copy(check.Message, "caption"))));
-        }
-        if (readiness.NeedsAndroidConsent)
-        {
-            var consent = new CheckBox { Content = Copy("I accept Google’s Android SDK license terms"), IsChecked = accepted };
-            consent.IsCheckedChanged += (_, _) =>
-            {
-                accepted = consent.IsChecked == true;
-                NextButton.IsEnabled = accepted && readiness.CanInstall;
-            };
-            Page.Children.Add(Card(Column(Link("Read Android SDK license terms", AndroidTerms), consent)));
         }
         if (readiness.CanInstall)
             Page.Children.Add(ButtonFor("Check again", async () => await Check(), HorizontalAlignment.Left));

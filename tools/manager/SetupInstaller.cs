@@ -137,9 +137,14 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                 javaFound ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
             if (!javaFound && (!string.IsNullOrWhiteSpace(local.JavaHome) || !local.AllowToolDownloads))
                 checks[^1] = new("Java build tools", "Choose a JDK 21 folder in Setup help or clear it to use the verified download.", SetupCheckStatus.NeedsAttention);
-            needsConsent = tools.NeedsSdkPackages;
-            Add("Android build tools", needsConsent ? "Setup can install the required components after you accept Google’s license terms." : "Found.",
-                needsConsent ? SetupCheckStatus.Automatic : SetupCheckStatus.Ready);
+            needsConsent = true;
+            await Probe("Android build tools", () =>
+            {
+                var sdkPending = tools.NeedsSdkPackages || !tools.HasAndroidSdkLicense;
+                Add("Android build tools", sdkPending ? "Setup will prepare the SDK after you accept Google’s Android SDK license terms." : "Found.",
+                    sdkPending ? SetupCheckStatus.Automatic : SetupCheckStatus.Ready);
+                return Task.CompletedTask;
+            });
             Add("Quest 3", "Enable Developer Mode, connect the headset by USB and accept the USB debugging prompt. Setup checks the connection after the local build.",
                 SetupCheckStatus.Automatic);
             if (options.InstallXboxVariant)
@@ -147,7 +152,7 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                 {
                     if (OperatingSystem.IsWindows()) await WindowsCompiler.Configure(runner, token);
                     else if (Paths.FindExecutable("c++") is null) throw new IOException("Install GCC or Clang C++ tools, then check again.");
-                    if (!needsConsent || !string.IsNullOrWhiteSpace(local.CMake))
+                    if (!tools.NeedsSdkPackages || !string.IsNullOrWhiteSpace(local.CMake))
                     {
                         var cmake = tools.FindCMake();
                         if (tools.FindNinja(cmake) is null)

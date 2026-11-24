@@ -27,6 +27,8 @@ disc image, or both.
    title and region but fails the retail US 1.0 fingerprint check, Setup offers
    **Continue with unverified ISO** or **Cancel**. Continue only if you trust the
    image. The import still requires successful conversion.
+   For Quest, review Google's Android SDK license terms on the checklist and
+   select the acceptance checkbox to enable **Install**.
 4. Select **Install**. The first install can take a while. Use the desktop shortcut
    for PCVR, or open Liberty City VR under Unknown Sources in the Quest app library.
    If the headset installation is pending, connect or authorize the headset and retry.

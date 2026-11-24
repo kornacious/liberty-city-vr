@@ -78,6 +78,48 @@ await Test("Graphical setup validates local game selections without creating a w
     Assert(!Directory.Exists(workspace));
 });
 
+await Test("Quest Setup requires consent even when Android tools and licenses are present", async () =>
+{
+    using var log = new PrivateLog();
+    var source = Path.Combine(root, "consent-kit");
+    var pc = Path.Combine(root, "consent-pc-copy");
+    var sdk = Path.Combine(root, "consent-sdk");
+    var installWork = Path.Combine(root, "consent-work");
+    var suffix = OperatingSystem.IsWindows() ? ".exe" : "";
+    Directory.CreateDirectory(Path.Combine(source, "patches"));
+    foreach (var folder in new[] { "data", "TEXT", "anim", "models", "movies", "Audio" })
+        Directory.CreateDirectory(Path.Combine(pc, folder));
+    foreach (var file in new[] { Path.Combine(source, "overlay/android/app/build.gradle.kts"),
+        Path.Combine(pc, "Audio/sfx.RAW"), Path.Combine(pc, "Audio/sfx.SDT"),
+        Path.Combine(sdk, "platforms/android-35/android.jar"), Path.Combine(sdk, "build-tools/34.0.0/source.properties"),
+        Path.Combine(sdk, "platform-tools/adb" + suffix), Path.Combine(sdk, "ndk/27.2.12479018/source.properties"),
+        Path.Combine(sdk, "cmake/3.22.1/bin/cmake" + suffix) })
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "fixture");
+    }
+    var local = config with { Repository = source, Workplace = installWork, AndroidSdk = sdk,
+        AllowToolDownloads = true, AstcEncoder = "", JavaHome = "" };
+    var toolchain = new Toolchain(local, new CommandRunner(log), log);
+    var installer = new SetupInstaller(local, log);
+    var selection = new SetupSelection(GameTarget.Quest, pc, null);
+    var readiness = await installer.Check(selection, default);
+    Assert(readiness.NeedsAndroidConsent && readiness.Checks.Any(c => c.Title == "Android build tools" && c.Status == SetupCheckStatus.Automatic));
+
+    var licenses = Path.Combine(sdk, "licenses");
+    await ThrowsAsync<IOException>(() => toolchain.EnsureSdk(false, default));
+    Assert(!Directory.Exists(licenses));
+    await toolchain.EnsureSdk(true, default);
+    Assert(File.Exists(Path.Combine(licenses, "android-sdk-license")));
+    Assert(Directory.GetFiles(licenses).Select(Path.GetFileName).SequenceEqual(["android-sdk-license"]));
+    readiness = await installer.Check(selection, default);
+    Assert(readiness.NeedsAndroidConsent && readiness.Checks.Any(c => c.Title == "Android build tools" && c.Status == SetupCheckStatus.Ready));
+    var declined = await installer.Install(selection, null, default);
+    Assert(declined is { Status: InstallStatus.Failed, Stage: InstallStage.CheckingSetup, Built: false });
+    if (readiness.CanInstall) Assert(declined.Message.Contains("license terms", StringComparison.Ordinal));
+    Assert(!Directory.Exists(installWork));
+});
+
 await Test("File browser places, expansion, navigation and layout", FileBrowserChecks.Run);
 await Test("Windows and Linux workplace defaults", () =>
 { Assert(ManagerSettings.DefaultWorkplace(true) == @"C:\LCVRBuild"); Assert(ManagerSettings.DefaultWorkplace(false).EndsWith("LCVRBuild")); return Task.CompletedTask; });

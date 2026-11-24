@@ -26,6 +26,12 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
         ["cmake;3.22.1"] = "cmake/3.22.1/bin/cmake" + Exe
     };
     internal bool NeedsSdkPackages => SdkPackages.Values.Any(path => !File.Exists(Path.Combine(Sdk, path)));
+    // The required packages all reference Google's standard Android SDK license
+    // with this digest in their SDK Manager metadata.
+    private const string AndroidSdkLicenseHash = "24333f8a63b6825ea9c5514f83c2829b004d1fee";
+    private string AndroidSdkLicense => Paths.Child(Sdk, "licenses/android-sdk-license");
+    internal bool HasAndroidSdkLicense => File.Exists(AndroidSdkLicense) &&
+        File.ReadLines(AndroidSdkLicense).Any(line => line.Trim().Equals(AndroidSdkLicenseHash, StringComparison.OrdinalIgnoreCase));
     public string Java { get; private set; } = "";
 
     public string? FindAdb()
@@ -82,6 +88,21 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
 
     public async Task EnsureSdk(bool acceptLicenses, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        var missing = SdkPackages.Where(p => !File.Exists(Path.Combine(Sdk, p.Value))).Select(p => p.Key).ToArray();
+        var hasLicense = HasAndroidSdkLicense;
+        if ((!hasLicense || missing.Length > 0) && !acceptLicenses)
+            throw new IOException("Accept Google’s Android SDK license terms before installing or building for Quest 3.");
+        if (!hasLicense)
+        {
+            // Record only the terms linked in Setup. `sdkmanager --licenses`
+            // also offers unrelated add-on licenses such as Google TV.
+            var license = AndroidSdkLicense;
+            Directory.CreateDirectory(Path.GetDirectoryName(license)!);
+            File.AppendAllText(license, "\n" + AndroidSdkLicenseHash + "\n");
+        }
+        if (missing.Length == 0) return;
+
         var toolHome = Path.Combine(Sdk, "cmdline-tools/latest");
         var jar = Path.Combine(toolHome, "lib/sdkmanager-classpath.jar");
         // Google's distribution uses the classpath JAR and its manifest dependencies.
@@ -96,15 +117,14 @@ public sealed class Toolchain(ManagerSettings settings, CommandRunner runner, Pr
             Paths.CopyTree(Path.Combine(stage, "cmdline-tools"), toolHome, token);
             Directory.Delete(stage, true);
         }
-        var packages = SdkPackages;
-        var missing = packages.Where(p => !File.Exists(Path.Combine(Sdk, p.Value))).Select(p => p.Key).ToArray();
-        if (missing.Length == 0) return;
-        if (!acceptLicenses) throw new IOException("SDK packages are missing. Read Google's Android SDK licenses, then enable the license acceptance option to install them.");
         log.Write("Installing Android SDK components: " + string.Join(", ", missing));
         string[] command = ["-Dcom.android.sdklib.toolsdir=" + toolHome, "-classpath", jar, "com.android.sdklib.tool.sdkmanager.SdkManagerCli", "--sdk_root=" + Sdk];
-        await runner.Run(Java, command.Concat(["--licenses"]), token: token, input: string.Concat(Enumerable.Repeat("y\n", 100)));
-        await runner.Run(Java, command.Concat(missing), token: token);
-        if (packages.Values.Any(p => !File.Exists(Path.Combine(Sdk, p)))) throw new IOException("SDK Manager did not install all required components.");
+        var installed = await runner.Run(Java, command.Concat(missing), check: false, token: token);
+        if (installed.Output.Contains("license", StringComparison.OrdinalIgnoreCase) &&
+            installed.Output.Contains("not accepted", StringComparison.OrdinalIgnoreCase))
+            throw new IOException("SDK Manager requires additional or updated license terms. Review them in Android Studio’s SDK Manager, then try Setup again.");
+        if (installed.ExitCode != 0 || NeedsSdkPackages)
+            throw new IOException("SDK Manager did not install all required Android components. See the setup log.");
     }
 
     public async Task<string> Gradle(CancellationToken token)
