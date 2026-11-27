@@ -18,9 +18,23 @@ int RunDesktopGame(unsigned frameLimit);
 // teardown, even if startup never initialized RenderWare. Flush CLI output and
 // leave the process directly on help/startup failure; the OS reclaims its state.
 [[noreturn]] static void FinishStartup(int code) {
-    std::cout.flush(); std::cerr.flush(); std::_Exit(code);
+    std::cout.flush();
+    std::cerr.flush();
+#if defined(LIBERTYVR_PORTABLE_ENGINE) && defined(_WIN32)
+    // ExitProcess runs DLL detach handlers even when called by the CRT's _Exit.
+    // RenderWare may never have initialized the engine's global allocators.
+    std::fflush(nullptr);
+    TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
+#endif
+    std::_Exit(code);
 }
+#if defined(LIBERTYVR_PORTABLE_ENGINE) && defined(_WIN32)
+extern "C" __declspec(dllexport) int LibertyVrRun(int argc,char **argv) {
+#elif defined(LIBERTYVR_PORTABLE_ENGINE)
+extern "C" __attribute__((visibility("default"))) int LibertyVrRun(int argc,char **argv) {
+#else
 int main(int argc,char **argv) {
+#endif
     std::string data,user,questProfile; bool explicitData=false,explicitUser=false; unsigned frames=0; bool configured=false,checkUpstateArchive=false,checkAssets=false;
     try {
         pcvrstartup::Arguments utf8(argc,argv); argc=int(utf8.values.size()); argv=utf8.pointers.data();
@@ -59,7 +73,12 @@ int main(int argc,char **argv) {
         }
 #else
         if(checkUpstateArchive) throw std::runtime_error("Use the Upstate executable for --check-upstate-archive.");
+#ifndef LIBERTYVR_PORTABLE_ENGINE
         if(questpackage::Enabled(data)) FinishStartup(pcvrstartup::DispatchUpstate(argc,argv,data,user));
+#endif
+#endif
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+        assetvariants::settingsRoot = (std::filesystem::u8path(user) / "configs").u8string();
 #endif
         const int selected=assetvariants::Select(data);
         if(selected<0) {
@@ -74,9 +93,13 @@ int main(int argc,char **argv) {
         if(!questProfile.empty()) { MatchedProfile::Load(questProfile); std::cout<<"Quest 3 compatibility workload profile active. Timings measure this PC, not Quest hardware.\n"; }
         if(!platform::configureDesktop(data,user)) throw std::runtime_error("Local data or Desktop media services unavailable.");
         configured=true;
-        if(!Desktop::Open(user)) throw std::runtime_error("Cannot create the desktop preview window.");
+        if(!Desktop::Open(user, assetvariants::settingsRoot)) throw std::runtime_error("Cannot create the desktop preview window.");
         int result=RunDesktopGame(frames); Desktop::Close(); platform::shutdownDesktop();
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+        FinishStartup(result);
+#else
         if(result!=0) FinishStartup(result);
         return result;
+#endif
     } catch(const std::exception &error) { Desktop::Close(); if(configured) platform::shutdownDesktop(); std::cerr<<"Desktop game startup: "<<error.what()<<'\n'; FinishStartup(1); }
 }

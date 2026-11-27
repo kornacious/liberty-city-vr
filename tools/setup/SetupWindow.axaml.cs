@@ -21,6 +21,8 @@ public sealed partial class SetupWindow : Window
     private string? xboxImage;
     private bool installUpstate;
     private string? upstateArchive;
+    private string? legacyInstall;
+    private string installRoot = ManagerSettings.DefaultWorkplace(OperatingSystem.IsWindows()) + "-PCVR";
     private bool allowUnverifiedXboxIso;
     private int step;
     private bool helpOpen;
@@ -40,7 +42,7 @@ public sealed partial class SetupWindow : Window
 
     private bool Quest => target == GameTarget.Quest;
     private SetupSelection Selection => new(target, pcFolder, xboxImage, accepted, releaseSigning, allowUnverifiedXboxIso,
-        installUpstate, upstateArchive);
+        installUpstate, upstateArchive, Quest ? null : installRoot, Quest ? null : legacyInstall);
 
     public SetupWindow()
     {
@@ -54,9 +56,13 @@ public sealed partial class SetupWindow : Window
             error = "Your saved manager settings could not be read. Setup is using the defaults for this session.";
         }
         // A packaged Setup travels with its matching source kit.
-        var packagedKit = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
-        if (File.Exists(Path.Combine(packagedKit, "overlay/android/app/build.gradle.kts")))
-            settings.Repository = packagedKit;
+        for (var candidate = new DirectoryInfo(AppContext.BaseDirectory); candidate is not null; candidate = candidate.Parent)
+            if (File.Exists(Path.Combine(candidate.FullName, OperatingSystem.IsWindows() ? "SETUP.bat" : "SETUP.sh")) &&
+                File.Exists(Path.Combine(candidate.FullName, "overlay/android/app/build.gradle.kts")))
+            {
+                settings.Repository = candidate.FullName;
+                break;
+            }
         var options = settings.Actions.GetValueOrDefault(ManagerAction.BuildAndInstall);
         releaseSigning = options is { Target: GameTarget.Quest, Release: true };
         if (options?.Target == SetupInstaller.DesktopTarget) target = options.Target;
@@ -152,6 +158,15 @@ public sealed partial class SetupWindow : Window
         AutomationProperties.SetHelpText(upstate, warning);
         upstate.IsCheckedChanged += (_, _) => installUpstate = upstate.IsChecked == true;
         Page.Children.Add(Card(Column(upstate, Copy(warning, "caption"))));
+        AddPath(Quest ? "Build folder" : "Install folder",
+            Quest ? "Choose a writable folder for tools, build files and prepared game data."
+                : "Choose an empty folder or an existing portable PCVR installation.",
+            Quest ? settings.Workplace : installRoot, false, value =>
+            {
+                if (value is null) return;
+                if (Quest) settings.Workplace = value;
+                else installRoot = value;
+            }, clearable: false);
     }
 
     private void AddTarget(GameTarget value, string name, string description)
@@ -169,13 +184,16 @@ public sealed partial class SetupWindow : Window
             if (radio.IsChecked != true || target == value) return;
             target = value;
             ResetChecks();
+            Dispatcher.UIThread.Post(() => Render(focusHeading: false));
         };
         Page.Children.Add(Card(radio));
     }
 
     private void RenderSources()
     {
-        Page.Children.Add(Copy("Choose either copy or both. Setup prepares a separate copy and keeps your original files on this computer."));
+        Page.Children.Add(Copy(Quest
+            ? "Choose either copy or both. Setup prepares a separate copy and keeps your original files on this computer."
+            : "Choose the game files to import. You can leave both blank when updating an existing portable installation."));
         if (work is not null)
         {
             Page.Children.Add(new ProgressBar { IsIndeterminate = true });
@@ -183,6 +201,9 @@ public sealed partial class SetupWindow : Window
             return;
         }
         AddPath("PC copy", "Choose the folder that contains the data, models, and audio folders.", pcFolder, false, value => pcFolder = value);
+        if (!Quest)
+            AddPath("Copy from an existing installation", "Choose the existing PCVR install root or app folder to copy prepared data, saves and settings.",
+                legacyInstall, false, value => legacyInstall = value);
         AddPath("Original Xbox copy", "Choose your GTA III US disc image (.iso or .xiso.iso).", xboxImage, true, value =>
         {
             xboxImage = value;
@@ -242,7 +263,24 @@ public sealed partial class SetupWindow : Window
             Page.Children.Add(Copy(result.Message));
             if (result.Status is InstallStatus.Cancelled or InstallStatus.Failed)
                 Page.Children.Add(Copy($"Stopped at: {StageTitle(result.Stage)}.", "status"));
-            if (result.InstallFolder is { } folder) Page.Children.Add(Link("Open install folder", folder));
+            if (result.InstallFolder is { } folder)
+            {
+                Page.Children.Add(Link("Open install folder", folder));
+                if (!Quest && result.Status == InstallStatus.Installed)
+                {
+                    var status = Copy("", "caption");
+                    Page.Children.Add(ButtonFor("Create desktop shortcut", async () =>
+                    {
+                        try
+                        {
+                            await PcvrShortcuts.CreatePortable(folder, target, CancellationToken.None);
+                            status.Text = "Desktop shortcut created.";
+                        }
+                        catch (Exception exception) { status.Text = "Couldn’t create the shortcut. " + exception.Message; }
+                    }, HorizontalAlignment.Left));
+                    Page.Children.Add(status);
+                }
+            }
             if (logPath is not null && File.Exists(logPath)) Page.Children.Add(Link("Open setup log", logPath));
             return;
         }
@@ -280,11 +318,7 @@ public sealed partial class SetupWindow : Window
             Documentation + (Quest ? "BUILDING.md#quest-build-and-deployment" : "overlay/desktop/README.md#dependencies")));
         AddPath("Liberty City VR source kit", "The folder you extracted. It contains the overlay and patches folders.", settings.Repository, false,
             value => settings.Repository = value ?? "", clearable: false);
-        AddPath("Build folder", OperatingSystem.IsWindows()
-                ? "Use a short, writable location like C:\\LCVRBuild with room for downloaded tools and prepared files."
-                : "Use a separate, writable folder with room for downloaded tools and prepared game files.", settings.Workplace, false,
-            value => settings.Workplace = value ?? "", clearable: false);
-        var downloads = new CheckBox { IsChecked = settings.AllowToolDownloads, Content = Copy("Allow verified tool archive downloads") };
+        var downloads = new CheckBox { IsChecked = settings.AllowToolDownloads, Content = Copy("Allow verified downloads for Setup") };
         downloads.IsCheckedChanged += (_, _) => { settings.AllowToolDownloads = downloads.IsChecked == true; ResetChecks(); };
         Page.Children.Add(downloads);
         var toolPaths = Column();
@@ -497,8 +531,20 @@ public sealed partial class SetupWindow : Window
         var reporter = new Progress<InstallProgress>(value => { if (work == install) UpdateProgress(value); });
         try
         {
-            using var log = new PrivateLog(logPath);
-            result = await Task.Run(() => new SetupInstaller(settings, log).Install(selection, reporter, install.Token));
+            using (var log = new PrivateLog(logPath))
+                result = await Task.Run(() => new SetupInstaller(settings, log).Install(selection, reporter, install.Token));
+            if (selection.Target != GameTarget.Quest && result is { Status: InstallStatus.Installed, InstallFolder: { } folder })
+            {
+                try
+                {
+                    var destination = Paths.Child(folder, "user/logs/" + Path.GetFileName(logPath));
+                    File.Copy(logPath, destination);
+                    if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                    logPath = destination;
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
         catch (Exception exception) { result = new(InstallStatus.Failed, InstallStage.CheckingSetup, false, exception.Message); }
         finally { work = null; }

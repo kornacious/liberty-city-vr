@@ -1134,7 +1134,7 @@ createSwapchain(void)
 
 	char settingsPath[512];
 	snprintf(settingsPath, sizeof(settingsPath), "%s/vr_settings.ini",
-		platform::gameDataRoot());
+		platform::configurationRoot());
 	// Apply the tested Quest baseline once when upgrading an older settings
 	// file. The version marker is written last, so a partial write retries on
 	// the next launch. After migration every menu option remains user-editable.
@@ -2509,7 +2509,7 @@ confirmRenderScaleRendererReady(void)
 
 	char settingsPath[512];
 	snprintf(settingsPath, sizeof(settingsPath), "%s/vr_settings.ini",
-		platform::gameDataRoot());
+		platform::configurationRoot());
 	const bool cleared =
 		WritePrivateProfileStringA("VR", "RenderScaleLastFallbackRequest",
 			"0", settingsPath) &&

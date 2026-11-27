@@ -186,7 +186,7 @@ public sealed class OriginalXboxModels(ManagerSettings settings, ICommandRunner 
             if (Directory.Exists(scratch)) Directory.Delete(scratch, true);
         }
     }
-    private async Task<string> Converter(CancellationToken token)
+    internal async Task<string> Converter(CancellationToken token)
     {
         if (runner is CommandRunner commands) await WindowsCompiler.Configure(commands, token);
         var tools = new Toolchain(settings, runner as CommandRunner ?? new CommandRunner(log), log);

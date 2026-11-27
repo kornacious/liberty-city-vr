@@ -41,11 +41,13 @@ public static class VariantInstaller
         foreach(var (p,h) in hashes)if(!Digests.Sha256(Paths.Child(root,p)).Equals(h,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Variant checksum mismatch: "+p);
         return hashes;
     }
-    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token,string? astcEncoder = null, string? xboxConverter = null)
+    public static async Task<Dictionary<string,string>> Prepare(ManagerSettings s,ActionOptions o,string portFiles,ICommandRunner runner,PrivateLog log,CancellationToken token,string? astcEncoder = null, string? xboxConverter = null, bool portable = false)
     {
         ValidateSource(s,o); var prepared=new Dictionary<string,string>();
         foreach(var id in new[]{"pc","xbox"}.Where(id=>id=="pc"?WantsPc(o):o.InstallXboxVariant)) {
-            var parent=Path.Combine(s.Workplace,"prepared-variants",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(parent);
+            var parent=Path.Combine(s.Workplace,"prepared-variants");
+            if (!portable) parent=Path.Combine(parent,Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(parent);
             var stage=Path.Combine(parent,id);
             if(id=="pc") {
                 Directory.CreateDirectory(stage);

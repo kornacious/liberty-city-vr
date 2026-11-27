@@ -56,7 +56,7 @@ struct AppState
 void
 autoResetRenderScaleAfterGameInitialiseFailure(void)
 {
-	const char *dataRoot = platform::gameDataRoot();
+	const char *dataRoot = platform::configurationRoot();
 	if(dataRoot == nullptr || dataRoot[0] == '\0'){
 		LOGE("render-scale recovery unavailable: game data root is empty");
 		return;
@@ -1017,7 +1017,7 @@ EndVrWristPanel(void)
 int RunWindowsGame(unsigned frameLimit)
 {
     androidgame::QuestProfilerSetLogDirectory(platform::storageRoot());
-    VehiclePlacement::configureRuntime(platform::gameDataRoot());
+    VehiclePlacement::configureRuntime(platform::gameDataRoot(), platform::configurationRoot());
     if(!xrvk::create(nullptr)) { xrvk::destroy(); return 1; }
     xrvk::GraphicsContext graphics{};
     if(!xrvk::getContext(&graphics)) { xrvk::destroy(); return 1; }

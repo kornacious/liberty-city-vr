@@ -26,6 +26,9 @@ bool configureDesktop(const std::string &data,const std::string &user){
   const int selected=assetvariants::Select(data);if(selected<0)return false;
   dataRoot=std::filesystem::absolute(std::filesystem::u8path(data)).u8string();userRoot=std::filesystem::absolute(std::filesystem::u8path(user)).u8string();
   std::filesystem::create_directories(std::filesystem::u8path(userRoot));
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+  std::filesystem::create_directories(std::filesystem::u8path(assetvariants::settingsRoot));
+#endif
   for(const char *dir:{"simulation-replays","renderdoc-captures","perf-captures"})std::filesystem::create_directories(std::filesystem::u8path(userRoot)/dir);
   quit=0;std::signal(SIGINT,interrupted);std::signal(SIGTERM,interrupted);
   installNativeDiagnostics(&checkpoint);
@@ -41,7 +44,18 @@ void setCheckpoint(const char *label){checkpoint.store(label,std::memory_order_r
 void startStallWatchdog(){}
 const char *storageRoot(){return userRoot.c_str();}
 const char *gameDataRoot(){return dataRoot.c_str();}
-char *resolveGamePath(char *out,size_t capacity,const char *relative){auto path=assetvariants::Resolve(dataRoot,relative);if(path.size()+1>capacity){if(capacity)*out=0;return out;}memcpy(out,path.c_str(),path.size()+1);return out;}
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+const char *configurationRoot(){return assetvariants::settingsRoot.c_str();}
+#endif
+char *resolveGamePath(char *out,size_t capacity,const char *relative){
+  auto path=assetvariants::Resolve(dataRoot,relative);
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+  if(std::strcmp(relative,"re3.ini")==0)
+    path=(std::filesystem::u8path(configurationRoot())/relative).u8string();
+#endif
+  if(path.size()+1>capacity){if(capacity)*out=0;return out;}
+  memcpy(out,path.c_str(),path.size()+1);return out;
+}
 bool resolveGamePathCaseInsensitive(char *out,size_t capacity,const char *relative){
   resolveGamePath(out,capacity,relative);if(!capacity || !*out)return false;
   auto requested=std::filesystem::u8path(out);if(std::filesystem::exists(requested))return true;

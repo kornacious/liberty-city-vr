@@ -155,7 +155,11 @@ void NormalizeRoot(const char *root)
 
 void FindSettingsPath()
 {
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+    snprintf(gSettingsPath, sizeof(gSettingsPath), "%s/vr_settings.ini", platform::configurationRoot());
+#else
     snprintf(gSettingsPath, sizeof(gSettingsPath), "%svr_settings.ini", gGameRoot);
+#endif
 }
 bool IsSafeModelsPath(const char *path)
 {

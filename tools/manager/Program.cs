@@ -7,6 +7,33 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args is ["--build-pcvr-setup", var settingsPath, var outputPath])
+        {
+            using var log = new PrivateLog();
+            log.Line += Console.Error.WriteLine;
+            try
+            {
+                var settings = JsonSerializer.Deserialize<ManagerSettings>(File.ReadAllText(settingsPath))
+                    ?? throw new InvalidDataException("Missing PCVR release build settings.");
+                Paths.RequireRepository(settings.Repository);
+                if (!Path.IsPathFullyQualified(settings.Workplace))
+                    throw new IOException("Choose an absolute PCVR release workspace.");
+                Paths.NoLinks(settings.Workplace);
+                var output = Path.GetFullPath(outputPath);
+                if (Directory.Exists(output) || File.Exists(output))
+                    throw new IOException("Use a fresh PCVR release staging directory.");
+                Directory.CreateDirectory(output);
+                var runner = new CommandRunner(log);
+                var host = PcvrWorkflow.HostTarget;
+                var app = Paths.Child(output, "app");
+                var assets = await new PcvrWorkflow(settings, runner, log, host).BuildPortablePackage(app, default);
+                PortablePcvrSetup.ValidateApp(app, host);
+                PortablePortAssets.Write(settings.Repository, assets, Paths.Child(output, PortablePortAssets.Manifest));
+                Console.WriteLine(await new OriginalXboxModels(settings, runner, log).Converter(default));
+                return 0;
+            }
+            catch (Exception error) { Console.Error.WriteLine(log.Sanitize(error.Message)); return 1; }
+        }
         if (args.Length >= 2 && args[0] == "--privacy")
         {
             try

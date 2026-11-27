@@ -18,10 +18,14 @@ disc image, or both.
    is experimental. For Quest, enable Developer Mode, connect the headset by USB
    and accept the USB debugging prompt inside the headset. Select **Install Upstate
    Liberty** to add the map expansion. Enabling it may reduce performance on Quest 3.
-3. Select your GTA III files and follow the checklist. Prebuilt PCVR kits need
-   a working Vulkan driver and OpenXR runtime. Windows may also need the x64
-   Microsoft Visual C++ Redistributable. Setup uses Git to obtain the pinned
-   re3 files it needs for data preparation and uses FFmpeg and ffprobe for Xbox
+3. For PCVR, choose the installation folder on the target screen. Setup puts
+   the game in `app`, prepared content in `data`, and saves, settings and logs
+   in `user`. To copy from an earlier install, select its install root or app
+   folder on the game files screen. Select your GTA III files and follow the
+   checklist. Prebuilt PCVR kits need a working Vulkan driver and OpenXR
+   runtime. The Windows game bundle includes the x64 Visual C++ runtime.
+   Prebuilt Setup fetches and verifies
+   only the required port assets and uses FFmpeg and ffprobe for Xbox
    disc imports. Setup downloads verified FFmpeg tools when working executables
    are unavailable. Windows Setup release kits include a converter that runs
    without Visual Studio, CMake or Ninja. If building PCVR from source, see the
@@ -35,8 +39,10 @@ disc image, or both.
    image. The import still requires successful conversion.
    For Quest, review Google's Android SDK license terms on the checklist and
    select the acceptance checkbox to enable **Install**.
-4. Select **Install**. The first install can take a while. Use the desktop shortcut
-   for PCVR, or open Liberty City VR under Unknown Sources in the Quest app library.
+4. Select **Install**. The first install can take a while. For PCVR, open the
+   game in the install folder or create a desktop shortcut on the ready screen.
+   You can move the complete folder and recreate its shortcut. For Quest, open
+   Liberty City VR under Unknown Sources in the app library.
    If the headset installation is pending, connect or authorize the headset and retry.
    Use **Settings → Assets → Upstate Liberty** to enable or disable an installed
    mod. Fully quit and reopen the game to apply the change. Each engine keeps its
@@ -56,6 +62,16 @@ Use the [terminal manager](../manager/README.md) for command-line parameters,
 tool-specific settings, the vehicle editor, diagnostics, or developer tools.
 
 ## Build and package Setup
+
+Run [New-PcvrSetupRelease.ps1](New-PcvrSetupRelease.ps1) from a clean release
+checkout, once on native Windows x64 and once on native Linux x64. Pass
+`-ReleaseTag`, the Manager build settings JSON via `-SettingsFile`, the native
+standalone 7-Zip executable, license and matching source archive via
+`-SevenZip`, `-SevenZipLicense` and `-SevenZipSource`, and
+`-OutputDirectory`. Use a separate workplace in the build settings. The
+starter builds and tests the portable game and converter, publishes the .NET
+tools, and creates a Windows ZIP or experimental Linux tarball for manual
+upload. Both archives include the source kit for the Quest option.
 
 From the checkout with the .NET 10 SDK, run
 `dotnet run --project tools/setup -c Release --artifacts-path out/setup-local-build`.

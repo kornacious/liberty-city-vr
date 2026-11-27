@@ -1000,7 +1000,7 @@ GetCutsceneCameraAnchorPath(char *out, size_t outSize)
 {
 	if(out == nil || outSize == 0)
 		return false;
-	const char *root = platform::gameDataRoot();
+	const char *root = platform::configurationRoot();
 	if(root == nil || root[0] == '\0')
 		return false;
 	const int written = snprintf(out, outSize,

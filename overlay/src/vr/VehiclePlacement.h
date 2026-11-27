@@ -308,6 +308,7 @@ inline uint64_t contentHash(const std::string &text) {
 struct LiveStore {
     Store store;
     std::string root = ".", acknowledged;
+    std::string personalRoot = ".";
     uint64_t revision = 0;
     std::string hashes[3];
     std::chrono::steady_clock::time_point lastPoll{};
@@ -320,7 +321,7 @@ struct LiveStore {
         Pack incoming[3];
         std::string nextHash[3];
         for (int i = 0; i < 3; i++) {
-            std::string path = root + "/vehicle_placements." + names[i] + ".ini", raw, error;
+            std::string path = (i == 0 ? root : personalRoot) + "/vehicle_placements." + names[i] + ".ini", raw, error;
             struct stat info;
             if (stat(path.c_str(), &info) != 0) {
                 if (errno != ENOENT)
@@ -353,7 +354,7 @@ struct LiveStore {
         }
         std::string request;
         {
-            std::ifstream file(root + "/vehicle_placements.reload");
+            std::ifstream file(personalRoot + "/vehicle_placements.reload");
             std::getline(file, request);
         }
         if (request.size() != 32 || request.find_first_not_of("0123456789abcdef") != request.npos)
@@ -362,7 +363,7 @@ struct LiveStore {
         for (int i = 0; i < 3; i++)
             acknowledge = acknowledge || hashes[i] != nextHash[i];
         if (acknowledge) {
-            const std::string path = root + "/vehicle_placements.live.ini", temp = path + ".tmp";
+            const std::string path = personalRoot + "/vehicle_placements.live.ini", temp = path + ".tmp";
             std::ofstream out(temp, std::ios::binary | std::ios::trunc);
             out << "[LivePlacement]\nVersion=1\nRequest=" << request << "\n";
             for (int i = 0; i < 3; i++)
@@ -386,9 +387,10 @@ inline LiveStore &liveRuntime() {
     static LiveStore live;
     return live;
 }
-inline void configureRuntime(const std::string &root) {
+inline void configureRuntime(const std::string &root, const std::string &personalRoot = {}) {
     auto &live = liveRuntime();
     live.root = root;
+    live.personalRoot = personalRoot.empty() ? root : personalRoot;
     live.lastPoll = {};
     live.poll(true);
 }
@@ -398,7 +400,7 @@ inline Store &runtime() {
     return live.store;
 }
 inline std::string personalPath() {
-    return liveRuntime().root + "/vehicle_placements.personal.ini";
+    return liveRuntime().personalRoot + "/vehicle_placements.personal.ini";
 }
 inline bool savePersonal(int set, int model, const std::string &key, float value) {
     Store &s = runtime();

@@ -1102,7 +1102,7 @@ GetBodyIKSettingsPath(char *out, size_t outSize)
 	if(out == nil || outSize == 0)
 		return false;
 
-	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::configurationRoot();
 	if(root == nil || root[0] == '\0')
 		return false;
 
@@ -1117,7 +1117,7 @@ GetCutsceneModeSettingsPath(char *out, size_t outSize)
 	if(out == nil || outSize == 0)
 		return false;
 
-	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::configurationRoot();
 	if(root == nil || root[0] == '\0')
 		return false;
 
@@ -1132,7 +1132,7 @@ static int
 ReadLegacyCutsceneMode(int fallback)
 {
 	char iniPath[512];
-	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::gameDataRoot();
+	const char *root = WorldSession::IsViewer() ? platform::storageRoot() : platform::configurationRoot();
 	if(root == nil || root[0] == '\0')
 		return clamp(fallback, 0, 1);
 

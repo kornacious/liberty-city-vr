@@ -8,6 +8,8 @@ public static class PcvrMods
 {
     public const string Engine = "libertyvr-upstate.exe";
     public static string EngineFor(GameTarget target)=>target==GameTarget.LinuxPcvr?"libertyvr-upstate":Engine;
+    internal static string PortableEngine(GameTarget target, string mode) =>
+        target == GameTarget.LinuxPcvr ? "libertyvr-engine-" + mode + ".so" : "libertyvr-engine-" + mode + ".dll";
     public const string Capabilities = "pcvr-mod-capabilities.txt";
     private static string Marker(CuratedMod mod) => mod.Id + ":" + mod.Version + ":" + mod.Sha256 + "\n";
     private static string Payload(string data, CuratedMod mod) => Paths.Child(data, "mods/" + mod.Id);
@@ -38,7 +40,8 @@ public static class PcvrMods
             (Directory.Exists(Paths.Child(paths.Install,"current")) || File.Exists(Paths.Child(paths.Install,"current.json")) ||
              File.Exists(Paths.Child(paths.Install,paths.Target==GameTarget.LinuxPcvr?"libertyvr-game":"libertyvr-game.exe"))))
         {
-            var install = PcvrWorkflow.ResolveInstallation(paths.Install,paths.Target);
+            var install = File.Exists(Paths.Child(paths.Install, ".portable-pcvr"))
+                ? paths.Install : PcvrWorkflow.ResolveInstallation(paths.Install,paths.Target);
             supported = Supports(install, paths.Target, mod);
         }
         return new(installed, enabled, supported);
@@ -46,7 +49,7 @@ public static class PcvrMods
     internal static bool Supports(string install, GameTarget target, CuratedMod mod)
     {
         var capabilities = Paths.Child(install, Capabilities);
-        return File.Exists(Paths.Child(install, EngineFor(target))) && File.Exists(capabilities) &&
+        return (File.Exists(Paths.Child(install, EngineFor(target))) || File.Exists(Paths.Child(install, PortableEngine(target, "upstate")))) && File.Exists(capabilities) &&
             File.ReadAllLines(capabilities).Contains(mod.Capability, StringComparer.Ordinal);
     }
     public static string SelectEngine(PcvrPaths paths)
@@ -57,7 +60,9 @@ public static class PcvrMods
         if (!status.Enabled || !status.Installed || !status.Supported)
             throw new IOException("Upstate activation or PCVR engine is unavailable. Disable the mod or rebuild/install PCVR from the manager.");
         CuratedMods.ValidatePackage(Payload(paths.Data, mod), mod);
-        return EngineFor(paths.Target);
+        return File.Exists(Paths.Child(paths.Install, ".portable-pcvr"))
+            ? paths.Target == GameTarget.LinuxPcvr ? "libertyvr-game" : "libertyvr-game.exe"
+            : EngineFor(paths.Target);
     }
     public static ModStatus Install(PcvrPaths paths, CuratedMod mod, string source, CancellationToken token)
     {

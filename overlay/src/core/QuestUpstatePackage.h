@@ -47,6 +47,26 @@ inline bool Regular(const std::filesystem::path &path) {
     std::error_code error;
     return std::filesystem::is_regular_file(std::filesystem::symlink_status(path,error)) && !error;
 }
+#ifdef _WIN32
+inline constexpr char PortableClassicLibrary[] = "libertyvr-engine-classic.dll";
+inline constexpr char PortableUpstateLibrary[] = "libertyvr-engine-upstate.dll";
+#else
+inline constexpr char PortableClassicLibrary[] = "libertyvr-engine-classic.so";
+inline constexpr char PortableUpstateLibrary[] = "libertyvr-engine-upstate.so";
+#endif
+inline bool SupportsPortableEngine(const std::filesystem::path &app) {
+    const auto path = app / "pcvr-mod-capabilities.txt";
+    if (!Regular(path) || !Regular(app / PortableUpstateLibrary)) return false;
+    std::ifstream capabilities(path);
+    bool upstate = false, portable = false;
+    std::string line;
+    while (std::getline(capabilities, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        upstate |= line == "upstate-liberty/1";
+        portable |= line == "portable-engine/1";
+    }
+    return upstate && portable;
+}
 inline bool Installed(const std::string &root) {
     namespace fs=std::filesystem;
     if(root.empty()) return false;
@@ -58,7 +78,7 @@ inline bool Installed(const std::string &root) {
 }
 inline bool PackageFilesValid(const std::string &root, const UpstateFile *files, size_t count) {
     namespace fs=std::filesystem;
-    fs::path base=fs::path(root).lexically_normal();
+    fs::path base=fs::u8path(root).lexically_normal();
     while(base!=base.root_path()&&base.filename().empty()) base=base.parent_path();
     fs::path package=base/"mods/upstate-liberty";
     std::error_code error;
@@ -70,7 +90,13 @@ inline bool PackageFilesValid(const std::string &root, const UpstateFile *files,
             if(parent.empty()||parent==parent.parent_path()) return false;
             if(!fs::is_directory(fs::symlink_status(parent,error))||error) return false;
         }
-        if(!Regular(path)||fs::file_size(path,error)!=file.bytes||error||FileHash(path.string().c_str())!=file.sha256) return false;
+        if(!Regular(path)||fs::file_size(path,error)!=file.bytes||error) return false;
+        std::ifstream input(path, std::ios::binary);
+        Sha256 hash;
+        std::array<uint8_t, 65536> buffer;
+        while (input.read(reinterpret_cast<char *>(buffer.data()), buffer.size()) || input.gcount())
+            hash.update(buffer.data(), static_cast<size_t>(input.gcount()));
+        if (input.bad() || !input.eof() || hash.finish()!=file.sha256) return false;
     }
     return Regular(package/".lcvr-package.json");
 }

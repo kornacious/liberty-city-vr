@@ -29,7 +29,7 @@ internal sealed class InstallRun(IProgress<InstallProgress>? progress)
 
 public sealed record SetupSelection(GameTarget Target, string? PcFolder, string? XboxImage,
     bool AcceptAndroidLicenses = false, bool? UseReleaseSigning = null, bool AllowUnverifiedXboxIso = false,
-    bool InstallUpstate = false, string? UpstateArchive = null);
+    bool InstallUpstate = false, string? UpstateArchive = null, string? InstallRoot = null, string? LegacyInstall = null);
 
 public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
 {
@@ -52,7 +52,6 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             CacheAstcTextures = quest && (pc || xbox),
             ConvertRadioStations = quest && pc,
             AcceptSdkLicenses = quest && selection.AcceptAndroidLicenses,
-            PcvrDesktopShortcut = !quest,
             Release = quest && release
         });
     }
@@ -60,7 +59,9 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
     // An integrity check returns the first mismatch only when an unverified import is eligible.
     public static string? CheckGameFiles(SetupSelection selection, bool checkXboxIntegrity = false, CancellationToken token = default)
     {
-        if (string.IsNullOrWhiteSpace(selection.PcFolder) && string.IsNullOrWhiteSpace(selection.XboxImage))
+        if (string.IsNullOrWhiteSpace(selection.PcFolder) && string.IsNullOrWhiteSpace(selection.XboxImage) &&
+            (selection.Target == GameTarget.Quest || string.IsNullOrWhiteSpace(selection.LegacyInstall) &&
+                (selection.InstallRoot is null || !PortablePcvrSetup.CanUpdate(selection.InstallRoot, selection.Target))))
             throw new InvalidDataException("Choose the folder for your PC copy, the disc image for your Original Xbox copy, or both.");
         if (!string.IsNullOrWhiteSpace(selection.PcFolder))
             Workflows.ValidateGameDirectory(selection.PcFolder);
@@ -85,6 +86,7 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
         var runner = new CommandRunner(log) { CommandTimeout = TimeSpan.FromSeconds(30) };
         var tools = new Toolchain(local, runner, log);
         var quest = selection.Target == GameTarget.Quest;
+        var portable = quest ? null : new PortablePcvrSetup(local, selection, log);
         var needsConsent = false;
         void Add(string title, string message, SetupCheckStatus status = SetupCheckStatus.Ready) =>
             checks.Add(new(title, message, status));
@@ -105,6 +107,14 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             if (System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64 ||
                 (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || (!quest && selection.Target != DesktopTarget))
                 throw new PlatformNotSupportedException("Choose a target that can be installed from this Windows or Linux x64 computer.");
+            if (portable is not null)
+            {
+                Paths.RequireRepository(local.Repository);
+                portable.CheckDestination();
+                portable.FindLegacy();
+                Add("Install folder", "Found the source kit and a dedicated PCVR install folder.");
+                return Task.CompletedTask;
+            }
             local.Validate();
             Paths.NoLinks(local.Workplace);
             foreach (var source in new[] { selection.PcFolder, selection.XboxImage })
@@ -128,17 +138,20 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
         if (selection.InstallUpstate)
             await Probe("Upstate Liberty", () =>
             {
-                var available = new CuratedMods(local, runner, log).CheckSetupArchive(CuratedMods.Upstate, selection.UpstateArchive);
+                var available = new CuratedMods(portable?.ScratchSettings ?? local, runner, log).CheckSetupArchive(CuratedMods.Upstate, selection.UpstateArchive);
                 Add("Upstate Liberty", available ? "Verified the official v1.1.2 archive." :
                     "Setup will download and verify the official v1.1.2 archive.",
                     available ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
                 return Task.CompletedTask;
             });
-        if (tools.HasGit) Add("Git", "Found.");
-        else if (OperatingSystem.IsWindows() && local.AllowToolDownloads)
-            Add("Git", "Setup can use or download a verified copy.", SetupCheckStatus.Automatic);
-        else if (!OperatingSystem.IsWindows()) Add("Git", "Install Git with your Linux package manager, then check again.", SetupCheckStatus.NeedsAttention);
-        else Add("Git", "Install Git or allow verified downloads in the existing manager.", SetupCheckStatus.NeedsAttention);
+        if (portable?.Bundle is null)
+        {
+            if (tools.HasGit) Add("Git", "Found.");
+            else if (OperatingSystem.IsWindows() && local.AllowToolDownloads)
+                Add("Git", "Setup can use or download a verified copy.", SetupCheckStatus.Automatic);
+            else if (!OperatingSystem.IsWindows()) Add("Git", "Install Git with your Linux package manager, then check again.", SetupCheckStatus.NeedsAttention);
+            else Add("Git", "Install Git or allow verified downloads in Setup help.", SetupCheckStatus.NeedsAttention);
+        }
 
         if (quest)
         {
@@ -162,16 +175,16 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             await Probe("Prebuilt PCVR package", () =>
             {
                 var app = Paths.Child(bundle, "app");
-                PcvrWorkflow.ValidateBinaries(app, selection.Target);
-                if (selection.InstallUpstate && !PcvrMods.Supports(app, selection.Target, CuratedMods.Upstate))
-                    throw new IOException("The PCVR package is missing Upstate runtime support. Extract a complete compatible Setup kit.");
+                PortablePcvrSetup.ValidateApp(app, selection.Target);
+                if (VariantInstaller.WantsAny(options) && PortablePortAssets.Read(bundle, local).Count > 0 && !local.AllowToolDownloads)
+                    throw new IOException("Allow verified downloads in Setup help to retrieve port assets.");
                 Add("Prebuilt PCVR package", "Found the desktop game.");
                 return Task.CompletedTask;
             });
         else
             await Probe("PCVR build tools", async () =>
             {
-                var ready = await new PcvrWorkflow(local, runner, log, selection.Target).CheckSetupTools(token);
+                var ready = await new PcvrWorkflow(portable!.ScratchSettings, runner, log, selection.Target).CheckSetupTools(token);
                 Add("PCVR build tools", ready ? "Found the compiler, build tools and desktop libraries." :
                     "Setup will prepare the desktop libraries using verified downloads.",
                     ready ? SetupCheckStatus.Ready : SetupCheckStatus.Automatic);
@@ -186,12 +199,8 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
                     Add("Xbox conversion tools", "Verified the converter included with Setup.");
                     return;
                 }
-                if (!quest && PcvrWorkflow.SetupBundle(local.Repository, selection.Target) is { } legacyBundle)
-                {
-                    await SetupKitTools.TestXboxConverter(runner, PcvrWorkflow.ValidateSetupBundle(legacyBundle, selection.Target), token);
-                    Add("Xbox conversion tools", "Found the converter included with the PCVR package.");
-                    return;
-                }
+                if (portable?.Bundle is not null)
+                    throw new IOException("The PCVR kit is missing its Xbox converter. Extract the complete matching kit.");
                 if (OperatingSystem.IsWindows()) await WindowsCompiler.Configure(runner, token);
                 else if (Paths.FindExecutable("c++") is null) throw new IOException("Install GCC or Clang C++ tools, then check again.");
                 if (!quest || !tools.NeedsSdkPackages || !string.IsNullOrWhiteSpace(local.CMake))
@@ -238,6 +247,11 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             if (readiness.NeedsAndroidConsent && !selection.AcceptAndroidLicenses)
                 return Result(InstallStatus.Failed, "Accept the Android SDK license terms on the setup checklist before installing.");
             var (local, options) = Request(selection);
+            if (options.Target != GameTarget.Quest)
+            {
+                await new PortablePcvrSetup(local, selection, log).Install(options, run, token);
+                return Result(InstallStatus.Installed, "Connect your headset through your PCVR software, then open Liberty City VR from the install folder.");
+            }
             Directory.CreateDirectory(local.Workplace);
             // Setup windows sharing a workplace must not install over each other.
             var lockPath = Path.Combine(local.Workplace, ".graphical-setup.lock");
@@ -250,19 +264,11 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             var preparedMod = selection.InstallUpstate
                 ? await new CuratedMods(local, runner, log).Prepare(CuratedMods.Upstate, selection.UpstateArchive ?? "", token) : null;
             var converter = options.InstallXboxVariant ? SetupKitTools.XboxConverter(local.Repository) : null;
-            if (options.Target == GameTarget.Quest)
-            {
-                var workflow = new Workflows(local, runner, log, _ => throw new SeveralHeadsetsException());
-                await workflow.Build(options, false, token, run, converter, preparedMod);
-                if (!run.Installed)
-                    return Result(InstallStatus.HeadsetPending, "Connect your Quest 3, accept USB debugging inside the headset, then retry.");
-                return Result(InstallStatus.Installed, "Open the app library on your Quest 3, choose Unknown Sources, and open Liberty City VR.");
-            }
-            var bundle = PcvrWorkflow.SetupBundle(local.Repository, options.Target);
-            await new PcvrWorkflow(local, runner, log, options.Target).Build(options, token, run, bundle, converter, preparedMod);
-            return Result(InstallStatus.Installed, run.ShortcutFailed
-                ? "Open the install folder to start the game. Setup could not create a desktop shortcut."
-                : "Connect your headset through your PCVR software, then open Liberty City VR from your desktop.");
+            var workflow = new Workflows(local, runner, log, _ => throw new SeveralHeadsetsException());
+            await workflow.Build(options, false, token, run, converter, preparedMod);
+            if (!run.Installed)
+                return Result(InstallStatus.HeadsetPending, "Connect your Quest 3, accept USB debugging inside the headset, then retry.");
+            return Result(InstallStatus.Installed, "Open the app library on your Quest 3, choose Unknown Sources, and open Liberty City VR.");
         }
         catch (SeveralHeadsetsException)
         {
@@ -280,7 +286,7 @@ public sealed class SetupInstaller(ManagerSettings settings, PrivateLog log)
             if (selection.Target == GameTarget.Quest && run.Stage == InstallStage.InstallingApplication)
                 message += " Check that your Quest 3 is connected and unlocked.";
             if (OperatingSystem.IsWindows() && run.Stage == InstallStage.BuildingGame)
-                message += " If the log shows a path-length error, choose a short Build folder in Setup help and try again.";
+                message += " If the log shows a path-length error, choose a shorter folder on Where will you play? and try again.";
             return Result(InstallStatus.Failed, message);
         }
     }

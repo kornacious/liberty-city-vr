@@ -42,6 +42,9 @@ bool Available(const char *root) {
     return true;
 #elif defined(LIBERTYVR_WINDOWS) || defined(LIBERTYVR_DESKTOP)
     try {
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+        return questpackage::SupportsPortableEngine(pcvrstartup::ExecutableDirectory());
+#else
 #ifdef _WIN32
         const char *engine="libertyvr-upstate.exe";
 #else
@@ -53,6 +56,7 @@ bool Available(const char *root) {
         std::string line;
         while(std::getline(capabilities,line))
             if(line=="upstate-liberty/1" || line=="upstate-liberty/1\r") return true;
+#endif
     } catch(const std::exception&) {}
     return false;
 #else

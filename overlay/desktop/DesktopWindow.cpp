@@ -111,11 +111,12 @@ void SetMode(WindowMode mode){if(!window)return;SDL_SetWindowFullscreen(window,m
 void ResetWindow(){if(!window)return;SetMode(WindowMode::Windowed);SDL_SetWindowSize(window,960,960);SDL_SetWindowPosition(window,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED);}
 void InjectFocus(bool focused){input={};input.focused=focused;if(context){auto &io=ImGui::GetIO();for(auto &v:io.KeysDown)v=false;for(auto &v:io.MouseDown)v=false;}Cursor();}
 void InjectKey(unsigned key,bool down){if(key>=512)return;if(key>=Key_F1 && key<=Key_F12){if(down)Shortcut(key);return;}input.keys[key]=down;if(context)ImGui::GetIO().KeysDown[key]=down;}
-bool Open(const std::string &root) {
+bool Open(const std::string &root, const std::string &configRoot) {
   if(window)return true;
   if(!SDL_InitSubSystem(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD))return false;
   quit=false;resize=true;input={};options={};
-  config=root.empty()?"":(std::filesystem::u8path(root)/"desktop-preview.cfg").u8string();
+  const auto &configDirectory = configRoot.empty() ? root : configRoot;
+  config=configDirectory.empty()?"":(std::filesystem::u8path(configDirectory)/"desktop-preview.cfg").u8string();
   if(!config.empty()){int version,eye,frame,mode,kb,pad;std::ifstream in(std::filesystem::u8path(config));
     if(in>>version>>eye>>frame>>mode>>kb>>pad && version==1 && eye>=0 && eye<2 && frame>=0 && frame<2 && mode>=0 && mode<3){options.eye=eye;options.framing=Framing(frame);options.mode=WindowMode(mode);options.keyboard=kb!=0;options.gamepad=pad!=0;}}
   window=SDL_CreateWindow("Liberty City VR - desktop preview (F1 controls)",960,960,SDL_WINDOW_VULKAN|SDL_WINDOW_RESIZABLE|SDL_WINDOW_HIGH_PIXEL_DENSITY);

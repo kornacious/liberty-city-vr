@@ -21,7 +21,7 @@ struct InputState {
   unsigned short padButtons = 0;
   float lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0;
 };
-bool Open(const std::string &userRoot);
+bool Open(const std::string &userRoot, const std::string &configRoot = {});
 void Close();
 void Pump();
 bool QuitRequested();

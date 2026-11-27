@@ -109,14 +109,19 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         ValidateBinaries(directory,target,viewer);
         return directory;
     }
-    public static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr, bool viewer = false)
+    public static void ValidateBinaries(string directory, GameTarget target = GameTarget.WindowsPcvr, bool viewer = false, bool portable = false)
     {
         var requiredFiles=viewer
             ? new[] {target==GameTarget.LinuxPcvr?"libertyvr-render-debug":"libertyvr-render-debug.exe","IMGUI_LICENSE.txt","LIBRW_LICENSE.txt","desktop-backend.txt"}
             : target==GameTarget.LinuxPcvr ? new[] { "libertyvr-game", "libertyvr-pcvr", "libopenxr_loader.so.1", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt", "desktop-backend.txt" } : new[] { "libertyvr-game.exe", "libertyvr-pcvr.exe", "openxr_loader.dll", "openxr-notices/LICENSE", "openxr-notices/JsonCpp-LICENSE", "IMGUI_LICENSE.txt", "LIBRW_LICENSE.txt" };
         foreach (var name in requiredFiles)
-            if(name=="libopenxr_loader.so.1") ValidateBundledLibrary(directory,Path.Combine(directory,name));
+            if (portable && name is "libertyvr-pcvr" or "libertyvr-pcvr.exe") continue;
+            else if(name=="libopenxr_loader.so.1") ValidateBundledLibrary(directory,Path.Combine(directory,name));
             else if (!File.Exists(Paths.Child(directory,name))) throw new IOException("PCVR installation is incomplete: " + name);
+        if (portable)
+            foreach (var mode in new[] { "classic", "upstate" })
+                if (!File.Exists(Paths.Child(directory, PcvrMods.PortableEngine(target, mode))))
+                    throw new IOException("The portable " + mode + " engine library is missing.");
         if(File.Exists(Path.Combine(directory,"desktop-backend.txt"))) {
             foreach(var (component,major) in new[]{("SDL3","0"),("avformat","63"),("avcodec","63"),("avutil","61"),("swresample","7")}) {
                 var required=target==GameTarget.LinuxPcvr?"lib"+component+".so."+major:component=="SDL3"?"SDL3.dll":component+"-"+major+".dll";
@@ -180,6 +185,42 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
         log.Write("Windows x64 C++ tools, CMake, Ninja and Vulkan SDK found. No Android tools or headset deployment required.");
         return (cmake,ninja,Path.GetFullPath(include),Path.GetFullPath(library),Path.GetFullPath(shader));
     }
+    internal async Task<string> BuildPortablePackage(string package, CancellationToken token, bool runChecks = true)
+    {
+        RequireHost();
+        var found = await FindTools(token);
+        await EnsureDependencies(token);
+        var tools = new Toolchain(settings, runner, log);
+        var sdk = await OpenXrSource(tools, token);
+        var source = await tools.Re3(token);
+        var assembled = Paths.Child(settings.Workplace, "portable-source");
+        var build = Paths.Child(settings.Workplace, "portable-build");
+        await Workflows.Assemble(settings.Repository, source, assembled, await tools.Git(token), runner, log, token);
+        await runner.Run(found.Cmake, ["-S", Path.Combine(assembled, "desktop"), "-B", build, "-G", "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_MAKE_PROGRAM=" + found.Ninja,
+            "-DLIBERTYVR_RE3_ROOT=" + assembled, "-DLIBERTYVR_DESKTOP_PREFIX=" + Prefix, "-DGLSLC=" + found.Shader,
+            "-DCMAKE_DISABLE_FIND_PACKAGE_OpenXR=TRUE", "-DFETCHCONTENT_SOURCE_DIR_OPENXR_SDK=" + sdk,
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON", "-DLIBERTYVR_PORTABLE_SETUP=ON", "-DBUILD_TESTING=" + (runChecks ? "ON" : "OFF"),
+            .. (Linux ? Array.Empty<string>() : new[] { "-DVulkan_INCLUDE_DIR=" + found.Include, "-DVulkan_LIBRARY=" + found.Library })], token: token);
+        await runner.Run(found.Cmake, ["--build", build, "--parallel", "8"], token: token);
+        if (runChecks)
+            await runner.Run(Path.Combine(Path.GetDirectoryName(found.Cmake)!, Executable("ctest")),
+                ["--test-dir", build, "--output-on-failure"], token: token);
+        await runner.Run(found.Cmake, ["--install", build, "--prefix", package], token: token);
+        if (!Linux)
+        {
+            var redist = runner.EnvironmentOverrides.GetValueOrDefault("VCToolsRedistDir")
+                ?? Environment.GetEnvironmentVariable("VCToolsRedistDir");
+            var x64 = string.IsNullOrWhiteSpace(redist) ? "" : Path.Combine(redist, "x64");
+            var crt = Directory.Exists(x64)
+                ? Directory.EnumerateDirectories(x64, "Microsoft.VC*.CRT").SingleOrDefault() : null;
+            if (crt is null) throw new IOException("Install the Visual Studio x64 C++ redistributable files, then retry.");
+            foreach (var library in Directory.EnumerateFiles(crt, "*.dll"))
+                File.Copy(library, Paths.Child(package, Path.GetFileName(library)), overwrite: true);
+        }
+        return Path.Combine(source, "gamefiles");
+    }
+
     private async Task<string> OpenXrSource(Toolchain tools,CancellationToken token)
     {
         string source;
@@ -267,7 +308,6 @@ public sealed class PcvrWorkflow(ManagerSettings settings, CommandRunner runner,
     internal async Task<bool> CheckSetupTools(CancellationToken token)
     {
         RequireHost();
-        Layout();
         var tools = await FindTools(token);
         if (!File.Exists(Path.Combine(Path.GetDirectoryName(tools.Cmake)!, Executable("ctest"))))
             throw new IOException("Install CMake with CTest.");

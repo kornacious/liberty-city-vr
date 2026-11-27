@@ -7,8 +7,8 @@ OpenXR and the bundled librw Vulkan renderer. Its official repository is
 | Game target | Status | Current workflow |
 | --- | --- | --- |
 | Standalone Quest 3, Android ARM64 | Release candidate | Manager source assembly, APK build and local headset installation. |
-| Windows PCVR, x64, OpenXR + Vulkan | Release candidate | Setup supports prebuilt kits. The manager supports source builds, isolated data preparation, versioned installs, launch and runtime diagnostics. |
-| Linux PCVR, x64, OpenXR + Vulkan | Experimental, pending native retest | Setup supports prebuilt kits. The manager supports native builds, separate data/save settings, and XDG runtime discovery. |
+| Windows PCVR, x64, OpenXR + Vulkan | Release candidate | Setup installs one portable game version per folder. The manager supports source builds, isolated data preparation, versioned installs, launch and runtime diagnostics. |
+| Linux PCVR, x64, OpenXR + Vulkan | Experimental, pending native retest | Setup uses the same portable layout. The manager supports native builds, separate data/save settings, and XDG runtime discovery. |
 
 Windows and Linux currently host the manager and authoring tools. The desktop
 vehicle placement editor is a non-VR tool. Neither establishes PCVR support.

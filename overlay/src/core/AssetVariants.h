@@ -14,6 +14,7 @@ namespace assetvariants {
 // Process-local tools may explicitly choose content without rewriting the
 // installation's gameplay preference. Set before any asset roots are cached.
 inline int sessionSelection = -1;
+inline std::string settingsRoot;
 inline bool Safe(const std::string &p) {
     return !p.empty() && p[0]!='/' && p.find('\\')==std::string::npos &&
         p.find(':')==std::string::npos && p.find("..")==std::string::npos;
@@ -92,7 +93,7 @@ inline int Requested(const std::string &root) {
 inline int Select(const std::string &root) {
     const bool pc=Complete(root,0)||LegacyPc(root),xbox=Complete(root,1);
     if(sessionSelection>=0)return sessionSelection==0?(pc?0:-1):(xbox?1:-1);
-    if(pc&&xbox)return Requested(root);return pc?0:xbox?1:-1;
+    if(pc&&xbox)return Requested(settingsRoot.empty() ? root : settingsRoot);return pc?0:xbox?1:-1;
 }
 inline std::string ContentRoot(const std::string &root,int selected) {
     if(selected==0&&!Complete(root,0)&&LegacyPc(root))return root;

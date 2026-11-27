@@ -38,6 +38,11 @@ const char *storageRoot(void);
 
 // <storageRoot>/gamedata -- the original game directory contents.
 const char *gameDataRoot(void);
+#ifdef LIBERTYVR_PORTABLE_ENGINE
+const char *configurationRoot(void);
+#else
+inline const char *configurationRoot(void) { return gameDataRoot(); }
+#endif
 
 // Joins a path under gameDataRoot() into a caller-supplied buffer, normalising
 // the backslashes that the game source uses throughout ("DATA\\GTA_VC.DAT").

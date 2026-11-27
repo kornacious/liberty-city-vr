@@ -30,14 +30,20 @@ public static class PcvrShortcuts
         return "[Desktop Entry]\nType=Application\nName=Liberty City VR\nExec=\""+quoted+"\"\nTerminal=false\nCategories=Game;\n";
     }
 
-    public static Task Create(PcvrPaths paths, CancellationToken token, string? desktop = null)
+    public static Task Create(PcvrPaths paths, CancellationToken token, string? desktop = null) =>
+        CreateForApp(Path.Combine(paths.Install, "current"), paths.Target, token, desktop);
+
+    public static Task CreatePortable(string root, GameTarget target, CancellationToken token) =>
+        CreateForApp(Paths.Child(root, "app"), target, token, null);
+
+    private static Task CreateForApp(string app, GameTarget target, CancellationToken token, string? desktop)
     {
         token.ThrowIfCancellationRequested();
         desktop ??= DesktopDirectory();
         if (string.IsNullOrWhiteSpace(desktop)) throw new IOException("Desktop directory is unavailable.");
         Directory.CreateDirectory(desktop);
-        var executable = Path.Combine(paths.Install,"current", paths.Target==GameTarget.LinuxPcvr ? "libertyvr-game" : "libertyvr-game.exe");
-        if (paths.Target==GameTarget.LinuxPcvr)
+        var executable = Path.Combine(app, target == GameTarget.LinuxPcvr ? "libertyvr-game" : "libertyvr-game.exe");
+        if (target == GameTarget.LinuxPcvr)
         {
             var destination = Path.Combine(desktop,"Liberty City VR.desktop");
             File.WriteAllText(destination,LinuxEntry(executable),new UTF8Encoding(false));
@@ -56,7 +62,7 @@ public static class PcvrShortcuts
         try
         {
             dynamic shortcut = shell.CreateShortcut(destination);
-            try { shortcut.TargetPath=executable; shortcut.WorkingDirectory=Path.GetDirectoryName(executable); shortcut.Description="Liberty City VR — current build"; shortcut.Save(); }
+            try { shortcut.TargetPath=executable; shortcut.WorkingDirectory=Path.GetDirectoryName(executable); shortcut.Description="Liberty City VR"; shortcut.Save(); }
             finally { Marshal.FinalReleaseComObject(shortcut); }
         }
         finally { Marshal.FinalReleaseComObject(shell); }
