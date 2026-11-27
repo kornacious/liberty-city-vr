@@ -68,7 +68,7 @@ static bool gNativeCameraHeadFromPreRender;
 static bool UsesNativeCameraHead(CPed *ped)
 {
 	return ModelSets::IsModernActive() && ped != nil && ped->IsPlayer() &&
-		ped->GetClump() != nil && IsClumpSkinned(ped->GetClump());
+		ped->m_rwObject != nil && IsClumpSkinned(ped->GetClump());
 }
 
 static void CaptureNativeCameraHead(CPed *ped, bool beforePresentation = true)

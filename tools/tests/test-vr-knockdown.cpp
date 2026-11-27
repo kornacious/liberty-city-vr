@@ -28,11 +28,16 @@ struct CPlayerPed {
 	int state=PED_IDLE, m_nPedState=PED_IDLE; bool vehicle=false, dead=false;
 	bool bIsInTheAir=false, bIsLanding=false, falling=false, collapsing=false;
 	CAnimBlendAssociation fallAnimation, collapseAnimation;
+	CPlayerPed *m_rwObject=this;
 	float m_fHealth=100;
 	bool InVehicle() {return vehicle;} bool DyingOrDead() {return dead;}
 	int GetPedState() {return state;}
-	CPlayerPed *GetClump() {return this;}
+	CPlayerPed *GetClump() {
+		if(!m_rwObject) throw std::logic_error("GetClump requires a live RenderWare object");
+		return m_rwObject;
+	}
 };
+using RpClump=CPlayerPed;
 static bool RpAnimBlendClumpIsInitialized(CPlayerPed *) {return true;}
 static CAnimBlendAssociation *RpAnimBlendClumpGetAssociation(CPlayerPed *clump, int id) {
 	if(id==ANIM_STD_FALL) return clump->falling ? &clump->fallAnimation : nullptr;
@@ -160,6 +165,10 @@ int main() {
 	gatePlayer.falling=true;
 	Check(!androidgame::VrKnockdownPresentationActive(),"standard fall view must preserve locomotion presentation");
 	androidgame::immersiveFallView=true;
+	gatePlayer.m_rwObject=nullptr;
+	Check(!PlayerUsingFallView(&gatePlayer) && !androidgame::VrKnockdownPresentationActive(),
+		"scripted outfit changes must allow a frame with no player render model");
+	gatePlayer.m_rwObject=&gatePlayer;
 	Check(androidgame::VrKnockdownPresentationActive() && !BodyIKGameplayContext(),"a long drop must let the fall animation own the body");
 	gatePlayer.fallAnimation.blendDelta=-1.0f;
 	Check(!PlayerUsingFallView(&gatePlayer),"a fading fall association must not capture an ordinary jump");

@@ -145,18 +145,23 @@ static bool
 PlayerUsingFallView(CPlayerPed *player)
 {
 	if(!androidgame::VrImmersiveFallViewEnabled() || !player ||
-	   player->InVehicle() || player->DyingOrDead() || !player->GetClump() ||
-	   !RpAnimBlendClumpIsInitialized(player->GetClump()))
+	   player->InVehicle() || player->DyingOrDead() || !player->m_rwObject)
+		return false;
+
+	// Scripted outfit changes can leave the player without a render object.
+	// GetClump checks the RenderWare object type and requires a live object.
+	RpClump *clump = player->GetClump();
+	if(!RpAnimBlendClumpIsInitialized(clump))
 		return false;
 
 	// A hard drop uses the native fall and collapse animations without
 	// entering PED_FALL or PED_GETUP. Collapse includes standing back up.
 	if(player->bIsLanding)
-		return RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_STD_FALL_COLLAPSE) != nil;
+		return RpAnimBlendClumpGetAssociation(clump, ANIM_STD_FALL_COLLAPSE) != nil;
 	if(!player->bIsInTheAir)
 		return false;
 	const CAnimBlendAssociation *fall =
-		RpAnimBlendClumpGetAssociation(player->GetClump(), ANIM_STD_FALL);
+		RpAnimBlendClumpGetAssociation(clump, ANIM_STD_FALL);
 	return fall && fall->blendDelta >= 0.0f;
 }
 
@@ -1512,11 +1517,10 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 		!CCutsceneMgr::IsRunning() &&
 		(!TheCamera.m_WideScreenOn || trainPassenger ||
 		 (ModelSets::IsModernActive() && PlayerKnockedDown(player)));
-	const bool xboxKnockdown = wantFirstPerson && !thirdPersonVehicle &&
-		ModelSets::IsModernActive() && player->GetClump() != nil &&
-		IsClumpSkinned(player->GetClump()) && PlayerKnockedDown(player);
-	const bool xboxCarEntry=wantFirstPerson && !thirdPersonVehicle &&
-		ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump()) &&
+	const bool xboxSkinnedPlayer = wantFirstPerson && !thirdPersonVehicle &&
+		ModelSets::IsModernActive() && player->m_rwObject && IsClumpSkinned(player->GetClump());
+	const bool xboxKnockdown = xboxSkinnedPlayer && PlayerKnockedDown(player);
+	const bool xboxCarEntry = xboxSkinnedPlayer &&
 		(playerVehicleState==PED_OPEN_DOOR || playerVehicleState==PED_CARJACK ||
 		 playerVehicleState==PED_ENTER_CAR || playerVehicleState==PED_STEAL_CAR);
 	static CPlayerPed *entryCameraPlayer;
@@ -1874,7 +1878,7 @@ VrUpdateFirstPersonAnchor(bool postPhysics)
 					VrKnockdownView::Wrap(outsideYaw-trainTurnStartYaw)*blend;
 				trainForwardLocal = CVector(Cos(yaw), Sin(yaw), 0.0f);
 			}
-			if(ModelSets::IsModernActive() && player->GetClump()!=nil && IsClumpSkinned(player->GetClump())){
+			if(ModelSets::IsModernActive() && player->m_rwObject && IsClumpSkinned(player->GetClump())){
 				// The skinned entry animation already performed the window turn.
 				// Continue its final heading instead of starting a second turn.
 				trainForwardLocal=CVector(trainEyeLocal.x<0.0f ? -1.0f : 1.0f,0,0);
